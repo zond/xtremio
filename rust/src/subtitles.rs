@@ -297,14 +297,14 @@ const WIDEST_OFFSET: f64 = 600.0;
 /// 0.33. Buying those back means scoring differently, not lowering this;
 /// see [`tests::chance_is_measured_from_both_densities`].
 ///
-/// **The fixture's four worst pairings to apply are not that**, and are
-/// older than [`horizon`]. All four name one file, all four found the right
-/// transform (a median start error of a fifth of a second) and all four
-/// scored about *zero*, which is the signature of a file whose timeline one
-/// damaged cue had stretched rather than of Dice's ceiling. The parse no
-/// longer hands the search such a file, so re-recording the corpus should
-/// lose those rows; nothing above them moves, since the populations the
-/// threshold is set from are summarised by percentile.
+/// **The fixture's four worst pairings to apply are not that.** Each names
+/// one file, each found the right transform (a median start error of a
+/// fifth of a second) and each scored about *zero*, the signature of a file
+/// whose timeline one damaged cue has stretched rather than of Dice's
+/// ceiling. The parse drops such a cue before it reaches the search
+/// ([`horizon`]), so re-recording the corpus should lose those rows;
+/// nothing above them moves, since the populations the threshold is set
+/// from are summarised by percentile.
 pub const CONVINCING: f64 = 0.45;
 
 /// How few cues make a file useless as evidence either way.
@@ -315,17 +315,14 @@ pub const CONVINCING: f64 = 0.45;
 /// Refusing to measure is better than measuring badly, and the floor
 /// guards both sides because either file can be the sparse one.
 ///
-/// Fifty is inherited from the measurement this replaced, where it was the
-/// count at which an unrelated file stopped being alignable by accident.
-/// Scoring against chance moved that count a long way down --
-/// [`tests::a_handful_of_cues_can_be_laid_onto_anything`] measures it at
-/// about eight cues a side, and at fifty the best an unrelated pair reaches
-/// is well under [`CONVINCING`] -- so the floor is now generous rather than
-/// tight. Calibrating that threshold left it where it is: a file with
-/// fewer than fifty cues is a signs track rather than a translation, so
-/// the floor costs nothing real, and the mismatches that come closest to
-/// being convincing are the shortest files in that corpus, which is an
-/// argument for the floor rather than against it.
+/// Fifty is generous: [`tests::a_handful_of_cues_can_be_laid_onto_anything`]
+/// measures an unrelated pair as alignable by accident down to about eight
+/// cues a side, and at fifty the best an unrelated pair reaches is well
+/// under [`CONVINCING`]. A file with fewer than fifty cues is a signs track
+/// rather than a translation, so the floor costs nothing real, and the
+/// mismatches that come closest to being convincing are the shortest files
+/// in that corpus, which is an argument for the floor rather than against
+/// it.
 const FEWEST_CUES: usize = 50;
 
 /// The bounds the first pass's ratio step is kept between; what it
@@ -908,16 +905,15 @@ mod tests {
         // cannot exceed 0.4 however perfectly the two line up, and the
         // chance term for those densities is 0.26 of that.
         //
-        // Calibration answered the question this used to leave open, and
-        // the answer is that the threshold cannot rescue it. A real
-        // partial track -- a Romanian file carrying a quarter of the
-        // Russian one's lines for the same film -- recovers the ratio
-        // exactly, puts four fifths of its starts within a third of a
-        // second, and scores 0.33, while unrelated files reach 0.376. No
-        // threshold accepts the first and refuses the second, so a partial
-        // subtitle is not evidence *this score* can accept, and taking it
-        // means scoring a different way (an overlap coefficient does not
-        // have the ceiling) rather than moving `CONVINCING`.
+        // The threshold cannot rescue it. A real partial track -- a Romanian
+        // file carrying a quarter of the Russian one's lines for the same
+        // film -- recovers the ratio exactly, puts four fifths of its
+        // starts within a third of a second, and scores 0.33, while
+        // unrelated files reach 0.376. No threshold accepts the first and
+        // refuses the second, so a partial subtitle is not evidence *this
+        // score* can accept, and taking it means scoring a different way
+        // (an overlap coefficient does not have the ceiling) rather than
+        // moving `CONVINCING`.
         assert!(!honest.is_convincing(), "{honest:?}");
     }
 
@@ -1001,12 +997,11 @@ mod tests {
         // one's own density (`chance_is_measured_from_both_densities`), and
         // it is two sparse files that leave no yardstick at all.
         //
-        // Fifty is inherited from the measurement this replaced, and it now
-        // has far more room than it needs: three cues a side is convincing
-        // almost every time, eight is once in eleven, and by twelve it has
-        // stopped happening. What that room buys is the same thing the
-        // number was for, so it is left where it is rather than re-tuned by
-        // a test that is not calibrating anything.
+        // Fifty ([`FEWEST_CUES`]) has far more room than it needs: three
+        // cues a side is convincing almost every time, eight is once in
+        // eleven, and by twelve it has stopped happening. That room is why
+        // it is left where it is rather than re-tuned by a test that is not
+        // calibrating anything.
         let thin = |cues: &[Cue], count: usize| -> Vec<Cue> {
             let step = cues.len() / count;
             (0..count).map(|index| cues[index * step]).collect()
@@ -1116,13 +1111,11 @@ mod tests {
 
     #[test]
     fn a_coarser_bin_keeps_the_file_s_density() {
-        // The property the coarse pass rests on. Lighting a bin from any
-        // overlap would make a file of two-second lines and one-second gaps
-        // nearly all lit at a second per bin, and a chance term computed
-        // from two densities of 0.9 leaves nothing above it to measure --
-        // measured that way, the right ratio scored 0.14 where a wrong one
-        // scored 0.34. Rounding a bin to the nearer answer keeps every pass
-        // looking at the same file.
+        // The property the coarse pass rests on: see [`Bitmap::of`] for why
+        // lighting a bin from any overlap, rather than from at least half of
+        // it, would leave nothing for the chance term to measure. Rounding a
+        // bin to the nearer answer keeps every pass looking at the same
+        // file.
         let cues = synthetic_cues(400);
         let density = |bin: f64| {
             let map = Bitmap::of(&cues, 1.0, bin);

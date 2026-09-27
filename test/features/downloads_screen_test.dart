@@ -30,9 +30,8 @@ const pilotKey = 'tt0903747:tt0903747:1:1';
 DownloadsRegistry recorded() =>
     DownloadsRegistry.fromJson(loadDownloadsFixture());
 
-/// The same, with the pilot stopped and a reason for it.
-/// The pilot as the boot leaves it when the server turns out not to hold
-/// its pieces any more: no bytes, no completion date, and a reason.
+/// The pilot as the boot leaves it when the server does not hold its
+/// pieces: no bytes, no completion date, and a reason.
 DownloadsRegistry withGonePilot() {
   final json = loadDownloadsFixture();
   final pilot =
@@ -623,10 +622,9 @@ void main() {
     testWidgets('the question says the bytes go, and offers no keeping them', (
       tester,
     ) async {
-      // "Keep the file" dropped the pin and nothing else, and a torrent
-      // nobody kept and nobody plays is what the server gives back at its
-      // next pass: the bytes went anyway, under a message saying they had
-      // stayed.
+      // Keeping the file would only drop the pin: with nothing else
+      // holding it, the server reclaims the bytes anyway, so it would
+      // promise something it cannot deliver and is not offered.
       useTallViewport(tester);
       final downloads = FakeDownloadsClient(registry: recorded());
       addTearDown(downloads.dispose);

@@ -57,8 +57,6 @@ void main() {
     test(
       'an invented title that searches to another year is dropped',
       () async {
-        // The measured case, exactly: a model invented `The Otherside
-        // (2022)` and the search answered with real films of 2008 and 2013.
         final table = catalogue({
           'movie/The Otherside': [
             meta('tt1', 'The Otherside', '2008'),

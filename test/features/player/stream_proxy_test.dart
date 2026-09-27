@@ -7,12 +7,10 @@ import '../../support/player_harness.dart';
 
 /// Every stream reaches the player as a URL on our own server.
 ///
-/// The player keeps nothing on disk any more, so a stream it fetched itself
-/// would be the one kind of playback with no local copy anywhere -- and on
-/// the owner's Chromecast that was the kind that filled the volume: a
-/// 90-second RD/HTTP title left 928 MB in an mpv cache file with no
-/// directory entry, and the server, which does have a cache it can bound
-/// and sweep, was never in the path at all.
+/// The player keeps nothing on disk (docs/ARCHITECTURE.md, "Streams, the
+/// proxy and the cache"), so a stream it fetched itself would be the one
+/// kind of playback with no local copy anywhere, and none of the server's
+/// bounded, swept cache in the path at all.
 ///
 /// The shape asserted here is the one the server parses; that it really
 /// serves it is `server/tests/proxy.rs` in the stream-server tree.
@@ -113,11 +111,11 @@ void main() {
     });
 
     test('is not taken apart by a target that has a d of its own', () {
-      // The server used to read the *request's* `d` query parameter before
-      // looking at the path, so a target carrying one answered 400 -- and a
-      // `d` that happened to parse as a URL was fetched instead of the
-      // target. The parameter belongs to the target and travels with its
-      // query; nothing here escapes it away.
+      // Reading the *request's* own `d` query parameter before the path
+      // would answer 400 for a target carrying one -- or worse, fetch
+      // whatever `d` happens to parse as instead of the target. The
+      // parameter belongs to the target and travels with its query;
+      // nothing here escapes it away.
       final proxied = proxiedThroughServer(
         Uri.parse('https://cdn.example/film.mkv?d=1&t=2'),
         serverBase: server,
@@ -306,8 +304,7 @@ void main() {
       // what choosing a streaming server elsewhere does, since that leaves
       // the embedded one running and `CoreInitInfo.serverBaseUrl` naming
       // it, and those streams go through the proxy like anybody else's.
-      // With nothing to proxy through the stream goes straight out, which
-      // is what every build did before this.
+      // With nothing to proxy through, the stream goes straight out.
       useWideViewport(tester);
       const remote = 'https://rd.example/dl/tok/film.mkv';
       final harness = PlayerHarness(

@@ -150,11 +150,6 @@ class PlaybackStats {
   /// matches beside a vo count that has stopped climbing is what a single
   /// screencap of this panel has to be able to say from the sofa.
   ///
-  /// `display-sync-active` was read here too, while
-  /// `video-sync=display-resample` was set. It answered `no` on every
-  /// capture ever taken and the option is gone, so the row said nothing
-  /// and now does not exist.
-  ///
   /// Null on any backend without the property, which is what keeps the row
   /// off the panel entirely rather than drawing a dash that reads as a
   /// measured rate of none.

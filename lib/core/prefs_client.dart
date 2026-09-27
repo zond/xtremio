@@ -81,12 +81,8 @@ class AppPrefs extends ChangeNotifier {
   /// the default: a fresh install has never chosen, and a fresh install is
   /// what this flag now defaults to showing.
   ///
-  /// This used to be named `streamsFlat`, back when grouped by addon was
-  /// the default and this flag meant "cut across every addon instead"; the
-  /// stored key changed with the rename so the default's own meaning could
-  /// change without also flipping what an old install's saved `false`
-  /// meant. [load] still reads that older key as a fallback so nobody's
-  /// choice is lost by the rename — see there.
+  /// [load] falls back to [legacyStreamsFlatKey] when this key is unset, so
+  /// an install that chose under the old name keeps its choice.
   static const String streamsSectionedKey = 'streamsSectioned';
 
   /// The boolean an install from before the rename may still have under
@@ -149,13 +145,10 @@ class AppPrefs extends ChangeNotifier {
   /// uploading to other people when nothing is playing (`IdleSharing`).
   ///
   /// **On until the viewer turns it off**, which is why it is a plain
-  /// `bool` and not a `bool?`. It used to be the third state: the default
-  /// differed by device, this class knows nothing about the device, so a
-  /// stored value had to be able to say "the viewer's own answer" for both
-  /// spellings of it. The default is now simply on everywhere, so a missing
-  /// key and a stored `true` mean the same thing and there is nothing left
-  /// for a null to say. A stored `false` is a decision and still survives,
-  /// which is all the storage ever had to do.
+  /// `bool` and not a `bool?`: the default is the same everywhere, so a
+  /// missing key and a stored `true` mean the same thing and there is
+  /// nothing left for a null to say. A stored `false` is a decision and
+  /// still survives, which is all the storage ever had to do.
   static const String shareWhileIdleKey = 'shareWhileIdle';
 
   /// The `verboseDiagnostics` key: whether the Diagnostics log carries the
@@ -235,20 +228,13 @@ class AppPrefs extends ChangeNotifier {
   static const String driveTokenDeadKey = 'driveTokenDead';
 
   /// The `drivePendingSession` key: a pairing this device started and has
-  /// not finished collecting.
+  /// not finished collecting. See `DrivePairingJob` for why this is
+  /// written down at all.
   ///
-  /// **Written down because losing one costs a whole Google sign-in.** The
-  /// service holds a finished pairing for about ten minutes and hands it
-  /// over exactly once, to whoever asks; if nothing asks, it expires and
-  /// the files, the consent and the picking are all gone. That happened
-  /// three times in one afternoon, because the only thing that asked was
-  /// the screen the viewer had already walked away from.
-  ///
-  /// The id is a credential while its pairing waits -- the collect that
-  /// hands over the refresh token asks for nothing else -- but only for
-  /// about ten minutes and only once, and this file is private to the app,
-  /// so it is kept here with the preferences. It is never logged whole
-  /// (`DrivePairingJob.logId`).
+  /// The id is a credential while its pairing waits (see
+  /// `DrivePairingSession`) but only for about ten minutes and only once,
+  /// and this file is private to the app, so it is kept here with the
+  /// preferences. It is never logged whole (`DrivePairingJob.logId`).
   static const String drivePendingSessionKey = 'drivePendingSession';
 
   bool _streamsSectioned = true;
@@ -362,10 +348,8 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     } else {
-      // No choice under the current name: fall back to the name an older
-      // install may have written under, where false meant grouped and
-      // true meant this same sectioned layout, just called "flat". Read
-      // once, as a migration, and never written back here.
+      // No choice under the current name: fall back to the legacy key
+      // (see [legacyStreamsFlatKey]), read once and never written back.
       final legacy = stored[legacyStreamsFlatKey];
       if (legacy is bool && legacy != _streamsSectioned) {
         _streamsSectioned = legacy;

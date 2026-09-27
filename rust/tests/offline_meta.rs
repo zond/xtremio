@@ -23,8 +23,8 @@ fn a_failed_meta_fetch_is_answered_from_the_download() -> anyhow::Result<()> {
     let storage = tmp.path().join("storage");
     std::fs::create_dir_all(&storage)?;
 
-    // The recorded registry, its film's meta taken from an addon that is
-    // not there any more.
+    // The recorded registry, with its film's meta addon swapped for one that
+    // answers nothing.
     let mut registry: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),

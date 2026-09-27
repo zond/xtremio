@@ -6,14 +6,15 @@ import '../../core/core.dart';
 /// stream tile of the release that is kept, an episode's badge. One
 /// dialog, so what it says is the same everywhere.
 ///
-/// **A removal deletes, and the dialog says so.** It used to offer to keep
-/// the file "as ordinary cache", which dropped the pin and nothing else --
-/// and a torrent nobody has pinned and nobody is playing is exactly what
-/// the server gives back at its next pass. The bytes went a moment later
-/// either way, under a message that said they had stayed. So there is one
-/// thing to confirm, and the bytes going is part of it. The one case where
-/// they stay -- the same file kept for another title too -- is said by the
-/// message after the removal, which is the first point anything knows it.
+/// **A removal deletes, and the dialog says so.** There is no meaningful
+/// way to keep the file "as ordinary cache" instead: an unpinned torrent
+/// nobody is playing is exactly what the server reclaims at its next pass,
+/// so the bytes go either way -- offering otherwise would only delay the
+/// same deletion behind a message that said they had stayed. So there is
+/// one thing to confirm, and the bytes going is part of it. The one case
+/// where they stay -- the same file kept for another title too -- is said
+/// by the message after the removal, which is the first point anything
+/// knows it.
 ///
 /// Popping `true` confirms; anything else is a cancel.
 ///

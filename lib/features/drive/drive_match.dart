@@ -10,9 +10,8 @@
 /// **A wrong match is worse than no match.** A poster is a claim about what
 /// a file *is*, and the failure being guarded against is not a missing
 /// poster -- it is a real poster for the wrong film, which looks exactly
-/// like a right one. `similar_resolver.dart` learned this from a model that
-/// invented `The Otherside (2022)`: the catalogue answers an invented query
-/// happily, with a 2008 film and a 2013 one. So the rule here is the same
+/// like a right one. The catalogue answers even an invented query happily
+/// (`similar_resolver.dart`'s problem too), so the rule here is the same
 /// rule as there, and reuses its pieces: a **loose title** compared on
 /// [similarTitleKey], and something strict beside it. See [acceptMatch] for
 /// which strict thing, and why there are two cases of it.
@@ -128,10 +127,9 @@ Future<LinkedDriveMatch?> matchDriveFile(
     // Rethrown as the one thing a caller has to be able to tell apart from
     // a refusal, and nothing more. `null` means the catalogue answered and
     // none of its answers was this file; this means nobody answered, which
-    // is worth asking again about. They looked identical, and a file that
-    // hit a slow Cinemeta once stayed unmatched for the rest of the run with
-    // nothing on screen saying why -- measured, on a real phone, on a file
-    // that matches perfectly a second later.
+    // is worth asking again about -- treating the two alike leaves a file
+    // that hit a slow Cinemeta once unmatched for the rest of the run, with
+    // nothing on screen saying why.
     throw const DriveCatalogueUnreachable();
   }
   return acceptMatch(metas, identity, type: type);
@@ -237,9 +235,8 @@ final class DriveMatchRun {
         );
         // Unclaimed, so the next pass asks again. A refusal is remembered
         // and a failure is not: the first is an answer about this file, the
-        // second is the absence of one, and treating them alike is what left
-        // a perfectly matchable file unmatched until somebody pressed
-        // Reload.
+        // second is the absence of one, and treating them alike would leave
+        // a perfectly matchable file unmatched until Reload is pressed.
         _asked.remove((file.fileId, file.name));
         continue;
       }

@@ -9,8 +9,8 @@
 /// deleted, or whose grant has been withdrawn, does not come back at all.
 ///
 /// **One call reaches every granted file.** The `drive.file` grants
-/// accumulate per user and per OAuth client and do not lapse -- measured
-/// against the real API, not read in a document -- so an access token
+/// accumulate per user and per OAuth client and do not lapse (see
+/// [DriveAccount], "One token, not one per file"), so an access token
 /// minted now sees the files picked in earlier pairings too, and
 /// [DriveFileLister.listFiles] needs no per-file request.
 ///

@@ -7,11 +7,11 @@
  * the answer, for every install: it is stored in Firestore under the title
  * and the version of the question, and every later request is a read.
  *
- * **Why here and not in the app.** The app used to ask Gemini itself, with
- * a key each viewer pasted into Settings. Nobody but the owner ever had
- * one, and an answer paid for on one device was paid for again on the
- * next. Here the key is the owner's, held in Secret Manager, and a title
- * costs one call however many devices open it.
+ * **Why here and not in the app.** A key each viewer pasted into Settings
+ * would mean nobody but the owner ever has one, and an answer paid for on
+ * one device is paid for again on the next. Here the key is the owner's,
+ * held in Secret Manager, and a title costs one call however many devices
+ * open it.
  *
  * **Why it is safe to leave open.** The request names a title by id and
  * nothing else. The question is built here, from the name and year
@@ -25,10 +25,9 @@
  * any title without end, and would replace the answer for everybody
  * because one viewer disliked it.
  *
- * The question is the one the app asked (`lib/features/similar/
- * similar_titles.dart` before this moved), measured in
- * `tool/recommendations/`. Changing its wording means a new
- * [QUESTION_VERSION], which is also what makes every title be asked again.
+ * The question's wording is measured in `tool/recommendations/`. Changing
+ * it means a new [QUESTION_VERSION], which is also what makes every title
+ * be asked again.
  */
 
 const {getFirestore, FieldValue} = require('firebase-admin/firestore');
@@ -59,7 +58,7 @@ const ANSWER_SHAPE =
   'Answer JSON only: {"titles":[{"title":"","year":0,' +
   '"kind":"film|series","why":"under 12 words"}]}.';
 
-/** The question the app used to ask itself, kept word for word: `tool/recommendations/` measured this wording. */
+/** The question, unchanged from what `tool/recommendations/` measured. */
 function question(subject, about) {
   if (about === 'series') {
     return `Name ${COUNT} television series or films to watch next for ` +

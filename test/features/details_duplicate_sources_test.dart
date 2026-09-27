@@ -41,8 +41,8 @@ Map<String, dynamic> torrent(
   'announce': announce,
 };
 
-/// The duplicate the owner reported: one release, two addons, everything
-/// on screen identical. Their tracker lists overlap without matching.
+/// One release, two addons, everything on screen identical. Their
+/// tracker lists overlap without matching.
 List<Map<String, dynamic>> theSameReleaseTwice() => [
   readyGroup(alphaUrl, [
     torrent(
@@ -149,7 +149,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Grouped is no longer the default; every test that wants it says so.
+  /// Grouped is not the default, so every test that wants it calls this.
   /// Loaded already, the way start-up reads it before the first sources
   /// list is built.
   ///
@@ -236,7 +236,7 @@ void main() {
 
       expect(find.text('Release A 1080p'), findsOneWidget);
       expect(find.text('Release B 1080p'), findsOneWidget);
-      // The addon's own line now sits between the release and the badges,
+      // The addon's own line sits between the release and the badges,
       // which is why the first of these is the line and not the addon.
       expect(badgesOf('Release A 1080p').sublist(1), [
         '👤 42 💾 2 GB',

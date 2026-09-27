@@ -17,11 +17,9 @@ import '../../support/tv.dart';
 /// television and off one.
 ///
 /// A television is watched from across the room, and a 16 dp spinner at
-/// the far right of a heading is not something a viewer there sees as
-/// "loading": the owner of a Chromecast reported the spinner "on the far
-/// right corner, not in the middle of the screen". Whatever the screen is
-/// waiting on -- the title, or every addon's answer -- the indicator sits
-/// on the screen's centre line.
+/// the far right of a heading does not read as "loading" from there.
+/// Whatever the screen is waiting on -- the title, or every addon's answer
+/// -- the indicator sits on the screen's centre line.
 void main() {
   const phone = DeviceProfile(isTv: false, hasTouch: true);
 

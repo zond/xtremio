@@ -493,14 +493,14 @@ void main() {
         lines.firstWhere((line) => line.startsWith('cache'));
 
     test('the mpv half is labelled, so it cannot read as ours', () {
-      // It always was mpv's few seconds of memory; unlabelled it read as
-      // the disk, which is the row's other half now.
+      // mpv's reading is labelled so it cannot be mistaken for the
+      // server's disk cache, the row's other half.
       expect(cacheRow(rows()), 'cache    294.6s mpv');
     });
 
     test('the window is two halves, in bytes and in watching', () {
       // The seconds are the server's, measured against each head's own
-      // rate; the panel does not divide bytes by a bitrate any more.
+      // rate, rather than bytes the panel divides by a bitrate.
       expect(
         cacheRow(
           rows(

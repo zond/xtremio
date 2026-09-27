@@ -73,9 +73,7 @@ void main() {
       tester,
     ) async {
       // The board is what an addon catalogue offers; a file on the viewer's
-      // own Drive is not that. Its app bar is a title and nothing else now,
-      // which is also why the two rungs of a TvLadder it carried for this
-      // one button went with it.
+      // own Drive is not that, so its app bar carries only a title.
       await tester.pumpWidget(harness(const BoardScreen(), core: boardCore()));
       await tester.pumpAndSettle();
 
@@ -94,10 +92,9 @@ void main() {
     testWidgets('its row is a button, not a sentence with a Cancel beside it', (
       tester,
     ) async {
-      // **This is the fix, stated.** The row was a [ListTile]: no edge, no
-      // fill, no arrow, and the only control on screen shaped like a button
-      // was the one that closes the dialog. A viewer who had not seen it
-      // before had to guess that the sentence was tappable.
+      // The row is a button, not a [ListTile]: without an edge, a fill or
+      // an arrow, a sentence-shaped row leaves a viewer to guess it can be
+      // tapped.
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         harness(const LibraryScreen(), core: libraryCore()),

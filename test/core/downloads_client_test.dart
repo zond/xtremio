@@ -357,8 +357,8 @@ void main() {
     });
 
     test('a listing envelope is still read, whole', () async {
-      // The narrow rows are what the ticker sends; the full envelope is
-      // what every build before it sent, and reading it costs nothing.
+      // The ticker sends narrow rows, but a full listing envelope is a
+      // valid shape too, and reading it costs nothing.
       final client = rust.client;
       final seen = <DownloadsUpdate>[];
       client.updates.listen(seen.add);

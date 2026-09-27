@@ -1,8 +1,8 @@
 import 'package:xtremio/core/core.dart';
 
 /// [ServerCacheControl] for widget tests: answers with what the test put in
-/// it and counts what it was asked -- there is no restart call left to
-/// record, since cleaning no longer needs one.
+/// it and counts what it was asked; cleaning takes no restart call to
+/// record.
 class FakeServerCache implements ServerCacheControl {
   FakeServerCache({
     this.usage,

@@ -125,12 +125,12 @@ class LibraryScreen extends StatefulWidget {
   /// Tooltip of the reload button drawn just before the Remote pill while
   /// it is on: fetch the linked files again. An icon and not a chip, so
   /// the pill beside it keeps its one job -- on and off, the way
-  /// Downloaded works -- and the button costs no row of its own. Two
-  /// earlier shapes were worse: a Reload chip on a row under the filters
-  /// moved the grid every time Remote was toggled, and making the pill's
-  /// second press the reload took away the only way to turn it off.
-  /// "Reload", not refresh: what it does is fetch the list again, and
-  /// refresh is what a television does sixty times a second.
+  /// Downloaded works -- and the button costs no row of its own. A chip on
+  /// a row under the filters would move the grid every time Remote is
+  /// toggled, and making the pill's second press the reload would take
+  /// away the only way to turn it off. "Reload", not refresh: what it does
+  /// is fetch the list again, and refresh is what a television does sixty
+  /// times a second.
   static const String reloadLabel = 'Reload';
 
   /// The line [_NamingNote] draws above the linked files.
@@ -209,10 +209,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ///
   /// It dispatches nothing, and the engine's controls never turn it off: a
   /// type or a sort pressed under Remote is the same filter over a different
-  /// list. It used to be the other way round -- Remote replaced the body
-  /// and every engine control turned it off -- which made the one local
-  /// filter that could not be combined with a type the one that looked like
-  /// it could.
+  /// list -- swapping the whole body for Remote instead of filtering it
+  /// would make this, the one local filter that cannot combine with a type,
+  /// look as if it could.
   ///
   /// A core reload cannot take it away, because it is not in the field:
   /// `selectable` arriving again republishes the engine's pills, and this
@@ -328,11 +327,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// **This is where a lost pairing gets found.** A finished pairing sits on
   /// the service for about ten minutes and is handed over exactly once, to
   /// whoever asks; the id of one that has not been collected is written down
-  /// (`PrefsClient.drivePendingSessionKey`), so if the app was killed, or
-  /// the network went away at the wrong second, the next library asks for
-  /// it. Three pairings were lost in one afternoon for want of this -- each
-  /// a Google sign-in, a consent and a list of files, gone with no error
-  /// anywhere because nothing had failed.
+  /// (`PrefsClient.drivePendingSessionKey`), so if the app is killed, or the
+  /// network drops at the wrong second, the next library asks for it.
+  /// Without this, a Google sign-in and consent that already produced a
+  /// list of files is lost with no error anywhere, because nothing failed.
   ///
   /// Nothing waits for it and nothing is drawn from it: the files simply
   /// appear, which is what the viewer expected when they picked them.
@@ -698,11 +696,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 icon: const Icon(Icons.sync),
                                 onPressed: _sync,
                               ),
-                      // Where the Downloaded chip used to go, and only while there
-                      // is something to clean up. Housekeeping is a different
-                      // intention from browsing: the pill below says what to look
-                      // at, this says what to get rid of, and a control that did
-                      // both was the thing that made them hard to tell apart.
+                      // Shown only while there is something to clean up.
+                      // Housekeeping is a different intention from browsing:
+                      // the pill below says what to look at, this says what
+                      // to get rid of, and a control that did both would
+                      // blur the two.
                       if (_hasDownloads)
                         IconButton(
                           tooltip: LibraryScreen.downloadsLabel,
@@ -750,22 +748,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     state != null &&
                     !state.isLibraryEmpty)
                   const _SignInHint(),
-                // What the naming note used to sit above, kept where it was
-                // useful: a viewer looking at their linked files is the one
-                // who needs to know that renaming is how a file gets matched.
+                // Shown only under Remote: a viewer looking at their linked
+                // files is the one who needs to know that renaming is how a
+                // file gets matched.
                 if (_remote) const _NamingNote(),
                 Expanded(
                   child: state == null || !state.isLoaded
                       ? const Center(child: CircularProgressIndicator())
                       // Both "nothing here" messages are about an empty
-                      // *body*, and the body is no longer the engine's
-                      // catalog alone: a viewer who has just linked a film
-                      // into an otherwise empty library is the most likely
-                      // of anybody to be hunting for it, and a page saying
-                      // there is nothing with the thing they are looking for
-                      // one merge away is the worst answer on this screen.
-                      // The engine still decides *which* message, because it
-                      // is the engine's filter either one is about.
+                      // *body*, not only the engine's catalog: a viewer who
+                      // has just linked a film into an otherwise empty
+                      // library is the most likely of anybody to be hunting
+                      // for it, and a page saying there is nothing with the
+                      // thing they are looking for one merge away is the
+                      // worst answer on this screen. The engine still
+                      // decides *which* message, because it is the engine's
+                      // filter either one is about.
                       : shown.isNotEmpty ||
                             kept.isNotEmpty ||
                             appended.isNotEmpty ||
@@ -1053,24 +1051,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// See [LibraryScreen._remote].
 ///
 /// **The rows are drawn whether the engine has anything to say or not.**
-/// They used to appear only once a non-empty library had loaded, which was
-/// fine while every control on them was the engine's -- and is exactly how
-/// a local option vanishes. Remote is true of this device whatever the core
-/// is doing, and a viewer whose library is empty is the *most* likely to be
-/// looking for the file they just linked. So the engine's controls come and
-/// go with its state (an empty [LibrarySelectable] draws neither), and the
-/// app's own are always there.
+/// A row that appeared only once a non-empty library had loaded would be
+/// exactly how a local option vanishes: Remote is true of this device
+/// whatever the core is doing, and a viewer whose library is empty is the
+/// *most* likely to be looking for the file they just linked. So the
+/// engine's controls come and go with its state (an empty
+/// [LibrarySelectable] draws neither), and the app's own are always there.
 ///
 /// **Two rows, in the order a viewer narrows things down.** The engine's
 /// controls first -- the types, and the sort beside them, wrapping under
 /// them only where the width forces it, so a wide screen spends one line on
 /// the engine's half and a phone two; then the app's own filters, Remote
 /// and Downloaded, with the reload button just before Remote while Remote
-/// is on. One wrapped row held all of them, and
-/// which control a press would land on depended on how the wrap happened to
-/// break at that width -- on a television, where the remote walks the rows,
-/// that is a layout that has to be learned per screen size. A row that has
-/// nothing to draw is left out rather than left empty.
+/// is on. One wrapped row holding all of them would make which control a
+/// press lands on depend on how the wrap happens to break at that width --
+/// on a television, where the remote walks the rows, that is a layout that
+/// has to be learned per screen size. A row that has nothing to draw is
+/// left out rather than left empty.
 class _FilterRow extends StatelessWidget {
   const _FilterRow({
     required this.selectable,
@@ -1204,12 +1201,11 @@ class _FilterRow extends StatelessWidget {
                 ),
               ),
             // A pill, like Remote, and for the same reason: it says what
-            // the body is showing. It used to be an [ActionChip] that
-            // navigated to the downloads screen, which made one control
-            // mean two things -- "show me these" and "let me delete these"
-            // -- and left Remote and Downloaded looking alike while
-            // behaving differently. The way to that screen is now an icon
-            // in the app bar, where housekeeping belongs.
+            // the body is showing. The way to the downloads screen is an
+            // icon in the app bar instead: a chip that also navigated there
+            // would make one control mean two things -- "show me these" and
+            // "let me delete these" -- and would leave Remote and Downloaded
+            // looking alike while behaving differently.
             if (hasDownloads)
               FocusTraversalOrder(
                 key: const ValueKey('downloaded'),

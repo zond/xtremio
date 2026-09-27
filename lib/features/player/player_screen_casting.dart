@@ -43,23 +43,16 @@ extension _PlayerCasting on _PlayerScreenState {
   }
 
   /// The session as the sender sees it. A null while this screen thinks it
-  /// is casting means the session ended somewhere else -- the receiver's
-  /// own remote, the system notification, another phone -- and playback
-  /// comes back to this device exactly as if Stop had been pressed here.
+  /// is casting means the session ended elsewhere (the receiver's remote,
+  /// the system notification, another phone), and playback comes back here
+  /// as if Stop had been pressed.
   ///
-  /// **Except while a receiver is being picked in its place.** Starting a
-  /// session ends the one running first, and the platform reports that end
-  /// as it reports every other, in the middle of the switch: taken for the
-  /// viewer's own Stop, it closed the listener the new session was being
-  /// handed, put the film back on this screen under the receiver about to
-  /// get it, and left the switch to finish on top of that ([_castStarts]).
-  ///
-  /// A session on some *other* receiver, reported while no switch here is
-  /// under way, is a session this screen did not hand anything to -- the
-  /// system's own output switcher moving the session, say -- and the
-  /// receiver that had the stream is no longer the one connected. That is
-  /// the same ending, and it gets the same answer rather than a screen
-  /// still naming a receiver it has no session with.
+  /// **Not while a receiver is being picked in its place** ([_castStarts]):
+  /// starting a session ends the running one, and taking that report for a
+  /// Stop would close the listener the new session is being handed. A
+  /// session on some *other* receiver, reported with no switch under way
+  /// (the system's output switcher, say), is the same ending and gets the
+  /// same answer.
   void _onCastSession(CastDevice? device) {
     if (!mounted || !_casting || _castStarts > 0) return;
     if (device != null && device == _castingTo) return;
@@ -81,30 +74,22 @@ extension _PlayerCasting on _PlayerScreenState {
     // second or so, and a length does not go stale.
     if (duration != null && duration > Duration.zero && duration != _duration) {
       _duration = duration;
-      // **What a cast can tell the server, and all of it.** The receiver
-      // does the reading and says where it is in seconds; seconds do not
-      // convert to a byte offset without a constant bitrate, and on a 23 GB
-      // film a two-percent error is wider than the whole retention window,
-      // so a window placed from a converted position would miss the film.
-      // The length, though, *is* the bitrate -- so the window is sized
-      // exactly, and where it sits is left to the receiver's own reads,
-      // which unlike mpv's are plainly sequential.
+      // **All a cast can tell the server.** The receiver's position is in
+      // seconds, which do not convert to a byte offset without a constant
+      // bitrate (a 2% error on a 23 GB film is wider than the retention
+      // window); the length does give the bitrate, so the window is sized
+      // exactly and placed by the receiver's own sequential reads.
       unawaited(_reportDuration(duration));
     }
     _position.value = status.position;
     _reportTime(status.position);
     _reportPlaying(status.state.isPlaying);
-    // A receiver keeps repeating "idle, finished" once it is done; the core
-    // is told the once, as mpv's own completion tells it once.
+    // A receiver keeps repeating "idle, finished"; the core hears it once.
     //
-    // And that is all a finished cast does. Casts do not binge, by decision
-    // and not by omission: no up-next card, no hand-over to the next
-    // episode, whatever `bingeWatching` says. [_onCompleted]'s countdown
-    // assumes someone at this screen who can press Cancel, and a viewer
-    // watching the television is not at the phone to confirm anything; a
-    // TV that goes on playing by itself into the next episode, or the one
-    // after, is the thing to avoid. Moving on stays a press the viewer
-    // makes.
+    // Casts do not binge, by decision: no up-next card and no hand-over,
+    // whatever `bingeWatching` says. The countdown assumes someone at this
+    // screen who can press Cancel, and a television that plays on into the
+    // next episodes by itself is what to avoid.
     if (status.ended && !_castEnded) {
       _castEnded = true;
       _client?.dispatch(CoreActions.playerEnded());
@@ -162,40 +147,23 @@ extension _PlayerCasting on _PlayerScreenState {
   StreamFacts get _streamFacts =>
       StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
 
-  /// **What a receiver is sent, and what the cast is judged by: the film,
-  /// not the container it came in.**
-  ///
-  /// When the stream turned out to be an archive or a disc image the
-  /// server serves the film inside it as ranges of the container
-  /// ([_translatedUrl]), and that member URL is what mpv is playing -- so
-  /// it is also what a receiver should fetch and what its decoder has to
-  /// cope with. Judging the container instead refused every one of these
-  /// on the container's own extension: a `.rar` is not in the castable
-  /// table, so a receiver was told "a Chromecast plays MP4 and WebM files"
-  /// about a release whose one member is an MP4 it plays perfectly well.
-  ///
-  /// Nothing about an ordinary stream changes: with no member this is
-  /// [_opened], which is what it always was.
+  /// **What a receiver is sent and what the cast is judged by: the film, not
+  /// the container it came in.** For an archive or disc image this is the
+  /// member URL the server serves ([_translatedUrl]), which mpv is playing;
+  /// judging the container would refuse a `.rar` whose one member is an MP4
+  /// the receiver plays fine. Otherwise it is [_opened].
   Uri? get _castSource => _translatedUrl ?? _opened;
 
   /// The name the compatibility check reads, which has to be the name of
   /// whatever [_castSource] is.
   ///
-  /// For a member that is the member's own name, as the server stated it:
-  /// the last segment of the URL the archive route redirected to, which
-  /// ends in the film's own file name for exactly this reason (see
-  /// `routeArchive`). [castFilename]'s answer is the *container's* name
-  /// there -- `streamName` is the `.rar` in the torrent, and the addon's
-  /// `behaviorHints.filename` is the `.rar` it linked to -- so it is not
-  /// consulted at all once there is a member, rather than being ranked
-  /// below one: a wrong name outranking a right one is the whole of the
-  /// bug this replaces.
-  ///
-  /// A member whose name has no extension yields null, and the check then
-  /// reads the URL itself and finds the same nothing: an unknown
-  /// container, refused. That is a real answer and not a "not yet" -- the
-  /// server has already said what is inside the container, and this is
-  /// what it said.
+  /// For a member, the last segment of the URL the archive route redirected
+  /// to, which ends in the film's own file name (see `routeArchive`).
+  /// [castFilename] would name the container there (`streamName` and the
+  /// addon's `behaviorHints.filename` are the `.rar`), so it is not
+  /// consulted at all once there is a member. A member name with no
+  /// extension yields null and the check refuses an unknown container, which
+  /// is a real answer, not a "not yet".
   String? get _castFilename {
     final member = _translatedUrl;
     if (member == null) {
@@ -207,22 +175,17 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// Hands the stream to [device], or explains why it cannot be.
   ///
-  /// Nothing is loaded until every step has answered: the stream has to be
-  /// one a receiver could play at all, the session has to start, and a URL
-  /// the receiver can actually fetch has to exist. A failure at any point
-  /// leaves nothing behind -- no session, no LAN listener, and no remains
-  /// of the session this one was picked in place of -- and says what
+  /// Nothing is loaded until every step has answered: the stream is one a
+  /// receiver could play, the session starts, and a URL the receiver can
+  /// fetch exists. A failure at any point leaves no session, no LAN listener
+  /// and no remains of the session this one replaced, and says what
   /// happened.
   ///
-  /// **Leaving the player is one of those endings.** Each step here is a
-  /// round trip, so the viewer can press Back inside any of them, and what
-  /// comes back then would pause the engine being released, open a
-  /// listener on the network and hand a receiver the film -- measured, off
-  /// a `connect` that took two seconds. So every continuation asks
-  /// [_stillOurs], and the one that says no unwinds whatever this call has
-  /// started ([_teardownCast]) rather than merely returning: a session and
-  /// a socket are exactly what must not outlive the screen, and until the
-  /// last line here nothing else knows they exist.
+  /// **Leaving the player is one of those endings.** Each step is a round
+  /// trip the viewer can press Back inside, so every continuation asks
+  /// [_stillOurs], and one that says no unwinds what this call started
+  /// ([_teardownCast]): a session and a socket must not outlive the screen,
+  /// and until the last line nothing else knows they exist.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
     // The film, which for a container is the member inside it; see
@@ -241,35 +204,25 @@ extension _PlayerCasting on _PlayerScreenState {
       facts: _streamFacts,
       filename: _castFilename,
       stats: _lastStats,
-      // A torrent *this device's server is serving* and has not named the
-      // file of yet: the answer is "not until it has", and it comes
-      // without reopening anything, since the poll that names it rebuilds
-      // this screen. A torrent playing off another machine records no
-      // request, so it is not pending here and the container is judged
-      // from what there is -- right, because nothing on this device is
-      // ever going to name that file, and "try again in a moment" would
-      // be a wait that never ends.
-      //
-      // A member is judged by the same state, with no clause of its own.
-      // A translation only ever happens out of [_failPlayback], which stops
-      // the polling and clears the request; the reopen that plays the
-      // member ([_reopenAt]) puts it back ([_restoreTorrentStats]). So a
-      // member of a torrent served here is pending until a poll names the
-      // torrent's file, as the stream was before it failed, and a member of
-      // a link never is.
+      // A torrent this device's server is serving and has not named the file
+      // of yet: "not until it has", answered without reopening anything,
+      // since the poll that names it rebuilds this screen. A torrent on
+      // another machine records no request, so it is judged from what there
+      // is: nothing here will ever name that file. A member is judged the
+      // same way: [_reopenAt] restores the request ([_restoreTorrentStats])
+      // that [_failPlayback] cleared, so a member of a torrent served here is
+      // pending until a poll names the file.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {
       await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
     }
-    // Whatever session is running now is about to be replaced, so its wait
-    // ends here rather than at its twenty seconds. Starting a cast zeroes
-    // the listener's count even when the listener is already up, and the
-    // load below is a round trip: a timer left armed for the last receiver
-    // would fire in the middle of that, read the new session's zero, and
-    // end a session that has had no chance to fetch anything. The next
-    // wait is armed after the load, by [_watchCastFetch].
+    // Whatever session is running is about to be replaced, so its wait ends
+    // here: starting a cast zeroes the listener's count, and a timer left
+    // armed for the last receiver would read the new session's zero during
+    // the load and end it. The next wait is armed after the load
+    // ([_watchCastFetch]).
     _cancelCastFetch();
     // A session the switch itself ends is not one that ended elsewhere, and
     // the platform reports it the same way: see [_onCastSession]. Counted
@@ -302,15 +255,11 @@ extension _PlayerCasting on _PlayerScreenState {
     CastReady compatibility,
   ) async {
     // Stop stays on the bar while a second receiver is being picked, and
-    // pressing it ends the cast. What this call has started by then --
-    // the new session, the listener it switched on -- is what that Stop
-    // was for, so every step below that finds one has happened unwinds
-    // like a leave does. Carrying on sent the film to the new receiver
-    // after the viewer had asked for it back. The unwinding is also what
-    // settles the listener: a Stop during the enable sends its disable
-    // while the enable is in flight, the two land in either order, and
-    // `_lanMediaOn` is written from the enable's answer -- so the disable
-    // that counts is the one the unwinding sends after that answer.
+    // pressing it ends the cast, so every step below that finds a Stop has
+    // happened unwinds like a leave. The unwinding also settles the
+    // listener: a Stop during the enable sends its disable while the enable
+    // is in flight, and `_lanMediaOn` is written from the enable's answer,
+    // so the disable that counts is the one sent after that answer.
     final stops = _castStops;
     bool abandoned() => !_stillOurs || _castStops != stops;
     // What comes back, not the row that was tapped: the platform is asked
@@ -341,12 +290,8 @@ extension _PlayerCasting on _PlayerScreenState {
       await cast.disconnect();
       // That disconnect ended whatever session was running, which on a
       // switch away from a live one is the session this screen is still
-      // showing. It is ended here rather than left to the client's own
-      // report of it: the report does come, and is what has been clearing
-      // this, but the screen would otherwise go on presenting a cast this
-      // very method has just torn down -- with its wait disarmed and its
-      // listener closed -- for as long as the platform takes to say so. A
-      // no-op when nothing was casting, which is every other way in here.
+      // showing: end it here rather than wait for the client's report of it.
+      // A no-op when nothing was casting.
       await _stopCast(disconnect: false);
       return '${device.name} cannot reach this device over the network, so '
           'there is no address to give it. Casting a loopback URL it could '
@@ -361,16 +306,10 @@ extension _PlayerCasting on _PlayerScreenState {
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
     await _engine?.pause();
-    // Pausing is a round trip too, and the continuation after it is the
-    // one that must not be skipped: below is a `setState` that puts this
-    // screen into casting, and while a receiver has the stream [build]
-    // draws no video. On a screen that is leaving, that takes the picture
-    // out of the tree for the rest of the teardown wait -- the wait whose
-    // whole point is that the sinks stay alive and draining while mpv
-    // stops ([_leave]) -- and nothing rebuilds it, since the unwinding
-    // below clears `_castingTo` without a `setState`. Measured: the
-    // surface gone from the frame, and the film handed to the receiver on
-    // the way past.
+    // Pausing is a round trip too, and the `setState` below puts the screen
+    // into casting, where [build] draws no video. On a leaving screen that
+    // would take the picture out for the rest of the teardown wait, whose
+    // point is that the sinks stay drained ([_leave]).
     if (abandoned()) {
       await _teardownCast();
       return null;
@@ -386,10 +325,8 @@ extension _PlayerCasting on _PlayerScreenState {
         duration: _duration > Duration.zero ? _duration : null,
       );
     });
-    // The one line that was missing while a Chromecast sat on a splash
-    // screen: what we handed it, and which receiver we picked that address
-    // for. The receiver's name is not in it -- it is as often a person's
-    // as a room's, and the address is what the report is about.
+    // What we handed the receiver, and which address it was picked for. Not
+    // the receiver's name, which is as often a person's as a room's.
     DiagnosticsLog.info(
       'player',
       'casting ${DiagnosticsLog.url(url)} to a receiver at '
@@ -405,18 +342,12 @@ extension _PlayerCasting on _PlayerScreenState {
         start: position,
       );
     } catch (error) {
-      // A receiver turning the media down does not come back this way --
-      // the plugin hands the load to the SDK and answers at once, and the
-      // refusal arrives later as a media status, which the wait armed
-      // below is for. What does come back this way is the platform itself
-      // refusing: a session that went away between connect and load, a
-      // native exception, a plugin that one day awaits the result. This
-      // call is not awaited by anyone, so an error out of it would land
-      // nowhere -- and the screen would sit in casting, the engine paused,
-      // the listener open, with no wait armed and only Stop left. Undone
-      // the way the no-address branch undoes it: the session and the
-      // listener go, the film comes back here at the position it was
-      // handed over at, and the viewer hears why.
+      // A receiver turning the media down does not come back this way (the
+      // plugin answers at once and the refusal arrives later as a media
+      // status, which the wait below is for). This is the platform itself
+      // refusing: a session gone between connect and load, a native
+      // exception. Nobody awaits this call, so it is undone here the way the
+      // no-address branch undoes it, and the viewer hears why.
       DiagnosticsLog.warn(
         'player',
         'the receiver did not take the media: $error',
@@ -464,20 +395,14 @@ extension _PlayerCasting on _PlayerScreenState {
     _castFetchTimer = null;
   }
 
-  /// Whether the receiver ever reached this device, which is the whole of
-  /// what the listener's count says and the whole of what this asks.
+  /// Whether the receiver ever reached this device, which is all the
+  /// listener's count says.
   ///
-  /// Nothing has reached it: the address it was given is one it cannot
-  /// route to. There is nothing to wait for -- a hanging connect never
-  /// fails on its own -- so the session ends the way Stop ends it and the
-  /// film comes back to this device, with the reason said out loud.
-  ///
-  /// Something has, and the viewer hears nothing at all. Whether a receiver
-  /// that found us is buffering slowly or cannot decode what it fetched is
-  /// not something twenty seconds can tell -- a cold torrent has made
-  /// requests by then and is still filling its window -- and a modal
-  /// blaming the file for a wait that is going fine is worse than silence.
-  /// The log gets it; Stop is where it always was.
+  /// Nothing reached it: the address is one it cannot route to, and a
+  /// hanging connect never fails on its own, so the session ends as Stop
+  /// ends it and the film comes back here, with the reason said. Something
+  /// did: the viewer hears nothing, since twenty seconds cannot tell slow
+  /// buffering from a decode failure; the log gets it.
   Future<void> _castFetchCheck() async {
     _castFetchTimer = null;
     if (!mounted || !_casting) return;
@@ -505,21 +430,14 @@ extension _PlayerCasting on _PlayerScreenState {
   /// The URL to give [device] for the stream this player has open, or null
   /// when there is none it could fetch.
   ///
-  /// A stream served from somewhere else on the internet is handed over as
-  /// it is; the receiver has a network connection of its own. Only a URL on
-  /// the embedded server needs the server's LAN media listener, which is
-  /// therefore the only case that starts one.
-  ///
-  /// [local] is the film ([_castSource]), so for a container it is the
-  /// member's URL on the archive stream routes -- and the listener does
-  /// serve those: `lan_media_routes()` mounts `archive_stream_routes()`
-  /// beside `lan_stream_routes()`, deliberately, for this. What it does
-  /// not mount is the archive `/create` half, which fetches a
-  /// caller-named URL; so a session made here on loopback is readable
-  /// from the LAN and a new one cannot be made there. That costs nothing
-  /// while a cast is running -- the receiver's own reads keep the session
-  /// leased -- and is why the member is rebuilt on the LAN base rather
-  /// than re-created for it.
+  /// A stream on another internet host is handed over as it is. Only a URL
+  /// on the embedded server needs the LAN media listener, which is the only
+  /// case that starts one. For a container [local] is the member's URL on
+  /// the archive stream routes, which the listener serves
+  /// (`lan_media_routes()` mounts `archive_stream_routes()`); it does not
+  /// mount the archive `/create` half, which fetches a caller-named URL, so
+  /// the member is rebuilt on the LAN base rather than re-created there, and
+  /// the receiver's reads keep its session leased.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
     // The LAN listener serves the embedded server's routes and nothing
     // else, so a URL on another server on this device has no address a

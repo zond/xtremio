@@ -12,15 +12,15 @@
 //! the other does not, a translator's own timings, and two subtitlers'
 //! habits about when a line goes up.
 //!
-//! **The checked-in fixture predates the move to spans and holds only the
-//! starts.** The recorder below now writes both ends, and this test uses
-//! them whenever the file has them; until the fixture is re-recorded from
-//! the files it came from, each cue is given [`NOMINAL_LENGTH`] on screen
-//! instead. That makes what is being asserted here narrower than it looks:
-//! it is the *search* -- a PAL-sized ratio found unaided across a real,
-//! irregular pattern of 694 cues against 683 -- and not the tolerance of
-//! merged and split lines, which needs real ends and is covered
-//! synthetically in the module's own tests.
+//! **This checked-in fixture holds only cue starts, not spans.** The
+//! recorder below writes both ends, and this test uses them whenever the
+//! file has them; until the fixture is re-recorded from the files it came
+//! from, each cue is given [`NOMINAL_LENGTH`] on screen instead. That makes
+//! what is being asserted here narrower than it looks: it is the *search*
+//! -- a PAL-sized ratio found unaided across a real, irregular pattern of
+//! 694 cues against 683 -- and not the tolerance of merged and split lines,
+//! which needs real ends and is covered synthetically in the module's own
+//! tests.
 //!
 //! Re-record it with two SRT or WebVTT files of your own, which is also
 //! how it gains those ends:
@@ -47,9 +47,8 @@ struct Starts {
     note: String,
     playing: Vec<f64>,
     reference: Vec<f64>,
-    /// The same cues with both of their timestamps, once the fixture has
-    /// been recorded by a build that reads them. Defaulted rather than
-    /// required so the recording that predates spans still loads.
+    /// The same cues with both of their timestamps. Defaulted rather than
+    /// required so a fixture with no spans recorded still loads.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     playing_spans: Vec<Cue>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

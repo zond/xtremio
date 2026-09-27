@@ -2,12 +2,11 @@
 ///
 /// [sniffArchive] names a stream mpv could not open: a debrid link that is
 /// a `.rar` of a release, a torrent whose one big file is a disc image.
-/// Until now that was the end of it -- "this source is a RAR archive,
-/// which can't be played". The streaming server reads such a container as
-/// *ranges of itself* now (`docs/design/translated-sources.md` in the
-/// stream-server tree): it indexes the container with a handful of small
-/// reads, works out which bytes of it are the film's bytes, and serves
-/// those. Nothing is extracted and nothing is written, so a member is
+/// The streaming server reads such a container as *ranges of itself*
+/// (`docs/design/translated-sources.md` in the stream-server tree): it
+/// indexes the container with a handful of small reads, works out which
+/// bytes of it are the film's bytes, and serves those. Nothing is
+/// extracted and nothing is written, so a member is
 /// played exactly as cheaply as a plain file -- and a container whose film
 /// is *packed* rather than merely wrapped is refused, with a sentence
 /// saying so, because serving it would mean downloading and unpacking the
@@ -191,14 +190,13 @@ Future<ArchiveRouting?> _route(
 
   // A torrent-backed container that got no redirect. The route creates its
   // session on the first request for a *member*, and the redirect handler
-  // only looks sessions up -- so as the server stands today (master
-  // 52d25dc) nothing indexes the container here and nothing selects a
-  // member of it: the answer is a `404`. The query form below does index
-  // it, which is what turns a container the server will not serve at all
-  // -- a Blu-ray image's metadata partition, a RAR set with a hole in it
-  // -- from "can't be played" into the sentence that says why. It cannot
-  // produce a member: with nothing selected the route answers `404` for
-  // that too. See the step-7 report; the fix is on the server's side.
+  // only looks sessions up, so nothing here indexes the container or
+  // selects a member of it: the answer is a `404`. The query form below
+  // does index it, which turns a container the server will not serve at
+  // all -- a Blu-ray image's metadata partition, a RAR set with a hole in
+  // it -- from "can't be played" into the sentence that says why. It
+  // cannot produce a member either, so with nothing selected the route
+  // answers `404` for that too; fixing that is on the server's side.
   final indexed = await sendWithoutRedirects(
     client,
     'GET',

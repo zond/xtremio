@@ -195,9 +195,8 @@ Future<void> openSource(
   expect(focusedLabel(tester), group, reason: 'the group row reached $group');
   await press(tester, LogicalKeyboardKey.select);
   // Select on a pill opens its row and carries the remote into it, which
-  // is what [TvLadderRow.advanceOnSelect] is for. The press that used to
-  // follow it was a no-op then and is a step past the row now, because
-  // there is a rung below the sources for it to land on.
+  // is what [TvLadderRow.advanceOnSelect] is for; the press below is a
+  // step past the row, onto the rung under the sources.
   if (!focusIn<TvSourceCard>()) {
     await press(tester, LogicalKeyboardKey.arrowDown);
   }
@@ -539,9 +538,8 @@ void main() {
         'walked through in either direction', (tester) async {
       // The toggle is drawn on the heading's own line and the chips below
       // it. One rung for the pair would mean arriving at whichever came
-      // first and never reaching the other, which is the failure this
-      // screen had before the ladder: a control on screen, marked, and
-      // unreachable.
+      // first and never reaching the other: a control on screen, marked,
+      // and unreachable.
       await mountSectioned(tester);
       expect(focusIn<TvSourceGroupPill>(), isTrue);
 
@@ -802,12 +800,12 @@ void main() {
 
     testWidgets('the walk down from the title reaches the pills, and the '
         'episode row is where it was left', (tester) async {
-      // Both halves of one report from the sofa. A press down from the
-      // title stepped over the season pills -- they are narrow and packed
-      // at the left, which is what directional focus punishes -- and the
-      // episode row, arrived at sideways rather than through the ladder,
-      // lost its memory of the card the viewer had been standing on,
-      // because whatever the press landed on was written over it.
+      // Two things a press down from the title must not do: step over the
+      // season pills -- narrow and packed at the left, which is what
+      // directional focus punishes -- and, arriving at the episode row
+      // sideways rather than through the ladder, overwrite its memory of
+      // the card the viewer was standing on with whatever the press
+      // landed on.
       await mountSeries(tester);
       await stepUpToPills(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -838,10 +836,10 @@ void main() {
     });
 
     testWidgets('select on an episode goes where down goes', (tester) async {
-      // Landing on an episode already loads its sources, so select had
-      // nothing left to do and viewers pressed it and saw nothing happen.
-      // It does what down does now: whichever of the heading's controls
-      // is next, the same stop a press down reaches.
+      // Landing on an episode already loads its sources, so select alone
+      // would do nothing visible; it does what down does instead:
+      // whichever of the heading's controls is next, the same stop a
+      // press down reaches.
       await mountSeries(tester);
       await stepUpTo<TvEpisodeCard>(tester);
       await press(tester, LogicalKeyboardKey.arrowRight);

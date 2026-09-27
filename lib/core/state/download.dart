@@ -228,7 +228,7 @@ sealed class DownloadsUpdate {
   /// narrow event; a `removed` array names the entries that are gone (what
   /// the client pushes for its own removals, and the shape the Rust side
   /// would push if `remove` ever emitted); anything else is read as a
-  /// listing, which is what every build before the narrow one pushed.
+  /// listing, the shape a full `downloads_list` snapshot takes.
   factory DownloadsUpdate.fromJson(Map<String, dynamic> json) {
     final progress = json['progress'];
     if (progress is List) {

@@ -11,7 +11,6 @@ Ordered by how likely it is to be picked up, not by size.
 ## Subtitles on a cast
 
 A viewer picks a subtitle, casts, and it is simply not there -- silently.
-Asked for by zond, 2026-09-21.
 
 The sending half is ready: the Cast plugin takes `tracks` on the media
 information, `activeTrackIds` on the load, and has `setActiveTrackIDs` for
@@ -47,19 +46,19 @@ that exists; a Matroska subtitle track reader is the half that does not.
 What would make casting work for the files a receiver turns down -- HEVC,
 Matroska, TrueHD -- instead of refusing them with a sentence. stream-server
 already advertises HLS transcoding support, so this may be wiring rather
-than building; scope it before estimating. Wanted since 2026-09-08 and
-deferred every time because direct play covers what is actually watched.
+than building; scope it before estimating. Wanted, and deferred every time
+because direct play covers what is actually watched.
 
 ## A discover-only torrent state
 
-**Being scoped 2026-09-21 -- zond wants this built, not wished for.** What
-follows is the reason; the design is in hand.
+**Being scoped -- zond wants this built, not wished for.** What follows is
+the reason; the design is in hand.
 
 An engine with no reader wants every file, and the want set only narrows
 when a stream arrives -- so anything that creates an engine early fetches
-the whole torrent until a reader shows up (measured 2026-09-19: 546 MB at
-~50 MB/s). It is not hit today only because the player's stream request
-follows its open by about 160 ms.
+the whole torrent until a reader shows up (546 MB at ~50 MB/s). It is not
+hit today only because the player's stream request follows its open by
+about 160 ms.
 
 The fix needs a state where a torrent finds peers and metadata without
 wanting data, and rqbit drops peers when neither side is interested, so
@@ -69,10 +68,10 @@ waits on.
 
 ## Drive as an addon
 
-Asked by zond, 2026-09-20: whether Google Drive belongs behind an addon
-seam rather than in the app. The translated-sources work made the case
-stronger -- a Drive file is another source of byte ranges, which is
-exactly what that seam takes -- but nothing has been designed.
+Whether Google Drive belongs behind an addon seam rather than in the app.
+The translated-sources work makes the case stronger -- a Drive file is
+another source of byte ranges, which is exactly what that seam takes --
+but nothing has been designed.
 
 ## Shrinking the stremio-core fork to nothing
 
@@ -86,9 +85,9 @@ this is how that becomes zero.
 
 A compressed member cannot be seeked, so those are refused. Formats with
 independently-compressed blocks (bgzip, seekable zstd) could be, with a
-block index. **Decided against, 2026-09-20**: the releases that show up in
-practice are stored RAR and ZIP, so this would be machinery for a case
-that does not arrive. Here so the decision is findable, not to be done.
+block index. **Decided against**: the releases that show up in practice
+are stored RAR and ZIP, so this would be machinery for a case that does
+not arrive. Here so the decision is findable, not to be done.
 
 ## Multi-volume RAR behind a debrid link
 
@@ -125,4 +124,4 @@ viewers with an AVR that takes it.
 * **iOS.** No forks are carried for it.
   [OPERATIONS.md](OPERATIONS.md#building-for-ios) has the two proven
   changes, and the CI job is red by design.
-* **Browser clients.** Closed by zond, 2026-09-19.
+* **Browser clients.** Closed by zond.

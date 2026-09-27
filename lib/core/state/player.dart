@@ -94,17 +94,15 @@ final class SubtitleInfo {
   /// narrower being guessed.
   ///
   /// `g`, OpenSubtitles v3's small-integer bucket, is deliberately not
-  /// read: it used to be the key, on the belief that it named one
-  /// uploader's batch across a series, and it does not. Measured over 506
-  /// real answers for two shows, one Swedish batch
-  /// (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`) is `g=6` on S01E01, `5` on
-  /// S01E02, `4` on S01E03 and `1` on S03E05: the index is re-assigned per
-  /// answer, roughly in size order, so the same integer names a different
-  /// family next episode. Nor is `fpsMilli`, the frame rate the addon says
-  /// the file was cut for: ten English files for one film declaring six
-  /// rates all end within 1 % of the same runtime, so it says where an
-  /// upload came from and not how it is timed (AGENTS, *Nothing re-times a
-  /// subtitle but the viewer*).
+  /// read: despite the name, it is not a stable batch id. One Swedish
+  /// batch (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`) answers `g=6` on
+  /// S01E01, `5` on S01E02, `4` on S01E03 and `1` on S03E05 -- the index
+  /// is re-assigned per answer, roughly in size order, so the same integer
+  /// names a different family next episode. Nor is `fpsMilli`, the frame
+  /// rate the addon says the file was cut for: ten English files for one
+  /// film declaring six rates all end within 1 % of the same runtime, so
+  /// it says where an upload came from and not how it is timed (AGENTS,
+  /// *Nothing re-times a subtitle but the viewer*).
   String? get releaseGroupKey => releaseGroup?.toLowerCase();
 
   /// The source that release came from (`BluRay`, `WEB-DL`).

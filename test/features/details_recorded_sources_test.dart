@@ -179,10 +179,10 @@ void main() {
         // picks the row out, and it fails by name when none carries them.
         final drawn = rowFor(tester, shown);
         expect(drawn.first, shown.lead, reason: '$why: the lead leads');
-        // Said once. The bug this replaces drew the release and then the
-        // file line under it, which is the same release with `.mkv` on the
-        // end; the lead is taken out of the rest wherever it appears, so
-        // the row cannot say it twice however the addon spelled it.
+        // Said once: the lead is taken out of the rest wherever it
+        // appears, so the row cannot say it twice however the addon
+        // spelled it -- even when the addon repeats the release, with
+        // `.mkv` on the end, as the file line under it.
         expect(
           drawn.where((line) => line == shown.lead),
           hasLength(1),
@@ -212,8 +212,7 @@ void main() {
           ),
         ),
       );
-      // Row 6: a hundred and twenty characters of filename, and the line
-      // under it adds one word to it.
+      // Row 6 (`dubs`): the line under the release adds only `MULTi`.
       expect(rowFor(tester, shownOf(streams[5])), contains('MULTi'));
       // Row 5: the same release spelled with spaces instead of dots adds
       // nothing at all, so it is not on the row in any form -- which is
@@ -223,16 +222,15 @@ void main() {
         isNot(contains(startsWith('The Matrix 1999 UHD BluRay'))),
       );
 
-      // Row 4's pack: ten of its fifteen words were the lead over again
-      // and the card is down to the five that name the box set. The old
-      // rule drew the whole line, which is what a phone showed.
+      // Row 4's pack: ten of its fifteen words repeat the lead; the card
+      // keeps the five that name the box set, not the whole line.
       expect(
         rowFor(tester, shownOf(streams[3])),
         contains('PACK 4K UHD Collection 1999-2003'),
       );
       // Row 27 is the same shape at its worst -- `30.Rock.S02` under
       // `30.Rock.S02E11`, thirty-eight characters for a difference of
-      // three -- and it is the row this parser was rebuilt for.
+      // three.
       expect(rowFor(tester, shownOf(streams[26])), contains('S02'));
 
       // And the line that is about something else, whole, in the addon's
@@ -332,9 +330,8 @@ void main() {
       tester,
     ) async {
       await pump(tester, width: 400);
-      // Recorded row 6: `behaviorHints.filename` spells out every dub, 120
-      // characters of it, which is what a viewer picking between two
-      // 2160p rips is reading.
+      // `dubs` (recorded row 6) is the longest release in the fixture,
+      // and what a viewer picking between two 2160p rips is reading.
       final long = shownOf(recordedStreams()[5]).lead;
       final title = tester.getSize(find.text(long));
       final shortest = tester.getSize(find.text('MUBI'));
@@ -397,9 +394,9 @@ void main() {
     ) async {
       await pump(tester);
 
-      // The whole point of the parser, drawn: the one recorded stream with
-      // a Swedish track, and the indexer it came off. Nothing in the app
-      // could say either before this.
+      // The parser's payoff: the one recorded stream with a Swedish
+      // track, and the indexer it came off, are both nameable because
+      // of it.
       final swedish = recordedStreams().firstWhere(
         (stream) => factsOf(stream).languages.contains('🇸🇪'),
       );
@@ -474,21 +471,18 @@ void main() {
         expect(card.pills, factsOf(stream).pills, reason: '$why: the parse');
       }
 
-      // And the card draws them. Recorded row 4 is the pack: the film is
-      // the lead, off `behaviorHints.filename`, and what the collection it
-      // came out of adds to that is the line under it -- which is the one
-      // thing on that card a viewer cannot work out from the file name.
+      // And the card draws them. Recorded row 4's pack: the film is the
+      // lead and the collection line under it is the one thing on the
+      // card a viewer cannot get from the file name alone.
       const film =
           'The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) '
           '[4KLiGHT]';
       const pack = 'PACK 4K UHD Collection 1999-2003';
       expect(drawnOn(tester, film), containsAllInOrder([film, pack]));
-      // Row 6 is the wall of text: ~120 characters of spelled-out dubs in
-      // the filename where the addon's own line says `MULTi`. The lead is
-      // on the card whole -- what the card does about the length is wrap
-      // at the release's own separators and stop at
-      // [TvSourceCard.leadLines] -- and the line under it is the one word
-      // of it that is not the lead already.
+      // `dubs` (recorded row 6): the lead is on the card whole, wrapped at
+      // the release's own separators and stopped at
+      // [TvSourceCard.leadLines]; the line under it is the one word of it
+      // that is not the lead already.
       expect(drawnOn(tester, dubs), containsAllInOrder([dubs, 'MULTi']));
     });
 
@@ -498,32 +492,18 @@ void main() {
 
       // What this is really measuring is the panel. A row of cards is as
       // tall as the tallest card in it, so the tallest recorded answer
-      // sets the height of every card beside it -- and the sources have to
-      // share a 720p television with the rung headers above them, the
-      // heading's own two rungs of controls, and the row of group pills.
+      // sets the height of every card beside it, and the sources share a
+      // 720p television with the rung headers, the heading's own two
+      // rungs of controls, and the row of group pills above them.
       //
-      // Uncapped, the tallest recorded card comes out at 403 dp and the
-      // row at 427 -- most of a 648 dp safe area, so walking from a pill
-      // to a card would scroll the screen. Three lines for the lead and
-      // three for each line under it ([TvSourceCard.leadLines],
-      // [TvSourceCard.bodyLines]) bring the 2160p row to 337.
+      // Uncapped, the tallest recorded card would run past the panel's
+      // 342 dp ceiling with a fourth line, so [TvSourceCard.leadLines]
+      // and [TvSourceCard.bodyLines] cap the lead and each line under it
+      // at three, and the cap does not grow.
       //
-      // It was 342 at two lines of lead, before the repeat of the release
-      // was taken out of the line underneath it: that took the row to 322,
-      // and the third line of the lead spent 15 dp of the 20.
-      //
-      // Rebuilding the parser around one tokenisation shortened six of
-      // these second lines and added six rows, and moved neither capped
-      // number: 313 and 337 before, 313 and 337 after. What binds them is
-      // row 6's lead, which no line under it can shorten -- uncapped the
-      // row did fall, 447 to 427. So the room does not buy a taller cap
-      // either: a fourth lead line measures 352 and a fourth body line
-      // 353, both past the 342 this panel is known to carry.
-      //
-      // These numbers are the widget test's own font, whose glyphs are
-      // square and therefore wider than any real one: a conservative
-      // measure, and the reason this asserts a ceiling rather than an
-      // equality.
+      // The ceiling, not an equality, because the widget test's own font
+      // has square glyphs wider than any real one -- a conservative
+      // measure.
       final heights = tester
           .widgetList<TvSourceCard>(find.byType(TvSourceCard))
           .map((card) => tester.getRect(find.byWidget(card)).height)
@@ -542,12 +522,10 @@ void main() {
         reason: 'the sources are a row of the panel, not the panel',
       );
 
-      // And the room the subtraction bought is spent, not banked: the
-      // longest recorded release is painted over three lines
+      // The longest recorded release paints over three lines
       // ([TvSourceCard.leadLines]), written out here rather than read off
-      // the constant so that lowering the cap fails this. Two was what the
-      // panel could afford while the line underneath was the release over
-      // again; six is what the release would take uncut.
+      // the constant so that lowering the cap fails this test; the
+      // release would take six lines uncut.
       expect(linesOf(tester, breakableRelease(dubs)), 3);
     });
 

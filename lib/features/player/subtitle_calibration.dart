@@ -173,13 +173,10 @@ final class SubtitleCalibration {
   /// before their difference is allowed to set a rate.
   ///
   /// A rate read off two observations carries their error divided by the
-  /// span between them, and the error is at best the tenth of a second
-  /// one shift press is worth. Across thirty seconds that tenth is a
-  /// 0.3 % rate error -- three times the 0.12 % drift the marks are
-  /// there to find, and applied to the whole episode. Two minutes puts
-  /// it at 0.083 %, under the residual it is chasing, and is well inside
-  /// the flow this is for: mark it right at the start, notice the drift
-  /// five minutes later, mark it right again.
+  /// span between them; at this span that error is 0.083 %, under the
+  /// 0.12 % drift the marks are there to find. Well inside the flow this
+  /// is for: mark it right at the start, notice the drift five minutes
+  /// later, mark it right again.
   static const double rateSpan = 120;
 
   /// How close a new mark has to be to an existing one to be treated as

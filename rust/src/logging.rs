@@ -7,12 +7,11 @@
 //! the last [`RING_CAPACITY`] formatted lines in memory, so a release build
 //! on a phone can show and copy its own log without ADB.
 //!
-//! Desktop builds also print to stderr. On Android there is now a
-//! subscriber where there used to be none, and installing one stops
+//! Desktop builds also print to stderr. Installing this subscriber stops
 //! `tracing`'s `log` feature from forwarding events to the `log` crate (it
-//! only does that while no subscriber is installed), so [`RingLayer`]
-//! re-emits each line through `log` itself -- which is what FRB's
-//! `setup_default_user_utils` routes to logcat.
+//! only forwards while no subscriber is installed), so on Android, where
+//! FRB's `setup_default_user_utils` reads from `log`, [`RingLayer`] re-emits
+//! each line through `log` itself -- which is what routes it to logcat.
 //!
 //! That FRB setup opens the `log` crate at TRACE, and the crates that log
 //! through `log` rather than `tracing` -- rustls, mio, notify -- never pass
@@ -66,13 +65,13 @@ static INIT: Once = Once::new();
 /// swaps the filter built from them.
 ///
 /// Both traces are off in the filter this installs and are turned on by
-/// [`set_verbose`] alone. They were on unconditionally before: this crate
-/// owns the process's one subscriber (stream-server is embedded with
-/// `init_logging: false`), so the server's own switch had no filter to
-/// reload -- it wrote the setting to its file and the log carried the
-/// trace either way. `enginefs=info` and `stream_server=info` admit both
-/// targets wholesale, which is why they have to be named off explicitly
-/// rather than merely left out.
+/// [`set_verbose`] alone. Without naming them off, they would be on
+/// unconditionally: this crate owns the process's one subscriber
+/// (stream-server is embedded with `init_logging: false`), so the server's
+/// own switch has no filter to reload -- it writes the setting to its file,
+/// and the log carries the trace either way. `enginefs=info` and
+/// `stream_server=info` admit both targets wholesale, which is why they
+/// have to be named off explicitly rather than merely left out.
 static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLock::new();
 
 /// Serialises every test that writes the process's one filter: the ones
@@ -82,10 +81,7 @@ static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLoc
 /// global and the lib's tests run in parallel, so a test that starts a
 /// server in another thread could turn the trace off between
 /// `a_start_applies_the_setting_the_last_session_left`'s restart and its
-/// check. It did in a full run on 2026-09-27, while only the tests that
-/// flipped the filter on purpose took this lock. This is the shape
-/// that made stream-server's own suite flake once already. Take it through
-/// [`serialise_with_the_filter`].
+/// check. Take it through [`serialise_with_the_filter`].
 #[cfg(test)]
 static VERBOSE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -283,9 +279,9 @@ impl<S: Subscriber> Layer<S> for RingLayer {
         //
         // The module path is what android_logger names the logcat tag after
         // (FRB configures no tag of its own), and a record built here has
-        // none unless it is given one: every line went to logcat with an
-        // empty tag, so `logcat -s` could not find them and a filter on the
-        // tag matched nothing. `adb logcat -s xtremio` now does.
+        // none unless it is given one: without it, `logcat -s` matches
+        // nothing against an empty tag. This is the tag `adb logcat -s
+        // xtremio` filters on.
         #[cfg(target_os = "android")]
         log::logger().log(
             &log::Record::builder()
@@ -368,10 +364,9 @@ mod tests {
         let retention = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
         let proxy =
             || tracing::enabled!(target: stream_server::PROXY_TRACE_TARGET, tracing::Level::INFO);
-        // Before anything is flipped, which is the half that was wrong:
-        // `enginefs=info` and `stream_server=info` admit both targets
-        // wholesale, so the filter installed here has to name them off
-        // rather than merely not mention them.
+        // Before anything is flipped: `enginefs=info` and `stream_server=info`
+        // admit both targets wholesale, so the filter installed here has to
+        // name them off rather than merely not mention them.
         assert!(
             !retention(),
             "the retention trace was on before anyone asked"

@@ -17,8 +17,8 @@
            it needs the matching permission to exist at all.
 
          The plain FOREGROUND_SERVICE also merges in from
-         flutter_chrome_cast's manifest, but this app now needs one of its
-         own, so it is declared here rather than borrowed. -->
+         flutter_chrome_cast's manifest, but this app needs one of its own,
+         so it is declared here rather than borrowed. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
@@ -69,54 +69,30 @@
                 <!-- Show in the Android TV / Google TV home launcher. -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
-            <!-- stremio:// deep links, which is how every addon site's
-                 Install button (stremio-addons.net's included) hands over an
-                 addon: it takes the addon's own manifest URL and swaps the
-                 scheme, so https://host/manifest.json arrives here as
-                 stremio://host/manifest.json. The app opens that addon's
-                 details screen; nothing is installed without a press.
-
-                 BROWSABLE is what lets a link in a browser reach the app;
-                 DEFAULT is required for an implicit VIEW intent to match.
-                 No android:host and no android:autoVerify: the host in these
-                 URLs is the addon's own domain, which could be anyone's, so
-                 there is no domain to claim and App Links verification (which
-                 needs assetlinks.json served from that domain) is impossible
-                 by construction. A custom scheme is all this can be, and it
-                 is what the official Stremio app registers too.
-
-                 The activity is singleTop, so a link arriving while the app
-                 is already up is delivered to the running instance through
-                 onNewIntent rather than starting a second one. -->
+            <!-- stremio:// links, e.g. from an addon site's Install button:
+                 opens that addon's details screen; nothing is installed
+                 without a press (see docs/DEEP_LINKS.md). BROWSABLE lets a
+                 browser link reach the app; DEFAULT is required for an
+                 implicit VIEW intent to match. No host and no autoVerify:
+                 the host in these URLs is the addon's own domain, so App
+                 Links verification is impossible here. singleTop delivers a
+                 link arriving while the app is already up through
+                 onNewIntent rather than starting a second instance. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="stremio"/>
             </intent-filter>
-            <!-- The Drive pairing link a television draws as a QR, which on
-                 a phone that has this app opens the app instead of a
-                 browser. Same QR either way: a phone without the app still
-                 gets the web page, and that page is still the only thing a
-                 desktop or an unverified phone ever sees.
-
-                 android:autoVerify, unlike the filter above, because this
-                 host is *ours*: Android fetches
+            <!-- Drive pairing link a television draws as a QR (see
+                 docs/ARCHITECTURE.md, "Google Drive"). autoVerify works
+                 because this host is ours: Android checks
                  https://xtremio-xervice.web.app/.well-known/assetlinks.json
-                 and opens the app only if it names this package and this
-                 signing certificate. That is why it can be an https link at
-                 all — the stremio:// filter above cannot verify anything,
-                 because the host in those URLs is the addon author's.
-
-                 It matters for what this is *for*: the app picks Drive
-                 files with Android's native picker, which can select more
-                 than one, while the web Google Picker on a phone cannot
-                 (issuetracker.google.com/issues/334994030).
-
-                 Verification is per signing certificate, so a build signed
-                 with a different key will not claim these links — it will
-                 fall back to the browser, which is a degradation and not a
-                 breakage. -->
+                 against this package and signing certificate before opening
+                 the app, unlike the stremio:// filter above, whose host is
+                 the addon author's and so can never verify. A build signed
+                 with a different key falls back to the browser instead of
+                 breaking. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -164,17 +140,12 @@
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.felnanuke.google_cast.GoogleCastOptionsProvider" />
 
-        <!-- Holds the process up while offline downloads are unfinished,
-             with the ongoing progress notification the system requires for
-             it. Started and stopped from Dart over the xtremio/downloads
-             channel (DownloadsChannel.kt), which is also the only thing
-             that knows what is being downloaded.
-
-             stopWithTask: swiping the app out of recents takes the Flutter
-             engine with it, and a notification nobody can move on or take
-             down is worse than none, so the service goes at the same time.
-             The downloads themselves lose nothing: librqbit keeps its
-             verified pieces and start-up re-pins every unfinished entry. -->
+        <!-- Holds the process up while offline downloads are unfinished, with
+             the ongoing notification that requires. Started and stopped from
+             Dart over the xtremio/downloads channel (DownloadsChannel.kt).
+             stopWithTask: a notification nobody can move on or take down is
+             worse than none, so the service goes with the Flutter engine
+             when the app is swiped from recents (see DownloadsService.kt). -->
         <service
             android:name=".DownloadsService"
             android:exported="false"

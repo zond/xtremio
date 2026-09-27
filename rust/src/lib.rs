@@ -23,22 +23,18 @@
 //! The crate also owns the process's allocator, below.
 
 /// mimalloc as the global allocator, the way the standalone stream-server
-/// binary has it (`server/src/main.rs`); this crate had none, so embedded in
-/// the Android app it ran on the platform's scudo and on the desktop on
-/// glibc's malloc.
+/// binary has it (`server/src/main.rs`); without it, this crate runs on the
+/// platform's scudo on Android and on glibc's malloc on the desktop.
 ///
 /// What it is for is retention rather than speed. A torrent engine allocates
 /// in the shape an allocator handles worst: hundreds of thousands of short
 /// lived buffers of a few sizes -- a peer's 16 KiB write and 32 KiB read
 /// buffer, its channel, its task -- freed in an order unrelated to the one
 /// they were taken in, so the heap is left holding pages that are mostly
-/// free and cannot be given back. Measured on the desktop (glibc, a
-/// tracking-allocator build of stream-server streaming one real swarm to
-/// completion): about 130 MiB of live heap under a resident size that
-/// peaked at 565 MB and settled at 300 MB, so some 170 MB of what the
-/// process held was the allocator's, not the program's. mimalloc's segments
-/// are per size class and purged back to the OS a few milliseconds after
-/// they empty, which is the case this is.
+/// free and cannot be given back. On the desktop, streaming one real swarm
+/// to completion, about 170 MB of resident size was the allocator's, not
+/// the program's. mimalloc's segments are per size class and purged back to
+/// the OS a few milliseconds after they empty, which is the case this is.
 ///
 /// Whether scudo on the owner's television shows the same gap is not known
 /// and is what decides whether this stays: the win is measured on desktop

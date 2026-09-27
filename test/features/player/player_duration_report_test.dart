@@ -12,10 +12,10 @@ import '../../support/player_harness.dart';
 /// server's delivery rather than its own consumption. Without a length
 /// there is no honest absolute number anywhere in the retention.
 ///
-/// This test exists because deleting the playhead report (2026-09-13) took
-/// the length with it: it had been riding along in the same call, the cast
-/// path had its own, and nothing here noticed. The field log that followed
-/// measured a consumer at twenty-six gigabytes a second.
+/// This test exists because nothing else depends on the length reaching
+/// the server, so a regression here is silent everywhere but in the
+/// numbers: a consumer measured without it read twenty-six gigabytes a
+/// second.
 void main() {
   testWidgets('the player says how long the film is, without being asked', (
     tester,

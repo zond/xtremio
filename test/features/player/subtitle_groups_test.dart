@@ -172,8 +172,8 @@ void main() {
   test('two uploads the addon named alike are still told apart', () {
     // OpenSubtitles answers The Godfather with three Czech files whose
     // `subtitleFileName` is `1.srt` for all three, and Breaking Bad with
-    // three Romanian `101`s. Three rows reading `1` are worse than the
-    // `Option N` they replaced, so the position goes back on.
+    // three Romanian `101`s. Three rows reading `1` are unpickable, so an
+    // ambiguous derived name gets its position appended (`1 (2)`).
     final groups = groupSubtitlesByLanguage([
       for (var i = 1; i <= 3; i++)
         source(

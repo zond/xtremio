@@ -132,10 +132,9 @@ void main() {
     // scheme gains no second meaning and the whole effect of the link is the
     // platform switching tasks.
     //
-    // `initial` is the half that matters most. `app_links` replays the launch
-    // link on a cold start, and the objection written down against a
-    // hand-back was that a stale one could reopen a dead pairing days later.
-    // A link nothing acts on cannot.
+    // `initial` is the half that matters most: `app_links` replays the
+    // launch link on a cold start, and a stale hand-back link left
+    // un-acted-on cannot reopen a dead pairing days later.
     final core = fakeCore();
     final links = await pumpApp(
       tester,
@@ -154,9 +153,10 @@ void main() {
     tester,
   ) async {
     // `app_links` delivers the launch link both as the initial link and on
-    // the stream, and can replay it as the picker hands back. A second
-    // screen's pick found the first's still open and failed with "A pick is
-    // already on screen", over a first pick that had worked.
+    // the stream, and can replay it as the picker hands back. Without
+    // dedup, a second delivery opens a second pairing screen while the
+    // first pick is still in flight, and fails with "A pick is already on
+    // screen".
     const pairing = '${XtremioDrivePairingService.defaultOrigin}/link?s=abc123';
     // Pumped by the clock rather than settled: the pairing screen's
     // spinner turns until a picker answers, and there is none here.

@@ -287,11 +287,9 @@ void main() {
   testWidgets('under the app\'s own theme, the ring is the whole of it', (
     tester,
   ) async {
-    // The tiles are what the ring was built for and what the owner
-    // approved; the theme floor arrived afterwards for the controls that
-    // can wear nothing else. A tile taking both is the floor washing a
-    // near-white 0.44 across poster art under a ring that had already
-    // said everything.
+    // Tiles wear the ring alone; the theme's focus floor is for controls
+    // that can take nothing else. Both together would wash the floor's
+    // near-white 0.44 fill across poster art the ring has already marked.
     await tester.pumpWidget(
       harness(
         tiles(),

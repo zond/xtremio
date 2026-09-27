@@ -15,15 +15,9 @@ import 'shell/device_profile.dart';
 import 'src/rust/frb_generated.dart';
 
 Future<void> main() async {
-  // First of everything: whichever binding comes up first is the process's,
-  // and anything below that brings one up -- every plugin's own
-  // `ensureInitialized` does -- has to come after.
-  //
-  // It used to be a binding of this app's own, whose only purpose was to
-  // replace the image cache with one that logged what every picture decoded
-  // to. That answered what a poster costs resident on the television, which
-  // is what it was built for, and then drowned the log of anybody
-  // debugging anything else.
+  // Whichever binding comes up first is the process's, and anything below
+  // that brings one up -- every plugin's own `ensureInitialized` does --
+  // has to come after.
   WidgetsFlutterBinding.ensureInitialized();
   // Before anything that could fail: an unhandled error is the one line a
   // report most needs, and until the core is up there is nowhere to put it
@@ -208,42 +202,19 @@ class XtremioBootstrap extends StatefulWidget {
   /// 16 MiB, in place of the framework's 100 MiB (`ImageCache`, 1000
   /// images / 100 MiB).
   ///
-  /// **It was 32 MiB, and two measurements took it down.** The device's
-  /// own report read `image cache: 33 MB of 33.6 MB ceiling - 80 images`
-  /// with a settled native heap of 42 MB for the whole process, so the
-  /// cache was pinned at its ceiling and was most of what the app
-  /// retained. And the per-image log said what those 80 were: posters at
-  /// `300x450 px, 540 kB`, correctly bounded to their tile, in quantity --
-  /// there was no oversized decode to find, only a lot of right-sized
-  /// ones. So the number of them is the lever, and this is the number.
-  ///
-  /// What made it affordable is [ImageDiskCache], which landed first: an
-  /// eviction used to be a re-download over a television's wifi and is now
-  /// a read out of the app's cache directory. Lowering this before that
-  /// existed would have traded memory for latency on every scroll back.
-  ///
   /// Every poster, backdrop and episode thumbnail is decoded at the box it
-  /// is drawn in (`cacheWidth`), so no single picture is large any more; a
-  /// catalog is. The Board alone walks a few hundred posters past the
-  /// viewer, and Flutter keeps each one until the cache is full -- and the
-  /// default is full at 100 MiB. On the owner's Chromecast with Google TV
-  /// (2 GB of RAM for the whole system, about 650 MB of it ever available)
-  /// Android's low-memory killer took the app twice in one day at
-  /// 311-379 MB resident the moment it went to the background, and that
-  /// latent 100 MiB is the second-largest single number in the
-  /// attribution after the torrent engine. What the ceiling costs is a
-  /// re-decode when a row is scrolled back to, from a bounded-size source
-  /// that is already on disk in [ImageDiskCache]: cheap, and visible only
-  /// as a poster fading in a second time.
+  /// is drawn in (`cacheWidth`), so no single picture is large; a catalog
+  /// is. The Board alone walks a few hundred posters past the viewer, and
+  /// Flutter keeps each one until the cache is full. On a 2 GB Android TV
+  /// box the low-memory killer takes this app at 311-379 MB resident, and
+  /// a cache pinned at the framework's 100 MiB default is the single
+  /// largest thing it can be asked to give back -- so the count of images
+  /// held is the lever, and this is the number.
   ///
-  /// **That last sentence was false when it was written.** It said "on
-  /// disk in the HTTP cache", and there is no HTTP cache: `dart:io`'s
-  /// `HttpClient` implements none and Flutter's `NetworkImage` adds none,
-  /// so until [ImageDiskCache] existed every eviction this ceiling caused
-  /// cost a round trip to the addon rather than a read. The premise the
-  /// number was chosen under is only now true, which is what makes
-  /// lowering it a cheap thing to measure rather than a trade against the
-  /// network.
+  /// [ImageDiskCache] is what makes the lower number affordable: an
+  /// eviction is a read out of the app's own bounded cache directory
+  /// rather than a re-fetch from the addon, so what the ceiling costs is a
+  /// poster fading in a second time, not a round trip to the network.
   ///
   /// One number on every device rather than a television's own. A phone
   /// decodes at three times the density, so 16 MiB there holds a third as

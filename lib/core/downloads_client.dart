@@ -293,8 +293,8 @@ final class DownloadRemoveResult {
 }
 
 /// The app's way to the offline downloads. Behind an interface so widget
-/// tests substitute a fake through [DownloadsScope] instead of pinning
-/// torrents.
+/// tests substitute a fake through [DownloadsScope] instead of adding a
+/// real download.
 abstract interface class DownloadsClient {
   /// Pins the request's stream and records it. A refused pin comes back as
   /// [DownloadAddResult.error]; only a malformed request or a stream that is
@@ -401,10 +401,9 @@ class RustDownloadsClient implements DownloadsClient {
     final result = DownloadRemoveResult.fromJson(
       _object(await removeDownload(key: key, deleteFiles: deleteFiles)),
     );
-    // Told here rather than by the Rust side, which is the one client
-    // holding every listener anyway: the foreground service used to re-list
-    // the registry on a timer to notice this, and a row it is told about is
-    // a listing it need not take.
+    // Told here, not left for the Rust side to notice: this client already
+    // holds every listener, so a caller learns of a removal without
+    // polling the registry to find it.
     if (result.removed) _controller?.add(DownloadsRemovalUpdate([key]));
     return result;
   }

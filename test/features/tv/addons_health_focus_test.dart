@@ -18,9 +18,9 @@ import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
 /// The verdict chip is the one control the installed list draws that opens
-/// something of its own, and until it was lifted out of the tile it was
-/// unreachable from a sofa: the tile takes focus as a whole and its
-/// `RemotePress` takes select, so a chip inside it was drawn and dead.
+/// something of its own, so it is drawn beside the tile and never inside
+/// it: the tile takes focus as a whole and its `RemotePress` takes select,
+/// so a chip inside it would be reachable in appearance only.
 void main() {
   const cinemeta = 'https://v3-cinemeta.strem.io/manifest.json';
   const youtube = 'https://v3-channels.strem.io/manifest.json';

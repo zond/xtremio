@@ -47,9 +47,7 @@ abstract final class DiagnosticsLog {
   /// (`DiagnosticsTraceSync`, the one place that follows the preference).
   ///
   /// Verbose logging is for chasing a problem, and the redaction below is
-  /// exactly what hides the thing being chased -- the RD stream that mpv
-  /// could not recognise could not be fetched again, because the log held
-  /// `/proxy/d=<host>/...` and nothing else. So with it on, [url] hands the
+  /// exactly what hides the thing being chased: with it on, [url] hands the
   /// URL back as it is and the copied report skips its scrub
   /// (`formatDiagnostics`). The switch's own text says so: those URLs can
   /// carry an addon's debrid key. Lines written before it was turned on
@@ -126,18 +124,14 @@ abstract final class DiagnosticsLog {
   /// credentials.
   ///
   /// The query is where an addon's API key rides, and the userinfo is a
-  /// password by definition. The path is the half that used to be kept
-  /// whole, on the reasoning that the embedded server's own
-  /// `/{infoHash}/{fileIdx}` is the useful bit of a report and carries
-  /// nothing secret -- which is true of that path and false of every other
-  /// one this app plays. A debrid link signs its token into a path segment,
-  /// Torrentio and Comet put the debrid *API key* in theirs, and a stream
-  /// proxied through the server carries the whole target path on the end
-  /// of `/proxy/d=<origin>&p=<player token>/…`
-  /// (`proxiedThroughServer`, `lib/core/stream_proxy.dart`), so the old
-  /// rule wrote a working download link and the proxy's own token into
-  /// the report the Diagnostics screen tells people to paste into an
-  /// issue. So:
+  /// password by definition. A debrid link signs its token into a path
+  /// segment, Torrentio and Comet put the debrid *API key* in theirs, and a
+  /// stream proxied through the server carries the whole target path on the
+  /// end of `/proxy/d=<origin>&p=<player token>/…`
+  /// (`proxiedThroughServer`, `lib/core/stream_proxy.dart`). Without the
+  /// rule below, a proxy URL's path and `p=` token -- a working download
+  /// link -- would land in the report the Diagnostics screen tells people
+  /// to paste into an issue:
   ///
   /// - A `/proxy/…` URL keeps `scheme://host:port/proxy/d=<target host>/…`:
   ///   the target's host is what a report about a stream needs (which
@@ -237,10 +231,9 @@ abstract final class DiagnosticsLog {
   /// (the embedded server over loopback), or the host *and port* of a
   /// server of ours that is reachable from the network ([noteOwnServer]).
   ///
-  /// Not "any private address", which is what it used to be: an addon
-  /// somebody hosts on their own LAN is on a private address too, and its
-  /// path carries its config -- debrid key included -- the same as a
-  /// public addon's does.
+  /// Not "any private address": an addon somebody hosts on their own LAN
+  /// is on a private address too, and its path carries its config --
+  /// debrid key included -- the same as a public addon's does.
   static bool _isOurs(Uri url) {
     final host = url.host;
     if (host == 'localhost' ||

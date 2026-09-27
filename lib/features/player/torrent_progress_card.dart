@@ -133,9 +133,9 @@ class TorrentProgressCard extends StatelessWidget {
   /// the same thing three ways.
   ///
   /// Connections holding the whole file (`connectedSeeders`) and addresses
-  /// discovered but not connected (`peerDiscovery.seen`) were on this line
-  /// and are not any more -- they describe our own end rather than the
-  /// swarm, and the stats overlay still shows both.
+  /// discovered but not connected (`peerDiscovery.seen`) are left off this
+  /// line: they describe our own end rather than the swarm, and the stats
+  /// overlay shows both already.
   static String formatSwarm(TorrentStats stats) {
     final seeders = stats.swarmSeeders;
     final leechers = stats.swarmLeechers;

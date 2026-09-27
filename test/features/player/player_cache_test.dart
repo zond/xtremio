@@ -2,22 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
 
-/// What the app tells mpv about its own cache, which is now one sentence:
-/// keep nothing on disk.
-///
-/// There is one cache on this device and it is the embedded server's --
-/// named files, a configured limit, a free-space floor, a cleaner that
-/// evicts, and survival across a crash. mpv's was the other one, and it was
-/// everything the server's is not: `cache-on-disk=yes` is media_kit's own
-/// default, and the file it makes is unlinked the moment it is created, so
-/// no `du`, no `dumpsys diskstats` and no walk the server's cleaner
-/// performs can find it. On the owner's Chromecast a single 90-second title
-/// held 928 MB that way while three separate instruments reported the app
-/// was using 46 MB, and nothing but killing the process gave it back.
-///
-/// So the app writes `cache-on-disk=no` and never writes it again. Every
-/// stream now reaches the player through the server (`stream_proxy.dart`),
-/// which is where a read-ahead worth keeping belongs.
+/// What the app tells mpv about its own cache, in one sentence: keep
+/// nothing on disk. See docs/ARCHITECTURE.md, "Streams, the proxy and the
+/// cache" -- media_kit's own default (`cache-on-disk=yes`) unlinks its
+/// cache file the moment it is created, invisible to every instrument and
+/// to the server's own budget, so the app writes `cache-on-disk=no` once
+/// and never again. Every stream reaches the player through the server
+/// (`stream_proxy.dart`) instead, which is where a read-ahead worth
+/// keeping belongs.
 ///
 /// The engine itself cannot be built without libmpv, so what is checked
 /// here is the property set it applies. That the set really lands before
@@ -31,9 +23,9 @@ void main() {
   test('and nothing tells it where a cache file would go', () {
     // The directory was the other half of the file cache: without one, mpv
     // on Android cannot create the file at all. It is not set, it is not
-    // asked for, and the app no longer has a cache directory of its own --
-    // which is what makes "no disk cache" a property of the build rather
-    // than of the device it happens to be running on.
+    // asked for, and the app keeps no cache directory of its own -- which
+    // is what makes "no disk cache" a property of the build rather than
+    // of the device it happens to be running on.
     for (final property in const [
       'demuxer-cache-dir',
       'demuxer-cache-unlink-files',
@@ -54,14 +46,12 @@ void main() {
     // media_kit 1.2.6 puts `PlayerConfiguration.bufferSize` on both
     // `demuxer-max-bytes` and `demuxer-max-back-bytes`; this is the window
     // ahead, and the one behind is set apart from it below. Written out
-    // rather than inherited: it is the only buffer the player has now, and
-    // the only buffer should not be a dependency's default.
+    // rather than inherited, since it is the only buffer the player has
+    // and should not be a dependency's default.
     //
-    // Briefly halved to 16 MiB and put back: the halving read the
-    // heaviest measured torrent as 4 Mb/s when it is 4 MB/s, about
-    // 32 Mbps, where 32 MiB is 8.4 seconds of read-ahead and 16 is 4.2.
-    // This is the buffer that absorbs a swarm going quiet, on the one
-    // kind of file that has stalled on this device.
+    // 32 MiB is 8.4 seconds of read-ahead at the heaviest torrent measured
+    // on this device, about 32 Mbps (4 MB/s) -- the buffer that absorbs a
+    // swarm going quiet, on the one kind of file that has stalled here.
     expect(MediaKitEngine.memoryCacheBytes, 32 * 1024 * 1024);
     // Eight seconds of the heaviest thing this app is given, and no less.
     const fourMegabytesASecond = 4 * 1000 * 1000;
@@ -97,9 +87,10 @@ void main() {
     );
     // What it buys: the remote's seek step is ten seconds, and one press
     // back stays in memory up to about 6.7 Mbps -- 13 seconds at an
-    // ordinary 5 Mbps 1080p. Above that neither 8 MiB nor the 16 it
-    // replaces covers a press (a 32 Mbps remux gets 2.1 s and 4.2 s), so
-    // on the heaviest file a backward seek went to the server either way.
+    // ordinary 5 Mbps 1080p. Above that, doubling it to 16 MiB would still
+    // not cover a press on a 32 Mbps remux (2.1 s at 8 MiB, 4.2 s at 16),
+    // so a backward seek on the heaviest file reaches the server either
+    // way.
     const fiveMbps = 5 * 1000 * 1000 / 8;
     expect(
       MediaKitEngine.backCacheBytes / fiveMbps,

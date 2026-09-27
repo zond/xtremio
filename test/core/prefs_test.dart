@@ -112,8 +112,8 @@ void main() {
   group('an install from before the rename', () {
     test('reads its choice from the old streamsFlat key when the new one is '
         'unset', () async {
-      // True under the old name meant this same sectioned layout, just
-      // called "flat" back then.
+      // True under the old `streamsFlat` key reads as this same sectioned
+      // layout.
       final sectioned = AppPrefs(
         client: FakePrefsClient({'streamsFlat': true}),
       );

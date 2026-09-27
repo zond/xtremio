@@ -254,12 +254,12 @@ fn buffer(app: &AppState, event: String) {
 /// aside, the bytes stay for a later build or a human.
 ///
 /// Anything else -- a read the disk refused, storage with no directory --
-/// is an error and `init` fails with it. It used to read as "empty" like a
-/// parse failure, which turned a transient `EIO` or a file-descriptor
-/// shortage under a busy swarm into a default profile that the first user
-/// action persisted for good, and the logged-in user into an anonymous one.
-/// A boot the app refuses can be retried; one that quietly starts over
-/// cannot be undone.
+/// is an error and `init` fails with it, never an empty bucket: read as
+/// empty, a transient `EIO` or a file-descriptor shortage under a busy
+/// swarm would turn into a default profile that the first user action
+/// persisted for good, and the logged-in user into an anonymous one. A boot
+/// the app refuses can be retried; one that quietly starts over cannot be
+/// undone.
 fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     key: &str,
 ) -> impl std::future::Future<Output = anyhow::Result<Option<T>>> {
@@ -317,16 +317,12 @@ fn migration_refuses_the_boot(error: &EnvError) -> bool {
 /// held: stremio-core's default (`http://127.0.0.1:11470/`), a port an
 /// earlier launch was given, or a remote server's URL.
 ///
-/// **The embedded server is the only one this app streams from.** There
-/// used to be a "Remote server" choice, and a remote URL was left alone
-/// here. It was never a working mode: everything the app itself asks of a
-/// server -- the stats overlay, the player's duration and stall notes,
-/// stream numbers, storage, Drive, sharing, downloads -- goes to the
-/// embedded one over FFI, so with a remote URL half of the player watched
-/// an idle server while the other half streamed elsewhere; and the only
-/// thing a remote URL could name was Stremio's own server, since this
-/// server runs nowhere but in the app. The choice is gone, and a profile
-/// that still holds a remote URL is brought back here at the next launch.
+/// **The embedded server is the only one this app streams from.** Everything
+/// the app itself asks of a server -- the stats overlay, the player's
+/// duration and stall notes, stream numbers, storage, Drive, sharing,
+/// downloads -- goes to the embedded one over FFI, so a profile pointed at
+/// any other URL would watch an idle server while streaming elsewhere. A
+/// profile that holds a remote URL is brought back here at the next launch.
 pub fn pin_to_embedded(profile: &mut Profile, embedded: &Url) {
     pin_settings_to_embedded(&mut profile.settings, embedded);
 }
@@ -757,8 +753,7 @@ mod tests {
                 "{loopback}"
             );
         }
-        // A remote server's URL, left by the choice this app no longer
-        // offers, is brought back too.
+        // A remote server's URL is brought back too -- see `pin_to_embedded`.
         let mut profile = Profile::default();
         profile.settings.streaming_server_url = Url::parse("http://192.168.1.20:11470/").unwrap();
         pin_to_embedded(&mut profile, &embedded);

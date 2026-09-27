@@ -4,16 +4,15 @@ import 'torrent_progress_card.dart';
 import 'torrent_stats.dart';
 
 /// Shown over the video when playback stalls after it has started: mpv has
-/// run out of buffered data and is waiting for the torrent, which until now
-/// was a bare spinner with a sentence next to it.
+/// run out of buffered data and is waiting for the torrent.
 ///
-/// It is the start-up card's presentation said in the present tense, and it
-/// is deliberately more sparing with percentages. The server's only measured
-/// target is the *head* of the file (the initial priority window) plus a
-/// hash check, so once playback is past the head there is nothing whose
-/// completion can be drawn: the bar goes indeterminate and the numbers --
-/// speed and the swarm, zeros included, which during a stall is exactly
-/// the answer -- carry the news.
+/// Presents the start-up card's information in the present tense, more
+/// sparing with percentages: the server's only measured target is the
+/// *head* of the file (the initial priority window) plus a hash check, so
+/// once playback is past the head there is nothing whose completion can be
+/// drawn. The bar goes indeterminate and the numbers -- speed and the
+/// swarm, zeros included, which during a stall is exactly the answer --
+/// carry the news.
 class TorrentStallOverlay extends StatelessWidget {
   const TorrentStallOverlay({super.key, required this.stats});
 
@@ -26,8 +25,8 @@ class TorrentStallOverlay extends StatelessWidget {
   Widget build(BuildContext context) =>
       TorrentProgressCard(status: describe(stats));
 
-  /// The label the player showed before this card existed, and what a
-  /// stall says whenever the server has nothing more precise to add.
+  /// What a stall says whenever the server has nothing more precise to
+  /// add.
   static const String waiting = 'Buffering from the torrent…';
 
   /// What to say for [stats] during a stall. Null stats means nothing has

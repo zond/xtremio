@@ -4,15 +4,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * One mode a display offers, as `Display.getSupportedModes()` describes it,
- * flattened to the four numbers that choosing between them needs.
- *
- * A plain data class rather than `Display.Mode` so that the choosing has no
- * Android in it, and so the one piece of this feature with a right answer
- * can be tested on the JVM (`FrameRateModeTest`). Everything else here --
- * the surface, the window, the display -- needs a device.
- */
-/**
  * What one mode would make of the content: how far it is from showing every
  * frame for the same length of time, and over how many refreshes each frame
  * would be held. The second is what settles a tie between two modes that
@@ -39,6 +30,15 @@ enum class FrameRateAsk {
     SURFACE_THEN_MODE,
 }
 
+/**
+ * One mode a display offers, as `Display.getSupportedModes()` describes it,
+ * flattened to the four numbers that choosing between them needs.
+ *
+ * A plain data class rather than `Display.Mode` so that the choosing has no
+ * Android in it, and so the one piece of this feature with a right answer
+ * can be tested on the JVM (`FrameRateModeTest`). Everything else here --
+ * the surface, the window, the display -- needs a device.
+ */
 data class FrameRateMode(
     val id: Int,
     val width: Int,
@@ -100,34 +100,28 @@ data class FrameRateMode(
          * `DisplayManager.getMatchContentFrameRateUserPreference()`
          * answers.
          *
-         * `Surface.setFrameRate` is a *vote*, and this setting decides
-         * what a vote is allowed to do. The owner's Chromecast reads
-         * `settings get secure match_content_frame_rate` as null, which is
-         * not "no": with the setting unset AOSP's `DisplayModeDirector`
-         * runs at `SWITCHING_TYPE_WITHIN_GROUPS`, which is
-         * `MATCH_CONTENT_FRAMERATE_SEAMLESS_ONLY` -- seamless switches
-         * only. 59.94 Hz to 23.976 Hz retrains the HDMI link and is never
-         * seamless, so the vote is dropped in silence. That is the reading
-         * this exists for: `FrameRateOverrides=none`,
-         * `frameRateOverrideConfig=Disabled`, and `mActiveModeId` still on
-         * the 59.94 Hz mode while a 23.976 fps film played.
+         * `Surface.setFrameRate` is a *vote*, and this setting decides what a
+         * vote is allowed to do. Unset reads as null, not "no": AOSP's
+         * `DisplayModeDirector` then runs at `SWITCHING_TYPE_WITHIN_GROUPS`
+         * (`MATCH_CONTENT_FRAMERATE_SEAMLESS_ONLY`), and 59.94 Hz to 23.976
+         * Hz retrains the HDMI link and is never seamless, so the vote is
+         * dropped in silence: on a Chromecast with the setting unset,
+         * `mActiveModeId` stayed on the 59.94 Hz mode while a 23.976 fps
+         * film played.
          *
          * Naming a mode is not gated the same way. A window's
-         * `preferredDisplayModeId` becomes an app request vote for a base
-         * mode, and `DisplayModeDirector` flattens those only when mode
-         * switching is off altogether (`SWITCHING_TYPE_NONE`); under
-         * seamless-only the mode a window asks for is the mode the display
-         * takes. It is the path television video apps used before Android
-         * 12, and it is the fallback here.
+         * `preferredDisplayModeId` is flattened only when mode switching is
+         * off altogether (`SWITCHING_TYPE_NONE`); under seamless-only, the
+         * mode a window asks for is the mode the display takes. That is the
+         * fallback here.
          *
-         * So: [MATCH_CONTENT_NEVER] is `SWITCHING_TYPE_NONE`, where
-         * neither path can do anything and the viewer has said as much --
-         * nothing is asked for. [MATCH_CONTENT_ALWAYS] is the box that
-         * honours the vote, where naming a mode as well is only a second
-         * way of saying it. Anything else -- seamless-only, or a box that
-         * will not say -- gets both, since the vote may still take on a
-         * display where the switch happens to be seamless and the mode
-         * ask is what covers the one this app was written for.
+         * So: [MATCH_CONTENT_NEVER] is `SWITCHING_TYPE_NONE`, where neither
+         * path can do anything and the viewer has said as much -- nothing is
+         * asked for. [MATCH_CONTENT_ALWAYS] is the box that honours the
+         * vote, where naming a mode as well is only a second way of saying
+         * it. Anything else -- seamless-only, or a box that will not say --
+         * gets both, since the vote may still take on a display where the
+         * switch happens to be seamless.
          */
         fun askFor(matchContent: Int): FrameRateAsk =
             when (matchContent) {

@@ -345,8 +345,7 @@ void main() {
       expect(focusedLabel(tester), kSourcesLabel);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), kSourceAccountingLabel);
-      // And back up the same way, which is the walk the season pills and
-      // the source rows used to be strung out along.
+      // And back up the same way.
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedLabel(tester), kSourcesLabel);
     });
@@ -468,16 +467,12 @@ void main() {
 
     testWidgets('and so does every stop inside the open rung, now that the '
         'line under the sources has gone', (tester) async {
-      // A readout used to sit under the row of sources -- not a rung, no
-      // level of its own, and kept out of the walk by an `ExcludeFocus`.
-      // Deleting it takes something off the panel that the ladder walks
-      // *past*, which is exactly the shape of the mistake that made "up"
-      // skip Episodes: the ladder counts levels and the viewer counts
-      // things on the screen, and they only agree while everything drawn
-      // between two levels can be stepped over.
-      //
-      // So this walks the stops rather than the headers, down and back up,
-      // with the sources rung open and a rung below it to walk on to.
+      // The ladder counts levels; the viewer counts what is on the screen.
+      // The two only agree while everything drawn between two levels can
+      // be stepped over or is deliberately excluded from the walk (an
+      // `ExcludeFocus`). So this walks the stops rather than the headers,
+      // down and back up, with the sources rung open and a rung below it
+      // to walk on to.
       await mount(
         tester,
         film()
@@ -539,11 +534,11 @@ void main() {
 
     testWidgets('and it still does with the header\'s description standing '
         'in the walk', (tester) async {
-      // The description became a focus stop so the plot could be unfolded
-      // with a remote, and a stop added to the top of a ladder is exactly
-      // how a rung gets stepped over: the header is the row at level 0,
-      // and a press out of it has to reach the rung drawn under it and
-      // come back. So the whole ladder is walked again from up there.
+      // The description is a focus stop, so the plot can be unfolded with
+      // a remote -- but a stop added to the top of a ladder is exactly how
+      // a rung gets stepped over: the header is the row at level 0, and a
+      // press out of it has to reach the rung drawn under it and come
+      // back. So the whole ladder is walked again from up there.
       await mount(
         tester,
         plotted(playedSeries()),
@@ -764,13 +759,12 @@ void main() {
     expect(focusedLabel(tester), kSourcesLabel);
   });
 
-  /// The app bar is above the ladder without being on it, so a press down
-  /// out of it was Flutter's to answer rather than the ladder's -- and
-  /// Flutter answers by distance. The downloads button is at the far right
-  /// of the bar and the bookmark at the far right of the header directly
-  /// under it, while the plot is a block that stops well short of both, so
-  /// down from downloads landed on the bookmark: reading the plot meant
-  /// going left to Back first and then down, reported from a Chromecast.
+  /// The app bar sits above the ladder without being part of it, so a
+  /// press down out of it reaches the header by declared order rather
+  /// than by distance: unguided, the downloads button at the right of the
+  /// bar would land on the bookmark at the right of the header, past the
+  /// plot block that stops well short of both, needing a press left to
+  /// Back and then down just to reach it.
   ///
   /// These press the real bar, which means the screen has to be pushed
   /// over another one -- Back is drawn only where there is something to go

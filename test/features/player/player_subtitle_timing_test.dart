@@ -26,7 +26,7 @@ import '../../support/tv.dart';
 void main() {
   /// A multiplier a measurement can come to, and what the stored
   /// memory below puts back on the `PLAIN` file: the panel has no
-  /// control that sets one any more, so this is how a speed gets in
+  /// control that sets one directly, so this is how a speed gets in
   /// force in front of the reset rule.
   const measured = 1.044;
 
@@ -412,10 +412,10 @@ void main() {
     await step(tester, 'subtitle-shift-later');
     expect(engine.subtitleDelay, closeTo(0.2, 1e-9));
 
-    // One state tick used to retry the refused pick, and every retry
-    // replaced the whole timing: the shift vanished a moment after it was
-    // made, while the viewer was watching the picture for it to take
-    // effect, and it vanished again a second later.
+    // Without this, a state tick would retry the refused pick and every
+    // retry would replace the whole timing: the shift would vanish a
+    // moment after it was made, while the viewer was watching the picture
+    // for it to take effect, and vanish again a second later.
     pokeState(player);
     await pumpEvents(tester);
     expect(engine.subtitleDelay, closeTo(0.2, 1e-9));

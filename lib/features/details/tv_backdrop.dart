@@ -62,10 +62,6 @@ class TvBackdrop extends StatelessWidget {
   /// background is close to a megabyte.
   static const String imageSize = 'medium';
 
-  /// Black over the picture, heaviest where the header sits. The lightest
-  /// stop is still most of the way to opaque: the whole point is that a
-  /// white logo and a white focus ring read over *any* frame of any film,
-  /// and the frame is the part nothing here gets to choose.
   /// How much of the panel's width the backdrop is decoded at: half.
   ///
   /// Every other picture in this app is decoded at the box it is drawn in,
@@ -75,12 +71,9 @@ class TvBackdrop extends StatelessWidget {
   /// rather than a photograph anybody reads. So it is the one image whose
   /// decode may be smaller than its box, and it upscales into the panel.
   ///
-  /// Measured on the owner's television, off the app's own per-image log:
-  /// a backdrop at panel width is `1920x1080 px, 8.3 MB resident` -- as
-  /// much as fifteen posters, and more than the whole board costs. At half
-  /// that it is 2.1 MB, so opening a title costs 6.2 MB less. The device
-  /// has 2 GB for the whole system and its low-memory killer has taken
-  /// this app at 147 MB resident.
+  /// A backdrop decoded at panel width costs 8.3 MB resident against
+  /// 2.1 MB at half -- worth taking on a device whose low-memory killer
+  /// takes this app at 147 MB.
   ///
   /// Half rather than a quarter deliberately: a quarter saves another
   /// 1.6 MB and is a four-fold upscale, which is where a gradient in a
@@ -88,6 +81,10 @@ class TvBackdrop extends StatelessWidget {
   /// under a scrim, and the saving is nearly all of what there is to take.
   static const double decodeFraction = 0.5;
 
+  /// Black over the picture, heaviest where the header sits. The lightest
+  /// stop is still most of the way to opaque: a white logo and a white
+  /// focus ring must read over *any* frame of any film, and the frame is
+  /// the part nothing here gets to choose.
   static const LinearGradient scrim = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,

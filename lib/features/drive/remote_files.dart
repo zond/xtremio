@@ -21,9 +21,8 @@ import 'drive_pairing_screen.dart';
 /// It is drawn as an icon button in the **library's** app bar. The board is
 /// what an addon catalogue offers and the library is what the viewer has;
 /// a file on their own Drive is theirs, not a catalogue's, so this is a
-/// control about the library. It sat on the board first and that was the
-/// wrong shelf. Discreet either way: linking a remote file is something a
-/// viewer does once a month.
+/// control about the library. Discreet either way: linking a remote file is
+/// something a viewer does once a month.
 class RemoteFilesButton extends StatelessWidget {
   const RemoteFilesButton({super.key});
 
@@ -71,10 +70,10 @@ enum _RemoteService { googleDrive }
 /// The short list of services, drawn so that a row of it is plainly a thing
 /// to press.
 ///
-/// **It read as a message with a Cancel button.** One [ListTile] on a
-/// dialog's surface has no edge, no fill and no arrow: the only control on
-/// screen with a button's shape was the one that closed it, so a viewer who
-/// had never seen this before was being asked to guess that the sentence was
+/// **A plain [ListTile] would read as a message with a Cancel button.** It
+/// has no edge, no fill and no arrow, so the only control on screen with a
+/// button's shape would be the one that closes the dialog -- asking a
+/// viewer who has never seen this before to guess that the sentence is
 /// tappable. That is a dialog that says "no" for you.
 ///
 /// So the row is an [OutlinedButton]: an outline that is there before the

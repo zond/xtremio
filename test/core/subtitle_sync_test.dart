@@ -246,10 +246,9 @@ void main() {
           'release': 'r.mkv',
           'shiftSeconds': double.nan,
         },
-        // A row an older build wrote, keyed on the addon's per-answer
-        // bucket: `g` never named the same release family twice, and the
-        // group's name is not in the row to migrate it with, so it
-        // lapses.
+        // A row keyed on the addon's per-answer bucket (`group`): `g`
+        // never named the same release family twice, and the group's name
+        // is not in the row to migrate it with, so it lapses.
         <String, Object?>{'series': gilmore, 'group': '6', 'speed': stretch},
         <String, Object?>{
           'series': gilmore,

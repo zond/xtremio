@@ -20,8 +20,8 @@
 //! its contents are bad, so a read answers with the error and a write
 //! refuses, instead of "nothing set" letting one key be written over every
 //! other -- which is what an `EIO` on an ageing flash chip, or a
-//! file-descriptor shortage under a busy swarm, used to cost: the whole
-//! file, silently.
+//! file-descriptor shortage under a busy swarm, would otherwise cost: the
+//! whole file, silently.
 //!
 //! Nothing here is secret and nothing here is synced. Do not put auth
 //! material in it (`AGENTS.md`, "Never log auth material") -- it is written
@@ -257,9 +257,9 @@ mod tests {
         });
     }
 
-    /// The case the owner met: the file is there and full, and the read is
-    /// refused by permissions (an `EIO` reads the same way). A `set` used to
-    /// answer `Ok` and leave the file holding its one key.
+    /// A file that is there and full, whose read is refused by permissions
+    /// (an `EIO` reads the same way): the write must refuse too, never
+    /// silently succeed and leave the file holding only the key just set.
     #[cfg(unix)]
     #[test]
     fn a_full_file_the_read_is_refused_on_keeps_every_key() {

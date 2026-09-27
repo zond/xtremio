@@ -33,9 +33,8 @@ import '../support/fixtures.dart';
 /// though it were: it dispatches nothing, it leaves the engine's selection
 /// exactly where it was, and it survives the field arriving again.
 void main() {
-  /// A linked Drive file, matched or not.
-  /// One linked file, which is now what makes the Remote pill exist: a
-  /// control with nothing to act on is not drawn.
+  /// A linked Drive file, matched or not. One linked file is what makes the
+  /// Remote pill exist: a control with nothing to act on is not drawn.
   const linkedOne = [
     (id: 'drive-file-1', name: 'A Film 2019.mkv', match: null),
   ];
@@ -312,13 +311,10 @@ void main() {
     testWidgets('is drawn with a file linked and no engine state at all', (
       tester,
     ) async {
-      // The other half of not vanishing. The row used to appear only once a
-      // non-empty library had loaded, which is fine for controls that are the
-      // engine's and is exactly how a local one disappears -- and a viewer
-      // with an empty library is the most likely to be looking for the file
-      // they just linked. What the pill now waits for is a linked *file*,
-      // not a loaded library: the engine having nothing to say is not a
-      // reason to hide a control that is not the engine's.
+      // The pill waits for a linked *file*, not a loaded library: the engine
+      // having nothing to say is not a reason to hide a control that is not
+      // the engine's, and a viewer with an empty library is the most likely
+      // to be looking for the file they just linked.
       useNarrowScreen(tester);
       await tester.pumpWidget(
         harness(
@@ -544,8 +540,9 @@ void main() {
     testWidgets('and Downloaded says the same kind of thing in its own words', (
       tester,
     ) async {
-      // The same fall-through: a local filter over a type it left empty used
-      // to reach the engine's messages, which are about the library.
+      // The same fall-through as Remote: a local filter over a type it
+      // leaves empty must not reach the engine's messages, which are about
+      // the library.
       useNarrowScreen(tester);
       await tester.pumpWidget(
         harness(
@@ -1634,11 +1631,11 @@ void main() {
 
   testWidgets('a pairing the service still holds is collected on the next '
       'library, without anybody asking', (tester) async {
-    // What survives the app being killed. The id of a pairing that reached
-    // the service and was never taken is written down; the next library asks
-    // for it. Three pairings were lost in one afternoon for want of this --
-    // each a Google sign-in, a consent and a list of files, gone with no
-    // error anywhere because nothing had failed.
+    // What survives the app being killed: the id of a pairing that reached
+    // the service and was never taken is written down, and the next library
+    // asks for it. Without this, a completed pairing -- a Google sign-in, a
+    // consent and a list of files -- is gone with no error, because nothing
+    // failed.
     final service = FakeDrivePairingService(
       answers: [
         DrivePairingCollected(
@@ -1673,14 +1670,12 @@ void main() {
 
   testWidgets('a pairing left behind is collected when the job that left it '
       'wakes the library, and is not asked for for ever', (tester) async {
-    // The gap that made the recovery useless: the id was written to the
-    // preferences and the job told its own listeners, and neither of those
-    // is what the library depends on. Coming back from the pairing screen
-    // changed nothing the library was watching, so it never looked, and a
-    // pairing with seventeen files sat on the service until it expired.
-    //
-    // And bounded, because the waking is circular by construction: a collect
-    // that fails wakes the library, which asks again.
+    // Neither the pending-session id in preferences nor the job's own
+    // listeners are what the library depends on: coming back from the
+    // pairing screen has to change something the library watches, or a
+    // left-behind pairing sits on the service until it expires with no
+    // error. And bounded, because the waking is circular by construction: a
+    // collect that fails wakes the library, which asks again.
     var collects = 0;
     final service = FakeDrivePairingService(
       answers: [const DrivePairingUnreachable()],

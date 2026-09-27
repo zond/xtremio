@@ -41,11 +41,12 @@ final class SubtitleOption {
   /// addon gave, else the release it was cut for, else its filename, else
   /// the release name, else its position.
   ///
-  /// OpenSubtitles v3 sends no label, so before the pinned fork kept the
-  /// addon's own properties (see docs/ARCHITECTURE.md, "Pinned forks")
-  /// every one of fifteen English uploads was `Option N` and the addon's
-  /// name. The derived names are what tell them apart now; `Option $index`
-  /// is still the floor, for an addon that says nothing but a URL.
+  /// OpenSubtitles v3 sends no label, so without the addon-specific
+  /// fields the pinned stremio-core fork keeps (docs/ARCHITECTURE.md,
+  /// "Pinned forks"), fifteen English uploads would all read `Option N`
+  /// and the addon's name. Derived names use those fields to tell them
+  /// apart; `Option $index` is still the floor, for an addon that says
+  /// nothing but a URL.
   ///
   /// A derived name only earns its place by being *different* from its
   /// neighbours, and often it is not: all three Czech files OpenSubtitles
@@ -335,12 +336,12 @@ enum _ReleaseFit {
 /// that is playing first, then the ones from a group the viewer has
 /// already adjusted for [series], then the rest as the addons gave them.
 ///
-/// The declared frame rate used to order this and no longer does. It is
-/// a claim about the release an upload was made for, and the evidence
-/// says that is a claim about *provenance* and not about timing: ten
-/// English files for one film declaring six different rates all end
-/// within 1 % of the same runtime. What names a release says more,
-/// because two files cut for one release keep its time.
+/// The declared frame rate does not order this: it is a claim about the
+/// release an upload was made for, and the evidence says that is a claim
+/// about *provenance* and not about timing -- ten English files for one
+/// film declaring six different rates all end within 1 % of the same
+/// runtime. What names a release says more, because two files cut for
+/// one release keep its time.
 ///
 /// [release] and [series] name what is playing (null for either -- an
 /// offline play, a torrent nothing has named the file of, a stream with
@@ -382,10 +383,10 @@ enum _ReleaseFit {
 /// preference that is enabled and names **no** language -- which is what
 /// picking a file the addon gave no language for leaves behind, since
 /// that pick sends a null language -- matches every file, so it takes the
-/// head of the whole list: the alphabetically first language now, where
-/// it was the first language answered before. Neither is a judgement
-/// about the file, and the alphabet's at least picks the same one every
-/// time. Every other reader of this order is a menu.
+/// head of the whole list: the alphabetically first language. That is not
+/// a judgement about the file either, but it picks the same one every
+/// time, where answer order does not. Every other reader of this order is
+/// a menu.
 ///
 /// The order *inside* a language is untouched, and so is the order
 /// inside each rank, so the addon that answered first still wins a tie.
@@ -632,7 +633,7 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
 ///
 /// The names come from what the addon said about each upload, and an
 /// addon repeats itself: the same `subtitleFileName` for three different
-/// cuts, the same release group for two. `Option N` was at least unique.
+/// cuts, the same release group for two. `Option N` is at least unique.
 List<SubtitleOption> _disambiguated(List<SubtitleOption> options) {
   final taken = <String, int>{};
   for (final option in options) {

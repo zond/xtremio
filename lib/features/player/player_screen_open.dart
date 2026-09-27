@@ -31,16 +31,10 @@ extension _PlayerOpen on _PlayerScreenState {
         ?.open(media, start: _openStart)
         .then((_) {
           if (state != null) _reportVideoParams(state, url);
-          // A re-open is a fresh `loadfile` on the same player, and what
-          // is in force belongs to the playback rather than to the file
-          // the demuxer just re-read: the stream is re-opened on a
-          // network error and on a buffer change, both keeping the
-          // position, and a correction the viewer made ten minutes ago
-          // has to survive that. Writing it again is what makes the
-          // guarantee ours instead of a property mpv happens to carry
-          // over; on a first open it re-states what [_onPlayerState] has
-          // already put back. The file it was computed for goes back
-          // first, because `loadfile` took that with it
+          // A re-open is a fresh `loadfile`, and a correction the viewer made
+          // belongs to the playback, not to the file re-read: write it again
+          // so it survives a re-open for a network error or a buffer change.
+          // The addon file goes back first, because `loadfile` dropped it
           // ([_restoreExternalSubtitle]).
           if (_stillOurs && _opened == url) {
             _restoreExternalSubtitle();
@@ -70,38 +64,26 @@ extension _PlayerOpen on _PlayerScreenState {
 
   /// Re-opens the stream at the position it is playing at, so a new
   /// `buffer=` takes effect without restarting the playback -- and only
-  /// then.
-  ///
-  /// The window reaches libmpv through the URL and nowhere else, so a
-  /// re-open that would hand it the URL it is already reading buys
-  /// nothing and costs the picture: the demuxer starts again, the cache
-  /// it had filled is dropped and the film stops for as long as the new
-  /// read takes to come back. So a choice with the `buffer=` already in
-  /// force ([BufferAhead.wholeFile] and [BufferAhead.maximum] share a
-  /// wire) re-opens nothing, and nor does any choice on a stream the
-  /// parameter is not written on ([_bufferOnUrlFor]).
+  /// then. A re-open drops the demuxer's cache and stops the film for as
+  /// long as the new read takes, so a choice with the `buffer=` already in
+  /// force ([BufferAhead.wholeFile] and [BufferAhead.maximum] share a wire),
+  /// or a stream without the parameter ([_bufferOnUrlFor]), re-opens
+  /// nothing.
   void _reopenForBuffer(String previousWire) {
     if (_bufferAhead.wire == previousWire || !_bufferOnUrlFor(_opened)) return;
     _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
   }
 
   /// [url] as the engine should fetch it, which is always a URL on our own
-  /// server: the core's stream URL with `buffer=` added when it is a
-  /// torrent the server is already serving, and the same stream wrapped in
-  /// the server's `/proxy` route when it is anybody else's host.
+  /// server: the core's stream URL with `buffer=` added when it is a torrent
+  /// the server is serving, and the same stream wrapped in the server's
+  /// `/proxy` route when it is anybody else's host.
   ///
-  /// `buffer=` goes on the torrent alone. A remote host knows nothing about
-  /// the parameter, and a kept download's URL -- this server's own media
-  /// route, with every piece already on the device -- has nothing left to
-  /// read ahead of; adding a query to either would be noise at best. A
-  /// kept download falls through to the proxy check and is left alone
-  /// there too, because it is a loopback URL.
-  ///
-  /// The proxy is the other half of having one cache instead of two
-  /// ([proxiedThroughServer]). The player keeps nothing on disk now, so a
-  /// stream it fetched itself would be the one kind of playback with no
-  /// local copy anywhere -- and that was the kind that filled the owner's
-  /// television.
+  /// `buffer=` goes on the torrent alone: a remote host knows nothing of it,
+  /// and a kept download (a loopback URL, left alone by the proxy check too)
+  /// has nothing left to read ahead of. The proxy makes the server's cache
+  /// the only one ([proxiedThroughServer]); the player keeps nothing on
+  /// disk.
   Uri _mediaUrl(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
     if (_bufferOnUrlFor(url)) return withBufferAhead(url, _bufferAhead);
@@ -110,13 +92,10 @@ extension _PlayerOpen on _PlayerScreenState {
       serverBase: _serverBase,
       playerToken: _proxyToken,
     );
-    // Recorded rather than inferred from the URL later, because a re-open
-    // for a new buffer window, a next episode or a stream the core
-    // resolved differently can each change what this answers -- and what
-    // the teardown needs to know is whether *anything* was ever proxied
-    // under this token, not what the last URL happened to be. The server
-    // has to be ours for that to mean anything: with none there is nothing
-    // to wrap, and a target host that happens to serve its own `/proxy`
+    // Recorded, not inferred later: a re-open, a next episode or a stream
+    // the core resolved differently can each change this answer, and the
+    // teardown needs to know whether *anything* was proxied under this
+    // token. Only with a server of ours: a host that serves its own `/proxy`
     // path would otherwise read as one of ours.
     _proxiedStream |= _serverBase != null && isProxiedByServer(proxied);
     return proxied;
@@ -168,11 +147,10 @@ extension _PlayerOpen on _PlayerScreenState {
     // server is told about; see [_playingNormally].
     _playingNormally = false;
     _playedSinceSeek = Duration.zero;
-    // A re-open is an attempt at the playback, so whatever the last one
-    // failed with is not what is happening any more: left, it sat as
-    // "Playback failed" over a stream that was playing again, kept the
-    // display's rate from being asked for ([_askDisplayFrameRate]) and
-    // held the stats panel's request away.
+    // A re-open is a new attempt, so the last failure is not what is
+    // happening any more: left, it would sit as "Playback failed" over a
+    // stream that plays, block the display's rate ([_askDisplayFrameRate])
+    // and hold the stats panel's request away.
     final failed = _engineError != null;
     if (failed) setState(() => _engineError = null);
     _open(url, reason: reason);
@@ -313,42 +291,32 @@ extension _PlayerOpen on _PlayerScreenState {
       _stopTorrentStats();
     });
     final url = _engineUrl;
-    // [_mediaIn], not [_mediaLoaded]: media_kit reports `playing: true`
-    // the moment the `loadfile` is issued, before a byte has been read,
-    // so on Android the other flag is true within a few hundred
-    // milliseconds of every open and asked nothing of the container
-    // playbacks this exists for. A film inside a RAR came back as mpv's
-    // "Failed to recognize file format" on the television while every
-    // test here passed, because a test's open fails at `open` and never
-    // reports itself playing.
+    // [_mediaIn], not [_mediaLoaded]: media_kit reports `playing: true` when
+    // the `loadfile` is issued, before a byte is read, so [_mediaLoaded] is
+    // true within a few hundred milliseconds of every open on Android and
+    // would skip every container this is for.
     if (!_mediaIn && url != null) {
       _explainArchive(url, error, fileInTorrent);
     }
   }
 
-  /// Plays the film inside the source, when the source turned out to be a
-  /// container rather than a film -- and says why not when it cannot.
+  /// Plays the film inside the source when the source turned out to be a
+  /// container rather than a film, and says why not when it cannot.
   ///
-  /// mpv's own words for a container are "Failed to recognize file format",
-  /// which is true and useless: the source card rarely says what the file
-  /// is, and the fix is not something the message suggests. The sniff
-  /// names it ([archiveKindOf]); the server can then read the film inside
-  /// it as ranges of the container itself, with nothing extracted and
-  /// nothing written ([routeArchive]), and what plays is the member.
+  /// mpv's words for a container are "Failed to recognize file format". The
+  /// sniff names it ([archiveKindOf]); the server can then read the film
+  /// inside as ranges of the container, with nothing extracted or written
+  /// ([routeArchive]), and what plays is the member.
   ///
   /// **After the failure, not before it.** Sniffing before the first open
-  /// would put a ranged read in front of every playback there is, and
-  /// almost every playback is a film -- a round trip and 32 KiB (an ISO
-  /// carries its signature at byte 32769) spent to learn nothing, on every
-  /// title, on a television. Here it costs only the playbacks that were
-  /// already going to fail, and it is truthful: nothing is taken away from
-  /// mpv that mpv could open. What it costs is the wait for mpv to give
-  /// up, which is the wait the message already had.
+  /// would put a ranged read (32 KiB: an ISO's signature is at byte 32769)
+  /// in front of every playback, almost all of which are films. Here it
+  /// costs only playbacks that were already failing, and takes nothing from
+  /// mpv that mpv could open.
   ///
-  /// Asked only of a stream whose file never showed up ([_mediaIn]), and
-  /// only once the failure is final; the answer is dropped if another
-  /// failure, or a new stream, has replaced this one by the time it
-  /// comes.
+  /// Asked only of a stream whose file never showed up ([_mediaIn]), once
+  /// the failure is final; the answer is dropped if another failure or a new
+  /// stream has replaced this one.
   Future<void> _explainArchive(
     Uri url,
     String error,
@@ -392,15 +360,12 @@ extension _PlayerOpen on _PlayerScreenState {
   /// How the server is asked about the container this stream turned out to
   /// be, or null when there is nothing to ask with.
   ///
-  /// A torrent's container is a file of a torrent the server already has,
-  /// so it is named rather than fetched: the info hash and
-  /// [fileInTorrent], the file's own name as the server states it
-  /// ([_serverFilename], which is `streamName` from `stats.json` and is
-  /// exactly the string the route matches on). Nothing else is a torrent, so it is named by the URL --
-  /// [url], which is the URL the *engine* was handed and not the core's
-  /// bare one: for anybody else's host that is this server's `/proxy` URL,
-  /// carrying the stream's credentials, and a container the server cannot
-  /// fetch is a container it cannot index.
+  /// A torrent's container is a file of a torrent the server already has, so
+  /// it is named rather than fetched: the info hash and [fileInTorrent], the
+  /// file's name as the server states it ([_serverFilename], `streamName`
+  /// from `stats.json`). Anything else is named by [url], the URL the
+  /// *engine* was handed: for another host that is this server's `/proxy`
+  /// URL, carrying the stream's credentials.
   ArchiveRouteRequest? _archiveRequest(
     ArchiveKind kind,
     Uri url,
@@ -430,23 +395,15 @@ extension _PlayerOpen on _PlayerScreenState {
   /// Whether a failed `open` is worth another attempt.
   ///
   /// Only for a torrent, only before the media has loaded, and only while
-  /// the server says the torrent is not ready yet -- still resolving its
-  /// metadata, hash-checking, or filling the initial window -- or has not
-  /// answered about it at all, which is where a start-up spends its first
-  /// seconds. mpv gives up on the first refusal; the server, at that
-  /// moment, has nothing to serve yet and is perfectly entitled to say so.
+  /// the server says the torrent is not ready yet (resolving metadata,
+  /// checking, filling the initial window) or has not answered at all: mpv
+  /// gives up on the first refusal, when the server has nothing to serve
+  /// yet. A torrent on another machine's server, which this device asks
+  /// nothing about ([_startTorrentStats]), gets the same bounded retries.
   ///
-  /// The kind of stream being played is what decides it, and not whether
-  /// this screen is polling for stats: a torrent on a streaming server on
-  /// another machine is one this device asks nothing about
-  /// ([_startTorrentStats]) and whose start-up is just as slow, so it gets
-  /// the same patience with no stats to consult -- the bounded retries
-  /// alone.
-  ///
-  /// A direct HTTP stream, a torrent the server has given up on
-  /// ([TorrentPhase.error]), a phase we do not recognise, and a `ready`
-  /// torrent that still would not open are all real failures: nothing about
-  /// them will be different in a second.
+  /// A direct HTTP stream, a torrent the server has given up on, an unknown
+  /// phase, and a `ready` torrent that still would not open are real
+  /// failures.
   bool get _retryableTorrentStart {
     if (!mounted || _handedOver || _mediaLoaded) return false;
     if (_openState?.selectedStream?.kind != StreamKind.torrent) return false;

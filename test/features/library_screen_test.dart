@@ -804,10 +804,9 @@ void main() {
   testWidgets('the app bar is what opens what is kept on the device', (
     tester,
   ) async {
-    // The chip used to be the way here, which made one control mean both
-    // "show me these" and "let me delete these". Browsing is the pill;
-    // housekeeping is a button in the bar, which is a place you go
-    // deliberately.
+    // A single chip would make one control mean both "show me these" and
+    // "let me delete these". Browsing is the pill; housekeeping is a
+    // button in the bar, which is a place you go deliberately.
     useNarrowScreen(tester);
     final core = fakeCore();
     final downloads = FakeDownloadsClient(

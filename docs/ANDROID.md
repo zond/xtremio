@@ -181,20 +181,20 @@ left, and in `PlayerScreen.dispose`, on both paths.
 
 ## Telling mpv when the screen refreshes
 
-Matching the panel removed the cadence but not the drops. Those were the
-decoder: media_kit's `hwdec=auto-safe` can only pick `mediacodec-copy` in the
-libmpv it ships, which copies every frame into CPU memory -- on a
+Matching the panel fixes the cadence but not the drops, which are the
+decoder's doing: media_kit's `hwdec=auto-safe` can only pick `mediacodec-copy`
+in the libmpv it ships, which copies every frame into CPU memory -- on a
 Chromecast with Google TV thousands of `vo` drops, frames decoded on time
 and presented late. `MediaKitEngine.configurationFor` names
 `hwdec=mediacodec,mediacodec-copy` (mpv-android's list): direct first, the
-copy as fallback. Measured on the owner's box: 224 % of a core down to 45 %,
-and `1 vo / 0 decoder` drops. The OSD's `hwdec` row is the only check of
-which one took; the logcat line once thought to announce the copy mode is
-logged by the direct decoder too.
+copy as fallback (224 % of a core down to 45 %, and `1 vo / 0 decoder`
+drops). The OSD's `hwdec` row is the only reliable check of which one took:
+the logcat line does not distinguish them, since the direct decoder logs
+the same line the copy mode does.
 
-**No display sync.** `video-sync=display-resample` never engaged on this VO
-and, while set, drew the audio audibly ahead of the picture over minutes; it
-is gone, and `video-sync` stays mpv's default (`audio`). What remains is
+**No display sync**: `video-sync=display-resample` does not engage on this
+VO, and forcing it draws the audio audibly ahead of the picture over
+minutes, so `video-sync` stays mpv's default (`audio`). What remains is
 **`override-display-fps`** (`MediaKitEngine.displayRateProperties`), because
 Android's `gpu-context` answers `VO_NOTIMPL` to every display-rate request
 and this is the only way mpv learns the rate at all. It is:

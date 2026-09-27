@@ -40,31 +40,23 @@ class RustSubtitleMatchClient implements SubtitleMatchClient {
 
 /// What the panel says about [match], which is the score either way.
 ///
-/// **The score and not a count of cues.** "Only 303 of 690 cues matched"
-/// is what the measurement this replaced said about the owner's own
-/// Swedish file against an English one, and the pairing was fine: a
-/// translation that merges two lines into one has half the cues and the
-/// same subtitle, so a count of cues is not comparable between two files
-/// and never was evidence the viewer could judge. What is comparable is
-/// how much more of the time the two files have text on screen together
-/// than two files this talkative would manage by accident, which is what
-/// the number in these sentences is.
+/// **The score, not a count of cues**: a count is not comparable between
+/// two files, since a translation merging two lines into one halves the
+/// cue count without changing the subtitle. See docs/ARCHITECTURE.md,
+/// "Matching against another subtitle".
 ///
-/// **A refusal says what was found, not merely that it was not enough.**
-/// The transform is in the sentence because it is the other half of the
-/// judgement: a reference that wants a plausible speed and a small shift
-/// and still scores badly is a file that disagrees, where one that wants
-/// to be stretched a tenth and pushed four minutes is the wrong episode.
-/// Told only a fraction, the owner went looking for a different reference
-/// when the reference was fine.
+/// **A refusal names the transform as well as the score.** A reference
+/// that wants a plausible speed and a small shift and still scores badly
+/// is a file that disagrees; one that wants stretching a tenth and a
+/// four-minute shift is the wrong episode. Without the transform, a
+/// viewer told only a fraction might go looking for a different reference
+/// when the one they picked was fine.
 ///
-/// **Nothing to measure is a different answer, and names the reference.**
-/// No score at all means one of the two files had too few cues to be
-/// evidence -- an ASS file, an addon answering with an error page, a
-/// forced track of a dozen signs -- rather than two files that disagree.
-/// Saying "only 0 %" there describes the file the viewer is trying to fix
-/// and hides the one they chose badly, so both counts are what that
-/// sentence is about. They are measured for exactly this.
+/// **Nothing to measure is a different answer, and names both files' cue
+/// counts.** Too few cues to be evidence -- an ASS file, an addon
+/// answering with an error page, a forced track of a dozen signs -- is not
+/// the same failure as two files that disagree, so it is not read as a
+/// score of zero.
 ///
 /// No line names a file: the panel is drawn over the picture the viewer is
 /// watching, and the two files involved are the one playing and the one

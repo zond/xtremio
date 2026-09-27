@@ -240,8 +240,8 @@ void main() {
   group('a wait one piece wide', () {
     /// A 16 MiB-piece torrent whose reader wants exactly one piece --
     /// which is every big torrent: librqbit credits verified pieces and
-    /// nothing between them, so this percentage could only ever read 0 or
-    /// 100, and it read 0 for tens of seconds while the download ran.
+    /// nothing between them, so this percentage can only ever read 0 or
+    /// 100, and reads 0 for tens of seconds while the download runs.
     const onePiece = TorrentStats(
       phase: TorrentPhase.buffering,
       initialWindowReadyBytes: 0,
@@ -757,10 +757,10 @@ void main() {
   testWidgets('a backgrounded app asks nothing while the torrent starts up', (
     tester,
   ) async {
-    // The mirror of the stats OSD's test for a loaded torrent. Hidden with
-    // the start-up card up, the twice-a-second poll used to go on into the
-    // background -- the sync that stops a loaded torrent's polling returns
-    // before the media has loaded.
+    // The mirror of the stats OSD's test for a loaded torrent: with the
+    // start-up card up, the twice-a-second poll needs its own guard here,
+    // since the check that stops a loaded torrent's polling in the
+    // background returns before the media has loaded.
     final harness = PlayerHarness();
     final stats = harness.torrentStats..response = null;
     await tester.pumpWidget(harness.build());
@@ -947,9 +947,9 @@ void main() {
     });
 
     test('is the one formatter all three cards render', () {
-      // The stall overlay and the start-up overlay have each grown their
-      // own swarm wording before; the same stats must reach the screen as
-      // the same string, or the three drift apart again.
+      // The stall overlay, the start-up overlay and this card must draw
+      // the same stats as the same string through one formatter, or the
+      // three drift apart.
       const stats = TorrentStats(
         phase: TorrentPhase.ready,
         downloadSpeed: 1500000,

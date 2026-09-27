@@ -767,8 +767,9 @@ void main() {
     });
 
     testWidgets('and its icons are still white over the video', (tester) async {
-      // The colour moved from `color` to the style; a bar whose icons went
-      // grey would be a worse fault than the one that move fixed.
+      // The colour comes from the icon's own style rather than from
+      // `color` directly, so the floor's own styling can sit on top of it
+      // without turning the icons grey.
       await pumpOnTv(tester);
       final icon = find.descendant(
         of: find.byType(PlayerTopBar),
@@ -981,11 +982,11 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<PlayerBottomBar>(), isTrue);
 
-      // A button holding focus is no reason to keep the bar up -- on a
-      // remote there is nowhere else for focus to be, so a veto on it kept
-      // the OSD up for the rest of the session. It fades, and the remote
-      // comes back to the video with it rather than being left on a
-      // button that is no longer drawn.
+      // A button holding focus is no reason to keep the bar up: on a
+      // remote there is nowhere else for focus to be, so a veto on it
+      // would keep the OSD up for the rest of the session. It fades
+      // instead, and the remote comes back to the video with it rather
+      // than being left on a button that is no longer drawn.
       await tester.pump(PlayerScreen.controlsTimeout);
       await tester.pumpAndSettle();
       expect(controlsOpacity(tester), 0);
@@ -1004,7 +1005,7 @@ void main() {
       final harness = await pumpOnTv(tester);
       // The measured bar, overscan band and all -- not a constant chosen
       // on a phone. On this 720-high panel the television's bar is half
-      // again the 96 logical px the constant used to assume.
+      // again the 96 logical px a flat constant would assume.
       final covered =
           tvSize.height - tester.getRect(find.byType(PlayerBottomBar)).top;
       expect(covered, greaterThan(96));

@@ -43,9 +43,9 @@ import 'sharing_activity.dart';
 /// shell hands in is skipped by traversal, so the light can never stand
 /// between a D-pad press and the poster it was meant for; what reaches it is
 /// one explicit rule of the shell's (`_onRailKey`), up from the top of the
-/// rail, which was a key that did nothing before. Any direction key hands the remote straight back
-/// to the rail, so the ring can never be stranded on a light that goes out.
-/// Off a television it is an ordinary button: a pointer presses it, and Tab
+/// rail. Any direction key hands the remote straight back to the rail, so
+/// the ring can never be stranded on a light that goes out. Off a
+/// television it is an ordinary button: a pointer presses it, and Tab
 /// reaches it.
 ///
 /// **It is a light, not a notification.** Semi-transparent, and pulsing

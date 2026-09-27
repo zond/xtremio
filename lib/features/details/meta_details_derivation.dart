@@ -179,10 +179,10 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
   ///
   /// Deriving is a handful of regexes per stream ([StreamFacts.of]), a sort
   /// and a sectioning: a few milliseconds for three addons' worth of
-  /// streams on a desktop, several times that on the box this runs on. It
-  /// used to run on every build, and this screen is rebuilt by things that
-  /// change none of its inputs -- a download's progress tick once a second
-  /// for as long as anything is downloading, while the screen sits under
+  /// streams on a desktop, several times that on the box this runs on --
+  /// worth caching, since this screen is rebuilt by things that change
+  /// none of its inputs, such as a download's progress tick once a second
+  /// for as long as anything is downloading while the screen sits under
   /// the player. The inputs are the field's state (one object per pull),
   /// the `ctx` behind the profile (the same) and the two layout
   /// preferences; what else a build reads -- the open sections, the pins
@@ -334,15 +334,14 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
                 isLoading: group.isLoading,
                 rows: _collapse(
                   [
-                    // Read, the same as the sectioned layout reads. This
-                    // list does not *rank* by what is in a stream -- it
-                    // keeps each addon's own order -- and it was given no
-                    // facts at all for that reason, which is why the two
-                    // layouts drew different things from different
-                    // sources and drifted apart. The television already
-                    // paid for this read per card ([_tvSource]); paying
-                    // for it once here is what makes one row look the
-                    // same whichever way the list is grouped.
+                    // Read the same way the sectioned layout reads, even
+                    // though this list does not *rank* by what is in a
+                    // stream -- it keeps each addon's own order -- so a
+                    // row shows the same badges and text whichever layout
+                    // drew it. The television already pays for this read
+                    // per card ([_tvSource]); paying for it once here is
+                    // what makes one row look the same whichever way the
+                    // list is grouped.
                     for (final stream in group.streams)
                       _rowOf(profile, group, stream),
                   ],

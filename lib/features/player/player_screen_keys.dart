@@ -11,18 +11,12 @@ extension _PlayerKeys on _PlayerScreenState {
   /// video when the control it was on has left the tree.
   ///
   /// The top bar builds Next, Subtitles and Audio only when there is
-  /// something behind them, so the button holding the remote can vanish
-  /// mid-playback (the engine reports the last episode, the second audio
-  /// track goes away). Focus is then on a node that is no longer in the
-  /// tree — the controls' scope is not told, so its listener cannot be
-  /// the hook — and the video's [Focus] never gets it back, its
-  /// `autofocus` having been spent when it first attached. [_onKeyEvent]
-  /// would stop running for good: the remote dead and the controls stuck
-  /// at full opacity until the player is left.
-  ///
-  /// [_focusNode] wraps the whole screen, so "nothing here has focus" is
-  /// exactly `!_focusNode.hasFocus`. A sheet this screen opened keeps the
-  /// remote, as the player is not the current route while it is up.
+  /// something behind them, so the focused button can vanish mid-playback.
+  /// Focus is then on a detached node, the controls' scope is not told, and
+  /// the video's spent `autofocus` never takes it back: [_onKeyEvent] would
+  /// stop running for good. [_focusNode] wraps the whole screen, so "nothing
+  /// here has focus" is `!_focusNode.hasFocus`; a sheet this screen opened
+  /// keeps the remote.
   void _scheduleFocusCheck() {
     if (_focusCheckScheduled) return;
     _focusCheckScheduled = true;
@@ -43,11 +37,10 @@ extension _PlayerKeys on _PlayerScreenState {
 
   /// Focuses [node] where this layout drew it, and says whether it did.
   ///
-  /// A node whose widget is not built has no context, and a node with no
-  /// context cannot take focus: asking anyway leaves the remote pointing
-  /// at nothing at all. Every named stop below goes through here for that
-  /// reason -- what the player draws depends on the width, on whether a
-  /// receiver has the stream, and on whether there is a video yet.
+  /// A node whose widget is not built has no context and cannot take focus;
+  /// asking anyway leaves the remote pointing at nothing. What is drawn
+  /// depends on the width, on a receiver having the stream, and on whether
+  /// there is a video yet.
   bool _focusStop(FocusNode node) {
     if (node.context == null) return false;
     node.requestFocus();
@@ -64,33 +57,19 @@ extension _PlayerKeys on _PlayerScreenState {
   /// key to whatever it means otherwise.
   bool _focusUp() => _focusStop(_topBarFocus);
 
-  /// Where a down press goes: the seek bar, and play/pause from the seek
-  /// bar itself.
+  /// Where a down press goes: the seek bar, and play/pause from the seek bar
+  /// itself, so from anywhere on the OSD the seek bar is one press away and
+  /// play/pause two.
   ///
-  /// Two named stops, and every down press lands on one of them -- so
-  /// from anywhere on the OSD the seek bar is one press away and
-  /// play/pause is two, whatever this layout drew. That is the point: on
-  /// a remote the useful control is the one that can always be got back
-  /// to, and play/pause is this screen's.
+  /// Named rather than measured: Flutter's directional traversal ranks by
+  /// distance, so a narrow control near the source beats the obvious one,
+  /// and "down always reaches play/pause" cannot be left to that.
   ///
-  /// Named rather than measured. Flutter's directional traversal ranks
-  /// candidates by distance, so a narrow control near the source beats a
-  /// wide obvious one: down from the transport row reached whichever
-  /// button happened to lie under it, and where down went from the top
-  /// bar depended on how long the title was. "Down always reaches
-  /// play/pause" cannot be left to that.
-  ///
-  /// The countdown is the exception, because it is the decision in front
-  /// of the viewer: while it runs, down is "Play now" and the card keeps
-  /// the remote until the viewer answers it ([_moveWithinControls]).
-  ///
-  /// The fallbacks are the layouts that leave a stop out: the narrow one
-  /// puts the transport in the middle of the video with no node of its
-  /// own, and there is no bottom bar at all while the stream is still
-  /// resolving. A press that finds its stop undrawn stays where it is if
-  /// a control already has the remote -- an edge press moves nothing,
-  /// which is what the rest of the bar does at its edges -- and from the
-  /// video falls back to the top bar, which is always built.
+  /// While the up-next countdown runs, down is "Play now" and the card keeps
+  /// the remote until answered ([_moveWithinControls]). A stop this layout
+  /// did not draw (the narrow layout's transport, no bottom bar while the
+  /// stream resolves) leaves a focused control where it is and sends the
+  /// remote from the video to the top bar, which is always built.
   void _focusDown() {
     final stop = _upNextSecondsLeft != null
         ? _playNextFocus
@@ -103,35 +82,26 @@ extension _PlayerKeys on _PlayerScreenState {
   }
 
   /// Up with a control focused: the next stop above inside the bar -- or
-  /// either direction inside the timing panel, which is confined to its
-  /// own scope for the same reason -- and nothing at all at its edges.
+  /// either direction inside the timing panel, confined to its own scope --
+  /// and nothing at its edges. Down on the bar has named stops instead
+  /// ([_focusDown]).
   ///
-  /// Down does not come through here on the bar; it has named stops
-  /// instead ([_focusDown]).
-  ///
-  /// Neither wrapping round nor stepping out onto the video. The video
-  /// draws no focus ring, so it cannot be a legitimate stop while
-  /// something visible is on screen, and a viewer who is not looking
-  /// closely would only see the ring vanish. Back is the way out of the
-  /// controls (see [_popBack]).
+  /// Neither wraps round nor steps out onto the video, which draws no focus
+  /// ring and so is not a legitimate stop while something visible is on
+  /// screen. Back is the way out of the controls ([_popBack]).
   void _moveWithinControls(TraversalDirection direction) {
     FocusManager.instance.primaryFocus?.focusInDirection(direction);
   }
 
   /// Whether Back has something to put away before it leaves the player:
-  /// the timing panel first, then the up-next card, then a control bar
-  /// that is up and free to go.
+  /// the timing panel first, then the up-next card, then a control bar that
+  /// is up and free to go.
   ///
-  /// The panel is the one rung that exists off a television too. It is
-  /// opened deliberately and it does not fade, so on a phone Back is the
-  /// only way out of it and on a desktop Escape comes down the same
-  /// ladder; the other two are the OSD's, where the pointer hides the
-  /// controls and Escape means what `escExitFullscreen` says it means, so
-  /// Back and Escape keep leaving the player as they always have.
-  ///
-  /// A bar that cannot fade -- paused, buffering, a menu open -- is not on
-  /// the ladder: there is nothing Back could do about it, so it leaves the
-  /// player instead of appearing to do nothing.
+  /// The timing panel is a rung off a television too: it does not fade, so
+  /// on a phone Back is the only way out and on a desktop Escape comes down
+  /// the same ladder. The other two are television-only; elsewhere Back and
+  /// Escape leave the player. A bar that cannot fade (paused, buffering, a
+  /// menu open) is not a rung: Back could do nothing about it, so it leaves.
   bool get _backDismisses =>
       _timingShown ||
       (_isTv &&
@@ -212,29 +182,18 @@ extension _PlayerKeys on _PlayerScreenState {
       }
     }
 
-    // Which of the player's two modes this press is in, read here and used
-    // below: with the OSD up there is something to aim at and the press is
-    // aimed, and with it hidden there is not. Read before [_showControls],
-    // because a press means what it meant when the viewer made it.
-    //
-    // Whatever the state is when the key arrives is the state, including
-    // the instant the bar is on its way out: a press that lands then gets
-    // whichever of the two answers this reading gives, and both are fine
-    // -- the control the viewer was on, or play/pause. Nothing here tries
-    // to tell those apart.
+    // Which of the player's two modes this press is in, read before
+    // [_showControls]: a press means what it meant when the viewer made it.
+    // A press landing as the bar fades gets either answer, and both are
+    // fine.
     final shownBefore = _controlsShown;
     _showControls();
 
     // A control on the bar has the remote: select presses it and left/right
-    // walk the bar (the seek bar seeks; both are handled below us, before
-    // this ever runs). Up and down leave the control, and the bar itself.
-    // The seek bar is the exception to select: it is not a button, so the
-    // key falls through to the play/pause below.
-    //
-    // The two directions are not symmetrical, and that is deliberate. Up
-    // walks the stops as they are drawn, which is what reading the bar
-    // upwards looks like. Down is the way back to the two controls that
-    // matter ([_focusDown]), from any stop and in at most two presses.
+    // walk the bar (the seek bar seeks), both handled below us. The seek bar
+    // is not a button, so select there falls through to play/pause below.
+    // Up walks the stops as drawn; down is the way back to the two controls
+    // that matter ([_focusDown]).
     if (_controlFocused) {
       if (key == LogicalKeyboardKey.arrowDown) {
         if (event is KeyDownEvent) _focusDown();
@@ -259,22 +218,13 @@ extension _PlayerKeys on _PlayerScreenState {
       if (!_isTv) return KeyEventResult.ignored;
       if (event is KeyDownEvent) {
         if (!shownBefore) {
-          // With nothing drawn there is nothing to aim at, so the press
-          // cannot be about aiming: it is the one button a hidden player
-          // has, and it means play/pause. The bar only fades while
-          // something is playing ([_canAutoHide]), so this is the press
-          // that stops the film -- and it leaves the remote on play/pause,
-          // which makes the second press of the same key the one that
-          // starts it again, with no hunting for a button in between.
-          //
-          // Nothing special is done about the fade. What keeps the bar up
-          // is the stopped playback itself -- [_canAutoHide] is false for
-          // as long as it lasts, so no timer is armed and [_hideControls]
-          // refuses -- and that begins the moment the engine reports the
-          // pause, milliseconds away. Until then the ordinary
-          // [PlayerScreen.controlsTimeout] runs, as it does after any
-          // press: a player that turns out not to have paused should not
-          // behave as though it had.
+          // With nothing drawn the press cannot be aiming: it is the one
+          // button a hidden player has, play/pause. The bar only fades while
+          // playing ([_canAutoHide]), so this stops the film and leaves the
+          // remote on play/pause, making the second press of the same key
+          // the one that restarts it. The stopped playback then keeps the
+          // bar up; until the engine reports the pause, the ordinary
+          // [PlayerScreen.controlsTimeout] runs.
           _togglePlay();
           _focusPlayPause();
         } else if (_upNextSecondsLeft != null) {
@@ -289,22 +239,11 @@ extension _PlayerKeys on _PlayerScreenState {
       return KeyEventResult.handled;
     }
 
-    // Up and down on a TV are how the remote reaches the controls; the
-    // television has its own volume keys, so they never fall through to
-    // the volume there.
-    //
-    // A hidden OSD is no longer a wasted press. Both stops are named
-    // ([_focusDown], [_focusUp]) rather than measured from wherever focus
-    // happens to be, so the viewer knows where the press lands before they
-    // make it and can be shown it in the same press: the bar comes up
-    // (above) with the remote already on the seek bar, or on the top bar.
-    // Nothing invisible is ever walked -- there is one stop, and it is
-    // drawn by the time the frame is.
-    //
-    // Left and right are the other two, and they are not moves at all:
-    // they scan, which is what they mean on the video whether the bar is
-    // up or not, and the bar comes up showing where the scan went (the
-    // switch at the end of this method).
+    // Up and down on a TV reach the controls (the television has its own
+    // volume keys). Both stops are named ([_focusDown], [_focusUp]), so a
+    // press on a hidden OSD brings the bar up with the remote already on
+    // the seek bar or the top bar; nothing invisible is ever walked. Left
+    // and right scan whether the bar is up or not (the switch below).
     if (_isTv &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {
@@ -329,12 +268,9 @@ extension _PlayerKeys on _PlayerScreenState {
     if (shift &&
         (key == LogicalKeyboardKey.arrowLeft ||
             key == LogicalKeyboardKey.arrowRight)) {
-      // The short step is the precise one and stays an exact seek. It is
-      // three seconds by default, which is shorter than the gap between
-      // one keyframe and the next on a great many releases, so a scan
-      // would answer a press for three seconds with a jump of ten -- and
-      // this is the key a viewer reaches for when the step is too coarse
-      // already.
+      // The short step stays an exact seek: at three seconds by default it
+      // is shorter than many releases' keyframe interval, so a scan would
+      // answer it with a jump of ten.
       _seekTo(
         _position.value +
             (key == LogicalKeyboardKey.arrowLeft
@@ -415,12 +351,9 @@ extension _PlayerKeys on _PlayerScreenState {
   // --- Stats hover ---------------------------------------------------------
 
   void _onPointerMoved() {
-    // The `MouseRegion` sits above the `IgnorePointer` that covers the
-    // rest of the screen ([build]), so a hover still arrives while the
-    // player is stopping. It is aimed at nothing, exactly as a key press
-    // is ([_onKeyEvent]): bringing the OSD back over a picture on its way
-    // out is the opposite of what the viewer asked for, and the timer
-    // below would be armed after [_detach] had run.
+    // A hover still arrives while the player is stopping (the `MouseRegion`
+    // is above the `IgnorePointer`) and is aimed at nothing, like a key
+    // press ([_onKeyEvent]); the timer below would also outlive [_detach].
     if (_leaving) return;
     _showControls();
     _statsHoverTimer?.cancel();

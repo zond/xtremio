@@ -28,14 +28,14 @@ FONT=$(fc-match -f "%{file}" "Cantarell:style=Extra Bold")
 # ---------------------------------------------------------------- geometry --
 # Two interlocking chevrons on a 256 grid: a cyan "<" and an amber ">" passing
 # through each other with a diamond of ground between them. It reads as
-# rewind-and-forward rather than as a letter, which is the point -- a two-tone
-# X sat too close to another company's mark.
+# rewind-and-forward rather than as a letter, on purpose: a two-tone X sits
+# too close to another company's mark.
 #
 # Each chevron is a round-capped, round-joined polyline of width 31.
-# ImageMagick's own renderer draws neither strokes nor gradients (both were
-# found the hard way), so raster output writes the stroke out as what it
-# geometrically is: a quad per segment plus a disc at each vertex. The Android
-# vector drawables keep the real stroke, which AAPT does support.
+# ImageMagick's own renderer draws neither strokes nor gradients, so raster
+# output writes the stroke out as what it geometrically is: a quad per
+# segment plus a disc at each vertex. The Android vector drawables keep the
+# real stroke, which AAPT does support.
 LEFT_CHEVRON="206,40 50,128 206,216"
 RIGHT_CHEVRON="50,40 206,128 50,216"
 
@@ -191,12 +191,10 @@ done
 lockup() { # $1=pointsize $2=out (transparent png)
   local ps=$1 out=$2 xh s ink top gap tx base canvas marky
   xh=$(magick -font "$FONT" -pointsize "$ps" label:x -trim -format "%h" info:)
-  # the X ink fills 64 of the 108 grid, so the raster has to be scaled past the
-  # height we actually want to see
   # The mark's ink, caps included, spans 24.5..231.5 of the 256 grid: 81% of
-  # the raster, where the old X filled 59%. It is also a symbol rather than a
-  # letter, so it is set a little taller than the x-height and centred on that
-  # band, overshooting it evenly above and below the way a round glyph does.
+  # the raster. It is also a symbol rather than a letter, so it is set a
+  # little taller than the x-height and centred on that band, overshooting it
+  # evenly above and below the way a round glyph does.
   s=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 1.30 * 256 / 207}')
   ink=$(awk -v s="$s" 'BEGIN{printf "%d", s * 207 / 256}')
   top=$(awk -v s="$s" 'BEGIN{printf "%d", s * 24.5 / 256}')

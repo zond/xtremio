@@ -73,25 +73,20 @@ class UpNextCard extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
-              // A [Wrap] and not a [Row], and the countdown on a line of
-              // its own above it. Three things across the card fit on a
-              // phone and did not on a television: the countdown was an
-              // [Expanded] and gave way until it was wrapping down the
-              // card, and the two buttons still overflowed the row. The
-              // width above is what makes them fit side by side, which is
-              // how the remote walks them; the wrap is what happens
-              // instead of an overflow when a viewer has also asked the
-              // platform for larger text.
+              // [Wrap], not [Row], with the countdown on its own line
+              // above: three things across the card overflow on a
+              // television at a larger text scale. The width constraint
+              // above keeps the two buttons side by side for the remote
+              // to walk; wrapping is what happens instead of an overflow
+              // when the text is larger still.
               //
-              // The [Align] is what puts them at the end of the card,
-              // which the [Row] did for nothing: a [Wrap] laid out on a
-              // [Column]'s cross axis is handed loose constraints and
-              // takes the width of its own children, so
-              // `WrapAlignment.end` has no room to distribute and the two
-              // buttons come out flush left under the "Up next" label.
-              // The [Align] takes the width instead and the wrap aligns
-              // inside it, on the last line too when the text is large
-              // enough to break them apart.
+              // [Align] puts the wrap at the end of the card. A [Wrap] on
+              // a [Column]'s cross axis gets loose constraints and sizes
+              // to its own children, so `WrapAlignment.end` has no room
+              // to distribute and the buttons sit flush left under the
+              // label without it; [Align] gives the wrap the width to
+              // align inside, including on a last line broken apart by
+              // large text.
               Align(
                 alignment: Alignment.centerRight,
                 child: Wrap(

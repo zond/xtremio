@@ -32,9 +32,8 @@ void main() {
 
   group('the default', () {
     test('is to share, on any device nobody has asked', () async {
-      // The same answer everywhere, which is the point: the default used
-      // to be the device's, and what decided it was a guess about a cost
-      // this app cannot see.
+      // The same answer everywhere: a per-device default would need to
+      // guess at a cost this app cannot see.
       final server = RecordingServerSettings();
       final policy = started(prefs: AppPrefs.inMemory(), server: server);
       await settle(policy);

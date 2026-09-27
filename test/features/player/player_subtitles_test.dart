@@ -411,8 +411,8 @@ void main() {
     tester,
   ) async {
     // What a dead subtitle link really does: `sub-add` completes, and
-    // mpv's error lines arrive on their own -- which used to be "Playback
-    // failed" over a film that went on playing.
+    // mpv's error lines arrive on their own. Left unhandled, they would
+    // surface as "Playback failed" over a film that goes on playing.
     useWideViewport(tester);
     const otherFrench = 'https://subs.example.org/tt0063350/fre-2.srt';
     final harness = harnessWithSubtitles(
@@ -702,12 +702,11 @@ void main() {
       'first', (tester) async {
     useWideViewport(tester);
     // Three uploads, two of which declare a rate. The rate orders
-    // nothing -- nothing reads it at all any more -- because it is a
-    // claim about the release an upload was made for, and ten English
-    // files for one film declaring six different rates all end within
-    // 1 % of the same runtime. What the addon says about *which release*
-    // does order them, because two files cut for one release keep its
-    // time.
+    // nothing, since nothing reads it as a multiplier: it is a claim
+    // about the release an upload was made for, and ten English files
+    // for one film declaring six different rates all end within 1 % of
+    // the same runtime. What the addon says about *which release* does
+    // order them, because two files cut for one release keep its time.
     final harness = subtitleHarness([
       upload(
         'en-1',
@@ -941,9 +940,9 @@ void main() {
     // shows. A preference that is enabled and names no language -- what a
     // pick of a file the addon gave no language for leaves behind --
     // matches every file, so the auto-pick takes the head of the whole
-    // list. That is the alphabetically first language now, where it was
-    // whichever addon answered first before the rows were sorted; the
-    // addon here answers Swedish first and German second.
+    // list: the alphabetically first language, not whichever addon
+    // answers first. The addon here answers Swedish first and German
+    // second.
     final harness = subtitleHarness(
       [
         upload('sv-1', 'swe', 'https://subs.example.org/sv.srt', 'YTS'),
@@ -1073,8 +1072,9 @@ void main() {
   ) async {
     // `movieReleaseName` is addon text and arrives as long as it likes --
     // the real Breaking Bad answer has one of 122 characters -- and a
-    // `ListTile` grows to fit whatever it is handed. On a phone that made
-    // one alternative six lines tall, where `Option N` had been one.
+    // `ListTile` grows to fit whatever it is handed: on a phone this makes
+    // the alternative six lines tall, where the short `Option N` fallback
+    // would be one.
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

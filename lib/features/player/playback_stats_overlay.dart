@@ -138,12 +138,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// The one row standing in for every reading mpv has not taken yet, in
   /// the same label column as the rest.
   ///
-  /// It names mpv, because mpv is what is still collecting: the rows below
-  /// it come from the embedded server, which is answering about a file on
-  /// the disk and has no wait to share. It used to say `stats:` and to be
-  /// the whole panel, which is the bug -- somebody sitting in front of a
-  /// stream that has not started is watching for exactly the rows that
-  /// were being suppressed.
+  /// Named for mpv specifically, not the whole panel: the rows below come
+  /// from the embedded server, which is answering about a file on the disk
+  /// and has no wait to share, so they must not be suppressed along with
+  /// mpv's -- a stream that has not started yet is exactly when those rows
+  /// are worth watching.
   static const String collecting = 'mpv      collecting…';
 
   /// One text line per stat, in the order the panel shows them: what mpv
@@ -379,12 +378,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// The cache row: mpv's demuxer buffer, then what the server holds of
   /// this stream on the disk.
   ///
-  /// **Two different caches, and the row now says which is which.** The
-  /// first number is `demuxer-cache-duration`, a few seconds of memory
-  /// that mpv has read ahead -- it was the whole row and unlabelled, which
-  /// read as though it were ours. `mpv` names it. What follows is the
-  /// retention window: the bytes on this device around the playhead, the
-  /// half a scan back is served from and the half playback has in hand.
+  /// **Two different caches, and the row says which is which.** The first
+  /// number is `demuxer-cache-duration`, a few seconds of memory mpv has
+  /// read ahead, labelled `mpv` so it does not read as the server's. What
+  /// follows is the retention window: the bytes on this device around the
+  /// playhead, the half a scan back is served from and the half playback
+  /// has in hand.
   ///
   /// The window is absent for a stream nothing is bounding -- a torrent
   /// small enough that the budget covers it, a stream this server is not
@@ -423,16 +422,13 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// Half the window: its bytes, and how much watching that is.
   ///
-  /// The time is **the server's**, not an arithmetic done here.
-  ///
-  /// It used to be the bytes over mpv's `video-bitrate`, which was the only
-  /// rate this panel had. Two things were wrong with that. The half is
-  /// reported for whichever of the player's streams is worst off, and that
-  /// may be a subtitle track, whose runway has nothing to do with how many
-  /// bits the picture takes. And a stream that is consuming nothing has no
-  /// runway at all rather than a long one: mpv's read of a Matroska file's
-  /// cues parks at the tail and takes nothing further. The server measures
-  /// each head's own rate and sends the seconds with the bytes.
+  /// The time is **the server's**, not an arithmetic done here: mpv's
+  /// `video-bitrate` would rate whichever of the player's streams is worst
+  /// off by how many bits the picture takes, even when that stream is a
+  /// subtitle track, and would call a stream consuming nothing a long
+  /// runway rather than none -- mpv's read of a Matroska file's cues parks
+  /// at the tail and takes nothing further. The server measures each
+  /// head's own rate and sends the seconds with the bytes.
   ///
   /// **No rate, no time**: the bytes go on their own rather than beside a
   /// dash, for a stream nothing has measured yet or one that is not
@@ -520,12 +516,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// stalled one sits in it, and so does what really was thrown away. A
   /// few per cent of what was played is that ordinary duplication; a
   /// multiple of it, beside refusals that are never healthy above zero, is
-  /// what made a phone fetching 1.6 GB to play a hundred megabytes
-  /// legible -- the cache was ordering pieces its own next pass deleted,
-  /// and the refusals were the ones it could not even delete, because an
-  /// open stream was still reading ahead over them. Absent rather than
-  /// zero where the server has nothing to say -- a proxied stream, or a
-  /// torrent whose counters cannot be read.
+  /// what a phone fetching 1.6 GB to play a hundred megabytes looks like:
+  /// the cache ordering pieces its own next pass deletes, and refusing
+  /// reclaims it cannot even delete because an open stream is still
+  /// reading ahead over them. Absent rather than zero where the server has
+  /// nothing to say -- a proxied stream, or a torrent whose counters
+  /// cannot be read.
   static List<String> describeUnverified(StreamNumbers? held) {
     final sharing = held?.sharing;
     if (sharing == null) return const [];

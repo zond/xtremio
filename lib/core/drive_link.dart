@@ -8,12 +8,12 @@
 /// file ids and names, which is no more secret than the library is, and
 /// lives in the preferences file with everything else the viewer chose.
 ///
-/// The list is **not** a list of grants. One token reaches every file the
-/// account has ever picked through this OAuth client -- measured: a token
-/// from a second pairing reads a file picked during the first -- so this
-/// is a record of what was linked and therefore what to *show*, never a
-/// permission check. Nothing here can take a file away, which is why
-/// there is no "unlink one file": see [DriveAccount.unlink].
+/// The list is **not** a list of grants: one token reaches every file the
+/// account has ever picked through this OAuth client (see [DriveAccount],
+/// "One token, not one per file"), so this is a record of what was linked
+/// and therefore what to *show*, never a permission check. Nothing here can
+/// take a file away, which is why there is no "unlink one file": see
+/// [DriveAccount.unlink].
 library;
 
 import 'package:flutter/foundation.dart';
@@ -206,9 +206,8 @@ final class LinkedDriveFile {
   /// it over in the listing that is being fetched anyway.
   ///
   /// **Null is ordinary.** Drive fills this in after processing an upload
-  /// and leaves it empty for anything it did not decode, so a file with no
-  /// height behaves exactly as every file did before this was recorded --
-  /// nothing may require it.
+  /// and leaves it empty for anything it did not decode, so nothing may
+  /// require a height.
   final int? height;
 
   /// How long the video runs, in milliseconds, as Drive measured it, or

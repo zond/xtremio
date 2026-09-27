@@ -305,7 +305,8 @@ void main() {
       'as pills', (tester) async {
     // Written the way Torrentio writes them: the name is the addon and
     // the quality, and the release is the first line of the description.
-    // The card that led with the name read "Torrentio" four times over.
+    // Leading with the name instead would read "Torrentio" four times
+    // over.
     const release = 'Alpha.2001.1080p.BluRay.x264-CiNEFiLE';
     await mount(
       tester,
@@ -329,7 +330,7 @@ void main() {
     // standing, and the two layouts put the same card under different
     // headings. The quiet line names the kind, the tags and the addon --
     // with the other addon that offered the very same source spelled out
-    // rather than counted `+1`, which is what the deleted readout was for.
+    // rather than counted `+1`.
     expect(pillsOf(tester, release), ['1080p', '1.5 GB', '42 seeders']);
     expect(notesOf(tester, release), [
       'Torrent',
@@ -353,12 +354,9 @@ void main() {
   testWidgets('says everything, on the card, with nothing pressed', (
     tester,
   ) async {
-    // This was a readout under the row (`TvSourceDetailStrip`, deleted):
-    // the tags, the kind and the other addons lived there because a
-    // 260x96 card had no room for them, and it described one card at a
-    // time -- the one the remote was on, which on arrival is no card at
-    // all. Everything it carried is on every card now, before anything is
-    // pressed, which is what lets a viewer compare two of them.
+    // Every card says everything about itself -- the tags, the kind and
+    // the other addons that offered it -- before anything is pressed,
+    // which is what lets a viewer compare two of them side by side.
     await mount(tester, sharedByTwoAddons(), sectioned: true);
 
     expect(focusIn<TvSourceCard>(), isFalse, reason: 'still on the pill');
@@ -427,7 +425,7 @@ void main() {
       'every card in it', (tester) async {
     // WatchHub answers with `externalUrl`s: not one card in the row is a
     // focus stop, so there is no card the remote is on and none it will
-    // be handed. Nothing about the row depends on that any more.
+    // be handed. Nothing the row draws depends on that.
     await mount(tester, loadMetaDetailsFixture());
 
     expect(groupLabels(tester).first, 'watchhub.strem.io');
@@ -574,10 +572,8 @@ void main() {
       'was', (tester) async {
     // The rows are as tall as their content and their content does not
     // depend on where the remote is, so walking into the row and out of
-    // it moves nothing. It is worth a test because the thing this
-    // replaced -- a readout that said more about a focused card than an
-    // unfocused one -- reflowed the panel on exactly this walk, and was
-    // given a reserved height to stop it.
+    // it moves nothing: content that depended on which card was focused
+    // would reflow the panel on exactly this walk.
     await mount(tester, sharedByTwoAddons(), sectioned: true);
 
     // Measured against the rows themselves rather than the panel, so

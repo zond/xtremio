@@ -64,8 +64,8 @@ void main() {
     );
     harness.engine.emitBuffering(false);
     // On load mpv reports zero and then the resume point: a jump, not
-    // playback. The first field log had the open's wait counted as a
-    // stall because of it.
+    // playback. Counting it as playback would report the open's own wait
+    // as a stall.
     harness.engine.emitPosition(const Duration(seconds: 897));
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
@@ -140,12 +140,10 @@ void main() {
   });
 
   testWidgets('a scrub back is not a run of stalls', (tester) async {
-    // The field, 2026-09-20 21:09:27: six "stalls" a second apart at
-    // descending positions -- 6190s, 6180s, 6170s, 6157s, 6145s, 6133s --
-    // two of them counted by the server, and the split depth stepped up
-    // behind them. The remote's rewind key reaches mpv directly, so this
-    // player never sees a seek: it sees the position jump backwards, and a
-    // few frames playing between two rewinds re-armed the report.
+    // The remote's rewind key reaches mpv directly, so this player never
+    // sees a seek: it sees the position jump backwards, and without this
+    // rule a few frames playing between two rewinds would re-arm the
+    // report as a stall each time.
     final harness = bunny();
     await harness.pump(tester);
     harness.engine.emitPosition(const Duration(seconds: 6200));

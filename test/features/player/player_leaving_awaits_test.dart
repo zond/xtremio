@@ -21,15 +21,13 @@ import '../../support/player_harness.dart';
 /// The awaits that were already in flight when the viewer left.
 ///
 /// `player_leaving_test.dart` is about what *arrives* during the teardown
-/// wait, and `PlayerScreen._detach` is the answer to all of it: a screen
+/// wait; `PlayerScreen._detach` is the answer to all of it -- a screen
 /// with no subscriptions, no listeners and no timers cannot be reached by
-/// an event. It cannot reach a continuation that is already suspended.
+/// an event, and it cannot reach a continuation that is already suspended.
 /// An `await` that was out when the press landed is neither a
-/// subscription nor a timer, and it resumes into the middle of the wait --
-/// into a screen that is *more* alive than the one its `mounted` guard was
-/// written against, since the player now stays until mpv has stopped
-/// instead of popping at the press. Every such guard passes exactly when
-/// it used to fail.
+/// subscription nor a timer, and it resumes into the middle of the wait,
+/// with `mounted` still true: `_stillOurs` (`mounted && !_leaving`) is the
+/// guard that still says no.
 ///
 /// So this file is the other half, and it is a list rather than a handful
 /// of cases: one row per await in `PlayerScreen` whose continuation can
@@ -409,10 +407,9 @@ void main() {
       what: 'a cast start',
       reaches: 'the engine, the cast client and the LAN listener',
       suspend: (tester, wedged) async {
-        // Measured with a `connect` that takes two seconds: the engine is
-        // paused, the listener is opened, and the receiver is handed the
-        // film -- the viewer pressed Back and the film started on their
-        // television.
+        // Once the connect answers, the engine is paused, the listener is
+        // opened, and the receiver is handed the film -- none of which may
+        // happen after the viewer has left.
         final answered = Completer<void>();
         final cast = FakeCastClient(devices: const [livingRoom]);
         cast.connectPending = answered.future;

@@ -340,11 +340,10 @@ class StreamsHeader extends StatelessWidget {
 /// linked Drive files, which are not an addon's answer and cannot be
 /// described as one.
 ///
-/// A record and not the `(StreamGroup, rows)` pair it was, because
-/// everything the layout needs used to be read back off the [StreamGroup]
-/// -- its name, the label its open state is stored under, whether it is
-/// still answering -- and a group with no addon behind it can supply every
-/// one of those and has no [StreamGroup] to be asked for them.
+/// A record and not just a [StreamGroup] paired with its rows, because a
+/// group with no addon behind it -- the linked Drive files -- has no
+/// [StreamGroup] to read its name, its storage label or whether it is
+/// still answering off of; the record supplies each of those directly.
 typedef SourceGroup = ({
   /// The addon group, or null for the linked Drive files. Null is what says
   /// there is no addon request to record a pin against and no addon health
@@ -603,14 +602,15 @@ class StreamGroupSliver extends StatelessWidget {
   /// open state is stored under, and its rows.
   ///
   /// The heading is a **name** -- the addon's own, out of its manifest, or
-  /// `Google Drive` for the viewer's own linked files. It used to be
-  /// `group.addonLabel`, which is the host of the manifest URL -- so a list
-  /// of "Torrentio", "Comet" and "MediaFusion" read as "torrentio.strem.fun",
-  /// "comet.elfhosted.com" and "mediafusion.elfhosted.com": the hosting
-  /// arrangement rather than the addon, and three of them sharing a domain
-  /// look like one thing. That is also why the Drive group is headed with
-  /// three words a viewer reads rather than with anything URL-shaped: there
-  /// is no addon here at all, and the heading has to say what is true.
+  /// `Google Drive` for the viewer's own linked files. `group.addonLabel`,
+  /// the host of the manifest URL, would read a list of "Torrentio",
+  /// "Comet" and "MediaFusion" as "torrentio.strem.fun",
+  /// "comet.elfhosted.com" and "mediafusion.elfhosted.com" instead: the
+  /// hosting arrangement rather than the addon, with three of them sharing
+  /// a domain looking like one thing. That is also why the Drive group is
+  /// headed with three words a viewer reads rather than with anything
+  /// URL-shaped: there is no addon here at all, and the heading has to say
+  /// what is true.
   final SourceGroup group;
 
   /// Whether the rows are on screen. Remembered across titles and restarts
@@ -633,8 +633,8 @@ class StreamGroupSliver extends StatelessWidget {
     final rows = group.rows;
     final label = group.isFromMeta ? 'From ${group.name}' : group.name;
     // Nothing yet, as opposed to nothing at all: a group that settled on
-    // no streams is not listed here at all any more, so the label with a
-    // spinner under it can only mean the answer is still coming.
+    // no streams is never listed here at all, so the label with a spinner
+    // under it can only mean the answer is still coming.
     final waiting = rows.isEmpty && group.isLoading;
     return SliverMainAxisGroup(
       slivers: [
@@ -781,13 +781,12 @@ class _EmptyAddonsSummaryState extends State<EmptyAddonsSummary> {
 /// affordance for a torrent, and a play affordance (or the kind of source
 /// when the player cannot open it).
 ///
-/// **The row carries the addon's text entire.** It used to carry one line
-/// of it -- whichever the derivation picked for a headline -- and throw the
-/// rest away, so a pack's collection line, the `⚙️` it was indexed on and
-/// the flags saying which dubs are on it were read, sorted by, and never
-/// shown. They are lines of their own now, in the order the addon wrote
-/// them ([StreamPresentation.rest]), and the only thing taken out of them
-/// is what the line the row is headed with has already said.
+/// **The row carries the addon's text entire.** The lines beyond the
+/// headline are lines of their own, in the order the addon wrote them
+/// ([StreamPresentation.rest]) -- a pack's collection line, the `⚙️` it was
+/// indexed on, the flags saying which dubs are on it -- and the only thing
+/// taken out of them is what the line the row is headed with has already
+/// said.
 ///
 /// **And none of it is cut.** Not the release, not the addon's lines, not
 /// the addon's name: the list scrolls, so a row is as tall as what is on
@@ -860,11 +859,11 @@ class StreamTile extends StatelessWidget {
     final title = titleOverride ?? shown.lead;
     // A row whose whole name is the hint ("1080p", which is all some
     // addons call a stream) needs no badge saying it again. The badges
-    // are read now rather than pulled out of the free text, so this is
-    // checked against what the row is actually headed with -- the badges
-    // repeat the title just as readily as the old chips did, and a row
-    // reading "1080p / 1080p / 2 GB" is what it looks like when nobody
-    // checks.
+    // come from [StreamFacts.pills], or [StreamHints.chips] when there are
+    // no facts, so this is checked against what the row is actually
+    // headed with -- either source can repeat the title just as readily,
+    // and a row reading "1080p / 1080p / 2 GB" is what it looks like when
+    // nobody checks.
     // The kept release says so where the row is read, not only in the
     // trailing button: a picker with five releases and one bin icon was a
     // puzzle ("which one is the download?").
@@ -984,9 +983,9 @@ class StreamTile extends StatelessWidget {
     return switch (entry.state) {
       // The finished state is a button, not a tick: the picker that took
       // the download is where the user is when they decide they do not
-      // want it any more, and the tick said the same thing while doing
-      // nothing. It keeps the primary colour of the tick it replaces, so
-      // the row still reads as "this one is on the device".
+      // want it any more, and a tick there would say the same thing while
+      // doing nothing. It keeps the tick's primary colour, so the row
+      // still reads as "this one is on the device".
       DownloadState.complete => IconButton(
         tooltip: kDownloadDeleteTooltip,
         color: Theme.of(context).colorScheme.primary,

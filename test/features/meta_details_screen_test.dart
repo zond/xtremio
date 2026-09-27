@@ -60,9 +60,8 @@ Map<String, dynamic> torrentGroup(String videoId) => readyGroup(
 );
 
 /// What the row is headed with: the release, derived from the fixture's
-/// `behaviorHints.filename` without its extension. It was the addon and
-/// the quality ("Torrentio 1080p") until the tiles were made to lead with
-/// the release, which is the thing a viewer is actually choosing between.
+/// `behaviorHints.filename` without its extension -- the thing a viewer
+/// is actually choosing between.
 const kTileRelease = 'Breaking.Bad.S01E01.1080p';
 
 /// The season pills, in the order the row draws them: every [ChoiceChip]
@@ -191,11 +190,9 @@ void main() {
       expect(find.text('caching.stremio.net'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);
-      // And the line the addon wrote it on, above the chip. This used to
-      // read `findsNothing`: the row drew one line of the addon's text and
-      // threw the rest away, so a size that had been parsed was taken out
-      // of the words it was parsed from. It is drawn now, and the chip
-      // under it is how a viewer sees the two agree.
+      // And the line the addon wrote it on, above the chip: dropping it
+      // would take a parsed size out of the words it was parsed from, and
+      // the chip under it is how a viewer sees the two agree.
       expect(find.text('💾 1.51 GB'), findsOneWidget);
       expect(find.text('Amazon Prime Video'), findsOneWidget);
       final external = tester.widget<ListTile>(
@@ -872,20 +869,16 @@ void main() {
       expect(find.text(kTileRelease), findsOneWidget);
       // Said once, and this is the assertion that says so. `find.text` is
       // an exact match, so asserting that the filename is drawn nowhere
-      // passed happily while the line under the title read
-      // "Breaking.Bad.S01E01.1080p.mkv\nThePirateBay" -- the release, on
-      // screen, one line under itself, which is the bug this is here to
-      // catch. Counting every Text the release appears *in* is what
+      // would pass even with the release repeated one line under itself,
+      // in a Text reading
+      // "Breaking.Bad.S01E01.1080p.mkv\nThePirateBay" -- the bug this
+      // catches. Counting every Text the release appears *in* is what
       // catches it: the title, and nothing else.
       expect(find.textContaining(kTileRelease), findsOneWidget);
       // And the rest of what the addon wrote *is* drawn, on the line it
-      // wrote it on. This read `findsNothing` -- "the addon's raw blurb is
-      // not drawn at all", because both lists parsed the stream and were
-      // held to show only the parse. The parse turned out to be the thing
-      // worth checking against the text rather than the thing worth
-      // showing instead of it: `⚙️ ThePirateBay` is the only statement in
-      // the whole answer about where the file came from, and nothing in
-      // the app had ever put it on screen.
+      // wrote it on: `⚙️ ThePirateBay` is the only statement in the whole
+      // answer about where the file came from, so the parse is checked
+      // against the text rather than shown instead of it.
       expect(
         find.text('👤 42 💾 1.51 GB ⚙️ ThePirateBay'),
         findsOneWidget,

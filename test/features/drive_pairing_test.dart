@@ -121,13 +121,12 @@ void main() {
 
     testWidgets('a phone that can pick natively never leaves this screen, '
         'and collects what it picked', (tester) async {
-      // The bug this is here for: the phone used to open its own pairing
-      // link, Android handed it back to this app as an App Link, the app
-      // picked natively and posted to the session -- and left *this* screen
-      // to poll the answer back. By then the viewer had pressed Done on the
-      // screen in front of it and gone to their library, so nothing was
-      // polling and the session sat at `ready` until it expired. Measured on
-      // a real phone, three times, with every other part working.
+      // Without this, the phone opens its own pairing link, Android hands
+      // it back to this app as an App Link, and a native pick posts to the
+      // session while leaving *this* screen to poll the answer back -- but
+      // the viewer has already pressed Done on the screen in front of them
+      // and gone to their library, so nothing polls and the session sits
+      // at `ready` until it expires.
       final picker = FakeNativePicker([_picked]);
       final opener = FakeLinkOpener();
       final service = FakeDrivePairingService(
@@ -170,19 +169,16 @@ void main() {
       expect(service.handovers, [
         (sessionId: service.session.sessionId, files: 2),
       ]);
-      // Collected without waiting for a tick: the answer was already there,
-      // and waiting is what left three real pairings to expire.
+      // Collected without waiting for a tick: the answer is already there.
       expect(account.files.entries, hasLength(2));
     });
 
     testWidgets('and the pairing finishes even when the screen is gone', (
       tester,
     ) async {
-      // The whole reason this work moved off the screen. Three pairings were
-      // lost in one afternoon because the only thing collecting them was a
-      // screen the viewer had already walked away from -- a Google sign-in,
-      // a consent and a list of files, gone with no error anywhere, because
-      // nothing had failed.
+      // This runs independent of the screen: without it, a pairing that
+      // finishes after the viewer walks away -- sign-in, consent, files
+      // chosen -- is silently lost, with nothing left to say it failed.
       final gate = Completer<void>();
       final service = FakeDrivePairingService(
         answers: [
@@ -359,12 +355,11 @@ void main() {
 
     testWidgets('and says nothing about a browser while picking here, '
         'because no page was opened', (tester) async {
-      // The screen used to draw "sign in to Google in the page that opened"
-      // and a button to open it for every device that is not a television,
-      // which was true while a phone always went out through a browser. With
-      // the picker up, that sentence is about a page that does not exist and
-      // the button is the one thing on screen not to press. Seen on a real
-      // phone, under a heading that said the right thing.
+      // A device with a native picker never opened a browser page, so the
+      // "sign in to Google in the page that opened" message and its button
+      // -- there for devices that do go out through a browser -- must not
+      // draw while the picker is up: the page they name does not exist,
+      // and the button is the one thing on screen not to press.
       final gate = Completer<void>();
       final opener = FakeLinkOpener();
       await tester.pumpWidget(
@@ -393,9 +388,9 @@ void main() {
 
     testWidgets('backing out of the picker leaves a way back in, not a dead '
         'end', (tester) async {
-      // No QR, no page, and a session that is still perfectly good. Before
-      // this the screen said it was "waiting for your phone" -- no phone was
-      // ever involved -- and offered nothing to press.
+      // No QR, no page, and a session that is still perfectly good, so the
+      // screen must not say it is "waiting for your phone" -- no phone was
+      // ever involved -- with nothing to press.
       final picker = FakeNativePicker([const DriveNativePickCancelled()]);
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
@@ -843,10 +838,9 @@ void main() {
     testWidgets('and thisRunOnly is said out loud rather than swallowed', (
       tester,
     ) async {
-      // A Linux box with no keyring daemon, an Android keystore that will
-      // not unwrap its key: the pairing works now and is gone after a
-      // restart, and a screen that showed a plain tick would be telling the
-      // viewer something untrue about the evening after this one.
+      // A Linux box with no keyring daemon, or an Android keystore that
+      // cannot unwrap its key: the pairing works now but does not survive
+      // a restart, and a plain tick would tell the viewer otherwise.
       final account = await _account(secrets: FakeSecretStore.failing());
       final service = FakeDrivePairingService(answers: [fakeCollected()]);
       await tester.pumpWidget(

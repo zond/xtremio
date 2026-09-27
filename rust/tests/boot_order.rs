@@ -1,14 +1,14 @@
 //! The one order `core_init` must keep, in a process of its own.
 //!
 //! The server is handed the pin set at startup, and that set is read off the
-//! downloads registry under `storage_dir`. `core_init` used to start the
-//! server *before* setting that directory, so every real boot read no
-//! registry, named no pins, and the server kept every torrent's data for
-//! the life of the process: the launch sweep skipped, every torrent counted
-//! as pinned, no owner ever reclaiming a byte. The integration test that
-//! covered pins set the directory itself before calling in, which is the
-//! one step the app does not take -- so this test does not either, and runs
-//! in its own binary so no earlier test can have set it.
+//! downloads registry under `storage_dir`, which `core_init` must set before
+//! starting the server: reversed, every real boot reads no registry, names
+//! no pins, and the server keeps every torrent's data for the life of the
+//! process -- the launch sweep skipped, every torrent counted as pinned, no
+//! owner ever reclaiming a byte. The integration test that covers pins sets
+//! the directory itself before calling in, which is the one step the app
+//! does not take -- so this test does not either, and runs in its own
+//! binary so no earlier test can have set it.
 //!
 //! What is observable is the launch sweep: handed a set (even an empty one)
 //! it removes every piece directory the set does not claim before the

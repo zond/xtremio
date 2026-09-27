@@ -25,11 +25,10 @@ export 'torrent_stats.dart';
 /// The URL of the external subtitle file [error] says mpv could not load,
 /// or null when it says something else.
 ///
-/// mpv's own words for it, `Can not open external file <url>.`, logged at
-/// error level by `cplayer` and so an [PlaybackEngine.errors] event --
-/// and the only word of it anyone gets: `sub-add` hands its failure back
-/// as the command's return code, which media_kit logs and drops, so the
-/// call itself completes as if the file had been added.
+/// mpv logs `Can not open external file <url>.` at error level, so it
+/// arrives as a [PlaybackEngine.errors] event, and that is the only signal:
+/// media_kit drops `sub-add`'s return code, so the call completes as if the
+/// file had been added.
 String? externalSubtitleFailure(String error) {
   const prefix = 'Can not open external file ';
   if (!error.startsWith(prefix)) return null;
@@ -83,34 +82,25 @@ abstract interface class PlaybackEngine {
   /// simply never emits.
   Stream<PlaybackStats> get stats;
 
-  /// The frame rate the open video declares (`container-fps`), re-emitted
-  /// whenever it changes -- which is once per file, as it is loaded.
-  /// Nothing is emitted for media that declares no rate, nor on a backend
-  /// without the property.
+  /// The frame rate the open video declares (`container-fps`), emitted once
+  /// per file as it loads; nothing for media that declares none, or on a
+  /// backend without the property.
   ///
-  /// The one consumer is the display: a 23.976 fps film presented on a
-  /// 59.94 Hz output lands on a 3:2 cadence, which is what "the picture
-  /// jumps" looks like, so the player asks the television for a refresh
-  /// rate that matches (`DisplayFrameRate`). That is a statement about the
-  /// video's own presentation, and it is the only thing a declared rate is
-  /// allowed to decide: nothing about a subtitle's timing may read this
-  /// (AGENTS.md, "Nothing re-times a subtitle but the viewer").
+  /// Its one consumer is the display: a 23.976 fps film on a 59.94 Hz
+  /// output lands on a 3:2 cadence, so the player asks the television for a
+  /// matching mode (`DisplayFrameRate`). Nothing about subtitle timing may
+  /// read this (AGENTS.md, "Nothing re-times a subtitle but the viewer").
   Stream<double> get videoFrameRate;
 
   /// Tells the engine what the display is **really** refreshing at, in
-  /// hertz, so it can time frames against the screen instead of against
-  /// the audio clock; `null` gives that claim back.
+  /// hertz, so it can time frames against the screen instead of the audio
+  /// clock; `null` withdraws the claim.
   ///
-  /// The other half of the story above. Asking the television for the
-  /// film's own rate removes the cadence; this is what makes mpv aware of
-  /// the rate it landed on, which on Android it cannot measure for itself
-  /// -- see [MediaKitEngine.displayRateProperties] for the reading that
-  /// justifies it and for why it is Android's alone. The caller owns the
-  /// lifetime: it is set while a rate is being held on the display and
-  /// cleared the moment it is given back, because an override outliving
-  /// the mode it described is worse than none.
-  ///
-  /// Only libmpv has the properties; any other backend does nothing here.
+  /// On Android mpv cannot measure the rate itself (see
+  /// [MediaKitEngine.displayRateProperties]). The caller sets it while it
+  /// holds a rate on the display and clears it the moment it gives the rate
+  /// back: an override outliving the mode it described is worse than none.
+  /// Only libmpv has the property; other backends do nothing.
   Future<void> setDisplayRefreshRate(double? hz);
 
   /// Opens [url] and starts playing from [start].
@@ -123,28 +113,18 @@ abstract interface class PlaybackEngine {
   /// Moves [delta] from wherever playback is, landing on a keyframe: the
   /// step a viewer scanning through the film asks for.
   ///
-  /// It is a different question from [seek], not a cheaper way of asking
-  /// the same one. An exact seek lands on the requested moment by
-  /// decoding forward from the keyframe before it, invisibly, and on a
-  /// 32-bit Amlogic television box with `hwdec=mediacodec-copy` that
-  /// decode is what a press of the seek key costs. A scan does not need
-  /// the moment -- a second or two either way is invisible while the
-  /// picture is moving -- so it takes the keyframe and lands at once,
-  /// which is what every television player does and what the owner
-  /// noticed for himself: with the cache empty, mpv had nothing to seek
-  /// within, fell back to a keyframe seek, and "the seeking becomes
-  /// smooth".
+  /// An exact [seek] decodes forward from the keyframe before the target,
+  /// and on a 32-bit Amlogic box with `hwdec=mediacodec-copy` that decode is
+  /// what a press of the seek key costs. A scan takes the keyframe and lands
+  /// at once.
   ///
-  /// **Relative, and that is the whole of why this is not a [seek] with a
-  /// flag on it.** A keyframe seek to an absolute target lands on the
-  /// keyframe *before* it, so a forward step shorter than the distance
-  /// between keyframes lands behind where it started: x264's default
-  /// `keyint` of 250 frames is 10.4 s at 23.976 fps, against a
-  /// `seekTimeDuration` of 10 s, and a viewer pressing forward would
-  /// watch the film sit still. Asked as a relative move, mpv rounds the
-  /// other way -- to the first keyframe at or past the target, and back
-  /// past it going backwards -- so a press always moves at least what it
-  /// asked for, in the direction it asked for.
+  /// **Relative, which is why this is not [seek] with a flag.** A keyframe
+  /// seek to an absolute target lands on the keyframe *before* it, so a
+  /// forward step shorter than the keyframe interval lands behind where it
+  /// started (x264's default `keyint` of 250 frames is 10.4 s at 23.976 fps,
+  /// against a 10 s `seekTimeDuration`). A relative keyframe seek rounds
+  /// away from the start, so a press always moves at least what it asked
+  /// for, in the direction it asked for.
   Future<void> scanBy(Duration delta);
 
   Future<void> play();
@@ -169,49 +149,34 @@ abstract interface class PlaybackEngine {
   /// Multiplies the timestamps of the subtitle events being drawn by
   /// [speed], `1.0` being the file's own timing.
   ///
-  /// This is how a file cut for a release of another frame rate is put
-  /// back in step: the whole drift is linear, so one multiplier removes
-  /// it. Only a viewer watching the picture ever asks for one -- a
-  /// declared rate says where an upload came from, not how it is timed --
-  /// so nothing sets this by itself. Only libmpv has the property; any
-  /// other backend does nothing here.
-  ///
-  /// Every path that changes what is on screen sets it, 1.0 included: a
-  /// multiplier is a property of the player, not of the file, so one left
-  /// behind by the previous pick would ruin a subtitle that was correct.
+  /// A file cut for a release of another frame rate drifts linearly, so one
+  /// multiplier puts it back in step. Only the viewer asks for one (AGENTS.md,
+  /// "Nothing re-times a subtitle but the viewer"), and every path that
+  /// changes what is on screen sets it, 1.0 included: it is a property of
+  /// the player, not of the file. Only libmpv has the property; other
+  /// backends do nothing.
   Future<void> setSubtitleSpeed(double speed);
 
-  /// Shifts the subtitle events being drawn by [seconds]: positive makes
-  /// a line appear later than the file asks for, negative earlier.
+  /// Shifts the subtitle events being drawn by [seconds]: positive makes a
+  /// line appear later than the file asks for, negative earlier.
   ///
-  /// The other half of putting a file back in step: a multiplier fixes a
-  /// subtitle that drifts, an offset fixes one cut for a release that
-  /// starts somewhere else -- a distributor logo this video does not
-  /// have. Like the multiplier, only a viewer watching the picture can
-  /// judge it, so nothing sets this by itself.
-  ///
-  /// libmpv's `sub-delay`; any other backend does nothing here.
-  ///
-  /// Like the multiplier it belongs to the player rather than to the
-  /// file, so every path that changes what is on screen sets it, `0.0`
-  /// included.
+  /// The other half of putting a file back in step: an offset fixes a file
+  /// cut for a release that starts elsewhere (a distributor logo this video
+  /// does not have). Like the multiplier it is set only by the viewer, and
+  /// every path that changes what is on screen sets it, `0.0` included.
+  /// libmpv's `sub-delay`; other backends do nothing.
   Future<void> setSubtitleDelay(double seconds);
 
   /// Where the cue on screen starts on the **subtitle file's own
-  /// timeline**, in seconds: its raw time in the file, before
-  /// [setSubtitleSpeed] multiplied it and [setSubtitleDelay] moved it.
-  /// Null when there is no cue on screen, and on every backend but
-  /// libmpv.
+  /// timeline**, in seconds: its raw time, before [setSubtitleSpeed] and
+  /// [setSubtitleDelay] moved it. Null when no cue is on screen, and on
+  /// every backend but libmpv.
   ///
-  /// This is half of a mark -- the other half is the video position the
-  /// viewer says that line belongs at -- and which timeline the number
-  /// is on decides every one of them: two marks read off different
-  /// timelines are points on two different lines, and
-  /// `SubtitleCalibration` fits a line. Which of the two libmpv answers
-  /// with was settled by measurement rather than by documentation; the
-  /// measurement is written down at [MediaKitEngine.subtitleCueStart],
-  /// which is the one place that would change if a build of libmpv ever
-  /// answered the other one.
+  /// This is half of a mark (the other half is the video position the
+  /// viewer says the line belongs at), and `SubtitleCalibration` fits one
+  /// line through the marks, so every mark has to be on the same timeline.
+  /// The measurement that settled which one libmpv answers on is at
+  /// [MediaKitEngine.subtitleCueStart].
   Future<double?> subtitleCueStart();
 
   /// Applies to the subtitles drawn over the video from the next build.
@@ -225,61 +190,33 @@ abstract interface class PlaybackEngine {
   /// Stops the playback and releases everything the backend holds for it,
   /// the video texture and the audio device among them.
   ///
-  /// It can be slow and it can fail -- `Player.stop()` waits on the mpv
-  /// core thread, which is the thread that has to answer for whatever the
-  /// playback was doing -- so [quit] goes first. That is what gets the
-  /// core thread out of whatever the playback had it doing and on to the
-  /// stop, and with it sent this comes back in a fraction of a second.
-  ///
-  /// **Awaited with the sinks still attached, because the release of them
-  /// happens inside here.** There is no separate sink to let go of
-  /// afterwards and none to withhold: media_kit tears the native video
-  /// output down from `Player.dispose`, after its `stop()`, which is
-  /// exactly the order wanted. What the caller owes is to keep drawing the
-  /// video and to keep the audio device open until this returns.
+  /// It can be slow and it can fail (`Player.stop()` waits on the mpv core
+  /// thread), so [quit] goes first; with it sent this returns in a fraction
+  /// of a second. The sinks are released inside this call (media_kit tears
+  /// the video output down from `Player.dispose`, after `stop()`), so the
+  /// caller keeps drawing the video and keeps the audio device open until
+  /// it returns. See docs/ARCHITECTURE.md, "Leaving the player".
   Future<void> dispose();
 
   /// Ends the playback outright -- libmpv's own `quit` -- freeing the
-  /// demuxer and the connection it is reading through, and leaves this
-  /// engine unusable.
+  /// demuxer and the connection it reads through, and leaves this engine
+  /// unusable.
   ///
-  /// **This is the kill, and it is sent the moment the player is left**,
-  /// ahead of [dispose] rather than behind it on a deadline. There is
-  /// nothing stronger to escalate to: `mpv_terminate_destroy` deadlocks
-  /// against an attached event loop, which is why media_kit schedules its
-  /// own five seconds after the teardown it belongs to (the whole of that
-  /// is at [MediaKitEngine.quit]). So withholding the only kill there is
-  /// until the slow path has failed buys nothing, and costs the demuxer,
-  /// the socket and the server engine that socket keeps live for as long
-  /// as the slow path takes. That is what this used to be for, and what it
-  /// is no longer.
+  /// **This is the kill, sent the moment the player is left, ahead of
+  /// [dispose].** There is nothing stronger: `mpv_terminate_destroy`
+  /// deadlocks against an attached event loop (see [MediaKitEngine.quit]).
+  /// It does not spoil the teardown behind it: `quit` leaves mpv's core
+  /// thread draining its dispatch queue, so the `stop` inside [dispose] is
+  /// answered as on a live core -- measured against real libmpv, `dispose`
+  /// returned in single-digit milliseconds three seconds after a quit.
   ///
-  /// **It does not spoil the teardown behind it, which was measured before
-  /// it was relied on.** `quit` does not end mpv's core thread: the
-  /// shutdown broadcasts and then loops, draining the core's dispatch
-  /// queue until the last client is destroyed, and media_kit destroys its
-  /// client five seconds late. So the `stop` inside [dispose] is
-  /// dispatched and answered exactly as it would be on a live core.
-  /// Against real libmpv, three seconds after a quit -- demuxer gone,
-  /// socket returned -- `dispose` still came back in single-digit
-  /// milliseconds, and nothing threw in any run.
+  /// It returns at once, but a core thread that is genuinely stuck swallows
+  /// it along with everything else; nothing in this process can reach that
+  /// thread.
   ///
-  /// **What it covers, and what it does not.** It returns at once, so a
-  /// caller is never blocked by it -- but "the call returns" and "the
-  /// player dies" are two different claims, and only the first one is
-  /// unconditional. [MediaKitEngine.quit] enqueues on the mpv core's own
-  /// dispatch queue, and the core thread is the only thread that can act
-  /// on it. A core thread that is genuinely stuck swallows this along with
-  /// everything else, and nothing in this process can reach that thread.
-  /// What bounds that case is that a player with no disk cache costs
-  /// memory and a socket rather than a volume.
-  ///
-  /// Throws when the backend refused to accept the command, so a caller
-  /// that logs a kill is logging one that was at least asked for.
-  ///
-  /// Calling it twice, or on a player that has already gone, does nothing
-  /// -- a caller may well have lost track of what the player is doing, so
-  /// the implementation and not the caller is what has to be sure.
+  /// Throws when the backend refused the command, so a caller that logs a
+  /// kill logs one that was at least asked for. Calling it twice, or on a
+  /// player that has gone, does nothing.
   Future<void> quit();
 }
 
@@ -489,66 +426,35 @@ class MediaKitEngine implements PlaybackEngine {
   /// worth nothing if it lands after the stream is open.
   late final Future<void> _overrides;
 
-  /// mpv properties this app sets differently from media_kit's own
-  /// defaults, applied once per player.
+  /// mpv properties this app sets differently from media_kit's defaults,
+  /// applied once per player.
   ///
-  /// `network-timeout`: media_kit 1.2.6 starts libmpv with
-  /// `network-timeout=5` (`player/native/player/real.dart`), which is five
-  /// seconds for the *whole* read to make progress. Our own stream is a
-  /// torrent: on a thin swarm the embedded server legitimately takes
-  /// minutes to hand over the next piece, and there is nothing wrong while
-  /// it does. With mpv's `keep-open=yes` that timeout does not surface as
-  /// an error either -- it arrives as a false end of file, on which
-  /// media_kit's `play()` seeks back to 0, which is what "it plays ten
-  /// seconds and starts over" is. Five minutes is long enough that no
-  /// swarm trips it and short enough that a connection that is really gone
-  /// still ends up an error rather than a hang.
+  /// `network-timeout`: media_kit starts libmpv with `network-timeout=5`,
+  /// five seconds for a read to make progress. On a thin swarm the embedded
+  /// server legitimately takes minutes to hand over the next piece, and with
+  /// `keep-open=yes` the timeout arrives as a false end of file on which
+  /// media_kit's `play()` seeks back to 0 ("it plays ten seconds and starts
+  /// over"). Five minutes is long enough that no swarm trips it and short
+  /// enough that a dead connection still ends in an error.
   ///
   /// **`cache-on-disk=no` is the whole of the player's disk policy.**
-  /// media_kit 1.2.6 starts libmpv with `cache-on-disk=yes`
-  /// (`player/native/player/real.dart`), and what that buys is a cache file
-  /// mpv unlinks the moment it creates it: no name in the directory, so no
-  /// `du`, no `dumpsys diskstats` and nothing the server counts can see it,
-  /// and the blocks come back only when the fd closes.
-  /// On the owner's Chromecast one 90-second title held 928 MB that way
-  /// while three separate instruments reported the app was using 46 MB.
+  /// media_kit's default `yes` makes a cache file mpv unlinks as it creates
+  /// it, invisible to `du`, `dumpsys diskstats` and the server until the fd
+  /// closes: one 90-second title on a Chromecast held 928 MB that way while
+  /// the app reported 46 MB. The one cache on the device is the server's,
+  /// which every stream reaches the player through ([proxiedThroughServer]).
   ///
-  /// There is one cache on this device now and it is the server's: named
-  /// files, a configured limit, a free-space floor, and owners that give
-  /// back what nobody is playing and nobody kept. Every stream reaches the
-  /// player through it ([proxiedThroughServer]), so a second copy in a file
-  /// nobody can see buys nothing that the first one does not already do
-  /// better. It is set here, once per player and never again, because it
-  /// is a property of this app rather than of any one media -- there is no
-  /// condition under which it comes back on, and nothing left that would
-  /// turn it off.
+  /// Not here: `force-seekable` is a claim about one stream
+  /// ([forcesSeekable], per `open`); `override-display-fps` is set per
+  /// playback against the rate the display settled on
+  /// ([displayRateProperties]); `video-sync` is deliberately left at mpv's
+  /// default (see [displayRateProperties]).
   ///
-  /// `force-seekable` is not here: it is a claim about the stream being
-  /// opened rather than about the player, so [forcesSeekable] decides it
-  /// per `open`.
-  ///
-  /// **`override-display-fps` is not here because it is not a property of
-  /// this player.** It is set per playback, against the rate the display
-  /// turned out to be on, and taken off again the moment nothing is being
-  /// presented -- [displayRateProperties] and [setDisplayRefreshRate] are
-  /// where it lives. What belongs here is why mpv has to be told a rate at
-  /// all, because that is a fact about this VO rather than about any one
-  /// film.
-  ///
-  /// mpv cannot *measure* the refresh rate here: media_kit runs it with
-  /// `vo=gpu` and `gpu-context=android`
-  /// (`android_video_controller/real.dart`), and in the build it ships for
-  /// Android (`mpv v0.36.0-549-g78d43740f5`) that context answers
-  /// `VO_NOTIMPL` to every request, `VOCTRL_GET_DISPLAY_FPS` included
-  /// (`video/out/opengl/context_android.c`), with `vo_gpu` handing the
-  /// request straight to it. So the reported rate stays 0 and
-  /// `vo_get_vsync_interval` answers -1 (`video/out/vo.c`). The stats OSD
-  /// has no display rate to show and mpv has none to reason with, which is
-  /// what the override supplies.
-  ///
-  /// **`video-sync` is not set here**, and display sync is not used: why
-  /// it was tried and taken out again, and what the dropped frames it was
-  /// set against really were, is at [displayRateProperties].
+  /// mpv cannot measure the display's refresh rate on Android: media_kit runs
+  /// `vo=gpu` with `gpu-context=android`, which in the build it ships
+  /// (`mpv v0.36.0-549-g78d43740f5`) answers `VO_NOTIMPL` to
+  /// `VOCTRL_GET_DISPLAY_FPS` (`video/out/opengl/context_android.c`), so the
+  /// reported rate stays 0. That is why the rate is supplied from outside.
   static const Map<String, String> mpvOverrides = {
     'network-timeout': '300',
     'cache-on-disk': 'no',
@@ -559,17 +465,12 @@ class MediaKitEngine implements PlaybackEngine {
   };
 
   /// The overrides "Verbose diagnostics" adds, with the `logLevel` of
-  /// [playerConfigurationFor] and stream-server's `stage="stream_request"`
-  /// line: mpv saying which of its parts wanted a read.
+  /// [playerConfigurationFor]: mpv saying which of its parts wanted a read.
   ///
-  /// Something once reopened a read once a second for a whole session at
-  /// `file_size - 25,961,713` -- about 41 kB each time, advancing some
-  /// sixty bytes. That offset was 15.2 MB before the file's `moov`, so it
-  /// was inside `mdat`: media data, not the container index the retention
-  /// code had been calling it and sizing two constants around. The server
-  /// can say what was asked for, and does. What it cannot say is which part
-  /// of a player wanted it, because a player sends a byte range and nothing
-  /// else. This is that half, on when somebody is about to read a report.
+  /// The server logs which byte range was asked for (stream-server's
+  /// `stage="stream_request"` line) but cannot know which part of the player
+  /// asked, because a player sends a range and nothing else. This is that
+  /// half, on while somebody is about to read a report.
   static const Map<String, String> verboseMpvOverrides = {
     'msg-level': 'all=info,demux=v,stream=v,cache=v',
   };
@@ -582,56 +483,28 @@ class MediaKitEngine implements PlaybackEngine {
   /// What tells mpv the rate a display is refreshing at, in hertz, and an
   /// empty map where there is nothing to say.
   ///
-  /// **`override-display-fps` is the whole of it, and `video-sync` is
-  /// deliberately not set.** `override-display-fps` is what
-  /// `update_display_fps` takes *ahead* of the rate the VO reports
-  /// (`video/out/vo.c`), and on Android it is the only way mpv learns the
-  /// rate at all -- the name was read out of the very `libmpv.so`
-  /// media_kit ships (`mpv v0.36.0-549-g78d43740f5`). `video-sync` is left
-  /// at mpv's own default (`audio`), so every frame is timed against the
-  /// audio clock, which is what [displayRateOff] gives back and why the
-  /// two maps carry the same one key.
-  ///
-  /// **Display sync was tried and taken out again, on the terms set for
-  /// it.** `video-sync=display-resample` was set against the drops a
-  /// 23.976 fps film still showed on a panel asked for 23.976 Hz (**2779
-  /// vo / 0 decoder** on the stats OSD), on the standard that display sync
-  /// had to actually start and the vo drop count had to beat 2779. It
-  /// failed both. `display-sync-active` read `no` in every
-  /// capture on the owner's Chromecast -- the override is enough for mpv
-  /// to *have* a rate but not enough for the mode to engage -- and what
-  /// removed the drops was not this at all but `hwdec=mediacodec` in place
-  /// of `mediacodec-copy` (see [configurationFor]): the copying decoder
-  /// was spending 86% of a core reading frames back and delivering them
-  /// late, which is what the 2779 were.
-  ///
-  /// What `display-resample` did do was put the audio on a correction loop
-  /// against a rate mpv cannot verify, and the picture drifted audibly
-  /// behind the sound over a few minutes -- on a 720p HEVC episode and on
-  /// a 1080p H.264 film alike. With this map as it now stands both play in
-  /// sync, `1 vo / 0 decoder`, and SurfaceFlinger presents 126 consecutive
-  /// frames at 41.70-41.71 ms, which is 23.975 fps on a panel asked for
-  /// 23.976. Stremio's own Android app reaches the same place the same
-  /// way: match the panel to the film, and do no display sync at all.
+  /// **`override-display-fps` is the whole of it; `video-sync` stays at
+  /// mpv's default (`audio`).** The override is what `update_display_fps`
+  /// takes ahead of the VO's rate (`video/out/vo.c`), and on Android the
+  /// only way mpv learns the rate at all. `video-sync=display-resample` is
+  /// not used: on a Chromecast `display-sync-active` never engaged, and it
+  /// put the audio on a correction loop against a rate mpv cannot verify,
+  /// so the picture drifted audibly behind the sound over a few minutes.
+  /// The frame drops it was tried against were the copying decoder's (see
+  /// [configurationFor]); with this map a 23.976 fps film on a panel asked
+  /// for 23.976 Hz plays at `1 vo / 0 decoder` drops.
   ///
   /// **[hz] is a measurement, never the rate that was asked for.** The ask
-  /// (`DisplayFrameRate`) is a vote on the surface on Android 12 and up
-  /// and a window attribute below it; neither reports back, both are
-  /// asynchronous, and a set can land on a neighbouring mode or move the
-  /// display nowhere at all. A rate we asked for and did not get is
-  /// exactly the wrong number to hand mpv, so the number comes from the
-  /// display itself, afterwards (`DisplayFrameRate.refreshRate`,
-  /// `MainActivity.DisplayRefreshRates`), and again whenever it changes.
+  /// (`DisplayFrameRate`) is asynchronous, reports nothing back and can land
+  /// on a neighbouring mode, so the number comes from the display itself
+  /// afterwards (`DisplayFrameRate.refreshRate`,
+  /// `MainActivity.DisplayRefreshRates`).
   ///
-  /// **Android only, and that is not a hedge.** Everywhere else mpv's VO
-  /// measures the rate itself and is right about it, so an override there
-  /// replaces a true number with one of ours -- which is the whole of what
-  /// this does. The Android VO is the one that answers `VO_NOTIMPL` (see
-  /// [mpvOverrides]) and so the one with nothing to lose.
+  /// **Android only.** Everywhere else mpv's VO measures the rate itself and
+  /// is right, so an override would replace a true number with ours.
   ///
-  /// Empty rather than [displayRateOff] for a rate that is not a rate:
-  /// with nothing measured there is nothing to claim, and a player that
-  /// never told mpv a rate has nothing to give back either.
+  /// Empty rather than [displayRateOff] for a rate that is not a rate: with
+  /// nothing measured there is nothing to claim.
   static Map<String, String> displayRateProperties(
     double? hz, {
     TargetPlatform? platform,
@@ -643,65 +516,36 @@ class MediaKitEngine implements PlaybackEngine {
     return {'override-display-fps': '$hz'};
   }
 
-  /// What takes the rate back, written by whichever player claimed one
-  /// once it stops presenting.
-  ///
-  /// A zero `override-display-fps` is what mpv reads as "no display rate",
-  /// which is where this started. It matters more than the setting did: an
-  /// override describes the mode one film was shown in, and one left
-  /// standing over the next film -- or over a display the viewer has since
-  /// changed, or one the platform put back when the ask was cleared -- is
-  /// a worse lie than no override at all, because it looks measured.
+  /// What takes the rate back, written by whichever player claimed one once
+  /// it stops presenting: a zero `override-display-fps` is mpv's "no display
+  /// rate". An override left standing over the next film, or over a mode
+  /// the platform has since changed, is worse than none, because it looks
+  /// measured.
   static const Map<String, String> displayRateOff = {
     'override-display-fps': '0',
   };
 
   /// Whether to tell mpv that [url] can be seeked in whatever the demuxer
-  /// concluded (`force-seekable`), which is decided per stream because it
-  /// is a claim about *this* server and not about seeking in general.
+  /// concluded (`force-seekable`) -- a claim about this server, decided per
+  /// stream.
   ///
-  /// mpv refuses a seek the demuxer says it cannot make -- it restores the
-  /// position rather than waiting -- and a demuxer decides that from what
-  /// it could read when the file opened, not from what the stream can
-  /// serve. A Matroska file keeps its index at the end, which on a torrent
-  /// is the last thing to arrive, so the demuxer concludes the file is
-  /// unseekable and every seek past the buffered part puts the position
-  /// straight back. The option exists for exactly the case where the
-  /// caller knows better than the demuxer, and for our own stream we do:
-  /// `server/src/routes/stream.rs` answers any byte range with
-  /// `Accept-Ranges: bytes`, seeks the torrent reader to the offset --
-  /// which re-prioritises the swarm around it -- and streams from there.
-  /// A cold offset waits; it is never refused. So the honest thing to tell
-  /// mpv is that the stream is seekable, and let a seek into a part nobody
-  /// has yet be the wait it really is -- a wait `network-timeout` above
-  /// already covers, and one longer than that arrives as the false end of
-  /// file the player re-opens from.
+  /// mpv refuses a seek the demuxer says it cannot make, and a demuxer
+  /// decides that from what it could read at open. A Matroska index is at
+  /// the end of the file, the last thing a torrent delivers, so without this
+  /// every seek past the buffered part is refused. The embedded server's
+  /// stream route answers any byte range and re-prioritises the swarm around
+  /// it: a cold offset waits (covered by `network-timeout`, and past that by
+  /// the false-end re-open), it is never refused.
   ///
-  /// **That claim is about the embedded server and nothing else**, so it
-  /// is made only for the loopback address the server binds
-  /// (`http://127.0.0.1:<port>/`). An addon can answer with a URL on its
-  /// own host, and the player opens that untouched: a live HLS playlist,
-  /// or a host that ignores `Range`, really cannot be seeked in, and
-  /// forcing it there does not make a seek work -- it turns a refusal the
-  /// viewer sees into a bar sitting at a position no packets will ever
-  /// arrive for. A refusal is the better failure. A kept download is on the
-  /// loopback address like any other torrent, so it is forced along with
-  /// them -- and it is the one case where every byte is already here.
+  /// **Only for the embedded server's own streams on the loopback address.**
+  /// An addon's own host (a live HLS playlist, a host that ignores `Range`)
+  /// really cannot be seeked in, and forcing it turns a visible refusal into
+  /// a bar sitting where no packets will arrive. A `/proxy` URL is on the
+  /// loopback address but fronts such a host, so it is not forced either. A
+  /// kept download is forced like any other torrent.
   ///
-  /// What forcing cannot do is invent an index. A demuxer with no index at
-  /// all may still refuse the seek itself, which is a different fault with
-  /// a different fix (fetching the tail of the file at open, on the server
-  /// side), and the stats OSD's `partially` and `ranges` rows are what
-  /// tell the two apart -- `seekable` is our own answer here, not the
-  /// demuxer's.
-  ///
-  /// **A `/proxy` URL is on the server and is still not the server's
-  /// stream.** Every remote stream now arrives at the loopback address
-  /// ([proxiedThroughServer]), which is exactly the address this method
-  /// used to read as "our torrent reader, which waits rather than refuses".
-  /// It is not: the route fronts a host we know nothing about, so the claim
-  /// that could be made about the addon's own URL is the claim to make
-  /// about the proxy of it -- and that claim was no.
+  /// Forcing cannot invent an index; a demuxer with none may still refuse,
+  /// which the stats OSD's `partially` and `ranges` rows tell apart.
   static bool forcesSeekable(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return false;
     if (isProxiedByServer(url)) return false;
@@ -742,61 +586,34 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// What mpv keeps in memory ahead of the play head: 32 MiB of packets.
   ///
-  /// `PlayerConfiguration.bufferSize` is set on both `demuxer-max-bytes`
-  /// and `demuxer-max-back-bytes` (media_kit 1.2.6,
-  /// `player/native/player/real.dart`), so on its own this number is per
-  /// side and the player's ceiling is twice it. It is not on its own any
-  /// more: [backCacheBytes] takes the back side down through
-  /// [mpvOverrides], and the ceiling is the sum of the two, 40 MiB.
+  /// media_kit sets `PlayerConfiguration.bufferSize` on both
+  /// `demuxer-max-bytes` and `demuxer-max-back-bytes`; [backCacheBytes]
+  /// takes the back side down through [mpvOverrides], so the player's
+  /// ceiling is 40 MiB.
   ///
-  /// **This was briefly halved to 16 MiB and put back.** The halving was
-  /// argued from a measurement of the heaviest torrent this television has
-  /// played, read as 4 Mb/s; it is 4 **MB**/s, about 32 Mbps. At that rate
-  /// 32 MiB is 8.4 seconds of read-ahead and 16 MiB is 4.2, and this is
-  /// the buffer that absorbs a swarm going quiet -- on the one kind of
-  /// file that has actually stalled on this device. The eight-fold error
-  /// made a thin window look generous.
+  /// This is the buffer that absorbs a swarm going quiet. The heaviest
+  /// torrent this television has played reads at about 4 MB/s (32 Mbps),
+  /// where 32 MiB is 8.4 s of read-ahead and 16 MiB would be 4.2. It is not
+  /// raised because a 2 GB television has no room; the cushion belongs in
+  /// the server's cache, which is bounded and reclaimable.
   ///
-  /// So the original reasoning stands, and its "nine seconds of a 30 Mbps
-  /// remux" turns out to describe real content rather than a hypothetical
-  /// one. Raising it is still the wrong answer: the room is not there on a
-  /// 2 GB television, and the cushion belongs in the server's cache, where
-  /// it is bounded and reclaimable. What is affordable is the *back*
-  /// window, for the reasons on [backCacheBytes].
-  ///
-  /// It is written out rather than inherited because it is the player's
-  /// only forward buffer, and the only buffer should not be somebody
-  /// else's default: a media_kit release that changed `bufferSize` would
-  /// change what a television holds, silently. mpv's own default for the
-  /// forward side is 150 MiB and for the back side 50 MiB.
+  /// Written out rather than inherited, so a media_kit release that changed
+  /// `bufferSize` cannot silently change what a television holds (mpv's own
+  /// defaults are 150 MiB ahead and 50 MiB behind).
   static const int memoryCacheBytes = 32 * 1024 * 1024;
 
-  /// What mpv keeps in memory *behind* the play head: 8 MiB, half of what
-  /// it keeps ahead, where media_kit would have made the two the same.
+  /// What mpv keeps in memory *behind* the play head: 8 MiB, where media_kit
+  /// would make it the same as the window ahead.
   ///
-  /// The two sides are not worth the same. The window ahead is what
-  /// playback is about to need and what a thin swarm is racing to fill;
-  /// the window behind is what a backward seek lands in without going to
-  /// the server, and nothing else. A seek that falls out of it is a range
-  /// request answered from the server's disk -- a stall of a second or so
-  /// while the demuxer re-opens, rather than a re-fetch from the swarm.
+  /// The window behind only serves a backward seek; one that falls out of it
+  /// is a range request answered from the server's disk (a second or so of
+  /// demuxer re-open), not a re-fetch from the swarm.
   ///
-  /// **The size is set by one press of the remote.** The seek step is ten
-  /// seconds (`SeekBar.defaultSeekStep`), so what matters is the bitrate
-  /// at which one press back still lands inside the window. 8 MiB covers
-  /// a press to about 6.7 Mbps: 13 seconds at 5 Mbps, 45 at an SD 1.5.
-  ///
-  /// Above that neither size covers a press, and that is what makes the
-  /// halving free rather than cheap. The heaviest torrent this television
-  /// has played runs at about 4 MB/s -- 32 Mbps -- where 16 MiB is 4.2
-  /// seconds and 8 MiB is 2.1: both far short of a press, so a backward
-  /// seek on that file was always a range request to the server, before
-  /// this change and after it. What the halving gives up is nothing any
-  /// bitrate actually pays.
-  ///
-  /// 4 MiB is the number *not* to take: it covers a press only to
-  /// 3.3 Mbps, so it would start missing on ordinary 1080p, where a press
-  /// back costs a second of demuxer re-open that it need not.
+  /// **Sized by one press of the remote.** The seek step is ten seconds
+  /// (`SeekBar.defaultSeekStep`), and 8 MiB covers one press back up to
+  /// about 6.7 Mbps. Above that no affordable size covers a press (at
+  /// 32 Mbps, 16 MiB is 4.2 s), so a larger window buys nothing. 4 MiB would
+  /// cover only 3.3 Mbps and start missing on ordinary 1080p.
   static const int backCacheBytes = 8 * 1024 * 1024;
 
   /// media_kit's own defaults with [memoryCacheBytes] named, and the log
@@ -818,24 +635,15 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// The controller configuration for a `hardwareDecoding` setting.
   ///
-  /// media_kit's own default is `hwdec=auto-safe`, and in the libmpv it
-  /// ships the direct `mediacodec` hwdec is deliberately not on that
-  /// whitelist, so on Android auto-safe can only ever pick
-  /// `mediacodec-copy`: the codec decodes into its own buffer, ffmpeg copies
-  /// every frame out of it into CPU memory, and mpv uploads that to GL. On a
-  /// Chromecast with Google TV that copy is 10-30 ms of a 41 ms frame on the
-  /// one core the player shares with everything else, and the stats OSD
-  /// showed it as `hwdec mediacodec-copy` with thousands of `vo` drops and
-  /// none at the decoder -- frames decoded fine and arrived late. (ffmpeg's
-  /// "Both surface and native_window are NULL" at decoder init does *not*
-  /// announce the copy mode, whatever an earlier note here said: the
-  /// direct decoder logs it too. The OSD's hwdec row is the only check.)
-  ///
-  /// So name the list mpv-android uses: direct `mediacodec` first -- mpv's
-  /// AImageReader interop renders the codec's output as an external texture
-  /// with no CPU copy -- and `mediacodec-copy` as the fallback, which is
-  /// exactly today's behaviour if the direct path fails to initialise. The
-  /// OSD's hwdec row says which one took.
+  /// media_kit's default `hwdec=auto-safe` excludes the direct `mediacodec`
+  /// hwdec, so on Android it can only pick `mediacodec-copy`, which copies
+  /// every frame into CPU memory: on a Chromecast with Google TV that is
+  /// 10-30 ms of a 41 ms frame, seen on the stats OSD as thousands of `vo`
+  /// drops and none at the decoder. So this names the list mpv-android uses:
+  /// direct `mediacodec` first (no CPU copy), `mediacodec-copy` as the
+  /// fallback. The OSD's hwdec row says which one took; ffmpeg's "Both
+  /// surface and native_window are NULL" at init is logged by both and
+  /// proves nothing.
   static VideoControllerConfiguration configurationFor({
     required bool hardwareDecoding,
   }) => VideoControllerConfiguration(
@@ -845,27 +653,21 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// Which codecs may go to the hardware decoder.
   ///
-  /// **MPEG-4 Part 2 and MPEG-2 are deliberately not on it**, and that is
-  /// the whole of this constant. media_kit's Android controller sets
+  /// **MPEG-4 Part 2 and MPEG-2 are deliberately not on it.** media_kit's
+  /// Android controller sets
   /// `hwdec-codecs=h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1`
-  /// (`android_video_controller/real.dart`), which is wider than mpv's own
-  /// default, and with the direct `mediacodec` hwdec this app asks for
-  /// ([configurationFor]) an MPEG-4 file fails at decoder init:
+  /// (`android_video_controller/real.dart`), and with the direct
+  /// `mediacodec` hwdec ([configurationFor]) an MPEG-4 file fails at decoder
+  /// init:
   ///
   ///     mpeg4_mediacodec: Both surface and native_window are NULL
   ///     mpeg4_mediacodec: MediaCodec 0x0 failed to start
   ///     vd: Could not open codec.
   ///
-  /// The player's own retry then recovers, so it *plays* -- after about
-  /// three seconds of stalling and an error on screen, which is how it was
-  /// found: a viewer reported "a codec error, but the video plays".
-  ///
-  /// Taking the two off the list costs nothing worth having. They are old,
-  /// low-bitrate formats that software decodes comfortably on the weakest
-  /// thing this app runs on, and the codecs the hardware is actually needed
-  /// for -- h264, hevc, vp9, av1 -- are all still on it. The alternative,
-  /// dropping back to `mediacodec-copy` for everything, would undo the
-  /// judder fix that direct decoding is there for.
+  /// It then plays, after about three seconds of stalling with an error on
+  /// screen. Software decodes those old formats comfortably on the weakest
+  /// device this runs on, and the codecs the hardware is needed for are all
+  /// still on the list.
   static const String hwdecCodecs = 'h264,hevc,vp8,vp9,av1';
 
   /// How often [stats] samples while listened to.
@@ -890,12 +692,8 @@ class MediaKitEngine implements PlaybackEngine {
   /// answers with the same number) does not ask the display twice.
   double? _lastVideoFrameRate;
 
-  /// Whether a rate has been claimed for this player, so the reset is
-  /// written only by a player that claimed one. Without it a television
-  /// whose display never reported a rate -- and every desktop, where
-  /// nothing is ever set -- would write [displayRateOff] over mpv's own
-  /// defaults on the way out, which is a claim about a player nobody
-  /// measured.
+  /// Whether a rate has been claimed for this player, so only a player that
+  /// claimed one writes [displayRateOff] back over mpv's defaults.
   bool _displayRateSet = false;
 
   late final List<StreamSubscription<void>> _trackSubscriptions;
@@ -1179,10 +977,8 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
-    // `cache-on-disk=no` is already in force and stays in force: it is set
-    // once per player ([mpvOverrides]) and nothing here or anywhere else
-    // writes it again. Awaiting [_overrides] is what puts it in front of
-    // the first `loadfile` rather than a moment after it.
+    // [_overrides] (`cache-on-disk=no` among them) must be in force before
+    // the first `loadfile`.
     await _overrides;
     // Before the `loadfile`, and before every one of them: mpv reads
     // `force-seekable` once, when it builds the demuxer, so it has to be
@@ -1202,46 +998,27 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// The mpv command a [scanBy] of [delta] is.
   ///
-  /// Written out here because media_kit has no relative seek and throws
-  /// `mpv_command`'s return code away (it logs it and returns), so a
-  /// misspelled flag would be a press that seeks nowhere, in silence.
-  /// Measured against the libmpv this host has (0.41.0): `relative` and
-  /// `keyframes` answer `success`, and a `relative+keyframe` a letter
-  /// short answers `MPV_ERROR_INVALID_PARAMETER`. Both words are in the
-  /// build media_kit ships for Android
-  /// (`mpv v0.36.0-549-g78d43740f5`) as well.
-  ///
-  /// Seconds with four decimals, which is how media_kit writes its own
-  /// absolute seek.
+  /// Written out because media_kit has no relative seek and discards
+  /// `mpv_command`'s return code, so a misspelled flag would seek nowhere in
+  /// silence. `relative+keyframes` answers `success` on libmpv 0.41.0, and
+  /// both words are in the Android build (`mpv v0.36.0-549-g78d43740f5`).
+  /// Seconds with four decimals, as media_kit writes its own absolute seek.
   static List<String> scanCommand(Duration delta) => [
     'seek',
     (delta.inMilliseconds / 1000).toStringAsFixed(4),
     'relative+keyframes',
   ];
 
-  /// The `keyframes` flag is what makes this a scan, and it has to be on
-  /// the command: media_kit starts libmpv with `hr-seek=yes`
-  /// (`player/native/player/real.dart`, the properties it sets for every
-  /// platform), which asks mpv for a precise seek wherever one is
-  /// possible -- relative seeks included, where mpv's own default would
-  /// have taken the keyframe. An explicit flag overrides the option, and
-  /// that was measured rather than read: with `hr-seek=yes` set first, a
-  /// bare `seek 10 relative` took 18.7 ms and landed on 315.000 of a
-  /// 10 s-keyframe file, and `seek 10 relative+keyframes` took 3.7 ms and
-  /// landed on 320.
+  /// The `keyframes` flag has to be on the command: media_kit starts libmpv
+  /// with `hr-seek=yes`, which makes even relative seeks precise, and an
+  /// explicit flag overrides it (measured: a bare `seek 10 relative` took
+  /// 18.7 ms and landed on 315.000 of a 10 s-keyframe file; with
+  /// `+keyframes`, 3.7 ms and 320). mpv merges a burst of relative seeks
+  /// itself (`queue_seek`), so a held key needs no coalescing here.
   ///
-  /// A burst of these is mpv's own business and not ours: 20 relative
-  /// seeks handed to libmpv back to back were merged into 3 actual seeks
-  /// landing at the sum of all 20 (`queue_seek` adds a relative seek to
-  /// the one already queued), so a held key already scans as fast as the
-  /// core can serve it without this having to coalesce anything.
-  ///
-  /// Off libmpv there is nothing to flag, and a scan is an ordinary seek
-  /// from where playback is. So it is once media_kit has decided the
-  /// media is over: `Player.play` seeks back to zero when its own
-  /// `completed` is still set, and only its `seek` clears that, so a
-  /// viewer scanning back from the end of a film and pressing play would
-  /// otherwise be taken to the beginning of it.
+  /// Off libmpv, or once media_kit has marked the media completed, this is
+  /// an ordinary seek from where playback is: `Player.play` seeks back to
+  /// zero while its `completed` is set, and only its `seek` clears it.
   @override
   Future<void> scanBy(Duration delta) {
     final native = _player.platform;
@@ -1331,15 +1108,11 @@ class MediaKitEngine implements PlaybackEngine {
         subtitleSpeedValue(speed),
       );
     } catch (_) {
-      // A player torn down mid-write, or a build of libmpv without the
-      // property. The latter never re-times anything either, so there is
-      // no stale multiplier for a failed reset to leave behind.
-      //
-      // A value mpv *refuses* does not come through here at all:
-      // media_kit discards `mpv_set_property_string`'s return code, so an
-      // out-of-range write is silent and leaves the property as it was.
-      // That is why the range is enforced where the number is computed
-      // (`minSubtitleSpeed` in `subtitle_groups.dart`) rather than here.
+      // A player torn down mid-write, or a libmpv without the property
+      // (which never re-timed anything either). media_kit discards
+      // `mpv_set_property_string`'s return code, so an out-of-range value is
+      // refused silently; the range is enforced where the number is computed
+      // (`minSubtitleSpeed` in `subtitle_groups.dart`).
     }
   }
 
@@ -1366,10 +1139,8 @@ class MediaKitEngine implements PlaybackEngine {
         subtitleDelayValue(seconds),
       );
     } catch (_) {
-      // A player torn down mid-write, or a build of libmpv without the
-      // property. The latter never shifted anything either, so there is
-      // no stale offset for a failed reset to leave behind. Unlike
-      // `sub-speed` this property has no range to fall outside of.
+      // A player torn down mid-write, or a libmpv without the property,
+      // which never shifted anything either.
     }
   }
 
@@ -1379,32 +1150,18 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// What that property answers, and how we know.
   ///
-  /// mpv's own documentation leaves it open whether `sub-start` is the
-  /// cue's raw time in the file or one already moved by `sub-delay` and
-  /// `sub-speed`, and a mark is only worth making if the answer is the
-  /// raw one: mixing the two frames of reference gives two marks two
-  /// different lines to sit on, and the solve is then confidently wrong.
-  /// The sign of `sub-speed` was taken from the manual once and had to be
-  /// confirmed on the owner's television, so this one was measured first.
+  /// mpv's documentation leaves open whether `sub-start` is the raw cue time
+  /// or one moved by `sub-delay` and `sub-speed`; a mark needs the raw one
+  /// (see [PlaybackEngine.subtitleCueStart]), so it was measured. libmpv
+  /// 0.41.0 (the library media_kit loads on Linux), a subtitle whose one cue
+  /// is `20.000 --> 25.000`, `sub-speed=2.0` and `sub-delay=5.0`: the cue is
+  /// drawn from 45 s to 55 s of video (`speed * cue + delay`, the line
+  /// `SubtitleCalibration` fits), and throughout it `sub-start` answered
+  /// **20.000** -- the raw time.
   ///
-  /// **The probe.** libmpv 0.41.0 -- on Linux this is the very library
-  /// media_kit loads, `libmpv.so` from the system -- with a 60-second
-  /// video, a subtitle whose one cue is `20.000 --> 25.000`, and
-  /// `sub-speed=2.0` with `sub-delay=5.0` set before `loadfile`. The cue
-  /// is drawn from 45 s to 55 s of video: 46 and 54 have it on screen, 43
-  /// and 56 do not. That is `speed * cue + delay` at both ends, which is
-  /// the line `SubtitleCalibration` fits and the sign the panel shows.
-  /// At every position inside that window `sub-start` answered **20.000**
-  /// and `sub-end` 25.000 -- the times written in the file, moved by
-  /// neither property. The transform had to be a real one for the reading
-  /// to mean anything: at speed 1.0 and delay 0.0 the raw and the drawn
-  /// time are the same number and the probe proves nothing.
-  ///
-  /// So the value is passed on as it stands. What was *not* probed is the
-  /// libmpv media_kit ships for Android (mpv v0.36.0-549-g78d43740f5),
-  /// which a desktop cannot load; if a build ever answers the drawn time
-  /// instead, this is the one line to change -- `(value - delay) / speed`
-  /// for the two properties in force.
+  /// Not probed: the Android build (mpv v0.36.0-549-g78d43740f5), which a
+  /// desktop cannot load. If a build ever answers the drawn time, this is
+  /// the one line to change: `(value - delay) / speed`.
   @override
   Future<double?> subtitleCueStart() async {
     final native = _player.platform;
@@ -1414,12 +1171,10 @@ class MediaKitEngine implements PlaybackEngine {
     try {
       return double.parse(await native.getProperty(subtitleCueStartProperty));
     } catch (_) {
-      // No cue on screen: mpv answers an unavailable property with
-      // nothing at all, which media_kit hands back as an empty string, so
-      // that arrives here as a parse failure rather than as an error. A
-      // build without the property and a player torn down mid-read come
-      // out the same way, and all three mean the same thing -- there is
-      // nothing to mark.
+      // No cue on screen: media_kit hands mpv's unavailable property back as
+      // an empty string, which fails the parse. A build without the
+      // property and a player torn down mid-read land here too; all three
+      // mean there is nothing to mark.
       return null;
     }
   }
@@ -1481,19 +1236,14 @@ class MediaKitEngine implements PlaybackEngine {
     });
   }
 
-  /// Stops playback before releasing the player. Once stopped, libmpv posts
-  /// no more frames to the video texture, so the texture is idle by the
-  /// time `Player.dispose` unregisters it.
+  /// Stops playback, then releases the player. Once stopped, libmpv posts no
+  /// more frames to the texture, so it is idle when `Player.dispose`
+  /// unregisters it.
   ///
-  /// **Nothing here disposes [_controller], and that is deliberate.**
-  /// media_kit tears the native `VideoOutput` down from inside
-  /// `Player.dispose`: the `VideoController` constructor adds its own
-  /// release callback to the player, and `NativePlayer.dispose` runs those
-  /// callbacks out of `super.dispose()` -- after `stop()`, before the
-  /// event loop is detached. So "stop, wait for it, then let the texture
-  /// and the audio device go" is an order media_kit already enforces, and
-  /// the only ways to break it from this side are to release the
-  /// controller ourselves or to call this twice, which throws.
+  /// **[_controller] is deliberately not disposed here.** media_kit releases
+  /// the native video output from inside `Player.dispose` (after `stop()`,
+  /// before the event loop is detached), which is the order wanted;
+  /// releasing the controller ourselves, or calling this twice, breaks it.
   @override
   Future<void> dispose() async {
     _disposed = true;
@@ -1515,123 +1265,56 @@ class MediaKitEngine implements PlaybackEngine {
   /// it is mpv's own shutdown, and asking twice adds nothing to that.
   bool _quitAsked = false;
 
-  /// The `reply_userdata` the quit is sent under, so that the reply mpv
-  /// sends back for it belongs to nobody else.
+  /// The `reply_userdata` the quit is sent under, chosen so its reply belongs
+  /// to nobody else: media_kit numbers its own async requests upwards from
+  /// zero, one per call, so a small id could complete one of its completers
+  /// with the quit's error code. It also reads as itself in a libmpv log.
   ///
-  /// It used to be zero, and zero is a live id on the other side of the
-  /// handle: media_kit's `_asyncRequestNumber` starts there and hands it
-  /// to the first async call an engine makes, so the reply to our quit
-  /// carried an id media_kit was keeping a completer under. Nothing ever
-  /// came of it -- request zero is always a `set_property` during
-  /// `_create`, and those replies wait in a different map from the command
-  /// replies -- but which map an id ends up in is not this side's to
-  /// choose, and an engine whose first async call was a command instead
-  /// would have had our quit's reply complete *that* command's completer,
-  /// with the quit's error code. The counter only ever steps by one per
-  /// async call, so a number past anything a session of them could reach
-  /// belongs to us alone. This one also reads as itself in a libmpv log.
-  ///
-  /// **What it does not do is quiet the log, and no id could.** media_kit's
-  /// event loop looks every `MPV_EVENT_COMMAND_REPLY` up in
-  /// `_commandRequests` and prints `Received MPV_EVENT_COMMAND_REPLY with
-  /// unregistered ID` and the number, for every one it does not find there
-  /// -- which is every reply to a command it did not send itself. It cannot
-  /// find this one: the map is private, and the command deliberately goes
-  /// past media_kit rather than through it. Through it is not the answer either, since
-  /// `_command` awaits the reply from the core thread, and a core thread
-  /// that answers is exactly what a teardown worth quitting does not have.
-  /// So the line is still printed on every exit that sends a quit. What
-  /// changed is the number in it, and the collision that number used to be.
+  /// media_kit still logs `Received MPV_EVENT_COMMAND_REPLY with
+  /// unregistered ID` for it on every exit: it logs every reply to a command
+  /// it did not send, and the quit bypasses it on purpose (its `_command`
+  /// awaits a reply from the core thread, which a teardown worth quitting
+  /// may never get).
   static const int _quitReplyId = 0xD1E00000000;
 
-  /// libmpv's `quit`, sent asynchronously on the live handle -- and not
-  /// `mpv_terminate_destroy`, which was the obvious thing to reach for and
-  /// is the thing that hangs. Both halves of that were measured.
+  /// libmpv's `quit`, sent asynchronously on the live handle, and not
+  /// `mpv_terminate_destroy`. Both halves were measured.
   ///
-  /// **Why not the destroy.** `mpv_terminate_destroy` is
-  /// `mp_destroy_client`, which takes the client out of the core's list
-  /// and then destroys the condition variable and the mutexes the handle
-  /// is made of (`player/client.c`). Any other thread inside an `mpv_*`
-  /// call on that handle is parked on that very condvar, and there is no
-  /// longer anybody who can wake it: with a thread in `mpv_wait_event` --
-  /// which is exactly where media_kit's event loop sits -- the destroy
-  /// never returned at all, both threads on one condvar, glibc's
-  /// `pthread_cond_destroy` waiting out a waiter that cannot be woken.
-  /// The deadlock is the lucky outcome; the same race an instant later is
-  /// that waiter reading a freed `ctx`, which is the "causes direct crash"
-  /// in media_kit's own comment beside the `quit` it sends instead.
-  /// libmpv states the contract itself: since `mpv_destroy` is called on
-  /// the way, it is not safe to call other functions concurrently on the
-  /// same context.
+  /// **Why not the destroy.** `mpv_terminate_destroy` destroys the condition
+  /// variable and mutexes the handle is made of (`player/client.c`) while
+  /// media_kit's event loop is parked on that condvar in `mpv_wait_event`:
+  /// the destroy never returned, and the same race a moment later is a
+  /// use-after-free. libmpv's own contract forbids concurrent calls during
+  /// it. media_kit detaches its event loop (`Initializer(mpv).dispose(ctx)`)
+  /// before its own destroy, but only after `stop()`, and this goes out
+  /// before the stop.
   ///
-  /// What has to be gone first is that event loop, and
-  /// `Initializer(mpv).dispose(ctx)` is what detaches it -- clearing the
-  /// wakeup callback before closing the `NativeCallable` libmpv would
-  /// otherwise call into, or waking the mainloop isolate and killing it
-  /// two seconds later. media_kit runs precisely that immediately before
-  /// scheduling its own `mpv_terminate_destroy` five seconds on, which is
-  /// why `dispose()` may destroy and its hot-restart sweeper may not. But
-  /// it runs it *after* `stop()`, and this goes out *before* the stop
-  /// does: the one path where destroying is prepared for is the path that
-  /// has not begun yet.
+  /// **Why the quit.** `mpv_command_async` only reserves a reply and
+  /// enqueues on the core's dispatch queue -- no lock, no waiter, nothing
+  /// freed -- so it is safe with the event loop attached and returns at
+  /// once; the arguments are copied before it returns. The shutdown it
+  /// starts carries mpv's own forceful abort after two seconds. Measured
+  /// with the loop attached: the call returned in microseconds and the
+  /// demuxer was gone within the second.
   ///
-  /// **Why the quit.** `mpv_command_async` is `reserve_reply` plus
-  /// `mp_dispatch_enqueue` and nothing else -- no core lock, no waiter,
-  /// nothing freed -- so it is safe with the event loop still attached and
-  /// it returns immediately, which is what something sent on the way out
-  /// of a screen has to do. It parses the arguments into the core's own copy before
-  /// enqueueing, so the buffers below can go back at once. And what it
-  /// sets off inside mpv is the shutdown, which is where mpv's own
-  /// forceful abort lives: `abort_async` after two seconds of waiting on
-  /// outstanding work. That bound is the thing this was after, and `quit`
-  /// is the way to it that does not require the preparation nobody has
-  /// done. Measured with the event loop attached throughout and
-  /// the handle never destroyed: the call returned in microseconds, the
-  /// demuxer was gone within the second, and the cache directory emptied
-  /// -- the blocks back on the volume, which was the whole complaint.
+  /// **Not a way past a stuck core thread.** The queue is drained by the
+  /// core thread, and media_kit's own `stop` goes through the same queue
+  /// (`_command` in `player/native/player/real.dart`). Sending the quit
+  /// first means a core thread that reaches the queue at all reaches the
+  /// quit before the stop; one stuck elsewhere swallows both. With no disk
+  /// cache that costs 40 MiB of packet memory and a socket, not a gigabyte
+  /// of the volume.
   ///
-  /// **What it is not: a way past a stuck core thread.** This comment used
-  /// to claim that whatever a teardown is blocked on, the quit is not
-  /// blocked on it too, and that is false. `mp_dispatch_enqueue` puts the
-  /// command on `mpctx->dispatch` -- the core's own queue, drained by the
-  /// core thread -- and the wedged `stop` is on that same queue: media_kit
-  /// 1.2.6 with `async: true` issues `stop` through `mpv_command_async`
-  /// as well and awaits the reply event (`_command` in
-  /// `player/native/player/real.dart`), which only the core thread can
-  /// send. Sending this *first* is what turns that queue from a hazard
-  /// into an ordering: a core thread that reaches the queue at all reaches
-  /// the quit before the stop, and the stop it then reaches is one against
-  /// a demuxer that has already been cancelled. What is left over is a
-  /// core thread stuck somewhere else entirely, and everything queued
-  /// behind that waits forever. The measured recovery above is the first
-  /// case; nothing in this process can do anything about the second.
+  /// **A refusal is thrown.** `run_async` answers
+  /// `MPV_ERROR_INVALID_PARAMETER`, `MPV_ERROR_UNINITIALIZED` or
+  /// `MPV_ERROR_EVENT_QUEUE_FULL` when the command was never enqueued, and a
+  /// caller must not log a kill that did not happen.
   ///
-  /// That is the strongest single argument for the player keeping no disk
-  /// cache: a stuck core thread now costs 40 MiB of packet memory, a
-  /// socket, and the server engine that socket keeps live, instead of a
-  /// gigabyte of a 4 GB television that only a force-stop returns.
-  ///
-  /// **The return code is not thrown away.** `run_async` answers
-  /// `MPV_ERROR_INVALID_PARAMETER` for a command it could not parse,
-  /// `MPV_ERROR_UNINITIALIZED` for a core that never came up, and
-  /// `MPV_ERROR_EVENT_QUEUE_FULL` when `reserve_reply` has no room -- and
-  /// in every one of those the command was never enqueued at all. A
-  /// caller that logged "destroying it" and heard nothing further would be
-  /// reporting a kill that did not happen, so a refusal is thrown and the
-  /// caller's own error path says so.
-  ///
-  /// What this does not do is free the `mpv_handle` and the core object
-  /// behind it: they leak until the process ends. That is bounded, it is
-  /// invisible on the volume, and it leaves media_kit's `dispose()` -- the
-  /// one place the preparation above is actually done -- as the only thing
-  /// that ever destroys the handle, so a teardown that lands late still
-  /// lands correctly rather than onto a pointer this method freed.
-  ///
-  /// The handle is read here, when the quit is sent, and not captured
-  /// earlier, and `NativePlayer.disposed` is asked with it. media_kit sets that flag
-  /// before it schedules its destroy, so a teardown that finished while
-  /// this was on its way sends nothing at all -- a `quit` on freed memory
-  /// is the same crash by the other road.
+  /// The `mpv_handle` is not freed here; it leaks until the process ends,
+  /// which leaves media_kit's `dispose()` the only thing that destroys it.
+  /// The handle is read when the quit is sent and `NativePlayer.disposed` is
+  /// asked with it: media_kit sets that flag before scheduling its destroy,
+  /// so a teardown that already finished sends nothing to freed memory.
   @override
   Future<void> quit() async {
     if (_quitAsked) return;

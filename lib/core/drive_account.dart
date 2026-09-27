@@ -122,12 +122,11 @@ class DriveAccount extends ChangeNotifier {
   /// Told by [DrivePairingJob] that a pairing started, finished or was left
   /// outstanding.
   ///
-  /// The job has listeners of its own, but they are the ones that *watch* a
-  /// pairing. This is what wakes everything that merely depends on the
-  /// account -- the library among them, which is where an outstanding
-  /// pairing gets collected. Without it the library was only ever told by a
-  /// change it had already seen, so a pairing left behind sat there until
-  /// the screen happened to be built again.
+  /// The job has listeners of its own, but they only *watch* a pairing.
+  /// This wakes everything that merely depends on the account -- the
+  /// library among them, which is where an outstanding pairing gets
+  /// collected -- without it a pairing left behind would sit unnoticed
+  /// until the screen happened to rebuild.
   void notePairingChanged() => notifyListeners();
 
   /// The pairing being finished, if any. Outlives every screen, because the

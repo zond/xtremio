@@ -256,9 +256,9 @@ fn core_lifecycle() -> anyhow::Result<()> {
     assert_eq!(server_base_url()?, urls[0]);
     core_shutdown()?;
 
-    // A persisted remote server URL -- left by the "Remote server" choice
-    // this app no longer offers -- is pointed back at the embedded server:
-    // it is the only server the app streams from (`core::pin_to_embedded`).
+    // A persisted remote server URL -- from a profile predating this app's
+    // single embedded server -- is pointed back at it: the only server the
+    // app streams from (`core::pin_to_embedded`).
     let tmp2 = tempfile::tempdir()?;
     let mut profile = Profile::default();
     profile.settings.streaming_server_url = url::Url::parse("http://192.168.1.20:11470/")?;

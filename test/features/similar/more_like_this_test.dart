@@ -81,10 +81,8 @@ void main() {
   });
 
   test('an answer to an older question is asked again', () async {
-    // What an install that opened this series under the film-only question
-    // holds: titles written down with no stamp on them at all. Without the
-    // stamp that viewer keeps a row of films under a television series for
-    // the life of the install.
+    // An answer stamped with an older question version is asked again;
+    // without the stamp a stale row for the wrong question never refreshes.
     await start({
       AppPrefs.similarSuggestionsKey: [
         {

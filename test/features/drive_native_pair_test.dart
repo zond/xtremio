@@ -166,7 +166,7 @@ void main() {
       expect(find.text(DriveNativePairScreen.goneMessage), findsOneWidget);
 
       // The code is one-time. Pressing again must not spend a second one on
-      // a session that is not there any more.
+      // a session that is gone.
       await tester.tap(find.text(DriveNativePairScreen.tryAgainLabel));
       await tester.pumpAndSettle();
       expect(picker.picks, 1, reason: 'the pick is not run again');

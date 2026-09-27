@@ -30,8 +30,8 @@ class _FakeSettings implements ServerSettingsAccess {
 /// Where the embedded server puts torrent data when its settings name no
 /// root of their own.
 ///
-/// It is one root now, so this directory holds the streaming cache *and*
-/// everything kept offline. On Android that rules out the app cache
+/// It is one root, holding the streaming cache *and* everything kept
+/// offline. On Android that rules out the app cache
 /// directory, which the system reclaims whenever it wants room: a build
 /// that defaulted there would hand every kept download to the reclaimer,
 /// and there is nowhere else for one to be.
@@ -115,8 +115,8 @@ void migration() {
   test(
     'an install that came up on the app cache directory is moved off it',
     () async {
-      // What every build before this one persisted at its first start, in the
-      // spelling the server stores it in: resolved through the symlink.
+      // A pre-migration cacheRoot, in the spelling the server stores it in:
+      // resolved through the symlink.
       final server = _FakeSettings('${internal.path}/server');
 
       final moved = await boot.moveOffPurgeableRoot(

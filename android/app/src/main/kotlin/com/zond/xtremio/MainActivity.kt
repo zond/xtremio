@@ -133,8 +133,9 @@ class MainActivity : FlutterActivity() {
      * Asks the display to present [fps] frames a second, so that a 23.976
      * fps film is not laid out on a 59.94 Hz output's 3:2 cadence -- some
      * frames shown twice, some three times, and the ones that miss their
-     * vsync dropped. On the owner's projector that was 560 frames dropped
-     * at the video output against none at the decoder.
+     * vsync dropped. Mismatched cadence costs frames: on the owner's
+     * projector, 560 dropped at the video output against none at the
+     * decoder.
      *
      * Only ever called for a television: the Dart side asks the device
      * profile first, and a phone's panel has no business switching. A rate
@@ -161,15 +162,14 @@ class MainActivity : FlutterActivity() {
      *   which is exactly the switch a television cannot do -- so it takes
      *   the mode path with everything older.
      *
-     * **The newer path is a vote, and a vote can be dropped in silence**,
-     * which is what the owner's box did: `setFrameRate` returns nothing,
-     * and with "Match content frame rate" unset the platform honours a
-     * seamless switch only -- which 59.94 Hz to 23.976 Hz never is. So
-     * what that setting says decides whether the older path follows the
-     * vote ([FrameRateMode.askFor] holds the reasoning, and the reading
-     * behind it), and a box that has frame rate matching turned off is
-     * asked for nothing at all. With no surface to vote on there is no
-     * vote to follow, and the mode is named whatever the setting says.
+     * **The newer path is a vote, and a vote can be dropped in silence**:
+     * `setFrameRate` returns nothing, and with "Match content frame rate"
+     * unset the platform honours a seamless switch only -- which 59.94 Hz
+     * to 23.976 Hz never is. So what that setting says decides whether the
+     * older path follows the vote ([FrameRateMode.askFor] holds the
+     * reasoning), and a box with frame rate matching off is asked for
+     * nothing at all. With no surface to vote on there is no vote to
+     * follow, and the mode is named whatever the setting says.
      */
     private fun matchFrameRate(fps: Double?) {
         if (fps == null || !FrameRateMode.plausible(fps)) return
@@ -242,7 +242,7 @@ class MainActivity : FlutterActivity() {
      * rate override can present an app at a divisor of it without changing
      * the mode at all, and `getRefreshRate()` is the one that accounts for
      * that -- the rate *this app's* frames are shown at, which is the
-     * question mpv is asking. On the box this was measured on the two agree
+     * question mpv is asking. On the owner's box the two agree
      * (`FrameRateOverrides=none`, `frameRateOverrideConfig=Disabled`).
      *
      * The listener is registered only while Dart is subscribed, and the
@@ -359,16 +359,13 @@ class MainActivity : FlutterActivity() {
      * subnets. It is `@Nullable`, and it is null exactly when the receiver
      * announced no IPv4 address (`hasIPv4Address()` is what it asks), which
      * is a receiver there is nothing useful to say about anyway.
-     * `getInet4Address()`, the name every older account of this gives, is
-     * gone from play-services-cast 21.5.0 altogether.
+     * `getInet4Address()` does not exist in play-services-cast 21.5.0+.
      *
      * `getIpAddress()` is itself `@Deprecated` in 21.5.0, where the sibling
      * `getInetAddress()` is `@NonNull` and is not -- so the next SDK bump
-     * is where this may have to move to that one and do the narrowing
-     * itself, since it answers whatever the receiver announced and that can
-     * be an `Inet6Address`. All of which was read off the resolved
-     * artifact's own bytecode rather than off an account of it, this
-     * comment having said the opposite before.
+     * may need to move to that one and do the narrowing itself, since it
+     * answers whatever the receiver announced and that can be an
+     * `Inet6Address`.
      *
      * **Nothing here throws, and there is no test to make sure of it**, so
      * it is written to have nothing to throw: every step is null-safe, and

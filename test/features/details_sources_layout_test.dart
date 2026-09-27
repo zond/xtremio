@@ -277,9 +277,8 @@ void main() {
 
       await choose(tester, kStreamsGroupedLabel);
 
-      // A heading per addon, once each: what this list looked like before
-      // the sectioned layout existed, except that the groups start shut
-      // like the sections do.
+      // A heading per addon, once each, and the groups start shut, the
+      // same as the sections do.
       expect(find.text('alpha.example'), findsOneWidget);
       expect(find.text('beta.example'), findsOneWidget);
       expect(find.text('Alpha 720p'), findsNothing);
@@ -380,10 +379,9 @@ void main() {
       ];
 
       // The release, then the line the addon wrote under it, then the
-      // addon, then a badge per thing that was read out of that line.
-      // The addon's line is new here: the row used to draw the release and
-      // the badges and nothing in between, so the numbers the list is
-      // sorted by were on screen and the sentence they came from was not.
+      // addon, then a badge per thing that was read out of that line: the
+      // numbers the list is sorted by are on screen beside the sentence
+      // they came from.
       expect(labels('Alpha 2160p'), [
         'Alpha 2160p',
         '👤 3 💾 20 GB',
@@ -734,8 +732,8 @@ void main() {
       final grouped = drawn(tester);
 
       // The release leads both, said once in each. `textContaining` and
-      // not `text`: an exact match passed for a year while the grouped
-      // list drew the release with the tracker stuck on the end of it.
+      // not `text`: an exact match would miss the grouped list's release,
+      // which is drawn with the tracker stuck onto the end of it.
       const release = 'Movie.Name.2019.1080p.WEB-DL.x265-GROUP';
       expect(
         sectioned.where((line) => line.contains(release)),
@@ -765,14 +763,10 @@ void main() {
         reason: 'the heading, and not the row underneath it as well',
       );
 
-      // And the line the addon actually wrote is drawn by both, whole.
-      // This read `isNot(contains(...))` on either side: the blurb was
-      // what the grouped list used to put under the release -- the
-      // filename again, with whatever the hint parser did not recognise
-      // trailing it -- and the fix was to stop drawing the text at all.
-      // Drawing the text is right; drawing the lead twice was the bug, and
-      // the lead being taken out of it is what settles that (the file line
-      // is the release again with `.mkv` on it, and it is not here).
+      // And the line the addon actually wrote is drawn by both, whole,
+      // with the lead taken out of it first: without that, the line would
+      // repeat the release the way the file line does, with `.mkv` on
+      // the end (which is not here).
       const stats = '👤 42 💾 1.51 GB ⚙️ ThePirateBay';
       expect(sectioned, contains(stats));
       expect(grouped, contains(stats));

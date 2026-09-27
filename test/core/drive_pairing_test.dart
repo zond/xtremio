@@ -96,10 +96,8 @@ void main() {
       // handed back; a desktop was too but has nowhere to be handed back to,
       // because the `stremio://` registration there is installed by hand or
       // not at all; a television's viewer is looking at the other screen and
-      // is sent nowhere. Three cases and not two, because the page says
-      // something different for each -- the desktop and the television were
-      // one case while this was a boolean, and a desktop was told its files
-      // were on the way to a television.
+      // is sent nowhere. Three cases, not two: the page says something
+      // different for each.
       for (final shape in DrivePairingShape.values) {
         await service().open(shape: shape);
       }
@@ -222,9 +220,9 @@ void main() {
     );
 
     test('a session naming no list of files is gone', () async {
-      // The service names the files as a list and nothing else; a single
-      // `file` is the spelling of a service long since replaced, and the
-      // session is deleted either way, so there is nothing to ask again.
+      // The service names the files as a list and nothing else; a lone
+      // `file` field is not this shape, and the session is deleted either
+      // way, so there is nothing to ask again.
       collectBody = {
         'status': 'ready',
         'refreshToken': fakeRefreshToken,
@@ -396,11 +394,9 @@ void main() {
   });
 
   test('the hand-back link is one this app does nothing with', () {
-    // The whole answer to what was written against `app_links` here: a
-    // host-less `stremio://` link is already the shape the app drops, so the
-    // hand-back adds no second meaning to the scheme and a launch link the
-    // platform replays on a cold start days later is dropped then too. What
-    // brings the app forward is the platform switching tasks.
+    // A host-less `stremio://` link is already the shape the app drops
+    // elsewhere, so the hand-back adds no second meaning to the scheme; see
+    // test/app_deep_link_test.dart for the cold-start replay case.
     expect(deepLinkAddonManifestUrl(drivePairingHandBackLink), isNull);
     expect(Uri.parse(drivePairingHandBackLink).host, isEmpty);
   });

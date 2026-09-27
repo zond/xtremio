@@ -389,8 +389,9 @@ void main() {
 
     test('a proxied stream keeps the target host and nothing else of it', () {
       // The exact chain playback runs: a debrid link through
-      // `proxiedThroughServer`, then into the open line. What used to come
-      // out was the whole thing -- debrid token, player token and file.
+      // `proxiedThroughServer`, then into the open line. Without
+      // redaction, the whole thing comes out -- debrid token, player
+      // token and file.
       final proxied = proxiedThroughServer(
         Uri.parse(
           'https://xx12.download.real-debrid.com/d/ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCD/Some.Movie.2024.1080p.mkv?token=QUERYTOKENabc',
@@ -685,11 +686,11 @@ void main() {
 
     /// The two image-cache lines, read off the real framework cache.
     ///
-    /// Nothing in the app used to observe this at all: the 32 MiB ceiling
-    /// was reasoned about carefully and then never watched, so whether it
-    /// ever bound was a guess. These run against the process-wide cache
-    /// rather than a fake, because a figure a test can invent is not
-    /// evidence that the report says what the cache holds.
+    /// Nothing else in the app observes this: the 32 MiB ceiling is chosen
+    /// but otherwise unwatched, so whether it ever binds is a guess without
+    /// this. These run against the process-wide cache rather than a fake,
+    /// because a figure a test can invent is not evidence that the report
+    /// says what the cache holds.
     group('the image cache lines', () {
       setUp(() {
         final ceiling = imageCache.maximumSizeBytes;

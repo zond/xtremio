@@ -40,21 +40,18 @@ ASK_FOR_FEEL = os.environ.get("ASK_FOR_FEEL", "1") == "1"
 # television series. 0 asks the film-only question the README's
 # numbers were taken with.
 ASK_FOR_ALSO_SERIES = os.environ.get("ASK_FOR_ALSO_SERIES", "1") == "1"
-# `SYSTEM` in xtremio-xervice/functions/similar.js, word for word. The
-# service sends it with every question; this script used to send none to
-# Google and a films-only one to the others, so three of the four were
-# measured on an instruction the app does not give.
+# `SYSTEM` in xtremio-xervice/functions/similar.js, word for word: every
+# provider here is asked with the same instruction the service sends, so
+# the measurement matches what ships.
 SYSTEM = ("You recommend films and television. Real, released titles only. "
           "JSON only.")
 
 def norm(text):
     """A title reduced to what two spellings of it share, plus its year.
 
-    Accents are folded rather than deleted. Stripping non-ASCII turned
-    `Cache` into "cache" and `Cach\u00e9` into "cach", so a model naming
-    Haneke's film the way Haneke spells it did not match the key entry for
-    it -- it was scored as a title nobody had rated and sent to the pool.
-    Ten of the 568 entries are spelled with an accent.
+    Accents are folded rather than deleted, so a model naming Haneke's film
+    the way Haneke spells it (`Cach\u00e9`) matches the key entry for it.
+    Ten of the 568 entries carry an accent.
     """
     text = unicodedata.normalize("NFKD", str(text))
     text = "".join(c for c in text if not unicodedata.combining(c))
@@ -69,13 +66,12 @@ def aliases(entry):
 
     A key entry is one film under one spelling, and a model naming that
     film is not obliged to pick the same one. Three ways it legitimately
-    differs, all of which used to count as a miss:
+    differs:
 
-      * the `aka` the key already records (17 entries carry one, and
-        nothing read it);
+      * the `aka` the key already records (17 entries carry one);
       * the part before a colon -- `Tetsuo` for `Tetsuo: The Iron Man`,
         `Innocence` for `Ghost in the Shell 2: Innocence` (22 entries);
-      * an accent, which [norm] now folds.
+      * an accent, which [norm] folds.
 
     The cost of a miss is not neutral: the suggestion is dropped from
     scoring and sent to the pool to be rated a second time, so the model
@@ -133,8 +129,7 @@ def prompt_for(target):
     table of numbers stops describing the app. When that function
     changes, change this, re-measure, and say in the README what moved.
 
-    ASK_FOR_ALSO_SERIES=0 asks the old film-only question instead -- the
-    one every number in the README was originally taken with -- so the
+    ASK_FOR_ALSO_SERIES=0 asks the film-only question instead, so the
     cost of admitting series can be measured rather than assumed.
     """
     feel = (" Prefer films that *feel* like it -- the same register, pace and "
@@ -198,19 +193,16 @@ def ask(spec, target):
     else:
         raise ValueError(f"unknown provider in {spec!r}")
     answer = json.loads(text[text.find("{"):text.rfind("}") + 1])
-    # The key the app asks for, then the one the old question asked for.
-    # A model that writes the other one is answering, not failing.
+    # Either the current question's key or the film-only question's; a
+    # model that writes the other one is answering, not failing.
     films = answer.get("titles") if "titles" in answer else answer["films"]
     return films, time.monotonic() - start
 
 def exists_on_tmdb(title, year):
     """Whether TMDB has a film *or* a television series by this name.
 
-    Both, since the app's question admits series. Searching only
-    /search/movie was right while the question said "films only"; against
-    the question as it is asked now it would score every correct series
-    as an invented title, and report a collapse in `real` that is entirely
-    this function's doing.
+    Both, since the app's question admits series: searching only
+    /search/movie would score every correct series as an invented title.
     """
     for kind, dated in (("movie", "release_date"), ("tv", "first_air_date")):
         url = f"https://api.themoviedb.org/3/search/{kind}?" + urllib.parse.urlencode(
@@ -319,9 +311,9 @@ def report(model, keys):
     return all_pool
 
 keys = load_keys()
-# Loudly, because a glob that matches nothing is not an empty measurement,
-# it is no measurement at all -- and the script used to carry on and print
-# "answered nothing" for every model, which reads like a result.
+# Loudly: a glob that matches nothing is not an empty measurement, it is no
+# measurement at all, and printing "answered nothing" for every model would
+# read like a result.
 if not keys:
     sys.exit(f"no answer keys found in {os.path.join(HERE, 'keys')}")
 print(f"{len(keys)} answer keys: " + ", ".join(keys))

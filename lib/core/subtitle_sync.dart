@@ -22,21 +22,17 @@
 ///   assumed, so it depends on *both* sides: change either and the answer
 ///   changes.
 ///
-/// This used to key on the addon's own bucket (`g`), which was believed to
-/// name one uploader's batch across a whole series and does not: it is
-/// re-assigned per answer, so the integer that meant the WEBRip family
-/// last episode means the DVDRip one this episode (the doc of
-/// `SubtitleInfo.releaseGroupKey` carries the measurement). A speed looked
-/// up under it therefore usually missed, and now and then hit a family it
-/// was never measured on.
+/// The key is never the addon's own bucket (`g`): it is re-assigned per
+/// answer, so an index does not name one release across a series --
+/// applying a speed found under it would apply the wrong family's
+/// correction (see `SubtitleInfo.releaseGroupKey`).
 ///
-/// Both are real numbers, because both are now *measured*: a viewer
-/// marking the picture right, or a match against a file they say is in
-/// sync, solves for a ratio and an offset that no menu of values
-/// contains. The ratio the owner's own Swedish files want is 1.0440
-/// where the PAL constant is 1.0427, and the three seconds between those
-/// two across an episode is the whole reason this stopped being a
-/// direction.
+/// Both are real numbers, measured rather than judged: a viewer marking
+/// the picture right, or a match against a file they say is in sync,
+/// solves for a ratio and an offset that no menu of fixed values could
+/// hold. The owner's own Swedish files want a ratio of 1.0440 against the
+/// PAL constant's 1.0427 -- three seconds apart across an episode, and
+/// enough to need a real number rather than a direction.
 ///
 /// Any part of a key being unknown -- an addon that names no release
 /// group, a release nothing has named yet -- means that adjustment is not
@@ -115,17 +111,11 @@ final class SubtitleSyncEntry {
   /// neither adjustment. Preferences are forgiving -- a row that cannot
   /// be read is dropped, never a failure to load.
   ///
-  /// That is also the whole of the migration off the two builds before
-  /// this one. A `speed` of `"stretch"` is not a number and a row with no
-  /// `shiftSeconds` names no offset, so the rows that stored a toggle
-  /// direction and a count of presses go; and a row keyed on the addon's
-  /// bucket wrote that under `group` rather than `releaseGroup`, so those
-  /// go too. They lapse rather than being carried over, because a `g`
-  /// cannot be turned into a release group: the name is not in the row,
-  /// and the answer it was an index into is long gone. What that costs is
-  /// one adjustment made a second time. What keeping them would cost is a
-  /// multiplier applied under a key that never meant what it was stored
-  /// as -- which is the bug this re-key exists to end.
+  /// A row keyed on the addon's bucket rather than a release group cannot
+  /// be migrated -- the bucket index does not name a release group, so
+  /// there is nothing to translate it into. It lapses instead: one
+  /// adjustment made again costs less than one applied under a key that
+  /// means something else.
   static SubtitleSyncEntry? fromJson(Object? json) {
     if (json is! Map) return null;
     final series = _token(json['series']);

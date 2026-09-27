@@ -270,7 +270,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert!(dht["nodesV6"].is_u64(), "{dht}");
     assert!(dht["everBootstrapped"].is_boolean(), "{dht}");
 
-    // Cleaning now runs the eviction pass in place -- no restart, so the
+    // Cleaning runs the eviction pass in place, with no restart, so the
     // server answers throughout and at the same URL afterwards.
     let cleaned = json(&tokio::task::spawn_blocking(server_clean_cache_now).await??);
     assert!(cleaned["total"].is_u64(), "{cleaned}");
@@ -357,8 +357,8 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // target's path and query exactly as they arrived -- and the escapes in
     // it are the ones that do not survive being decoded: `%2F` would become
     // a path separator, `%3D` would end a signature, `%23` would begin a
-    // fragment and take the rest of the URL with it, and the `?d=1` would
-    // once have been read as the target URL itself. Asserted here rather
+    // fragment and take the rest of the URL with it, and a raw `?d=1` would
+    // be read as the target URL itself. Asserted here rather
     // than only in the Dart tests because it is the *pinned server* that
     // has to keep them, and a pin bump is exactly when that stops being
     // true quietly.

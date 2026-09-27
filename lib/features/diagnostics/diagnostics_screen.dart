@@ -101,14 +101,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       dht = null;
     }
     if (!mounted) return;
-    // Read last, with nothing awaited between it and the clock below.
-    // Flutter's image cache is a live figure -- a screenful of posters
-    // resolves in the time one platform channel call takes -- so a reading
-    // from before the awaits would be stamped `taken:` at a moment it was
-    // not true of, in exactly the situation this exists to diagnose. It is
-    // framework state, not the core's, so it is read here rather than
-    // asked of the client: there is no platform to reach and a seam would
-    // only let a test disagree with the cache the app is really running.
+    // Read last, with nothing awaited between it and the clock below:
+    // Flutter's image cache changes fast enough (a screenful of posters
+    // resolves in the time one platform channel call takes) that an
+    // earlier reading would be stamped `taken:` at a moment it no longer
+    // matches. It is framework state, not the core's, so it is read here
+    // rather than asked of the client -- a seam would only let a test
+    // disagree with the cache the app is really running.
     ImageCacheUsage? images;
     try {
       images = ImageCacheUsage.read();
@@ -172,11 +171,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               icon: const Icon(Icons.copy_all_outlined),
               label: const Text('Copy diagnostics'),
             ),
-            // Information, never a warning: shown only for the one state
-            // worth a curious person's attention (a DHT that never found a
-            // node this session), and gone the moment it bootstraps or was
-            // never running to begin with. The node counts stay a tap away
-            // rather than sitting in the way of the log underneath.
+            // The one DHT state worth surfacing: a node never found this
+            // session. See [_DhtNotice].
             if (dht != null && dht.unavailable) ...[
               const SizedBox(height: 12),
               _DhtNotice(dht: dht),

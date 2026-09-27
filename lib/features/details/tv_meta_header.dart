@@ -45,12 +45,12 @@ import '../../widgets/text_overflow.dart';
 /// **The header says which of its two stops comes first**, because nothing
 /// else here can be trusted to. The description is built inside a
 /// [LayoutBuilder] -- it measures the words against the width it is given
-/// -- so its focus node is attached at layout, after the bookmark beside
-/// it, and both the ladder's walk and reading order then made the bookmark
-/// the header's first stop: the narrow button in the corner rather than
-/// the block spanning the panel. A viewer coming down out of the app bar
-/// landed on the bookmark and had to walk back for the plot, which is the
-/// report this order answers. So the order is declared
+/// -- so its focus node attaches at layout, after the bookmark beside it.
+/// Left to that attachment order, both the ladder's walk and reading order
+/// would make the bookmark the header's first stop -- the narrow button in
+/// the corner rather than the block spanning the panel -- so a viewer
+/// coming down out of the app bar would land on the bookmark and have to
+/// walk back for the plot. So the order is declared
 /// ([FocusTraversalOrder]) and both walks read the declaration: the
 /// [OrderedTraversalPolicy] here for Tab, [TvLadderRow] for the D-pad.
 class TvMetaHeader extends StatelessWidget {
@@ -227,15 +227,14 @@ class TvMetaHeader extends StatelessWidget {
 /// The description of a title on a television: a couple of lines, and a
 /// press to see the rest.
 ///
-/// **The ellipsis was the end of the story.** The header drew the plot as
-/// plain text clipped to [TvMetaHeader.descriptionLines], which takes no
-/// focus and answers no key, so on a television the rest of it could not
-/// be got to at all -- reported from a Chromecast, where the only pointer
-/// in the room is the D-pad. A phone has had a way past its own clamp
-/// since the beginning ([MetaDetailsScreen]'s `_ExpandableText`, with a
-/// More button under the words), and this is the same idea said the way a
-/// remote can hear it: the words themselves are the control, and select
-/// unfolds them and folds them back.
+/// **The words are the control, because there is no other pointer.** Plain
+/// text clipped to [TvMetaHeader.descriptionLines] takes no focus and
+/// answers no key, so without this the rest of a plot longer than two
+/// lines is unreachable on a television, whose only pointer is the D-pad.
+/// A phone already has a way past its own clamp (`ExpandableText`, in
+/// `details_header.dart`, with a More button under the words); this is
+/// the same idea for a remote: the words themselves are the control, and
+/// select unfolds them and folds them back.
 ///
 /// **A stop only where there is something behind the ellipsis.** The text
 /// is measured against the collapsed clamp exactly as the phone's is, and

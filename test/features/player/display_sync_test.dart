@@ -14,13 +14,12 @@ import '../../support/tv.dart';
 /// to get right are what this file is about: the rate is measured rather
 /// than asked for, the override is Android's alone, and it comes back off.
 ///
-/// It used to set `video-sync=display-resample` as well, against 2779 vo
-/// drops at a matched 23.976 Hz. That was the wrong culprit: display sync
-/// never once engaged (`display-sync-active` read `no` throughout) and the
-/// drops were the copying decoder delivering frames late. What the option
-/// did do was drift the audio against a rate mpv cannot verify. It is gone
-/// and the override is on its own; `MediaKitEngine.mpvOverrides` carries
-/// the measurements.
+/// `video-sync=display-resample` is deliberately not set alongside it:
+/// display sync never engages on this VO (`display-sync-active` reads
+/// `no`), so turning it on only drifts the audio against a rate mpv
+/// cannot verify. The frame drops it would seem to fix (2779 at a matched
+/// 23.976 Hz) come from the copying decoder delivering frames late
+/// instead; `MediaKitEngine.mpvOverrides` carries the measurements.
 void main() {
   /// The rate libmpv reports for the owner's film (`container-fps`), and
   /// the rate his projector settled on for it.

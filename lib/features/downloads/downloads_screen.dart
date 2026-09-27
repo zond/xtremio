@@ -82,11 +82,11 @@ class DownloadsScreen extends StatefulWidget {
   /// The stream request [view] plays under: the stored one, or -- for a
   /// Drive download with none -- [driveStreamRequest] for its video.
   ///
-  /// Builds before Drive plays were tracked stored Drive downloads with no
-  /// request at all, and without one the engine keeps no progress for the
-  /// play. The request is a function of the row's own type and video, so it
-  /// is made here on the way into the player rather than written back into
-  /// every old row.
+  /// A stored Drive download may have no stream request at all (an older
+  /// build did not track one), and without it the engine keeps no progress
+  /// for the play. The request is a function of the row's own type and
+  /// video, so it is made here on the way into the player rather than
+  /// written back into every old row.
   @visibleForTesting
   static ResourceRequest? streamRequestOf(DownloadView view) {
     final stored = _requestOf(view.streamRequest);
@@ -312,8 +312,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final registry = downloads?.registry ?? DownloadsRegistry.empty;
     final items = registry.newestFirst;
     // The header counts a listing, so it only speaks when there is one:
-    // "0 downloads · 0 B" over a listing that failed is the same lie the
-    // empty state below stopped telling.
+    // "0 downloads · 0 B" over a failed listing is the same lie the empty
+    // state below avoids.
     // The list this device keeps could not be read. Its items are empty and
     // that is not an answer about what is downloaded, so nothing below
     // counts them or calls them nothing.

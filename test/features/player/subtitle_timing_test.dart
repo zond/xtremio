@@ -238,9 +238,10 @@ void main() {
       // The panel is the surface operated after the OSD bar has faded,
       // and a stretch in force is otherwise invisible: a subtitle that
       // is right at this moment and wrong in ten minutes looks exactly
-      // like one that is right. But nothing here sets one -- the toggle
-      // that offered the PAL constant and its reciprocal was too blunt
-      // for the file it was written for, and a measurement replaced it.
+      // like one that is right. But nothing here sets one: a fixed
+      // toggle for the PAL constant and its reciprocal would be wrong
+      // for a file that does not drift by exactly that ratio, so only a
+      // measurement moves it.
       await tester.pumpWidget(
         panel(const SubtitleTiming(calibratedSpeed: measured)),
       );
@@ -303,9 +304,9 @@ void main() {
     ) async {
       // A file whose *rate* is wrong is out by minutes at the end of an
       // episode, and marking a point out there means shifting by that
-      // much. At a tenth a step that is eleven hundred steps; the whole
-      // reason the strides exist is that the toggle which used to fix a
-      // rate has gone.
+      // much. At a tenth a step that is eleven hundred steps -- the whole
+      // reason the strides exist, since nothing sets a rate directly but
+      // a measurement.
       final shifts = <int>[];
       await tester.pumpWidget(panel(const SubtitleTiming(), shifts: shifts));
       final gesture = await tester.startGesture(

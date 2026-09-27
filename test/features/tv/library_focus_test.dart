@@ -118,11 +118,9 @@ void main() {
   testWidgets('the D-pad walks the bar, the filter row, then the grid', (
     tester,
   ) async {
-    // **Before this change the first press down landed on the type
-    // segments**, because the anonymous library's app bar had nothing in it
-    // to focus. The link button is in it now, which makes the bar a region
-    // on the way in rather than a change of behaviour further down: every
-    // assertion below the first two is what it was.
+    // The app bar has a control in it -- the link button -- which makes it
+    // a region on the way in rather than a change of behaviour further
+    // down: every assertion below the first two holds regardless.
     useScreen(tester, tvSize);
     await tester.pumpWidget(
       harness(fakeCore(), drive: await driveWithOneFile(tester)),

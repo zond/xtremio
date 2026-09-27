@@ -232,12 +232,11 @@ const Map<String, String> _knownContainers = {
 /// rather than holding one table for every device, which is a larger change
 /// than any made here.
 ///
-/// It **leaned strict** over VP8 and VP9, which is what put them in the
-/// set: no WebM in the wild carries H.264, so a table of H.264 and HEVC
-/// refused every real WebM at the video check, before the audio the
-/// container half of this file had just been taught was ever consulted. A
-/// caveat written in one direction hid that for as long as it stood, so
-/// this one is written in both.
+/// It also **leans strict** over VP8 and VP9, which is why they are in the
+/// set: no WebM in the wild carries H.264, so a table of only H.264 and
+/// HEVC would refuse every real WebM at the video check before the
+/// container half of this file ever got a say. Written in both
+/// directions, since a caveat that only leans one way hides exactly that.
 ///
 /// And it is **not keyed on the container**, which the audio table is: a
 /// WebM claiming H.264 is called ready as `video/webm`, a pair Cast lists

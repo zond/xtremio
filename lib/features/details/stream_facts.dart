@@ -621,16 +621,16 @@ List<StreamSection<T>> sectionsByResolution<T>(
 ///
 /// It is a pair and not one string because addons answer in two registers
 /// too. Torrentio's `title` is a little document — a release, sometimes a
-/// file under it, a stats line, sometimes a line of flags — and the app has
-/// been picking one line out of it and throwing the document away.
+/// file under it, a stats line, sometimes a line of flags — and picking one
+/// line out of it throws the rest of the document away.
 ///
 /// **One tokenisation, and every word given one place to be.** The answer's
 /// strings are read into words exactly once ([_Words]); the lead is chosen
 /// out of them; and then every word of every line is sent either to the
 /// lead — which has already said it, so the line does not — or to the line
 /// it was written on. There is no pass afterwards that takes a finished
-/// lead back out of finished lines, which is what this replaces and what
-/// let a card say one release twice.
+/// lead back out of finished lines -- a second pass like that is what let
+/// a card say one release twice.
 ///
 /// **This is values, not layout.** Where the two go on a card, how many
 /// lines each gets, whether the rest is folded away — none of that is
@@ -656,9 +656,9 @@ final class StreamPresentation {
   ///   sends the release twice — `…UHD.BluRay.X265-IAMABLE` and
   ///   `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` — and what the
   ///   second one is for is `10bit.HDR.TrueHD.7.1.Atmos`. This is the case
-  ///   the pack lines are in: the whole point of row 26's line is `S02`, and
-  ///   it used to arrive with thirty-five characters of the lead wrapped
-  ///   around it.
+  ///   the pack lines are in: the whole point of row 26's line is `S02`,
+  ///   stripped here of the thirty-five characters of lead text that would
+  ///   otherwise wrap around it.
   /// - **It is about something else, and is untouched.** Row 13's line is
   ///   Russian prose about the season and row 7's is a drive dump's name.
   ///
@@ -724,8 +724,7 @@ final class StreamPresentation {
 ///    `1080p`. Leading with the text would head those cards `Subscription`
 ///    and blank.
 ///
-/// 4. **Nothing usable anywhere** → what kind of source it is, which is
-///    what the list showed for such a stream before any of this existed.
+/// 4. **Nothing usable anywhere** → what kind of source it is.
 ///
 /// [addonName] is what the card says elsewhere, and a candidate equal to it
 /// is skipped rather than drawn: an addon whose description is its own name
@@ -951,21 +950,22 @@ List<_Token> _fileWords(_Words words) {
 /// that is not — `10bit HDR TrueHD 7.1 Atmos` — is the audio and the bit
 /// depth, which are on the card nowhere else.
 ///
-/// **And why the pack lines are reduced too, which they were not.** The
-/// same holds, harder, for the line that names the pack a file came out of:
-/// row 26 sends `30.Rock.S02E11.1080p.BluRay.x265-KONTRAST` and, under it,
+/// **And the pack lines are reduced too.** The same holds, harder, for the
+/// line that names the pack a file came out of: row 26 sends
+/// `30.Rock.S02E11.1080p.BluRay.x265-KONTRAST` and, under it,
 /// `30.Rock.S02.1080p.BluRay.x265-KONTRAST`. Thirty-seven characters, of
-/// which three are the news. The old rule kept that line whole to protect
-/// the `S02`, and protected it by burying it; the `S02` is what this keeps.
+/// which three are the news, and keeping the line whole to protect the
+/// `S02` would bury it in the other thirty-four; the `S02` is what this
+/// keeps instead.
 ///
 /// **What makes a line about the lead: it opens the way the lead opens**
 /// ([_opensAsTheLeadDoes]). Two spellings of one release start with the
 /// same title, and a line about anything else does not — row 13's starts
 /// `Во все тяжкие`, row 7's `Imdb top 263 movies`, row 3's language line
 /// `Multi Audio`, and every stats line starts with a number. It is
-/// deliberately a weaker claim than the identity head this replaces, which
-/// asked the title *and the season* to agree and so refused exactly the
-/// pack lines it was supposed to read.
+/// deliberately a weaker claim than matching the title *and the season*
+/// together, which would refuse exactly the pack lines it is supposed to
+/// read.
 ///
 /// What is taken is words, not characters, because addons separate with
 /// `.`, `_`, `-` and spaces interchangeably and bracket a year as the mood
@@ -1077,11 +1077,10 @@ bool _countable(String token) =>
 ///
 /// A word is a run of letters and digits, so these fall to the separator
 /// side of the line and are written only when the next word is kept as
-/// well. That lost the only meaning the recorded set has ever lost to this
-/// parser: row 28's pack line says `DD+ 5 1`, the lead already said `5.1`,
-/// and what came back was `DD` — **which is a different codec**. `DD+` is
-/// E-AC-3 and `DD` is AC-3, so the card was making a claim about the file
-/// that the addon had not made.
+/// well. Row 28's pack line says `DD+ 5 1`; without this, the lead's `5.1`
+/// absorbs the `5 1` and leaves `DD` on its own — **a different codec**
+/// (`DD+` is E-AC-3, `DD` is AC-3), a claim about the file the addon never
+/// made.
 ///
 /// Only marks that cannot begin a separator are listed. A trailing `.`,
 /// `-` or `/` is punctuation *between* things and keeping it would put a
@@ -1207,12 +1206,12 @@ bool _looksLikeARelease(String text) =>
 ///
 /// Named, rather than matched by shape. "A dot and two to four letters at
 /// the end" is what a container looks like, and it is also what a codec
-/// looks like: `Breaking.Bad.S01E01.1080p.WEB-DL.x265` ends in `.x265`,
-/// which that shape reads as an extension and takes off, leaving a release
-/// that ends `WEB-DL`. That is what kept the phone drawing the release
-/// twice after it was supposedly fixed -- the title had `.x265` on it and
-/// the line beneath, stripped of `.mkv` and then of `.x265`, did not, so
-/// the two never compared equal. A list cannot make that mistake.
+/// looks like: matching by shape would take `.x265` off
+/// `Breaking.Bad.S01E01.1080p.WEB-DL.x265` as an extension, leaving a
+/// release that ends `WEB-DL`. The title still carries `.x265`, so it and
+/// the stripped line beneath it would never compare equal and the phone
+/// would draw the release twice. A list keyed by name cannot make that
+/// mistake.
 const Set<String> _containers = {
   '3gp',
   'asf',

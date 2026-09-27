@@ -35,8 +35,7 @@ class DiagnosticsTraceSync {
   /// plainly what it costs. Nothing in the report is redacted while it is
   /// on -- not a URL, not a token, not a password -- because a redacted
   /// line is the one a problem hides in; so the tile says the report then
-  /// holds credentials, in that word. (A longer version said why and when;
-  /// on a settings tile about verbosity that read as a joke.)
+  /// holds credentials, in that word.
   static const String description =
       'Adds cache, image and player detail to the report and redacts '
       'nothing: while on, the log includes credentials (account keys, '

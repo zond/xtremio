@@ -17,8 +17,7 @@ const String kDownloadTooltip = 'Download';
 const String kDownloadStartingTooltip = 'Starting download…';
 
 /// ... once the file is whole on the device, where the button removes the
-/// download. A tick sat here before and did nothing, which left the picker
-/// that started a download with no way to undo one.
+/// download.
 const String kDownloadDeleteTooltip = 'Downloaded — delete from this device';
 
 /// ... when the server reported a reason it stopped; pressing it pins again.

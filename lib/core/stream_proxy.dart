@@ -1,10 +1,9 @@
 /// Sending a stream through our own server instead of straight at its host.
 ///
-/// The player used to fetch a remote stream itself and keep its own copy of
-/// the read-ahead, in a cache file nothing could see. There is one cache
-/// now and it is the server's, so every stream has to reach the player as a
-/// URL on the server: a torrent already is one, and a remote stream becomes
-/// one here.
+/// There is one cache on this device and it is the server's, so every
+/// stream has to reach the player as a URL on the server: a torrent
+/// already is one, and a remote stream becomes one here. See
+/// docs/ARCHITECTURE.md, "Streams, the proxy and the cache".
 library;
 
 import 'dart:io';
@@ -25,11 +24,11 @@ import 'dart:io';
 ///
 /// **What the extra hop is for.** The server is the one writer on this
 /// device the app can see, bound, sweep and answer for; a stream the player
-/// fetched itself was a second one, with no name on disk and no limit. So
-/// the bytes come through the server whether it has anything to add to them
-/// or not, because everything that will ever be added -- a cache behind the
-/// read-ahead, a window kept around the play head -- has to be added
-/// somewhere both kinds of stream pass through.
+/// fetched directly would be a second one, with no name on disk and no
+/// limit. So the bytes come through the server whether it has anything to
+/// add to them or not: everything that will ever be added -- a cache
+/// behind the read-ahead, a window kept around the play head -- has to be
+/// added somewhere both kinds of stream pass through.
 ///
 /// **What the server keeps of it.** `/proxy` caches by byte range
 /// (`server/src/proxy_cache.rs`, in the stream-server tree
@@ -76,20 +75,18 @@ import 'dart:io';
 /// along the way is a 403 or a 404 rather than a slow stream. This half
 /// writes the path out exactly as it arrived (below); the other half is
 /// the server reading the target's path off the request URI rather than
-/// off axum's wildcard capture, which is percent-*decoded* -- until it
-/// did, `%2F` reached the origin as a path separator, `%3F` began a query
-/// and everything from a `%23` on was gone (`proxy_handler`, measured end
-/// to end). The `d=` segment survives the same trip: the server parses it
+/// off axum's wildcard capture, which comes percent-*decoded*: decoded,
+/// `%2F` would reach the origin as a path separator, `%3F` would begin a
+/// query and everything from a `%23` on would be gone (`proxy_handler`).
+/// The `d=` segment survives the same trip: the server parses it
 /// with `form_urlencoded`, which reads a bare `+` as a space, and
 /// [Uri.encodeComponent] escapes `+` along with everything else that is
 /// not unreserved.
 ///
 /// The target's own query rides on the outside, as this request's query,
-/// and it may name anything it likes -- including a `d` of its own. That
-/// used to be read as the whole target URL (a `400`, or a fetch of the
-/// wrong host when the value happened to parse as one); the server now
-/// decides the format from the shape of the path, which the target's
-/// query cannot reach.
+/// and it may name anything it likes -- including a `d` of its own --
+/// harmlessly, because the server decides the format from the shape of the
+/// path, which the target's query cannot reach.
 ///
 /// A fragment is dropped, because a fragment was never part of what a
 /// server is asked for: nobody sends one over the wire.
@@ -147,13 +144,12 @@ bool isProxiedByServer(Uri url) {
 /// device. False with no embedded server.
 ///
 /// The one rule for "ours", which the player, the proxy and the cast all
-/// ask. It used to be spelled per caller, as an exact host and port in
-/// one place and as any loopback host in others, and the two disagreed
-/// about the same URL: a streaming server typed as `localhost` is the
-/// embedded one when the port is, but `localhost` is not `127.0.0.1` as a
-/// string, so its streams drew no stats cards. The port is what separates
-/// this server from another on the same machine (the standard Stremio
-/// server on 11470, say); the host cannot.
+/// ask -- not "any loopback host": a streaming server typed as `localhost`
+/// is the embedded one when the port matches, but `localhost` is not
+/// `127.0.0.1` as a string, so a test on loopback alone would miss it and
+/// its streams would draw no stats cards. The port is what separates this
+/// server from another on the same machine (the standard Stremio server on
+/// 11470, say); the host cannot.
 bool isEmbeddedServer(Uri url, Uri? serverBase) {
   if (serverBase == null) return false;
   if (!url.isScheme('http') && !url.isScheme('https')) return false;

@@ -14,8 +14,8 @@ import '../../support/fake_sharing.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
-/// How a remote reaches the status light, and what it costs the walk that
-/// was there before.
+/// How a remote reaches the status light, and what wearing it costs the
+/// rest of the rail's walk.
 ///
 /// The light is drawn over the body in the top right corner, which on a
 /// television is where a poster row ends -- so the thing to prove is that
@@ -143,8 +143,7 @@ void main() {
     expect(find.byKey(const Key('sharing-light')), findsNothing);
 
     await focusRailTop(tester);
-    // The key that reaches the light is the one that used to do nothing,
-    // and with no light it still does nothing.
+    // With no light to reach, the key that would open it does nothing.
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusIn<NavigationRail>(), isTrue);
   });

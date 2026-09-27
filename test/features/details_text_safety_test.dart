@@ -149,8 +149,8 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Alpha.720p.mkv'), findsOneWidget);
-    // Said once, not twice: the release is the row's title now, so the
-    // line under it that used to repeat it is not drawn.
+    // Said once, not twice: the release is the row's title, so the line
+    // under it does not repeat it.
     expect(find.text('Alpha.720p.mkv'), findsOneWidget);
   });
 }

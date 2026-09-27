@@ -88,17 +88,6 @@ fn real_torrent(dir: &std::path::Path) -> (Vec<u8>, String, Vec<(String, u64)>) 
     })
 }
 
-/// Puts the pieces of `name` on disk where the server keeps torrent data:
-/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece / 1000>/<piece>`, one
-/// file per whole piece, which is the one layout there is -- the streaming
-/// cache and a kept download are the same pieces in the same store.
-///
-/// Both payloads here are exact multiples of [`PIECE`], so every piece of a
-/// file holds that file's bytes alone and "this file is complete" means
-/// only its own pieces are down.
-/// `pieces` caps how many of the file's own pieces are placed, which is
-/// what a download caught halfway looks like now: whole pieces on disk and
-/// whole pieces missing, with no partial file anywhere.
 /// The pieces `name` occupies, in the torrent's own numbering.
 fn piece_range(files: &[(String, u64)], name: &str) -> std::ops::Range<u32> {
     let mut offset = 0u64;
@@ -128,6 +117,16 @@ fn pieces_on_disk(root: &std::path::Path, info_hash: &str, pieces: std::ops::Ran
         .count()
 }
 
+/// Puts the pieces of `name` on disk where the server keeps torrent data:
+/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece / 1000>/<piece>`, one
+/// file per whole piece, which is the one layout there is -- the streaming
+/// cache and a kept download are the same pieces in the same store.
+///
+/// Both payloads here are exact multiples of [`PIECE`], so every piece of a
+/// file holds that file's bytes alone and "this file is complete" means
+/// only its own pieces are down. `pieces` caps how many of the file's own
+/// pieces are placed, for a download caught halfway: whole pieces on disk
+/// and whole pieces missing, with no partial file anywhere.
 fn place_pieces(
     root: &std::path::Path,
     info_hash: &str,
@@ -1063,7 +1062,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         serde_json::json!({ "cacheRoot": cache_root.display().to_string() }).to_string(),
     )?;
 
-    // Nothing about a folder is written down beside the entries any more.
+    // The registry holds no field but `items` and `version` -- no folder.
     let on_disk = json(&std::fs::read_to_string(&registry_file)?);
     assert_eq!(
         on_disk

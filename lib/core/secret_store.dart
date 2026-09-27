@@ -36,15 +36,13 @@ abstract interface class SecretStore {
 ///   own `SharedPreferences` file, every value in it AES-GCM ciphertext,
 ///   the AES key wrapped with an RSA-OAEP keypair that lives in the
 ///   Android Keystore and is hardware-backed wherever the device has a
-///   TEE or StrongBox. This is what was asked for as
-///   `EncryptedSharedPreferences` and is the same shape -- a preferences
-///   file whose values are ciphertext, rooted in the Keystore -- but it is
-///   not Jetpack Security's class: version 10 of the plugin dropped
-///   `androidx.security.crypto`, which Google has deprecated and no longer
-///   maintains, for ciphers of its own. Keystore is a CDD requirement, so
-///   an Android TV box has one; no biometric prompt is asked for, which is
-///   the point on a device whose only input is a remote. Needs API 23, and
-///   this app's `minSdk` is 24.
+///   TEE or StrongBox. The same shape as `EncryptedSharedPreferences` -- a
+///   preferences file whose values are ciphertext, rooted in the Keystore
+///   -- but built with the plugin's own ciphers rather than Jetpack
+///   Security's deprecated `androidx.security.crypto`. Keystore is a CDD
+///   requirement, so an Android TV box has one; no biometric prompt is
+///   asked for, which is the point on a device whose only input is a
+///   remote. Needs API 23, and this app's `minSdk` is 24.
 /// - **macOS**: the Keychain, with the data-protection keychain turned
 ///   *off* ([MacOsOptions.usesDataProtectionKeychain]). The
 ///   data-protection keychain wants a `keychain-access-groups`

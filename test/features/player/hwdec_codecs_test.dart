@@ -8,16 +8,11 @@ import 'package:xtremio/features/player/playback_engine.dart';
 /// reasoning that picked it.
 void main() {
   test('the old codecs are not offered to the hardware decoder', () {
-    // The bug, on a real phone, on a file linked from Drive:
-    //
-    //     mpeg4_mediacodec: Both surface and native_window are NULL
-    //     mpeg4_mediacodec: MediaCodec 0x0 failed to start
-    //     vd: Could not open codec.
-    //
     // media_kit's Android controller widens mpv's own list to include
-    // these two, and with the direct `mediacodec` hwdec this app asks for,
-    // an MPEG-4 file fails at decoder init and only the player's retry gets
-    // a picture -- after seconds of stalling and an error on screen.
+    // mpeg4 and mpeg2video. With the direct `mediacodec` hwdec this app
+    // asks for, an MPEG-4 file then fails decoder init ("Both surface and
+    // native_window are NULL") and only the player's retry recovers a
+    // picture, after seconds of stalling and an error on screen.
     final allowed = MediaKitEngine.hwdecCodecs.split(',');
     expect(allowed, isNot(contains('mpeg4')));
     expect(allowed, isNot(contains('mpeg2video')));
@@ -32,8 +27,8 @@ void main() {
   });
 
   test('and the direct decoder is still asked for first', () {
-    // The reason the old codecs had to go rather than the direct path: the
-    // copy path is what made the Chromecast judder, and this is that fix.
+    // `mediacodec` (direct) is asked for before `mediacodec-copy`: the
+    // copy path is what causes judder on a Chromecast.
     expect(
       MediaKitEngine.configurationFor(hardwareDecoding: true).hwdec,
       'mediacodec,mediacodec-copy',

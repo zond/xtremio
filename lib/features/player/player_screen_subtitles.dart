@@ -101,21 +101,15 @@ extension _PlayerSubtitles on _PlayerScreenState {
     });
   }
 
-  /// Puts libmpv's subtitle multiplier and offset back to untouched --
-  /// 1.0 and 0.0 -- and records [subtitle] as the addon file they now
-  /// belong to, or null when what is shown is not one.
+  /// Puts libmpv's subtitle multiplier and offset back to untouched (1.0 and
+  /// 0.0) and records [subtitle] as the addon file they now belong to, or
+  /// null when what is shown is not one.
   ///
-  /// Every path that changes what is on screen calls this, which is the
-  /// whole of the reset rule: the timing belongs to the player, not to
-  /// the file, so one left behind by the previous pick would silently
-  /// ruin a subtitle that was correct. An offset made for a file that
-  /// started late is nonsense on the next one, and mpv keeps `sub-delay`
-  /// across a track change exactly as it keeps `sub-speed`.
-  ///
-  /// Nothing but the viewer ever moves either value away from untouched,
-  /// so this is also the only thing that undoes their work: an
-  /// adjustment is theirs from the first press until something changes
-  /// what is shown.
+  /// Every path that changes what is on screen calls this: mpv keeps
+  /// `sub-speed` and `sub-delay` across a track change, so a timing left
+  /// behind by the previous pick would ruin a subtitle that was correct.
+  /// Nothing but the viewer moves either value away from untouched, so this
+  /// is also the only thing that undoes their work.
   void _resetSubtitleTiming([SubtitleInfo? subtitle]) {
     // Before anything moves: a press a moment ago belongs to the file
     // that is on its way out, not to the one replacing it.
@@ -135,24 +129,16 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _applySubtitleTiming();
   }
 
-  /// What the viewer is remembered to have fixed about [subtitle] here,
-  /// and untouched when nothing is -- which is every embedded track,
-  /// every subtitle turned off, and every file from an addon that names
-  /// no release group.
+  /// What the viewer is remembered to have fixed about [subtitle] here, and
+  /// untouched when nothing is (every embedded track, subtitles off, and
+  /// every file from an addon that names no release group).
   ///
-  /// The two halves are looked up under different keys because they have
-  /// different causes: the speed under the series and the release group,
-  /// since what a file was timed against is a property of where it came
-  /// from; the offset under the video release as well, since it is the
-  /// video's pre-roll less whatever the subtitle's source assumed. See
-  /// [SubtitleSyncMemory].
-  ///
-  /// Both come back as the measured halves of a [SubtitleTiming] rather
-  /// than as presses, because that is what they were when they were
-  /// written: a ratio and an offset in seconds, which no whole number of
-  /// presses names. The presses then count on top, so the first shift
-  /// after a file is put back moves it by a tenth from where it was left
-  /// rather than from nothing.
+  /// The speed is keyed on the series and the release group (what a file
+  /// was timed against comes from where it came from), the offset on the
+  /// video release as well (it is the video's pre-roll less what the
+  /// subtitle's source assumed); see [SubtitleSyncMemory]. Both come back as
+  /// measured halves of a [SubtitleTiming], so the next shift moves a tenth
+  /// from where it was left.
   SubtitleTiming _rememberedTiming(SubtitleInfo? subtitle) {
     final memory = _prefs?.subtitleSync;
     final releaseGroup = subtitle?.releaseGroupKey;
@@ -172,19 +158,13 @@ extension _PlayerSubtitles on _PlayerScreenState {
     );
   }
 
-  /// The multiplier [memory] holds for [releaseGroup]'s files of
-  /// [series], and null when it holds none this build will put on a
-  /// player.
+  /// The multiplier [memory] holds for [releaseGroup]'s files of [series],
+  /// and null when it holds none this build will put on a player.
   ///
-  /// The file is forgiving by design and this is the one place a number
-  /// out of it becomes `sub-speed`, so the range is checked here rather
-  /// than there. media_kit writes the property with
-  /// `mpv_set_property_string` and throws the return code away, so a
-  /// value outside `<0.1-10.0>` is refused in silence and the multiplier
-  /// the *previous* file left behind stays in force while the panel
-  /// claims a new one -- a hand-edited preferences file is not worth
-  /// that. A stored 1.0 is the file's own timing and is nothing applied,
-  /// which is what nothing remembered looks like too.
+  /// The range is checked here because this is where a stored number becomes
+  /// `sub-speed`, and media_kit discards mpv's refusal of a value outside
+  /// `0.1-10.0`: the previous file's multiplier would stay in force while
+  /// the panel claimed a new one. A stored 1.0 is nothing applied.
   double? _rememberedSpeed(
     SubtitleSyncMemory memory,
     String? series,
@@ -211,15 +191,12 @@ extension _PlayerSubtitles on _PlayerScreenState {
   }
 
   /// The video release an offset was measured against: the best filename
-  /// known ([castFilename] -- the file the server says it opened, else
-  /// the addon's claim about what it linked to), as a bare lower-case
-  /// name.
+  /// known ([castFilename]: the file the server says it opened, else the
+  /// addon's claim), as a bare lower-case name.
   ///
-  /// The whole filename rather than a release group parsed out of it. A
-  /// parse is a guess, and the same evening's worth of pre-roll is a
-  /// property of the exact file: two encodes by one group can still start
-  /// in different places. A narrower key is forgotten more often, which is
-  /// the price of never being wrong.
+  /// The whole filename rather than a parsed release group: two encodes by
+  /// one group can start in different places, and a narrower key forgotten
+  /// more often is the price of never being wrong.
   String? get _syncRelease {
     final name = castFilename(_state, serverFilename: _serverFilename);
     if (name == null) return null;
@@ -227,14 +204,10 @@ extension _PlayerSubtitles on _PlayerScreenState {
     return file.isEmpty ? null : file;
   }
 
-  /// [sources] in the order both of the list's consumers offer them: the
-  /// menu, and the auto-pick that applies a file with nobody looking.
-  ///
-  /// One place, because a consumer that skipped the ordering would apply
-  /// whichever addon answered first -- and the ranking is read from the
-  /// same three things a correction is: the release the server named,
-  /// the series, and what the viewer has already fixed. A third consumer
-  /// calls this too.
+  /// [sources] in the order every consumer offers them: the menu, the
+  /// reference picker, and the auto-pick that applies a file with nobody
+  /// looking. One place, because a consumer that skipped it would apply
+  /// whichever addon answered first.
   List<SubtitleSource> _offeredSubtitles(Iterable<SubtitleSource> sources) =>
       subtitlesByRelease(
         sources,
@@ -328,19 +301,15 @@ extension _PlayerSubtitles on _PlayerScreenState {
     engine.setSubtitleDelay(_timing.delay);
   }
 
-  /// A press on the timing panel. The panel is rebuilt from [_timing], so
-  /// what it draws is what mpv is really playing.
+  /// A press on the timing panel; the panel is rebuilt from [_timing], so it
+  /// draws what mpv is really playing.
   ///
-  /// It ends the auto-pick ([_subtitlesChosenByHand]): a viewer judging
-  /// the subtitle in front of them has answered the question the session
-  /// preference exists to guess at, and a guess that keeps swapping the
-  /// file under them is the wrong half of that answer.
-  ///
-  /// And it is the only path that remembers anything. Every *other* call
-  /// on the timing is the machine putting a file back the way it was
-  /// found ([_resetSubtitleTiming]), which is not a judgement about
-  /// anything and must not be written down as one -- Reset on the panel
-  /// is a judgement, and comes through here.
+  /// It ends the auto-pick ([_subtitlesChosenByHand]): a viewer judging the
+  /// subtitle in front of them has answered what the auto-pick guesses at.
+  /// And it is the only path that remembers anything: every other change to
+  /// the timing is the machine putting a file back ([_resetSubtitleTiming]),
+  /// which is not a judgement. Reset on the panel is one, and comes through
+  /// here.
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
     _subtitlesChosenByHand = true;
@@ -351,21 +320,10 @@ extension _PlayerSubtitles on _PlayerScreenState {
 
   /// The panel's Reset: back to untouched, and the marks with it.
   ///
-  /// Reset is the viewer undoing their own work, and the marks *are*
-  /// that work -- what is on `sub-speed` and `sub-delay` after two of
-  /// them is the line through them, so putting the two numbers back
-  /// without dropping the points they came from undoes nothing. The
-  /// next mark would join a pair the viewer has just discarded, which is
-  /// still the widest pair and so still the answer, and the panel
-  /// would go on saying the episode was fixed over a row reading 1.000x
-  /// and +0.0 s. Short of switching files there would then be no way to
-  /// take back a mark at all.
-  ///
-  /// It is not [_resetSubtitleTiming]: that one is the machine putting a
-  /// file back the way it found it and deliberately does not remember
-  /// what it did. This is a press, so it goes through [_adjustTiming]
-  /// like every other press -- back to untouched is *forgotten* rather
-  /// than stored as a zero, which is what that path already does.
+  /// The marks are the viewer's work too: resetting the two numbers but
+  /// keeping the points they came from would let the next mark rejoin a
+  /// pair the viewer has just discarded. It goes through [_adjustTiming]
+  /// like any press, so untouched is *forgotten* rather than stored as zero.
   void _undoSubtitleTiming() {
     _calibration = SubtitleCalibration.none;
     setState(() => _markNote = null);
@@ -376,34 +334,17 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// which is one mark.
   ///
   /// The mark pairs the cue's raw time in the file
-  /// ([PlaybackEngine.subtitleCueStart]) with the video position that cue
-  /// is *drawn* at under the transform the viewer has just approved --
-  /// `speed * cue + delay` -- and never with the position the button was
-  /// pressed at. **A cue is on screen for seconds and the property
-  /// answers throughout them**, so the press instant is the viewer's
-  /// reaction time and not a measurement of anything: taken as the mark,
-  /// it would push a subtitle that was already in step late by however
-  /// long they took to press, off the button that says it was right, and
-  /// would put a second or two of reaction into each end of the lever arm
-  /// a rate is read off -- [SubtitleCalibration.rateSpan] is sized for a
-  /// tenth of a second of error at each end, and this is twenty times
-  /// that.
+  /// ([PlaybackEngine.subtitleCueStart]) with the position that cue is
+  /// *drawn* at under the transform just approved (`speed * cue + delay`),
+  /// **never with the position the button was pressed at**: a cue is on
+  /// screen for seconds, so the press instant is reaction time, which would
+  /// push an in-step subtitle late and put seconds of error into a rate
+  /// ([SubtitleCalibration.rateSpan] is sized for a tenth at each end).
   ///
-  /// So a single mark changes nothing, and that is the shape of the
-  /// feature rather than a hole in it: the viewer has already shifted the
-  /// line into place by hand, and the mark only writes down where they
-  /// put it. What learns a rate is a *second* mark far off, made after
-  /// shifting the picture into place again out there, which is what the
-  /// shift's strides exist for. The two are points on one line because
-  /// each is the viewer's judgement about where a cue belongs, and that
-  /// stays true whatever transform was in force when it was made -- which
-  /// is what [SubtitleCalibration] fits, and why a mark is not the shift
-  /// in force written down.
-  ///
-  /// The answer is dropped if the subtitle changed while the read was
-  /// out: a property read is not the seconds-long fetch a match is, but a
-  /// mark landing on the file that replaced the one it was made against
-  /// is the same wrong answer.
+  /// So one mark changes nothing; a second mark far off, after shifting the
+  /// picture into place there, is what learns a rate (docs/ARCHITECTURE.md,
+  /// "Marks"). The answer is dropped if the subtitle changed while the read
+  /// was out.
   Future<void> _markSubtitleTiming() async {
     final engine = _engine;
     if (engine == null) return;
@@ -437,13 +378,8 @@ extension _PlayerSubtitles on _PlayerScreenState {
   }
 
   /// Whether any file *other* than the one playing is on offer, which is
-  /// what a match can be measured against.
-  ///
-  /// Nothing about matching is drawn without one: with a single file
-  /// there is nothing to compare it with, and an embedded track has no
-  /// URL to fetch at all. Hiding it is the honest answer -- an offered
-  /// control that cannot work says the app has a way of fixing this
-  /// video that it has not got.
+  /// what a match is measured against. Without one nothing about matching
+  /// is drawn: a control that cannot work claims a fix the app has not got.
   bool _hasOtherSubtitleFile(PlayerState? state) {
     final playing = _externalSubtitle?.url;
     if (playing == null || state == null) return false;
@@ -483,22 +419,14 @@ extension _PlayerSubtitles on _PlayerScreenState {
     if (picked != null && _stillOurs) await _matchSubtitleTo(playing, picked);
   }
 
-  /// Measures [playing] against [reference] and applies the answer, or
-  /// says why it did not.
+  /// Measures [playing] against [reference] and applies the answer, or says
+  /// why it did not.
   ///
-  /// The score is what is shown either way. A pair that does not match --
-  /// two files for different episodes, half a film against a whole one, a
-  /// reference that is itself adrift -- comes back with the same number in
-  /// it, and with the transform beside it, which is what makes the refusal
-  /// something the viewer can judge instead of an apology. A fraction of
-  /// cues is what this replaced: it is not comparable between a file that
-  /// merges lines and one that does not, and it sent the owner looking for
-  /// a different reference when the reference was fine.
-  ///
-  /// A convincing answer goes through [_adjustTiming] like a press does,
-  /// because it is one: the viewer chose the file it was measured
-  /// against, so the result is their judgement and not the machine
-  /// putting anything back.
+  /// The score is shown either way, with the transform beside it, so a
+  /// refusal (files for different episodes, a reference itself adrift) is
+  /// something the viewer can judge. A convincing answer goes through
+  /// [_adjustTiming]: the viewer chose the reference, so it is their
+  /// judgement.
   Future<void> _matchSubtitleTo(
     SubtitleInfo playing,
     SubtitleInfo reference,
@@ -610,21 +538,15 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _rememberPick();
   }
 
-  /// Writes a pick by hand down against this show: the language and,
-  /// where the addon named one, the release group of the very file, or --
-  /// with no [language] -- that subtitles were turned off here on
-  /// purpose.
+  /// Writes a pick by hand down against this show: the language and, where
+  /// the addon named one, the file's release group -- or, with no
+  /// [language], that subtitles were turned off here on purpose.
   ///
   /// **Only the three handlers above call this.** The auto-pick applying
-  /// what is remembered must never write, or one choice made in January
-  /// becomes twenty-two counts by March and the two pinned languages can
-  /// never change again. It is the discipline `_adjustTiming` keeps for
-  /// `subtitleSync`, for the same reason: what is stored has to be a
-  /// judgement, and a machine putting something back is not one.
-  ///
-  /// Nothing is remembered for a play with no meta behind it -- an
-  /// offline file, a deep link straight to a stream -- because there is
-  /// no show to key it on.
+  /// what is remembered must never write, or one choice would count again
+  /// on every episode and the two pinned languages could never change: what
+  /// is stored has to be a judgement. Nothing is remembered without a show
+  /// to key it on (an offline file, a deep link straight to a stream).
   void _rememberPick({
     String? language,
     String? releaseGroup,
@@ -680,33 +602,20 @@ extension _PlayerSubtitles on _PlayerScreenState {
     );
   }
 
-  /// Applies the session's subtitle preference (set by an earlier pick in
-  /// this Player session, e.g. the previous episode) to freshly opened
-  /// media: off stays off; otherwise the first track in the preferred
-  /// language, from the preferred source first. Waits for the engine to
-  /// report the media loaded (see [_mediaLoaded]), then retries as
-  /// tracks and addon results arrive until something matches, and counts
-  /// as done only once the engine accepted the pick.
+  /// Applies the session's subtitle preference to freshly opened media: off
+  /// stays off; otherwise the first file or track in the preferred language,
+  /// from the preferred source first. Waits for the media to load
+  /// ([_mediaLoaded]), retries as tracks and addon results arrive, and
+  /// counts as done only once the engine accepted the pick.
   ///
-  /// With no session preference -- which is every fresh start, since the
-  /// core clears it on `Unload` -- what this show was last watched with
-  /// stands in ([_wanted]). The two are read the same way and differ in
-  /// one thing: a remembered row can also name the release group of the
-  /// file that was picked, and among the files of the right language one
-  /// from that group is preferred.
+  /// With no session preference (every fresh start: the core clears it on
+  /// `Unload`) what this show was last watched with stands in ([_wanted]),
+  /// which can also prefer the release group of the file picked. A show
+  /// never watched is left alone: off is the honest floor.
   ///
-  /// A show never watched is still left alone. Putting this viewer's
-  /// commonest language on a programme nothing is known about would put
-  /// subtitles on a film that needs none, and off is the honest floor;
-  /// what the menu does for that case is lift the two languages they
-  /// usually pick to the top of it.
-  ///
-  /// **Nothing here dispatches `SubtitlePreferenceChanged`.** The core's
-  /// field means "the viewer said so, this session", and writing a
-  /// remembered guess into it would make a memory indistinguishable from
-  /// a judgement -- which is the distinction `_subtitlesChosenByHand`
-  /// rests on -- as well as counting the guess as a pick next time the
-  /// menu is opened.
+  /// **Nothing here dispatches `SubtitlePreferenceChanged`**: the core's
+  /// field means "the viewer said so, this session", and a remembered guess
+  /// in it would be indistinguishable from a judgement.
   void _maybeAutoPickSubtitles() {
     if (_autoPickedSubtitles ||
         _autoPickingSubtitles ||
@@ -821,14 +730,11 @@ extension _PlayerSubtitles on _PlayerScreenState {
 
   /// Puts the timing panel up and the remote on it.
   ///
-  /// Deliberately not part of the OSD: the bar fades on its three-second
-  /// timer while this stays, because adjusting means pressing and then
-  /// watching the picture for several seconds to see what the press did.
-  /// It is drawn outside the fade and it is not on [_canAutoHide]'s list
-  /// of things that stop it -- pinning the bar up over the very picture
-  /// being judged would be the wrong half of the problem to solve. What
-  /// makes that safe is that the panel is visible for as long as it holds
-  /// focus, which is the rule [_hideControls] keeps for the bar.
+  /// Not part of the OSD: the bar fades on its timer while this stays,
+  /// because adjusting means pressing and then watching the picture. It is
+  /// drawn outside the fade and is not on [_canAutoHide]'s list; it is
+  /// visible for as long as it holds focus, the rule [_hideControls] keeps
+  /// for the bar.
   void _showSubtitleTiming() {
     if (_timingShown) return;
     setState(() => _timingShown = true);
@@ -888,16 +794,10 @@ extension _PlayerSubtitles on _PlayerScreenState {
             builder: (context, tracks, _) => SubtitleMenu(
               embedded: tracks.subtitle,
               groups: groups,
-              // The counts, and not which languages they lift: the menu
-              // ranks what it draws, so its heading's note reports a
-              // comparison over the whole sheet however this screen
-              // assembles it (`SubtitleMenu.picks`).
-              //
-              // The pins are the menu's own presentation and are applied
-              // after the ordering, not inside it: both consumers of the
-              // list still get the same order, and the auto-pick's one
-              // case that reads it (an enabled preference naming no
-              // language takes the head of the whole list) is untouched.
+              // The counts, not which languages they lift: the menu ranks
+              // what it draws (`SubtitleMenu.picks`). The pins are the menu's
+              // presentation, applied after the ordering, so every consumer
+              // of the list still gets the same order.
               picks: _prefs?.subtitlePicks,
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,

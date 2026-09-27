@@ -12,9 +12,9 @@ def tmdb(path, **params):
 def check(title, year):
     """Exact-ish title match within a year either side, searching both the
     stated year and none: TMDB dates some films by festival, some by
-    release. Films and series both, because the keys hold series now --
-    the app's question admits them, so pooling folds them in, and a check
-    that knew only /search/movie would report every one of them missing.
+    release. Films and series both, since the keys hold series and the
+    app's question admits them; a check that knew only /search/movie
+    would report every one of them missing.
     """
     seen = []
     for kind, titled, dated in (("movie", "title", "release_date"),

@@ -6,10 +6,9 @@ import java.util.Properties
  * `android/key.properties` and the keystore beside it are **not in the
  * repository** and never can be (`android/.gitignore`), so every build has to
  * cope with their absence: a fresh clone, a contributor, and CI before its
- * secret is unpacked. Absent, the release build falls back to the debug key
- * exactly as it did before there was a release key at all -- so `flutter build
- * apk --release` keeps working for anybody, and only a build that *has* the
- * key produces an APK that can update an installed one.
+ * secret is unpacked. Absent, the release build falls back to the debug key,
+ * so `flutter build apk --release` keeps working for anybody, and only a
+ * build that *has* the key produces an APK that can update an installed one.
  *
  * What makes that safe rather than sloppy is that the two are told apart
  * afterwards: a release signed with the debug key has a different certificate,
@@ -45,12 +44,9 @@ dependencies {
     // naming it here adds nothing to the APK -- it only reaches our own
     // compile classpath.
     implementation("com.google.android.gms:play-services-cast:21.5.0")
-    // Google Identity Services, for the *native* Drive picker
-    // (DrivePicker.kt). The web Google Picker cannot select more than one
-    // file on a phone -- it gates selection on a Ctrl/Cmd key
-    // (issuetracker.google.com/issues/334994030) -- and this one can.
-    // `AuthorizationRequest.ResourceParameter`, which is what carries the
-    // picker trigger, exists from 21.6.0 onward, so that is the floor.
+    // Google Identity Services, for the native Drive picker (DrivePicker.kt).
+    // AuthorizationRequest.ResourceParameter, which carries the picker
+    // trigger, exists from 21.6.0 onward, so that is the version floor.
     implementation("com.google.android.gms:play-services-auth:22.0.0")
     // Plain JVM tests, for the Kotlin that has no Android in it.
     testImplementation("junit:junit:4.13.2")
@@ -135,12 +131,11 @@ android {
 
     buildTypes {
         release {
-            // The release key when this machine has it, the debug key when it
-            // has not -- see [releaseSigning]. This is the whole of what used
-            // to be a TODO, and the reason it mattered: an app's identity *is*
-            // its signing certificate, so App Links, an Android OAuth client
-            // and every future update are all keyed on this and on nothing
-            // else.
+            // The release key when this machine has it, the debug key
+            // otherwise -- see [releaseSigning]. This matters because an
+            // app's identity *is* its signing certificate, so App Links, an
+            // Android OAuth client and every future update are all keyed on
+            // this and on nothing else.
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

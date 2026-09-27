@@ -157,15 +157,13 @@ fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
 /// which Android app processes do not have. (It may still glance at the
 /// environment for defaults these directories override.)
 ///
-/// **Port 0: the OS picks.** This used to ask for 11470 and fall back to an
-/// ephemeral port when that was taken, because stremio-core's default
-/// profile points `streaming_server_url` at `http://127.0.0.1:11470`. It
-/// does not have to: `start_with` reads the bound address back and
-/// `core::pin_to_embedded` rewrites *any* server URL in the
-/// profile to it, whatever the port. So the preferred port only ever bought
-/// a collision -- with a desktop Stremio, with another instance of this app,
-/// with whatever else holds 11470 -- and the fallback that handled it was a
-/// second bind attempt for a number nothing reads.
+/// **Port 0: the OS picks.** stremio-core's default profile points
+/// `streaming_server_url` at `http://127.0.0.1:11470`, but nothing has to
+/// bind that number: `start_with` reads the bound address back and
+/// `core::pin_to_embedded` rewrites *any* server URL in the profile to it,
+/// whatever the port. Asking for 11470 specifically would only risk a
+/// collision -- with a desktop Stremio, with another instance of this app,
+/// with whatever else holds it -- for a number nothing downstream reads.
 fn spawn(config: &StartConfig) -> anyhow::Result<ServerHandle> {
     stream_server::start(server_config(config))
 }
@@ -232,14 +230,11 @@ const DRIVE_REFRESH_ENDPOINT: &str = "https://xtremio-xervice.web.app/refresh";
 /// created, and nothing a stranger on the network could make this device
 /// *do*. A `GET /{infoHash}/{fileIdx}` for a hash the server does not hold
 /// is a `404` at once, no `/create` is mounted, and no control route sits
-/// behind a token to guess. It was not always so -- before stream-server
-/// `388f68b` the stream route was the loopback one and *created* the torrent
-/// with the request's `tr=` trackers, so for the length of a cast any host
-/// on the LAN could make this device join a swarm of its choosing, and
-/// nothing on this side could filter it. `rust/tests/lan_media.rs` pins the
-/// closed contract, with a timing assertion that would catch the old
-/// behaviour coming back: a lookup answers now, a creation waits on
-/// metadata.
+/// behind a token to guess -- without this, any host on the LAN could make
+/// the device join a swarm of its choosing for the length of a cast.
+/// `rust/tests/lan_media.rs` pins the closed contract, with a timing
+/// assertion that tells a lookup (answers now) from a creation (waits on
+/// metadata) apart.
 const LAN_MEDIA_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0);
 
 /// Starts the server if it is not running and returns its base URL

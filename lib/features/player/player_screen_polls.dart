@@ -8,31 +8,20 @@ part of 'player_screen.dart';
 /// torrent's stats, what the server holds of the stream, and the hints it
 /// is told.
 extension _PlayerServerPolls on _PlayerScreenState {
-  /// Whether [url] is a stream this device's embedded server is the one
-  /// serving -- the single rule behind both of the questions this screen
-  /// asks that server about a stream ([_heldStreamUrl] and
-  /// [_startTorrentStats]).
+  /// Whether [url] is a stream this device's embedded server is serving --
+  /// the rule behind both questions this screen asks that server about a
+  /// stream ([_heldStreamUrl] and [_startTorrentStats]).
   ///
-  /// The server answers on the path and the `f=` query alone and says so
-  /// deliberately (`stream_numbers::parse`: the host a caller would have
-  /// to invent to be allowed to ask decides nothing), and the stats route
-  /// takes an info hash with no host in it at all. Neither can tell whose
-  /// stream it is being asked about, so it is whoever asks that has to
-  /// only ask about streams this server serves -- and with a streaming
-  /// server configured on another machine a torrent is not one of them:
-  /// it has an info hash, so [_mediaUrl] sends it straight to that machine
-  /// with `buffer=` and no proxy, while the embedded server here keeps
-  /// running and would answer for the same hash out of *its* own engine.
+  /// The server cannot tell whose stream it is asked about (stream numbers
+  /// answer on the path and `f=` alone; the stats route takes a bare info
+  /// hash), so the asker must only ask about streams it serves. With a
+  /// streaming server configured on another machine a torrent is sent there
+  /// ([_mediaUrl]), while the embedded server here would answer for the same
+  /// hash out of its own engine -- and a stats ask *creates* that engine
+  /// (`ServerClient.torrentStats`), starting an add on this device and
+  /// measuring it instead of the playback on screen.
   ///
-  /// Which is the milder half of it for the stats route, because asking
-  /// creates that engine (`ServerClient.torrentStats`): a film playing off
-  /// somebody else's box would start an add on this device, and the
-  /// panel's speed, seeds and peers rows -- and the start-up and stall
-  /// cards behind them -- would then be measuring that local add rather
-  /// than the playback they are drawn over.
-  ///
-  /// False with no embedded server at all ([_serverBase] null): there is
-  /// no server here to have served anything.
+  /// False with no embedded server ([_serverBase] null).
   bool _servedHere(Uri? url) =>
       url != null && isEmbeddedServer(url, _serverBase);
 
@@ -53,16 +42,14 @@ extension _PlayerServerPolls on _PlayerScreenState {
   }
 
   /// **Which file of the torrent the player is reading, as its URL spells
-  /// it** -- the `{fileIdx}` segment the core wrote, `-1` included.
+  /// it**: the `{fileIdx}` segment the core wrote, `-1` included.
   ///
-  /// Not from `TorrentStatsRequest.fileIdx`, which is the *addon's* -- and
-  /// an addon frequently does not say. The core then writes `-1` and the
-  /// *server* picks the file (the largest video, narrowed by the URL's
-  /// `f=` filters, [_openedFilters]); nothing on this side knows which.
-  /// So the segment is passed through as it is, filters beside it, and the
-  /// server resolves the two by the rule its stream route uses. Treating
-  /// `-1` as "no file" here meant a length was never reported for exactly
-  /// the streams whose addon named no file, which is most of them.
+  /// Not `TorrentStatsRequest.fileIdx`, the addon's, which is often absent:
+  /// the core then writes `-1` and the *server* picks the file (the largest
+  /// video, narrowed by the URL's `f=` filters, [_openedFilters]). So the
+  /// segment is passed through with the filters and the server resolves them
+  /// as its stream route does; treating `-1` as "no file" would report no
+  /// length for most streams.
   int? get _openedFileIdx {
     final segments = _opened?.pathSegments;
     if (segments == null || segments.length < 2) return null;
@@ -122,18 +109,14 @@ extension _PlayerServerPolls on _PlayerScreenState {
   // --- Torrent start-up ----------------------------------------------------
 
   /// Begins polling the server's stats for the torrent [state] plays (see
-  /// [TorrentStatsRequest.forStream]); anything else (a direct HTTP stream)
-  /// shows no overlay. The first request goes out on the first tick, never
-  /// before the engine's `open` has been issued.
+  /// [TorrentStatsRequest.forStream]); a direct HTTP stream shows no
+  /// overlay. The first request goes out on the first tick, never before the
+  /// engine's `open` has been issued.
   ///
-  /// A torrent, and one this device's server is the one serving
-  /// ([_servedHere], read off the URL [_open] has just handed the engine).
-  /// A torrent playing off a streaming server on another machine is not
-  /// ours to ask about: this server would answer out of an engine of its
-  /// own for that hash -- and, asked, would start one. No request means no
-  /// polling, and so no swarm rows, no start-up card and no stall card,
-  /// which is right, because every one of them would be describing that
-  /// local engine and not the playback on screen.
+  /// Only a torrent this device's server is serving ([_servedHere], on the
+  /// URL [_open] has just handed the engine): for one on another machine
+  /// this server would answer from an engine of its own, and start one. No
+  /// request means no swarm rows, no start-up card and no stall card.
   void _startTorrentStats(PlayerState state) {
     _stopTorrentStats();
     final stream = state.selectedStream;
@@ -222,13 +205,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
   }
 
   /// Keeps the polling in step with whoever wants the numbers, from
-  /// [_onMediaLoaded], [_onBuffering], the app going to the background and
-  /// back, and every change of the stats OSD's visibility. Once the media has loaded a torrent's stats are worth
-  /// asking for while playback is stalled (the stall card measures them)
-  /// and, more slowly, while the OSD shows them -- playback being fine is
-  /// no reason for a panel someone opened to freeze. Anything else -- no
-  /// watcher, a backgrounded app, a direct stream, a failure that cleared
-  /// the request -- leaves no timer behind.
+  /// [_onMediaLoaded], [_onBuffering], the app going behind and back, and
+  /// every change of the stats OSD's visibility. Once the media has loaded,
+  /// a torrent's stats are wanted while playback is stalled (the stall card
+  /// measures them) and, more slowly, while the OSD shows them. Anything
+  /// else (no watcher, a backgrounded app, a direct stream, a failure that
+  /// cleared the request) leaves no timer behind.
   void _syncTorrentStats() {
     if (!_mediaLoaded || _torrentStatsRequest == null) return;
     final cadence = _appHidden
@@ -240,13 +222,11 @@ extension _PlayerServerPolls on _PlayerScreenState {
         : null;
     if (cadence == null) {
       _pauseTorrentStats();
-      // Nobody wants numbers any more, but the cast check still wants the
-      // name of the file the server opened, and a torrent that started
-      // before the first poll came back has never been told one. This is
-      // the one ask that would otherwise never happen: with no timer left
-      // there is no later poll to carry it. Not while the app is in the
-      // background, which asks the server for nothing at all; coming back
-      // runs this again.
+      // Nobody wants numbers, but the cast check still wants the name of the
+      // file the server opened, and a torrent that loaded before the first
+      // poll came back has never been told one: this is the one ask that
+      // would otherwise never happen. Not in the background, which asks the
+      // server for nothing; coming back runs this again.
       if (!_appHidden && _serverFilename == null) _pollTorrentStats();
       return;
     }
@@ -321,23 +301,13 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// The URL the stats panel's rows are asked about, or null where there is
   /// nothing this server could answer for.
   ///
-  /// Two things have to be true, and neither of them is "the player has a
-  /// URL". It is [_engineUrl] rather than [_opened] because the URL the
-  /// *engine* was handed is the one the bytes are cached under: for
-  /// everything that is not a torrent [_mediaUrl] wraps the stream in this
-  /// server's `/proxy` route, and the server reads the store to answer
-  /// from off the path -- ask it with the core's bare origin URL and it
-  /// recognises neither store, so the window of every proxied stream would
-  /// be missing.
-  ///
-  /// And it has to be a stream this server is the one serving, which is
-  /// [_servedHere] and is not this row's own rule: the sharing row of a
-  /// film coming off somebody else's box would otherwise be this device's
-  /// committed set and this device's ratio, read out of whatever engine it
-  /// has for that info hash from a download or an earlier viewing.
-  ///
-  /// `buffer=` on the URL is left on: the server ignores every query key
-  /// but `f=`, and stripping it would be a second idea of what the URL is.
+  /// [_engineUrl], not [_opened]: the bytes are cached under the URL the
+  /// engine was handed (a `/proxy` URL for anything not a torrent), and the
+  /// server finds the store by path, so the bare origin would find nothing.
+  /// And only a stream this server serves ([_servedHere]): otherwise the
+  /// sharing row would show this device's numbers for a film coming off
+  /// somebody else's box. `buffer=` stays on: the server ignores every query
+  /// key but `f=`.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
     return _servedHere(url) ? url : null;
@@ -384,22 +354,14 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _streamNumbers = null;
   }
 
-  /// One ask, for [_heldStreamUrl] -- and nothing at all when there is no
-  /// such URL, which is the case for a stream on somebody else's server.
-  /// That decision lives here rather than in [_syncStreamNumbers] because
-  /// what the engine was handed can change under an open panel (a re-open
-  /// for a new buffer window), so it is read again for every ask; the
-  /// timer above ticks either way and costs a returned call.
+  /// One ask, for [_heldStreamUrl], and nothing when there is no such URL.
+  /// Decided per ask because what the engine was handed can change under an
+  /// open panel (a re-open for a new buffer window).
   ///
-  /// An answer that comes back after the stream changed, or after the
-  /// polling stopped, is not shown: it describes a moment nothing on
-  /// screen is in any more. [_opened] is what says which video that was,
-  /// not the URL asked with -- the URL is the address the bytes are held
-  /// under and a re-open rewrites it without the film changing.
-  ///
-  /// Every failure is no rows. The server not running throws here and a
-  /// stream it does not hold answers null; both mean there is nothing to
-  /// draw, and neither is a fault of the playback the panel is over.
+  /// An answer that comes back after the stream changed ([_opened], not the
+  /// URL, says which video), or after the polling stopped, is not shown.
+  /// Every failure is no rows: the server not running and a stream it does
+  /// not hold both mean there is nothing to draw.
   Future<void> _pollStreamNumbers() async {
     final url = _heldStreamUrl;
     final playing = _opened;

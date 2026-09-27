@@ -11,10 +11,10 @@ Map<String, dynamic> loadFixture(String name) =>
 Map<String, dynamic> loadDiscoverFixture() =>
     loadFixture('discover_cinemeta_top.json');
 
-/// The streams the live addons answered with on 2026-09-23 — Torrentio for
-/// The Matrix (`tt0133093`) and Breaking Bad (`tt0903747:1:1`), WatchHub
-/// and Public Domain Movies — trimmed from 122 to one row per field-shape,
-/// plus the WatchHub and Public Domain Movies rows already recorded in
+/// The streams the live addons answered with -- Torrentio for The Matrix
+/// (`tt0133093`) and Breaking Bad (`tt0903747:1:1`), WatchHub and Public
+/// Domain Movies -- trimmed from 122 to one row per field-shape, plus the
+/// WatchHub and Public Domain Movies rows already recorded in
 /// `meta_details_public_domain.json`.
 ///
 /// Each row is `{addon, kind, stream}`, `stream` exactly as it came off the

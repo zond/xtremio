@@ -83,8 +83,8 @@ void main() {
     });
 
     test('an unknown container is refused rather than guessed at', () {
-      // A torrent URL with no filename anywhere: the common case, and the
-      // one where a guess would be a guess about the whole evening.
+      // A torrent URL with no filename anywhere: the common case, where a
+      // wrong guess cannot be corrected once casting has started.
       final result = check();
       expect(refusalOf(result), CastRefusal.unknownContainer);
       expect((result as CastRefused).explanation, contains('conversion'));
@@ -262,8 +262,8 @@ void main() {
     test('a WebM carrying the video WebM actually carries is castable', () {
       // The audio table above is unreachable for a real WebM unless the
       // video check lets VP8 and VP9 through: no WebM in the wild carries
-      // H.264, so a gate that took only H.264 and HEVC refused every one
-      // of them before their audio was ever looked at.
+      // H.264, so a video check limited to H.264 and HEVC would refuse
+      // every one of them before their audio was ever looked at.
       for (final codec in ['vp9', 'vp8']) {
         final result = check(
           filename: 'clip.webm',
@@ -361,8 +361,8 @@ void main() {
     test(
       'its MP3 track does not refuse it, which is the bug from the field',
       () {
-        // The stream the owner tried to cast: an MP4 carrying H.264 video and
-        // an MP3 audio track, which is what mpv reports once it is playing.
+        // An MP4 carrying H.264 video and an MP3 audio track: what mpv
+        // reports once this file is playing.
         final stream = StreamInfo(DevStreams.bigBuckBunnyTorrent);
         final result = check(
           filename: stream.filename,

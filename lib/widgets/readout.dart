@@ -15,12 +15,8 @@ import 'focusable_tile.dart';
 /// the remote jumps over and the page never scrolls to: the viewer walks
 /// from the control above it to the control below it and the words in
 /// between go past. Where such a block is the last thing on the screen, or
-/// is taller than the space left under the control above it, some of it
-/// can never be read at all -- which is how this was found, on a
-/// Chromecast, on what was then the longest read-only block in the app:
-/// the result of a model check in Settings (since removed), a readout of
-/// judgement, agreement, invented films and speed that was exactly what
-/// somebody sits down to read.
+/// is taller than the space left under the control above it, without this
+/// some of it can never be read at all.
 ///
 /// So a block of words becomes a stop. Not a control: select does nothing
 /// here, and there is nothing for it to do.

@@ -15,10 +15,9 @@ void main() {
   testWidgets(
     'the Developer section, Diagnostics first, ships in every build',
     (tester) async {
-      // It used to be `if (!kReleaseMode)`, which is exactly the build the
-      // owner is testing on a phone: the entries that reproduce a playback
-      // failure, and the log that explains one, were missing from the only
-      // build that could hit it. They ship now.
+      // The Developer section ships in every build, release included:
+      // gating it behind kReleaseMode would hide the entries that
+      // reproduce a playback failure from the only build that hits one.
       final core = FakeCoreClient(
         state: {CoreField.ctx: loadCtxLoggedOutFixture()},
       );
@@ -61,11 +60,9 @@ void main() {
     'tools',
     (tester) async {
       // Where the root of every torrent byte on the device is named and
-      // moved. It used to be a developer entry, from when it was a number
-      // to look at while diagnosing a stuck cache; with one root it is
-      // also the answer to "where do my downloads go", which is an
-      // ordinary thing to want and not a thing to find at the bottom of
-      // the screen under Diagnostics.
+      // moved: an ordinary answer to "where do my downloads go", so it
+      // sits with the streaming server, not at the bottom under
+      // Diagnostics.
       //
       // Tall enough that the whole list lays out at once, so the two
       // positions are comparable without scrolling one of them out of the

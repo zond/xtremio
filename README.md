@@ -101,9 +101,9 @@ attaches them to a
 [GitHub Release](https://github.com/zond/xtremio/releases) -- that is where a
 build comes from. One thing about those builds
 is worth knowing before installing, and the release notes say it: the macOS
-build is unsigned. The APKs carry this project's own release key, so anyone
-who installed one from before that key must uninstall first: to Android, a
-signing certificate *is* the app's identity.
+build is unsigned. The APKs carry this project's own release key: to
+Android, a signing certificate *is* the app's identity, so upgrading from a
+build signed with a different key needs an uninstall first.
 
 Building it yourself needs Flutter stable and a Rust toolchain; `make run
 DEVICE=linux` runs it, and the setup, the `make` targets and what a build

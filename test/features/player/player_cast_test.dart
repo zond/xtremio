@@ -558,9 +558,9 @@ void main() {
     testWidgets('a stream off another server on this device is not rebuilt', (
       tester,
     ) async {
-      // The LAN listener serves the embedded server's routes. A stream off
-      // another server on this machine -- the standard one on 11470, say --
-      // was rebuilt on the listener anyway, and the receiver was handed a
+      // The LAN listener serves the embedded server's routes, so a stream
+      // off another server on this machine -- the standard one on 11470,
+      // say -- must not be rebuilt on it: the receiver would be handed a
       // path on a server that does not serve it.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
@@ -620,8 +620,9 @@ void main() {
     testWidgets('play and pause reach the receiver, not the engine here', (
       tester,
     ) async {
-      // A phone answering them itself played the film locally under the
-      // cast: two playbacks of one film, one of them audible in the room.
+      // A phone that answered them itself would play the film locally
+      // under the cast too: two playbacks of one film, one of them
+      // audible in the room.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final harness = castHarness(cast: cast);
@@ -834,9 +835,10 @@ void main() {
 
   group('a load the platform throws out of', () {
     testWidgets('ends the session and puts the film back here', (tester) async {
-      // Nothing awaits `_startCast`, so an error out of `load` used to land
-      // nowhere: the screen stayed a remote with the engine paused and the
-      // listener open, no wait armed, and only Stop left to press.
+      // Nothing awaits `_startCast`, so `load`'s error is caught explicitly:
+      // left uncaught, it would leave the screen a remote with the engine
+      // paused and the listener open, no wait armed, and only Stop left to
+      // press.
       final lines = captureDiagnostics();
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom])
@@ -879,10 +881,9 @@ void main() {
     // notice of at all. The receiver the whole feature exists for reports a
     // healthy session and `Unknown player state:` in its own log, which
     // `GoogleCastClient` folds into [CastPlayerState.idle] -- so a check
-    // that disarmed on anything but buffering disarmed on the one case it
-    // was written for. Silence is on the list because it is what a fake
-    // that emits nothing reports, and so is the only case the old tests
-    // ever reached.
+    // that disarmed on anything but buffering would disarm on the one case
+    // it exists for. Silence is on the list too, as the shape a fake that
+    // emits nothing reports, distinct from what a real receiver ever does.
     for (final reported in <CastPlayerState?>[
       null,
       ...CastPlayerState.values,
@@ -1046,10 +1047,10 @@ void main() {
 
   // A container is played as the film inside it, and so is cast: what the
   // receiver is handed and what the compatibility check judges are both the
-  // member, not the archive around it. Before this, `_startCast` handed the
-  // receiver `_opened` -- the container -- and judged it by the container's
-  // name, so every one of these was refused on the strength of an extension
-  // the viewer never chose ("a Chromecast plays MP4 and WebM files; this
+  // member, not the archive around it. Without this, `_startCast` would
+  // hand the receiver the container and judge it by the container's own
+  // name, refusing every one of these on the strength of an extension the
+  // viewer never chose ("a Chromecast plays MP4 and WebM files; this
   // stream is a .rar file").
   group('a container casts as the film inside it', () {
     const unrecognized = 'Failed to recognize file format.';
@@ -1141,11 +1142,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        // A link the player fetches through the server's own `/proxy`,
-        // which is never on the LAN listener and was the refusal this
-        // stream used to get. The member is on the archive stream routes,
-        // which are -- and the credentials the container needed stayed on
-        // the loopback side, in the session `/create` made.
+        // The container is a link the player fetches through the server's
+        // own `/proxy`, which is never on the LAN listener and so cannot
+        // cast; the member is on the archive stream routes, which are --
+        // and the credentials the container needed stayed on the loopback
+        // side, in the session `/create` made.
         final member = Uri.parse(
           '${PlayerHarness.recordedServerBaseUrl}/zip/stream/abc123/'
           'Big.Buck.Bunny.1080p.x264.AAC.mp4',
@@ -1234,12 +1235,12 @@ void main() {
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
       // The failure that translates the stream clears everything the
       // torrent was known by, [_serverFilename] included, and the reopen
-      // arms the polling again -- so right after a container is
-      // translated this screen is, on the old rule, "a torrent whose
-      // file the server has not named". It is nothing of the kind: the
-      // server has opened the container and said what is inside it, and
-      // this member is what it said. A member whose name says nothing is
-      // therefore an unknown file and not a wait, which would never end.
+      // arms the polling again. That looks, naively, like "a torrent whose
+      // file the server has not named" right after the translation, but it
+      // is nothing of the kind: the server has opened the container and
+      // said what is inside it, and this member is what it said. A member
+      // whose name says nothing is therefore an unknown file, not a wait
+      // that would never end.
       const container = 'Night.of.the.Living.Dead.1080p.x264.AAC.rar';
       final harness = torrentContainer(
         container: container,
@@ -1482,8 +1483,9 @@ void main() {
 
     testWidgets('the next-episode keys do nothing while casting, like the '
         'button', (tester) async {
-      // The top bar's Next is disabled while a cast runs; N and the remote's
-      // next-track key used to go round it and move on anyway.
+      // The top bar's Next is disabled while a cast runs; without a
+      // matching guard on the keys, N and the remote's next-track key
+      // would go round it and move on anyway.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final harness = castHarness(cast: cast);

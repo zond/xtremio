@@ -145,8 +145,8 @@ void main() {
       ),
     );
 
-    // The status line is where the embedded server's URL is shown: there
-    // is no choice of server to show it on any more.
+    // There is one server, embedded: its URL shows only in the status
+    // line, with no separate server choice to show it on.
     expect(find.text('http://127.0.0.1:11470/'), findsNothing);
     expect(find.text('Connecting… · http://127.0.0.1:11470/'), findsOneWidget);
     expect(find.text('v25'), findsOneWidget);

@@ -9,10 +9,10 @@ import '../../support/player_harness.dart';
 /// **Waiting is not the same question as mpv buffering.**
 ///
 /// mpv's flag means its demuxer cache ran dry during playback. It does not
-/// cover a read blocked in the server while mpv seeks, and on 2026-09-12
-/// that is exactly what the viewer got: the flag cleared when the container
-/// index arrived, the overlay came down, and nothing played for three and a
-/// half minutes. There is no second stall anywhere in that log.
+/// cover a read blocked in the server while mpv seeks: as soon as the
+/// container index arrives the flag clears and the overlay comes down,
+/// even though nothing plays for minutes afterwards -- three and a half,
+/// measured -- with no second stall of mpv's own to show for it.
 void main() {
   testWidgets('a position that stops moving brings the overlay back', (
     tester,
@@ -117,10 +117,11 @@ void main() {
   });
 
   testWidgets('a frame or two is not playing again', (tester) async {
-    // What froze a 4K remux on the television for seventy seconds: the
-    // position moved a fraction of a second, the flag cleared, the log
-    // said "playing again", and the detector -- counting from zero
-    // again -- never spoke about the minute that followed.
+    // A position move of a fraction of a second clears the stuck flag and
+    // logs "playing again", resetting the detector's count -- without a
+    // check for real progress, a freeze measured at seventy seconds on a
+    // 4K remux would go unreported for the minute that followed such a
+    // twitch.
     final lines = captureDiagnostics();
     final harness = PlayerHarness();
     await harness.pump(tester);

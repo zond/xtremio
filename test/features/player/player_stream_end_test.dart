@@ -17,8 +17,8 @@ import '../../support/player_harness.dart';
 /// as an end of file rather than an error, and our own server routinely
 /// takes longer than that to produce the next piece of a torrent on a thin
 /// swarm. Believed, that "ending" marks a film watched ten seconds in and
-/// media_kit's next `play()` seeks back to 0 -- which is what "it plays ten
-/// seconds and starts over" was.
+/// media_kit's next `play()` seeks back to 0 -- so without this, a stall
+/// plays ten seconds of the film and starts it over.
 void main() {
   /// Every `Ended` the core was told about.
   int endings(PlayerHarness harness) => harness.core.dispatched

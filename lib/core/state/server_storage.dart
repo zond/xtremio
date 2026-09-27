@@ -250,12 +250,10 @@ class EvictionReport {
   /// [CacheUsage.limitBytes]: null only when nothing capped the cache at
   /// all.
   ///
-  /// It was an `int` with 0 for "no limit" while the only limit was the
-  /// `cacheSize` setting, which nobody sets to nothing. The device-derived
-  /// cap reaches 0 on its own -- any volume whose occupancy plus free space
-  /// is under the server's floor gets exactly that -- and a cap of 0 is the
-  /// tightest there is, so reading it as "unlimited" said the opposite of
-  /// the truth on the device that most needed the answer.
+  /// Null, not zero, means unlimited: a device-derived cap legitimately
+  /// reaches 0 when a volume's occupancy plus free space is under the
+  /// server's floor, and reading that as "unlimited" would say the
+  /// opposite of the truth on the device that most needed the answer.
   final int? limit;
 
   /// Whether the run ended still over the limit. Not a failure: what is

@@ -289,12 +289,12 @@ void main() {
   testWidgets('the menu ranks the sheet it draws, and no caller can rank '
       'less of it', (tester) async {
     useWideViewport(tester);
-    // The probe that caught the note overclaiming. Handed the ranking of
-    // the addons' rows alone -- Swedish and Danish -- the menu drew "The
-    // 2 languages on offer here that you pick most often" with English,
-    // picked more often than either, three rows above as the video's own
-    // track. Nothing can hand a ranking down any more: the menu is given
-    // the counts and ranks what it has on offer, both sections of it.
+    // A ranking of only the addons' rows -- Swedish and Danish -- would
+    // draw "The 2 languages on offer here that you pick most often" while
+    // English, picked more often than either, sits three rows above as
+    // the video's own track. So no caller hands a ranking down: the menu
+    // is given the counts and ranks what it has on offer, both sections
+    // of it.
     final groups = groupSubtitlesByLanguage([
       addonFile('swe', 'https://subs.example.org/sv.srt'),
       addonFile('dan', 'https://subs.example.org/da.srt'),

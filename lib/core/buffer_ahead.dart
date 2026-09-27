@@ -11,9 +11,9 @@
 /// **The first three are measured in seconds of the film, not in bytes.**
 /// The server measures the rate bytes are really going out at and buys that
 /// many seconds of buffer, so the same choice means the same thing on a
-/// 2 Mbps documentary and a 4K feature. It used to be a fraction of the
-/// device's cache size, which meant a viewer who gave the app more storage
-/// silently bought a bigger mobile-data bill.
+/// 2 Mbps documentary and a 4K feature -- sizing by a fraction of the cache
+/// instead would grow with a viewer's storage, not their bitrate, and
+/// silently inflate their mobile-data bill.
 ///
 /// [maximum] is the exception only in degree: it asks for a day of film,
 /// which no film reaches, so where the cache has room it keeps the whole

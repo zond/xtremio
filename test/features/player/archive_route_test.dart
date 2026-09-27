@@ -250,8 +250,8 @@ void main() {
 
     test('a torrent the redirect route cannot select in is indexed by the '
         'query form, which is where its refusal is', () async {
-      // As the server stands (master 52d25dc) `GET /{fmt}/stream/{key}`
-      // only *looks up* a session, so a `torrent:` key it has never seen
+      // `GET /{fmt}/stream/{key}` only *looks up* a session, so a
+      // `torrent:` key it has never seen
       // is a 404 and no member is selected. The query form does create the
       // session, which is what turns a Blu-ray image's metadata partition
       // from "can't be played" into the sentence that says why.

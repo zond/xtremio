@@ -22,10 +22,8 @@ import '../support/tv.dart';
 /// A linked Google Drive file that Cinemeta matched to a title is **one more
 /// source on that title's ordinary details page** -- beside whatever the
 /// addons answered, in whichever of the two layouts the viewer chose, and
-/// played by a press like anything else there.
-///
-/// Before this, pressing a matched file in the library's Remote list opened
-/// this screen and the file was nowhere on it, so matching a file made it
+/// played by a press like anything else there. Without this, a matched
+/// file is nowhere on the screen it opens to, which makes matching it
 /// *harder* to play than leaving it unmatched.
 ///
 /// **What it is not** is an addon. It is not counted among the addons that

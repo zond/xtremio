@@ -277,10 +277,10 @@ void main() {
 
     test('a completion heard while a listing is taken is not lost', () async {
       // A listing is a round trip, and the ticker's last row can land
-      // inside it. Put in the registry's place, the listing threw that row
-      // away, and nothing sends it again: the Rust side sends a row only
-      // when it changes, and stops once nothing is unfinished. The
-      // service stayed up at 25 % until the process died.
+      // inside it and be overwritten by the older snapshot the listing
+      // returns. Nothing resends it -- the Rust side sends a row only
+      // when it changes -- so without this the service would sit at
+      // its last progress until the process dies.
       final service = await running();
       final listed = Completer<void>();
       client.listPending = listed.future;
@@ -539,12 +539,12 @@ void main() {
     });
 
     test('and neither is one whose pieces are gone', () {
-      // What the boot reconciliation leaves behind when the server turns
-      // out not to hold a finished download any more. Further from a
-      // download in progress than an errored one: nothing is being fetched
-      // for it and nothing will be until the user asks. Counting it would
-      // put a foreground service up, and a "Waiting to start" notification,
-      // for a row nothing is working on.
+      // What the boot reconciliation leaves behind when the server does
+      // not hold a finished download. Further from a download in progress
+      // than an errored one: nothing is being fetched for it and nothing
+      // will be until the user asks. Counting it would put a foreground
+      // service up, and a "Waiting to start" notification, for a row
+      // nothing is working on.
       final gone = DownloadView({
         'metaId': 'tt2',
         'videoId': 'tt2',

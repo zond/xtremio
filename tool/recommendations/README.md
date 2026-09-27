@@ -8,11 +8,9 @@ decide which model it asks, and with what question.
 
 Nothing here runs in CI or in the app build. It reaches the internet, it
 costs money at some providers, and it is run by hand when the question
-comes up again -- which it will, because the model catalogues move: in one
-afternoon of measuring, `gemini-2.5-flash` and `gemini-2.5-flash-lite`
-began answering *404, no longer available to new users*, `claude-sonnet-5`
-began rejecting `temperature` as deprecated, and models appeared and
-disappeared from the paid tier while we watched.
+comes up again, because the model catalogues move: a model can go *404, no
+longer available to new users*, a parameter can become deprecated overnight,
+and models appear and disappear from the paid tier without warning.
 
 ## The answer keys
 
@@ -35,8 +33,7 @@ relevance alone would recommend the first two warmly and bury the third.
 Four of the seven targets are obscure on purpose -- *Avalon*, *The American
 Astronaut*, *Wave Twisters*, *The Call of Cthulhu*. The other three are
 controls. Every model scores well on the controls; the obscure four are
-where they separate, and where one of them turned out to be no better than
-chance.
+where they separate, and where one of them is no better than chance.
 
 Each entry carries `what` (what the film is, for a reader who has not seen
 it), `why` (the connection, and a clause stating the tension outright when
@@ -50,13 +47,10 @@ research: see **Pooling** below.
 
 **`recommend_bench.py` asks what the app asks**, and it is on the reader
 to keep it that way: the prompt and the system instruction are the ones
-in `xtremio-xervice/functions/similar.js`, word for word (they lived in
-`lib/features/similar/similar_titles.dart` until the ask moved to the
-server). Change the function, change the script, re-measure, and say here
-what moved. Measuring one question while
-shipping another is how a table of numbers quietly stops describing the
-app, which is what happened between the first measurements and the day
-the app learned to ask about series.
+in `xtremio-xervice/functions/similar.js`, word for word. Change the
+function, change the script, re-measure, and say here what moved --
+measuring one question while shipping another is how a table of numbers
+quietly stops describing the app.
 
 `ASK_FOR_ALSO_SERIES=0` asks the old film-only question instead, so the
 cost of admitting series can be measured rather than argued about. The
@@ -148,9 +142,9 @@ any model tested, the most self-consistent, and under three seconds.
 
 ## What admitting series cost, 2026-09-22 (later the same day)
 
-The app's question changed to ask for films *and* series. `ASK_FOR_ALSO_SERIES`
-makes that a switch, so the two questions can be put to the same model on
-the same afternoon with the same key:
+The app now asks for films *and* series. `ASK_FOR_ALSO_SERIES` makes that a
+switch, so the two questions can be put to the same model with the same
+key, for comparison:
 
 | `gemini-3.1-flash-lite` | series admitted | film-only |
 |---|---|---|
@@ -175,18 +169,17 @@ now rest on almost all of what the model said rather than seven eighths
 of it.
 
 **The two are indistinguishable**, and that is the finding. One run each is
-nowhere near enough to call +0.17 better than +0.15 -- this benchmark's
-leader changed on every run until it was given repeats and a paired sign
-test, which is why the table above exists and this one is only a check
-that nothing collapsed. Nothing collapsed.
+nowhere near enough to call +0.17 better than +0.15 -- a single run is not
+reliable evidence, which is why the table above uses repeats and a paired
+sign test, and this one is only a check that nothing collapsed. Nothing
+collapsed.
 
 Three cautions, none of them about series:
 
 * **13 suggestions are still unrated** and left out of the scoring, which
-  flatters a model that wanders. That is down from 27 and 20 before this
-  round of pooling, and it never reaches zero: a new run turns up new
-  titles. It is the *size* of the unrated remainder that decides how much
-  a number can be trusted.
+  flatters a model that wanders, and it never reaches zero: a new run turns
+  up new titles. It is the *size* of the unrated remainder that decides how
+  much a number can be trusted.
 * **The film-only column is below this README's own row for the same
   model on the same question** (+0.15 against +0.19). Either run-to-run
   noise, or `gemini-3.1-flash-lite` has moved behind a stable name. The
@@ -194,36 +187,27 @@ Three cautions, none of them about series:
   (`xtremio-xervice/functions/similar.js`) and every failure is classified
   rather than fatal.
 * **`The Call of Cthulhu` is below chance on tone** (0.36 against 0.41),
-  and it was in every run all day. The model hears "Lovecraft" and misses
-  "silent, 47 minutes, 1920s pastiche". The obscure targets are where this
-  model fails, and admitting series changed that neither way.
+  consistently. The model hears "Lovecraft" and misses "silent, 47 minutes,
+  1920s pastiche". The obscure targets are where this model fails, and
+  admitting series does not change that either way.
 
-Four bugs were found by running it, all of which had made earlier runs
-worse than useless:
+Four invariants these scripts hold now, each guarding a failure that would
+otherwise pass as a real result:
 
-* `recommend_bench.py` and `vibe_sort.py` globbed `gold_*.json` beside
-  themselves after the keys moved into `keys/`. The bench printed
-  `0 answer keys` and then "answered nothing" per model -- which reads
-  like a result. Zero keys is an error now.
-* `exists_on_tmdb` searched `/search/movie` only. Correct while the
-  question said "films only"; against the question as it is asked now it
-  would have scored every correct series as an invented title and blamed
-  the wording for it. It searches `/search/tv` as well.
-* **`norm()` matched one spelling of a title and the keys hold several.**
-  A model naming a film the key already rates was scored as naming
-  something nobody had rated: dropped from the result and sent to the
-  pool to be rated a second time. Three ways it happened, ~9% of the
-  entries between them: accents were deleted rather than folded, so
-  `Caché` and `Cache` were different films (10 entries); the `aka` the
-  keys record was never read (17); and a subtitle had to match exactly, so
-  `Tetsuo` missed `Tetsuo: The Iron Man` (22). Every spelling is indexed
-  now -- title, `aka`, the part before a colon, and the part before a
-  trailing `or (...)`.
-* **`fold_pool.py` deduped on that same single spelling**, so a rated
-  suggestion under a variant name was appended beside the entry it
-  duplicated, rated twice and counted twice. It folds on every spelling
-  now. One duplicate (`Birdman`) got in before the rule covered the
-  `or (...)` form and was removed by hand.
+* `recommend_bench.py` and `vibe_sort.py` glob `gold_*.json` from `keys/`;
+  zero keys found is an error, not `0 answer keys` followed by "answered
+  nothing" per model, which reads like a real result.
+* `exists_on_tmdb` searches `/search/tv` as well as `/search/movie`, since
+  the question now allows series and a movie-only search would score every
+  correct series as an invented title.
+* **`norm()` indexes every spelling of a title** -- the title, `aka`, the
+  part before a colon, and the part before a trailing `or (...)` -- so a
+  model naming a film a key already rates is never scored as naming
+  something unrated (unfolded accents, an unindexed `aka`, or an exact-match
+  subtitle check caused this in about 9% of entries).
+* **`fold_pool.py` dedupes on every spelling too**, so a rated suggestion
+  under a variant name is never appended beside the entry it duplicates and
+  counted twice.
 
 ## Still open
 

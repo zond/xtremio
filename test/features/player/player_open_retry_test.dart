@@ -12,9 +12,9 @@ import '../../support/player_harness.dart';
 /// An `open` that fails while the torrent is still starting up.
 ///
 /// The server answers the media route with an error (or the connection
-/// fails) while it is still resolving metadata or checking data, mpv gives
-/// up on the first refusal, and the player used to show "Playback failed"
-/// for a stream that would have played a second later.
+/// fails) while it is still resolving metadata or checking data, and mpv
+/// gives up on the first refusal. Without a retry, the player would show
+/// "Playback failed" for a stream that plays a second later.
 void main() {
   final overlay = find.byType(TorrentStartupOverlay);
   final failure = find.textContaining('Playback failed');
@@ -138,7 +138,7 @@ void main() {
     );
     expect(find.text('Playback failed: $openFailure'), findsOneWidget);
     expect(overlay, findsNothing);
-    // The polling ends with the failure, as it always did.
+    // The polling ends with the failure.
     final polled = harness.torrentStats.requests.length;
     await tester.pump(PlayerScreen.torrentStatsInterval * 4);
     expect(harness.torrentStats.requests, hasLength(polled));

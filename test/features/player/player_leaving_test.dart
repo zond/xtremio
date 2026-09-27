@@ -14,19 +14,12 @@ import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// What may act on the player between the press that leaves and the
-/// teardown coming back.
-///
-/// The screen used to be gone by then: it popped at once and released the
-/// engine two frames later, so there was nobody left to answer an event.
-/// Waiting for the teardown with the picture still in the tree is right,
-/// and it puts the screen somewhere it has never been -- alive, built,
-/// subscribed, and holding an engine that is being released. Every handler
-/// it still has is a way for the last seconds of a session to change what
-/// the viewer comes back to.
-///
-/// So the rule is not a guard per handler: the screen lets go of
-/// everything that could reach the player before it awaits anything, and
-/// each test here names one thing that used to get through.
+/// teardown coming back: the screen stays alive, built, subscribed, and
+/// holding an engine that is being released, so every handler it still has
+/// is a way for a session's last seconds to change what the viewer comes
+/// back to. See docs/ARCHITECTURE.md, "Leaving the player", and
+/// [_detach], which ends every such handler in one act rather than a guard
+/// per handler; each test here names one it reaches.
 ///
 /// What letting go cannot reach is an `await` that was already out when
 /// the press landed. That half is `player_leaving_awaits_test.dart`.
@@ -237,14 +230,12 @@ void main() {
   testWidgets('a mouse moved over the picture during the wait arms nothing', (
     tester,
   ) async {
-    // The last door left open. The `MouseRegion` sits above the
-    // `IgnorePointer` that covers everything else, so a hover still
-    // arrives while the screen is waiting -- and it used to bring the OSD
-    // back up, re-arm the fade timer that [PlayerScreen._detach] had just
-    // cancelled, and start the stats hover timer. Both timers then
-    // outlived the screen, which is the shape the detach exists to
-    // prevent: the test binding is what says so, since a timer still
-    // pending when the tree has gone fails the test on its own.
+    // The `MouseRegion` sits above the `IgnorePointer` that covers
+    // everything else, so a hover still arrives while the screen is
+    // waiting. Without [_detach] having cancelled the fade timer first, a
+    // hover would re-arm it and start the stats hover timer, both then
+    // outliving the screen -- a timer still pending when the tree is gone
+    // fails the test on its own.
     final wedged = Completer<void>();
     final harness = await pumpWatching(tester, wedged);
 

@@ -6,12 +6,11 @@ import 'package:xtremio/core/core.dart';
 import '../support/fake_prefs_client.dart';
 
 /// Where "More like this" keeps what the server has already answered, and
-/// what became of the two preferences it used to keep beside it.
+/// wipes the leftover `similarKey`/`similarModel` prefs an older build
+/// stored locally.
 ///
-/// An older build asked Gemini itself, with a key the viewer pasted and a
-/// model they could name. Neither means anything now, and the key is auth
-/// material: a file that still holds one after an upgrade is a credential
-/// lying on the device that nothing reads.
+/// The key is auth material: a preferences file that still holds one is a
+/// credential on the device that nothing reads.
 void main() {
   test('the version stamped on a kept answer is the one the server asks '
       'by', () {

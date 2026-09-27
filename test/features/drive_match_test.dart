@@ -273,10 +273,8 @@ void main() {
     test(
       'a search that throws is not the same as a catalogue that said no',
       () async {
-        // These used to be the same answer -- `null`, both of them -- and a
-        // file that hit a slow Cinemeta once stayed unmatched for the rest
-        // of the run with nothing on screen to say why. Measured on a real
-        // phone, on a file that matched perfectly one Reload later.
+        // See the retry policy below ('a catalogue that could not be
+        // reached is asked again...') for why the distinction matters.
         await expectLater(
           matchDriveFile(
             'The.Matrix.1999.mkv',

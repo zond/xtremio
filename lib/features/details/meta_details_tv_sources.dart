@@ -280,12 +280,11 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// What a model says this title is like, as a rung below the sources.
   ///
   /// **Everything here is about a row that arrives late.** The answer
-  /// takes seconds when it comes at all, by which time the viewer
-  /// has read the screen and moved the remote, and this screen has been
-  /// broken twice already by something appearing under a viewer who was
-  /// using it (see [_takeTheRemoteToTheLastUsed] and
-  /// [FocusableTile._autofocus]). Three things keep it still, and none of
-  /// them is optional:
+  /// takes seconds when it comes at all, by which time the viewer has read
+  /// the screen and moved the remote, and something appearing under a
+  /// viewer who is using the screen breaks it (see
+  /// [_takeTheRemoteToTheLastUsed] and [FocusableTile._autofocus]). Three
+  /// things keep it still, and none of them is optional:
   ///
   ///  * **The header is there from the first frame.** Whether there is a
   ///    rung at all is decided by whether the title is a film or a
@@ -376,10 +375,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// own at the foot of the ladder; null when there is nothing to account
   /// for.
   ///
-  /// A rung and not one more pill among the resolutions, which is what it
-  /// was: it is not a group of sources, and its one line -- how many
-  /// failed, how many had nothing -- is exactly the shape a rung header
-  /// has and nothing a 36 dp pill could carry. The row underneath carries
+  /// A rung and not one more pill among the resolutions: it is not a
+  /// group of sources, and its one line -- how many failed, how many had
+  /// nothing -- is exactly the shape a rung header has and nothing a
+  /// 36 dp pill could carry. The row underneath carries
   /// the names, what each dead addon said, and the two things worth doing
   /// about one: opening its details, whose manifest fetch is the
   /// reachability test (select), and uninstalling it (a hold, since a
@@ -454,19 +453,17 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// of what the addon sent, the parse of it as pills, and a quiet line of
   /// provenance under both.
   ///
-  /// **The release leads.** The engine has no field for it, and what the
-  /// list showed instead was the stream's `name` -- which for Torrentio is
-  /// the addon and the quality, so four cards read "Torrentio" four times
-  /// and the thing that actually tells them apart was nowhere on the
-  /// screen. [StreamPresentation.lead] is where it comes from now, and
-  /// [StreamPresentation.rest] is everything else the addon wrote, which
-  /// used to be thrown away.
+  /// **The release leads.** The engine has no field for it -- the
+  /// stream's `name` is the addon and the quality, so four Torrentio
+  /// cards would otherwise read "Torrentio" four times with nothing to
+  /// tell them apart. [StreamPresentation.lead] derives it instead, and
+  /// [StreamPresentation.rest] is everything else the addon wrote, kept
+  /// on the card rather than dropped.
   ///
-  /// **Nothing is dropped to save room any more.** The card used to say
-  /// one line of facts and hand the rest -- the release tags, the other
-  /// addons offering the same file -- to a readout under the row. The
-  /// readout is gone ([TvSourceCard]): it described one card at a time,
-  /// and a viewer walking a row of cards is comparing them.
+  /// **Nothing is dropped to save room.** The card carries every tag and
+  /// note itself, with no separate readout under the row: that would
+  /// describe one card at a time, while a viewer walking a row of cards
+  /// is comparing them.
   ///
   /// The one thing still decided here is which of the two the pill above
   /// already says. The pills are the resolutions in the sectioned layout

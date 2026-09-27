@@ -17,9 +17,9 @@ import io.flutter.plugin.common.MethodChannel
  * select more than one file.
  *
  * The web Google Picker gates selection on a Ctrl/Cmd key, so a phone holds
- * exactly one file — issuetracker.google.com/issues/334994030, reported in
- * April 2024 and still open. This path was measured at seven files in one
- * go. A phone without this app still gets the web page, so both exist.
+ * exactly one file (issuetracker.google.com/issues/334994030). This path
+ * was measured at seven files in one go. A phone without this app still
+ * gets the web page, so both exist.
  *
  * Two things about the request are load-bearing and neither is obvious:
  *

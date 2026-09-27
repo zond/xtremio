@@ -8,15 +8,12 @@ import '../widgets/focusable_tile.dart';
 /// control is clearly marked without opting in to anything.
 ///
 /// [FocusHighlight] is worn by what the app builds -- a poster, a menu row,
-/// a rail destination -- and every one of those had to be wrapped by hand.
-/// Material's own controls could not be, and for a long time were not: the
-/// setting reached exactly one widget in the app, so a settings row, a
-/// dialog's buttons, the ⋮ menu on an installed addon and every control on
-/// Downloads and Diagnostics wore Flutter's default focus tint -- an
-/// overlay of about a tenth of the surface colour, no outline at all, and
-/// deaf to the switch. Across a room on a projector that is not a focus
-/// indicator; it is the same class of fault as a button that is drawn and
-/// dead, and there were twenty files of it.
+/// a rail destination -- and each is wrapped by hand. Material's own
+/// controls cannot be: without this floor a settings row, a dialog's
+/// buttons, an addon's ⋮ menu and every control on Downloads and
+/// Diagnostics would wear Flutter's default focus tint -- an overlay of
+/// about a tenth of the surface colour, no outline at all, and deaf to the
+/// switch -- invisible across a room on a projector.
 ///
 /// **One stroke over a lift, not two strokes.** [FocusRing] paints strokes
 /// of opposite luminance because it is drawn over poster art and video:

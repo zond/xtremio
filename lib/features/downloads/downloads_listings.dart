@@ -3,15 +3,15 @@ import '../../core/core.dart';
 /// Takes listings of the registry while the progress feed keeps arriving,
 /// and answers each with what the feed said while it was being taken.
 ///
-/// A listing is a round trip over FFI, and a progress row can land inside
-/// it. The row describes the registry as it is; the listing that comes
-/// back after it can describe the registry as it was before. Put in the
-/// registry's place, that listing threw the row away. Nothing sends it
-/// again: the Rust side sends a row only when it differs from the one it
-/// sent last, and its ticker stops once nothing is unfinished. So the row
-/// lost was usually the last one, a download completing, and whoever held
-/// the registry went on believing it was at 99 % -- the foreground service
-/// held the process up for it until the process died.
+/// A listing is a round trip over FFI, so a progress row can land and
+/// describe the registry as it now is while a listing already in flight
+/// still describes how it was before that row; overwriting the registry
+/// with such a listing would throw the row away. Nothing resends it: the
+/// Rust side sends a row only when it differs from the last one sent, and
+/// its ticker stops once nothing is unfinished -- so the row lost is
+/// usually the last one, a download completing, leaving the registry (and
+/// the foreground service waiting on it) believing it is still short of
+/// done.
 ///
 /// Laying the rows heard during a listing over its answer is safe whichever
 /// side of the listing they were sent on: a row carries the entry's numbers

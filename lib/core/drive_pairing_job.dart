@@ -1,27 +1,21 @@
 /// Finishing a Google Drive pairing, somewhere that is not a screen.
 ///
-/// **Why this is not on the pairing screen any more.** The service holds a
-/// finished pairing for about ten minutes and hands it over exactly once, to
-/// whoever asks for it. While the only thing that asked was the screen the
-/// viewer had started from, backing out of that screen threw the pairing
-/// away — a Google sign-in, a consent, and every file they had picked, gone
-/// with no error anywhere because nothing had failed. That happened three
-/// times in one afternoon before it was understood.
+/// **Owned by the account, not the screen that started it.** The service
+/// holds a finished pairing for about ten minutes and hands it over exactly
+/// once, to whoever asks; a screen that asked and was then backed out of
+/// would throw the pairing away with no error anywhere, since nothing had
+/// failed. The credential and file list outlive any widget here, so backing
+/// out of the pairing screen is no longer destructive -- a spinner that
+/// means "this is still happening" rather than "you must stay here".
 ///
-/// So the work is the *account's*, which outlives any widget: the credential
-/// and the file list were always going to be, and the screen was only ever
-/// the thing that happened to start it. Backing out now stops being
-/// destructive, which is the whole point — a spinner that means "this is
-/// still happening" rather than "you must stay here".
-///
-/// **And the id is written down.** A job in memory survives a screen; it
-/// does not survive the process being killed. The session id alone is enough
-/// to collect a pairing that already reached the service, so it is kept in
-/// the preferences and tried again on the next library — see
-/// `PrefsClient.drivePendingSessionKey`. The one thing that cannot be
-/// recovered is a process that died *between* the picking and the handover,
-/// because the one-time code goes with it; that window is a second wide,
-/// against the ten minutes that were being lost.
+/// **The id is written down.** A job in memory survives a screen but not
+/// the process being killed. The session id alone is enough to collect a
+/// pairing that already reached the service, so it is kept in the
+/// preferences and tried again on the next library -- see
+/// `PrefsClient.drivePendingSessionKey`. Only a process that dies *between*
+/// the picking and the handover cannot be recovered, because the one-time
+/// code goes with it; that window is a second wide, against the ten minutes
+/// that would otherwise be lost.
 library;
 
 import 'dart:async';
@@ -80,14 +74,10 @@ class DrivePairingJob extends ChangeNotifier {
   ///
   /// **What is never in them.** No refresh token, no access token, no
   /// server auth code -- not their values and not their lengths -- and no
-  /// whole session id. The id is a credential for as long as its pairing
-  /// waits: the collect that hands over the refresh token asks for nothing
-  /// else ([DrivePairingSession.toString]). Its first eight characters are
-  /// written ([logId]), because they are what makes a log line join up
-  /// with a row in the service's records -- every pairing fault in this app
-  /// so far was diagnosed by matching those two, and doing it without these
-  /// lines took an hour each time -- and eight characters of a uuid collect
-  /// nothing.
+  /// whole session id: it is a credential while its pairing waits (see
+  /// [DrivePairingSession]). Its first eight characters are written
+  /// ([logId]), enough to join a log line to a row in the service's
+  /// records; eight characters of a uuid collect nothing.
   static const String target = 'drive';
 
   /// The part of [sessionId] a log line carries: its first eight

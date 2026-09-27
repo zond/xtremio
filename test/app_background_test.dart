@@ -26,15 +26,12 @@ Future<void> cacheOneImage(WidgetTester tester) async {
   );
 }
 
-/// What the app holds in decoded images, and what it lets go of when it is
-/// put in the background.
+/// What the app holds in decoded images, and what it releases when it is
+/// backgrounded.
 ///
-/// Both numbers come from the owner's Chromecast with Google TV: 2 GB of RAM
-/// for the whole system, and Android's low-memory killer taking the app
-/// twice in one day at 311-379 MB resident the moment it was backgrounded.
-/// Flutter's own image cache stops at 100 MiB and nothing in the app used
-/// to lower it, and a backgrounded app used to hold exactly what it held in
-/// the foreground.
+/// Flutter's own image cache stops at 100 MiB, too high for a 2 GB Android
+/// TV: the low-memory killer has taken the app at 311-379 MB resident while
+/// backgrounded.
 void main() {
   setUp(() {
     final ceiling = imageCache.maximumSizeBytes;
@@ -45,7 +42,7 @@ void main() {
   });
 
   testWidgets('the bootstrap caps the image cache at 16 MiB', (tester) async {
-    // Flutter's own ceiling, which is what the app ran under until now.
+    // Flutter's default ceiling, before bootstrap lowers it.
     expect(imageCache.maximumSizeBytes, 100 << 20);
     final core = emptyBoardCore();
     final downloads = FakeDownloadsClient();

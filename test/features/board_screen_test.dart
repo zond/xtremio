@@ -57,8 +57,8 @@ void main() {
           .name;
 
   /// The extent the rows are laid out at: the board is a `CustomScrollView`
-  /// now (a summary of what could not be loaded follows the rows), so the
-  /// fixed extent lives on the sliver rather than on a `ListView`.
+  /// (a summary of what could not be loaded follows the rows), so the fixed
+  /// extent lives on the sliver.
   double rowExtent(WidgetTester tester) => tester
       .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
       .itemExtent;

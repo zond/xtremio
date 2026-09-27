@@ -156,10 +156,10 @@ static STORAGE_ORDER: LazyLock<StorageOrder> = LazyLock::new(|| StorageOrder {
 /// platform verifier. On Android that verifier runs every handshake through
 /// Java's `CertPathValidator` with revocation set to SOFT_FAIL and no
 /// NO_FALLBACK, so for a leaf without an OCSP URL Android downloads the
-/// issuer's CRL and parses it in Java. Measured on a Chromecast: ~180k Java
-/// objects per addon or catalog handshake, and 15 million objects / 400 MB
-/// for one tracker whose CRL has 116k entries -- 91% of the app's Java
-/// allocation, the GC storm that pushed a 2 GB box into swap and an ANR.
+/// issuer's CRL and parses it in Java. Measured on a Chromecast: one
+/// tracker whose CRL has 116k entries cost 15 million Java objects and
+/// 400 MB -- 91% of the app's Java allocation, the GC storm that pushed a
+/// 2 GB box into swap and an ANR.
 ///
 /// Trust policy, stated plainly: the app's own HTTPS (addon manifests,
 /// catalogs, the Stremio API, subtitles) trusts Mozilla's root program as
@@ -359,16 +359,13 @@ pub(crate) async fn fetch_text(url: &url::Url, most_bytes: usize) -> anyhow::Res
 /// meta, streams or subtitles list, or the Stremio API's answer to a login
 /// or a library sync: 32 MiB.
 ///
-/// Measured rather than guessed. The largest legitimate answer found is
-/// Cinemeta's meta for General Hospital, some fifteen thousand episodes, at
-/// 3.1 MB; Days of Our Lives is 1.2 MB and One Piece 1.4 MB, a catalog page
-/// 128 KB to 628 KB, a manifest a few KB. A library synced down whole is a
-/// few hundred bytes per item, so tens of thousands of items fit too. Ten
-/// times the largest of those rules nothing real out, and rules out what an
-/// unbounded read let an installed addon do: reqwest inflates gzip
-/// transparently, so a 100 KB body on the wire became 100 MB in memory and
-/// 1.7 GB with the value tree on top -- on a 2 GB television box, and on
-/// every launch, since the board asks every addon's catalogs.
+/// Measured rather than guessed: the largest legitimate answer found is
+/// Cinemeta's meta for a series with about fifteen thousand episodes, at
+/// 3.1 MB, and ten times that rules nothing real out. It also rules out what
+/// an unbounded read let an installed addon do: reqwest inflates gzip
+/// transparently, so a 100 KB body on the wire became 1.7 GB in memory --
+/// on a 2 GB television box, and on every launch, since the board asks
+/// every addon's catalogs.
 pub(crate) const MOST_JSON_BYTES: usize = 32 * 1024 * 1024;
 
 /// Why [`read_capped`] stopped short of a whole body.

@@ -171,9 +171,9 @@ void main() {
     tester,
   ) async {
     // The successor is built, and starts discovery, while this screen is
-    // still on its way out; a stop from this screen's dispose then ended
-    // the discovery the new player had just started, and the cast button
-    // stayed off the bar for as long as the next episode played.
+    // still on its way out. Without `_handedOver` guarding it, this
+    // screen's own dispose would stop that discovery too, leaving the
+    // cast button off the bar for as long as the next episode played.
     useWideViewport(tester);
     final cast = FakeCastClient(
       devices: const [CastDevice(id: 'd', name: 'Living Room TV')],

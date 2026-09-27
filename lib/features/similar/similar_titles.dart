@@ -2,13 +2,12 @@
 /// can go wrong with.
 ///
 /// The question is not asked here. It lives on the xtremio-xervice server
-/// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini key
-/// there is, asks the model once per title, and hands the same answer to
-/// every install after that. What is measured about the model and the
-/// wording lives in `tool/recommendations/`; none of it is this app's to
-/// choose any more, which is the point -- a viewer used to need a key of
-/// their own before the row appeared at all, and nobody but the owner had
-/// one.
+/// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini
+/// key there is, asks the model once per title, and hands the same answer
+/// to every install after that -- so nobody but the server needs a key of
+/// their own for the row to appear. What is measured about the model and
+/// the wording lives in `tool/recommendations/`; none of it is this
+/// app's to choose.
 library;
 
 import '../../core/core.dart';

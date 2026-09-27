@@ -77,11 +77,9 @@ abstract interface class ProxyStreamControl {
   /// It can still **throw**, and a caller on a teardown path has to say
   /// what happens when it does. The implementation is a synchronous FFI
   /// call, so a panic in the core or a bridge that is not up arrives here
-  /// as an exception; there is no answer to give in that case and nothing
-  /// useful to do about it beyond writing it down. It used to say it never
-  /// throws, and the one caller believed it: the call sat at the top of a
-  /// `dispose` and a throw would have skipped the release of the player
-  /// itself.
+  /// as an exception, with nothing useful to do about it beyond writing it
+  /// down -- a caller that puts this at the top of a `dispose` without
+  /// catching it would skip the player's own release.
   ///
   /// **It ends the read *and the token*.** The body fails and the
   /// connection is dropped, so the demuxer sees its source break now

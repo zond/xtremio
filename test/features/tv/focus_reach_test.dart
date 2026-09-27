@@ -90,7 +90,7 @@ Claim claim(String screen, String name, Mount mount) =>
 ///
 /// A dialog, a sheet, a menu with a route of its own and another screen are
 /// all a push, and [unopened] is about a screen that makes none: counting
-/// them is how a claim that used to be a sentence is checked.
+/// them is how the claim that a screen opens nothing is checked.
 class Pushed extends NavigatorObserver {
   int count = 0;
 
@@ -107,14 +107,11 @@ class Pushed extends NavigatorObserver {
 /// Every screen the remote can reach, walked stop by stop under a
 /// television profile, checking that this app says where the remote is.
 ///
-/// The audit that started this found focusable controls with no emphasis
-/// treatment in twenty files: everything built on Material's own
-/// primitives drew Flutter's default focus tint -- an overlay of about a
-/// tenth, no outline, deaf to the Bold switch -- and on a projector in a
-/// lit room that is no indicator at all. Fixing those twenty was a
-/// snapshot. This is what stops there being a twenty-first: a screen added
-/// without an indicator fails here rather than being invisible until
-/// somebody watches it on a projector.
+/// Everything built on Material's own primitives draws Flutter's default
+/// focus tint unless told otherwise -- an overlay of about a tenth, no
+/// outline, deaf to the Bold switch -- which on a projector in a lit room
+/// is no indicator at all. A screen added without one fails here rather
+/// than being invisible until somebody watches it on a projector.
 ///
 /// [focusMarks] says what "marked" means -- what is drawn on the control
 /// the remote is standing on -- and, more usefully, what it does not.
@@ -127,28 +124,23 @@ class Pushed extends NavigatorObserver {
 /// presses on a television actually are. A screen that opens nothing over
 /// itself on a television is in [unopened] instead.
 ///
-/// **Nothing here is excused by writing a reason.** [unopened] used to be
-/// a table of prose, and a screen counted as covered the moment somebody
-/// wrote a sentence in it: a reviewer listed a screen whose dialog held an
-/// unmarked stop, gave the reason "nothing at all, honest.", and the suite
-/// stayed green -- and one of the four sentences that were meant seriously
-/// was wrong in the same way, about this app, for a month. So an entry
-/// there is a *mount* now, and the claim is a measurement:
+/// **Nothing here is excused by writing a reason.** A written claim that a
+/// screen opens nothing can be wrong and still read as covered, so an
+/// entry in [unopened] is a *mount*, and the claim is a measurement:
 /// [proveNothingOpens] drives every stop of that screen with the two
 /// presses a remote has -- select, and the menu key, which is how a
 /// television delivers a hold -- and fails on a route being pushed or a
 /// menu opening. A screen with a dialog behind any of its stops cannot be
 /// listed there whatever is written about it.
 ///
-/// **Why the claims are checked rather than every screen probed.** The
+/// **Why the claims are checked rather than every screen probed.** A
 /// stronger mechanism -- drive every stop of every screen, walk whatever
-/// answers -- was built first and thrown away: pressing select on a poster
-/// tile pushes a details screen that has no downloads scope over it, on a
-/// catalog card a progress bar that never settles, and on a source card a
-/// player that wants a real libmpv, so a third of the presses failed for
-/// reasons that are about this harness rather than about the app. That
-/// would have traded a claim that can be false for a suite that is flaky,
-/// which is the same bargain in another currency. So the screens that open
+/// answers -- would push a details screen with no downloads scope from a
+/// poster tile, spin forever on a catalog card's progress bar, and want a
+/// real libmpv from a source card, so a third of its presses would fail
+/// for reasons that are about this harness rather than about the app.
+/// That trades a claim that can be false for a suite that is flaky, which
+/// is the same bargain in another currency. So the screens that open
 /// something are walked by hand in [opened], where writing the walk is
 /// what says the surface exists, and the screens that open nothing say so
 /// by being driven.
@@ -678,13 +670,11 @@ void main() {
     walk('settings_screen.dart', 'and the read-only blocks on Settings', (
       tester,
     ) async {
-      // The other way round from the rest of this file, and the fault the
-      // owner reported from a Chromecast: not a stop with nothing drawn on
-      // it, but words with no stop at all. The page scrolls by moving
-      // focus, so a block the D-pad jumps over is a block the page never
-      // scrolls to -- and the report of the model check Settings used to
-      // have was both the longest thing on this screen and the last, which
-      // is the worst possible thing to be unreachable.
+      // The other way round from the rest of this file: not a stop with
+      // nothing drawn on it, but words with no stop at all. The page
+      // scrolls by moving focus, so a block the D-pad jumps over is a
+      // block the page never scrolls to -- worst when the block is both
+      // the longest thing on the screen and the last.
       //
       // Named by nothing: the walk collects the [Readout]s the screen
       // builds as it goes and the ones it lands on, and the two sets have
@@ -722,9 +712,9 @@ void main() {
         reason: 'a block of words on Settings the D-pad walked straight past',
       );
       // And the blocks by name, because the check above is satisfied by a
-      // screen with no readouts on it at all: these are the ones that were
-      // unreachable when this was reported, each named by enough of itself
-      // to tell it from its neighbours.
+      // screen with no readouts on it at all: these are the specific
+      // blocks that have to be reached, each named by enough of itself to
+      // tell it from its neighbours.
       for (final words in [
         AccountSection.libraryNote,
         'Subtitle preview',
@@ -921,9 +911,8 @@ void main() {
     walk('library_screen.dart', 'the list of services the link button opens', (
       tester,
     ) async {
-      // The button moved off the board and into the library's app bar, so
-      // this walk moved with it. Down rather than up: the bar is above the
-      // filter row here, and down from nothing lands on it first.
+      // Down rather than up: the bar is above the filter row here, and
+      // down from nothing lands on it first.
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         DriveAccountScope(
@@ -1502,10 +1491,9 @@ void main() {
   testWidgets('and a text field keeps the fill although it owns its ink', (
     tester,
   ) async {
-    // The exception with a reason: the field drew a fill of its own -- a
-    // quarter of `ColorScheme.primary`, which the Bold switch could not
-    // reach -- and the fix was to hand that fill to the floor rather than
-    // to take it away, with the ring on top.
+    // The exception, with a reason: a plain removal would leave the field
+    // wearing an ink of its own that the Bold switch cannot reach, so its
+    // fill is handed to the floor instead, with the ring on top.
     useScreen(tester, tvSize);
     await tester.pumpWidget(
       CoreScope(client: fullCore(), child: onTv(const SearchScreen())),

@@ -43,10 +43,10 @@ void main() {
       );
     });
 
-    /// The URL is a media route now: its last segment is a file index and
-    /// names nothing. A build that still read the filename off it would
-    /// hand the player "1" as the file it is playing, which is what the
-    /// video parameters and every subtitle match are taken from.
+    /// The URL is a media route: its last segment is a file index and
+    /// names nothing. Reading the filename off it would hand the player
+    /// "1" as the file it is playing, which is what the video parameters
+    /// and every subtitle match are taken from.
     test('the filename comes from the entry, not from the URL', () {
       final json = offlineStream(
         viewOf(const {

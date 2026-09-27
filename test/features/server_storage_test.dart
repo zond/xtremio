@@ -57,10 +57,9 @@ void main() {
   });
 
   testWidgets('says what is kept the way the server keeps it', (tester) async {
-    // There is no scheduled sweep any more, and what a clean never takes
-    // is a kept download and the title played last -- kept with the player
-    // closed, which is exactly when a clean that frees nothing needs
-    // explaining. "A live stream" sent the viewer looking for one.
+    // What a clean never takes is a kept download and the title played
+    // last -- kept with the player closed, which is exactly when the
+    // explanation must not blame a live stream nothing is playing.
     final client = FakeServerCache(
       usage: overLimitNothingEvictable,
       cleanResult: const EvictionReport(
@@ -109,7 +108,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // No confirmation to get past: cleaning no longer stops playback.
+    // No confirmation to get past: cleaning does not stop playback.
     await tester.tap(find.text('Clean cache now'));
     await tester.pumpAndSettle();
 
@@ -337,8 +336,9 @@ void main() {
 
       expect(find.text(ServerStorageScreen.refusedMessage), findsOneWidget);
       expect(find.text('/data/cache/server'), findsWidgets);
-      // What was typed stays in the field to be corrected. The read after
-      // the refusal put the old root back over it, typo and all.
+      // What was typed stays in the field to be corrected: a read after
+      // the refusal must not put the stored root back over it, typo and
+      // all.
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller?.text,
         '/root/nope',

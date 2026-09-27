@@ -13,12 +13,10 @@ const _gradientBlack = Color(0xCC000000);
 /// [IconButton.styleFrom] as the foreground, which builds an
 /// **`overlayColor` of its own** -- white at a tenth for the focused state
 /// -- on the widget's style, where it beats the [IconButtonTheme] the
-/// focus floor puts on a television. So every button on the player's bar
-/// wore the floor's stroke and Flutter's own tint underneath it, which is
-/// the exact cue `FocusTheme` exists because nobody can see: a tenth, over
-/// video, in a lit room. `FocusTheme.lift` is written for this bar by name
-/// -- kept small so it does not wash out a white icon -- and was reaching
-/// none of it.
+/// focus floor puts on a television. Without this, every button on the
+/// bar would wear that tint instead of `FocusTheme.lift` (written for this
+/// bar by name, and kept small so it does not wash out a white icon) -- a
+/// tenth, over video, in a lit room, is the cue nobody can see.
 ///
 /// Setting only the icon's colour leaves `overlayColor` unsaid, so the
 /// floor's is what resolves. Nothing else about these buttons changes:

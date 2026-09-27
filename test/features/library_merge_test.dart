@@ -24,7 +24,7 @@ import '../support/fixtures.dart';
 /// the card it belongs to is among them, and only the missing ones are drawn
 /// after them. So what has to hold here is: the unit is the card and not the
 /// file, the engine is never written to, no pill is invented, and the two
-/// "nothing here" pages know that the body is no longer the engine's catalog
+/// "nothing here" pages know the body is more than the engine's catalog
 /// alone.
 ///
 /// `library_remote_test.dart` is the other half: the **Remote** option, which
@@ -683,10 +683,10 @@ void main() {
   ///
   /// A card is drawn for a linked file that **matched**, so a file nobody
   /// ever matched is a file that is nowhere: not on Movies, not on Series,
-  /// not on All. The pass used to belong to the Remote list, which meant a
-  /// viewer who linked a film and went to their library saw an empty page
-  /// until they happened to press a pill they had no reason to press. It
-  /// belongs to this screen now, and these are the three things that says.
+  /// not on All. The match runs on this screen itself, not gated behind
+  /// opening Remote -- otherwise a viewer who just linked a film would see
+  /// an empty library until they pressed a pill they had no reason to
+  /// press. These are the three things that guarantees.
   group('the matching behind the merge', () {
     /// A search that answers with Arrival for anything, and records what it
     /// was asked.

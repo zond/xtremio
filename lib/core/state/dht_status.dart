@@ -6,11 +6,11 @@
 /// trackers downloads fine without one. A network that drops the UDP the
 /// DHT needs -- carrier-grade NAT, a firewalled mobile APN, a captive
 /// portal -- simply never finishes bootstrapping, for the whole session,
-/// with nothing actually wrong: on the owner's own phone torrents ran at
-/// 30+ MB/s from trackers alone while the DHT never came up once. That is
-/// why this is information, never an error: nothing here is worth a toast,
-/// and nothing should poll it expecting a quick flip -- read it when a
-/// screen opens, or piggyback it on a poll that is already running.
+/// with nothing actually wrong: trackers alone have carried a torrent at
+/// 30+ MB/s while the DHT never came up once. That is why this is
+/// information, never an error: nothing here is worth a toast, and nothing
+/// should poll it expecting a quick flip -- read it when a screen opens,
+/// or piggyback it on a poll that is already running.
 class DhtStatus {
   const DhtStatus({
     required this.enabled,

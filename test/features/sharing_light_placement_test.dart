@@ -179,9 +179,8 @@ void main() {
   });
 
   // The width most phones have, and the narrowest any does. Every screen
-  // lays out at both -- Settings, which used to throw below about 480, is
-  // measured at 320 and 360 by `settings_narrow_test.dart` since its menus
-  // left the tile's trailing slot -- so the sweep runs where the light will
+  // lays out at both -- Settings is checked down to 320 by
+  // `settings_narrow_test.dart` -- so the sweep runs where the light will
   // be seen.
   for (final width in [360, 320]) {
     testWidgets('and on a phone $width wide, where the light is the button', (

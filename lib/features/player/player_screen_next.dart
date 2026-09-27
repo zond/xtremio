@@ -56,20 +56,12 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   /// and either a new player takes this one's place, or we return to the
   /// details screen pointing at the episode so its streams can be picked.
   ///
-  /// A finished download of that episode is what the new player gets,
-  /// connection or not: a whole file on this disk is the better source,
-  /// and it is the *only* one offline, where the next episode's streams
-  /// never load and the engine finds nothing to binge into. Next is a
-  /// linked Drive file of that episode: the engine cannot find one -- its
-  /// next-streams fetch asks addons, and a Drive play's request names a
-  /// service that answers none ([driveStreamRequest]) -- so this asks the
-  /// account, and a file that will not open is passed over like a missing
-  /// download. Otherwise it is the stream the engine found (same addon,
-  /// same binge group).
-  ///
-  /// Asking the registry is a round trip, so [_advancing] holds the second
-  /// press: the countdown running out under a finger on Next would
-  /// otherwise advance twice.
+  /// The new player gets, in order: a finished download of that episode
+  /// (the better source, and the only one offline), its linked Drive file
+  /// (the engine cannot find one: a Drive play's request names a service
+  /// that answers no addon query, [driveStreamRequest]), or the stream the
+  /// engine found (same addon, same binge group). [_advancing] holds a
+  /// second press while the registry answers.
   void _playNext() {
     final state = _state;
     final next = state?.nextVideo;

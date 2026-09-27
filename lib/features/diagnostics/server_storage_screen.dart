@@ -62,9 +62,8 @@ class ServerStorageScreen extends StatefulWidget {
   /// Heading of the root control.
   static const String rootTitle = 'Where torrent data lives';
 
-  /// What a root that took says. The running torrent session was opened on
-  /// the old one and cannot be moved onto this, so the change is real and
-  /// its effect is not, until the app is started again.
+  /// What a root that took says: real change, deferred effect. See
+  /// [_DataRoot.takesEffectNextStart].
   static String movedMessage(String path) =>
       'Torrent data goes to $path from the next start.';
 

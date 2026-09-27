@@ -49,12 +49,10 @@ import '../../widgets/tv_ladder.dart';
 /// row and the row of sources it opens are two rungs of the screen's
 /// ladder, and each hands the remote back to the card it was last on.
 ///
-/// There used to be a third thing under the sources that was not a rung at
-/// all -- a readout saying what a 260x96 card had no room for about
-/// whichever card the remote was on. The card has the room now ([TvSourceCard]),
-/// so the readout is gone: nothing on a television is described anywhere
-/// but on the card it is about, and the panel has one fewer thing on it
-/// that a press could not reach.
+/// Nothing on a television is described anywhere but on the card it is
+/// about ([TvSourceCard] has room for all of it): a separate readout under
+/// the sources would be one more thing on the panel that a press cannot
+/// reach.
 ///
 /// Closing the second row takes the card the remote was on off the screen
 /// with it, and nothing here puts the remote back: the enclosing
@@ -104,18 +102,17 @@ class TvSourceRows extends StatefulWidget {
   /// A resolution is one word and the pill is as wide as that word. An
   /// addon's name is not: `caching.stremio.net` drawn in full is most of
   /// a quarter of the panel, and four of those are a row the remote has
-  /// to scroll. So a long label ellipsizes at the width the card this
-  /// replaced used to be, and the row stays a row of choices.
+  /// to scroll. A long label ellipsizes at 208 instead, and the row stays
+  /// a row of choices.
   static const double maxPillWidth = 208;
 
   /// How tall a group pill is drawn at text scale 1.
   ///
-  /// A resolution is one word and a count. The 208x84 card this replaced
-  /// carried an icon, the word, and two lines of summary under it -- four
-  /// of them were the whole panel, and the screen had five other rungs to
-  /// fit. The pill is as tall as the word needs and as wide as the word
-  /// is, which is what lets the sources, the episodes and the last-used
-  /// card share a 720p panel.
+  /// A resolution is one word and a count, so the pill is only as tall as
+  /// that needs: a card with an icon and two lines of summary would leave
+  /// four of them filling the whole panel, with five other rungs still
+  /// needing room. Being no taller than the word is what lets the sources,
+  /// the episodes and the last-used card share a 720p panel.
   static const double pillHeight = 36;
 
   /// How wide a source card is: two lines of a release name, which is what
@@ -507,13 +504,9 @@ class TvSourceGroupPill extends StatelessWidget {
 /// **The card carries the whole of what the addon sent.** The lead names
 /// what a press would start ([StreamPresentation.lead]) and under it are
 /// the addon's remaining lines, in the order it wrote them and none of
-/// them shortened. That is a change of mind: the card was cut to two lines
-/// of release over one line of facts, and everything else -- the release
-/// tags, the other addons offering the same file, the release the file
-/// came out of -- was moved to a readout under the row, where it described
-/// one card at a time and could not be pointed at. A television fits more
-/// than that, and a viewer reading a row of cards is comparing them, which
-/// is a thing one readout cannot be used for.
+/// them shortened. Nothing is moved to a separate readout under the row:
+/// that would describe one card at a time and could not be pointed at,
+/// while a viewer reading a row of cards is comparing them.
 ///
 /// **The pills are the parse, beside the text it was read out of**
 /// ([StreamFacts.pills]): resolution, size, seeders, the languages and the
@@ -555,37 +548,19 @@ class TvSourceCard extends StatelessWidget {
   /// A strip cannot do that -- every card in it is the height of the
   /// tallest, on a panel that has five other rungs to fit.
   ///
-  /// **Measured, not chosen.** Uncapped, the thirty-one recorded rows come
-  /// out between 72 and 403 dp tall on a 720p television, and a row is as
-  /// tall as its tallest card -- 427 dp of a 648 dp panel, so a viewer
-  /// walking from a group pill to a card would scroll the screen. Recorded
-  /// row 6 is what drives it: its `behaviorHints.filename` spells out every
-  /// dub (~120 characters) where the addon's own line says `MULTi`, and at
-  /// 260 dp wide that is nine lines of one card.
-  ///
-  /// Three lines for the lead and three for each line under it hold the
-  /// tallest recorded card to 313 dp and its row to 337, which
-  /// `details_recorded_sources_test.dart` measures rather than trusts. The
-  /// lead had two until the repeat of it was taken out of the line
-  /// underneath ([StreamPresentation.rest]): that took 20 dp off the
-  /// tallest row (342 to 322) and the third line of the lead spends 15 of
-  /// it, which is the right place for it -- the lead is the one line that
-  /// says which file a press would start.
-  ///
-  /// **Re-measured when the parser was rebuilt around one tokenisation**,
-  /// which shortened six recorded second lines and added six rows. Uncapped
-  /// the tallest row fell 20 dp (447 to 427); capped, both numbers are
-  /// exactly where they were, because what binds them is row 6's lead and
-  /// not any line under it. So neither cap could be raised on the room: a
-  /// fourth lead line is 352 and a fourth body line 353, both past the 342
-  /// this panel is known to carry.
+  /// **Measured, not chosen**, against the recorded rows
+  /// (`details_recorded_sources_test.dart`): uncapped, the tallest row runs
+  /// to 427 dp of a 648 dp panel, enough that walking from a group pill to
+  /// a card would scroll the screen. Three lines for the lead and three for
+  /// each line under it hold the tallest row to 337 dp; neither cap can be
+  /// raised without going past the room this panel is known to carry (a
+  /// fourth line on either runs past 342 dp).
   static const int leadLines = 3;
   static const int bodyLines = 3;
 
   /// And how many the quiet provenance line gets. Two, not one: the
-  /// release tags are on it, and they are what the deleted readout used to
-  /// carry -- a line that ellipsized them would have made them unreachable
-  /// rather than moved.
+  /// release tags are on it, and a single line would ellipsize them out of
+  /// reach rather than just off screen.
   static const int noteLines = 2;
 
   @override

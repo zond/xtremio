@@ -10,13 +10,10 @@ import 'units.dart';
 ///
 /// `XtremioBootstrap.imageCacheCeilingBytes` caps that cache at 32 MiB in
 /// place of the framework's 100 MiB, and `XtremioApp` empties it when the
-/// app goes to the background -- but until this existed nothing in the app
-/// ever looked at what the cache actually held, so whether the cap was ever
-/// reached was a guess. On the owner's Chromecast with Google TV (2 GB for
-/// the whole box) browsing two titles and their source lists, with nothing
-/// played, took the native heap to 77 MB peak and 35 MB settled, and the
-/// low-memory killer has taken the app at 147 MB resident. Which part of
-/// that a ceiling could ever reach is the question these figures answer.
+/// app goes to the background. Nothing else in the app looks at what the
+/// cache actually holds, so this is the only way to tell whether the cap
+/// is ever reached -- worth knowing on a device the low-memory killer has
+/// taken at 147 MB resident (see [ImageDiskCache], the class doc).
 ///
 /// **Two halves, and they are not a sum.** [cachedBytes] is the cache
 /// proper: images an LRU bounds, evicted least-recently-used first as the

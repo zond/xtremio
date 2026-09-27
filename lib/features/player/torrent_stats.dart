@@ -213,9 +213,9 @@ final class TorrentStats {
   /// A piece is the unit that becomes readable: librqbit credits verified
   /// pieces and nothing in between, so a window one piece wide can only
   /// ever read 0 or all of it. On a multi-gigabyte torrent a piece is
-  /// 8-16 MiB, which is why a percentage sat at 0% for tens of seconds
-  /// while the download was running perfectly. What shows a wait has to
-  /// say it in pieces when there is only one of them; see
+  /// 8-16 MiB: without accounting for this, a percentage sits at 0% for
+  /// tens of seconds while the download runs perfectly. What shows a wait
+  /// has to say it in pieces when there is only one of them; see
   /// [windowPieces] and [initialWindowProgress].
   final int? pieceLength;
 
@@ -303,8 +303,8 @@ final class TorrentStats {
   ///
   /// The window is piece-aligned, so this is an exact count rather than an
   /// estimate. 1 means the whole wait is one piece arriving: there is no
-  /// progress to show between 0 and done, and pretending otherwise is what
-  /// made a working download look stuck.
+  /// progress to show between 0 and done, and pretending otherwise makes a
+  /// working download look stuck.
   int? get windowPieces {
     final window = initialWindowBytes;
     final piece = pieceLength;
@@ -321,9 +321,9 @@ final class TorrentStats {
   bool get waitsForOnePiece => windowPieces == 1;
 
   /// `0..1` of the window the reader waits for -- null when there is
-  /// nothing honest to show, which now includes a window one piece wide:
-  /// it can only ever be 0 or 1, and a bar that jumps between the two is a
-  /// worse answer than a sentence.
+  /// nothing honest to show, including a window one piece wide: it can
+  /// only ever be 0 or 1, and a bar that jumps between the two is a worse
+  /// answer than a sentence.
   double? get initialWindowProgress => waitsForOnePiece
       ? null
       : _ratio(initialWindowReadyBytes, initialWindowBytes);

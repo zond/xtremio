@@ -50,8 +50,8 @@ fn a_drive_play_keeps_its_place() -> anyhow::Result<()> {
     let storage = tmp.path().join("storage");
     std::fs::create_dir_all(&storage)?;
 
-    // The recorded registry, its episode's meta kept from an addon that is
-    // not there any more.
+    // The recorded registry, with its episode's meta addon swapped for one
+    // that answers nothing.
     let mut registry: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),

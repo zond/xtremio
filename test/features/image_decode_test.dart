@@ -3,10 +3,9 @@
 /// A decoded picture is width x height x 4 bytes resident whatever box it
 /// is drawn in, so a 1000x1500 poster is about six megabytes whether it
 /// fills the screen or a thumbnail. On the Chromecast with Google TV this
-/// app is used on -- two gigabytes for the whole system -- browsing two
-/// titles and their sources, with nothing played, cost 57 MB of native
-/// heap and took the resident set to 267 MB; the low-memory killer has
-/// taken the app at 203 MB and at 147 MB. Artwork is where that goes.
+/// app runs on -- two gigabytes for the whole system -- the low-memory
+/// killer has taken the app at 203 MB resident; artwork is where that
+/// budget goes.
 ///
 /// So each of these asserts the bound that reaches the [Image], derived
 /// from the box the picture is drawn in and the device's pixel ratio --
@@ -294,9 +293,9 @@ void main() {
       //
       // Three names, because there are three ways to reach a network
       // fetch from a widget: the framework's `Image.network` and
-      // `NetworkImage` (which nothing in `lib/` builds any more, and which
-      // are still watched so that going back to them is caught), and
-      // `DiskCachedImage.bounded`, which is what every call site uses now.
+      // `NetworkImage` (which nothing in `lib/` builds, watched so a
+      // regression back to them is caught), and `DiskCachedImage.bounded`,
+      // which is what every call site uses.
       // The bare `DiskCachedImage` constructor is *not* on this list
       // because no call site may reach it at all -- the test below is what
       // holds that.

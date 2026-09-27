@@ -13,20 +13,11 @@ analyzer:
     - rust_builder/cargokit/**
 linter:
   rules:
-    # `comment_references` is deliberately off, and that is a measurement
-    # rather than a preference. Turned on over this tree it reports a few
-    # dozen references -- 49 the last time it was run, and that count moves
-    # with every doc comment written or unlinked, so read what the run says
-    # rather than trusting this number. What does not move is what they
-    # are. When they were all checked, exactly two were the rot the rule
-    # would be enabled for -- a name that exists nowhere: `sharingLightNode`
-    # in `lib/shell/root_shell.dart` and `CastControls` in
-    # `lib/features/cast/cast_widgets.dart`, both since fixed. Every other
-    # one is a name that does exist: the doc comments here point across
+    # `comment_references` stays off: the doc comments here point across
     # features on purpose (`[SharingScope]` from the shell, `[RemotePress]`
-    # from an addon tile), and a class comment points at the private
-    # members of the State beside it. Making those pass means importing a
+    # from an addon tile), and a class comment points at the private members
+    # of the State beside it. Enabling the rule would mean importing a
     # library for the sake of a comment, or unlinking the reference -- and
-    # unlinking is what makes this rot invisible in the first place. Re-run
-    # the measurement before changing this: add the rule here, run
-    # `flutter analyze`, and read what it names.
+    # unlinking is what would make real rot invisible. It flagged 49
+    # references the last time it was run; re-run it (add the rule here, run
+    # `flutter analyze`) and read what it names before trusting that number.

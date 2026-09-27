@@ -77,9 +77,8 @@ abstract interface class CoreClient {
 /// generation fetches afresh.
 ///
 /// The map is held weakly. A screen that goes away takes its copy with it,
-/// as before, and a screen that arrives after the last one has gone pulls
-/// again: what is shared is the work, not the memory of a board nobody is
-/// looking at.
+/// and a screen that arrives after the last one has gone pulls again: what
+/// is shared is the work, not the memory of a board nobody is looking at.
 final class FieldPulls {
   FieldPulls(this._fetch);
 
@@ -189,16 +188,15 @@ final class RustCoreClient implements CoreClient {
   }
 
   /// Sends [action] into the Runtime, and writes down the one thing a
-  /// rejection was otherwise invisible as.
+  /// rejection would otherwise be invisible as.
   ///
   /// `core_dispatch` refuses an action serde cannot deserialize, and the
   /// Runtime never sees it: no event, no state change, nothing on screen.
-  /// Almost every caller drops the future, so the only trace was the
-  /// unhandled-error hook's anonymous `dart: AnyhowException(...)` line --
-  /// which names neither the action nor the screen, and only exists at
-  /// all because `captureUnhandledErrors` is installed. This line names
-  /// what was thrown out. The throw is kept: the contract is unchanged
-  /// and a caller that does await still hears about it.
+  /// Almost every caller drops the future, so without this line the only
+  /// trace is the unhandled-error hook's anonymous
+  /// `dart: AnyhowException(...)`, which names neither the action nor the
+  /// screen. The throw itself is kept: a caller that does await still
+  /// hears about it.
   ///
   /// [CoreAction.name] and nothing else -- action args carry credentials.
   @override

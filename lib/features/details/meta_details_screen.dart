@@ -82,37 +82,31 @@ enum _DetailsRung {
   addons,
 }
 
-/// The rungs of this screen's [TvLadder], top to bottom: the choices a
-/// viewer makes on the way to a stream, in the order they make them.
+/// The rungs of this screen's [TvLadder], numbered in the order they are
+/// drawn down the panel, not the order they are declared: the title and
+/// episodes come from [_infoSlivers] and everything from the last-used
+/// source down from [_tvSourceSlivers], and the panel lays them out
+/// info-then-sources, so a number out of that order is a rung the D-pad
+/// cannot reach from its neighbour.
 ///
-/// Numbered with gaps because most of them are conditional -- a film has
-/// no seasons or episodes, a title nobody has played has no last-used
-/// source, and the row of sources only exists while a group is open.
-/// Only what is drawn is registered, and a press walks past the rest. On
-/// a television most of these sit inside a [TvLadderRung], whose header
-/// is a rung of the walk in its own right: the walk goes header, header,
-/// header down the screen, and only the open rung puts its own rows
-/// between two of them.
+/// Numbered with gaps because most rungs are conditional -- a film has no
+/// seasons or episodes, a title nobody has played has no last-used
+/// source, a sources row only exists while a group is open -- and only
+/// what is drawn registers, so a press walks past the rest. On a
+/// television most rungs sit inside a [TvLadderRung], whose header is a
+/// rung of its own: the walk goes header, header, header down the screen,
+/// and only the open rung puts its own rows between two of them.
 ///
-/// **The numbers are the order things are drawn down the panel**, though
-/// two methods build them: the title and the episodes come from
-/// [_infoSlivers], everything from the last-used source down from
-/// [_tvSourceSlivers], and the panel lays them out info-then-sources. The
-/// ladder walks these numbers and the viewer walks the panel, so a number
-/// out of order is a rung the D-pad cannot reach from its neighbour.
-///
-/// This one has no row under it. The bar's Back and its actions sit in
-/// the bar's own slots, which no one widget can wrap, so they are not a
-/// row of the ladder -- but a press down out of one has to land on the
-/// ladder all the same, and this is the level it enters from
-/// ([_AboveTheLadder]).
+/// [_ladderAppBar] has no row of its own: the app bar's Back and actions
+/// sit in the bar's own slots, which no widget here wraps, but a press
+/// down out of one still has to land on the ladder, and this is the level
+/// it enters from ([_AboveTheLadder]).
 const int _ladderAppBar = -10;
 
 /// The block above the pills: on a television the title, its facts and
-/// the bookmark. A rung, so a press down from the bookmark reaches the
-/// pills rather than whatever geometry finds below a narrow row packed at
-/// the left, which would leave the episode row arrived at sideways and
-/// its memory of where the viewer was overwritten.
+/// the bookmark. A rung of its own, so a press down from the bookmark
+/// reaches the pills rather than whatever geometry finds under a narrow
+/// row packed at the left.
 const int _ladderInfo = 0;
 const int _ladderEpisodesHeader = 20;
 const int _ladderSeasons = 24;
@@ -131,135 +125,67 @@ const int _ladderAddons = 75;
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
-/// installed addons return for the selected video.
+/// installed addons return for the selected video. Tapping a playable
+/// stream opens the player.
 ///
 /// The engine guesses the video to show streams for when it can (a movie,
 /// or a `defaultVideoId`); for a series without one this screen picks the
-/// first sensible episode itself and every episode tap re-`Load`s the field
-/// with that video's stream path, so the streams list always follows the
-/// selection. Tapping a playable stream opens the player.
+/// first sensible episode itself, and every episode tap re-`Load`s the
+/// field with that video's stream path. Below
+/// [MetaDetailsScreen.wideBreakpoint] the streams sit far below the
+/// episodes in one scroll view, so a tap is answered where it happened:
+/// the tile goes selected at once and the stream section scrolls into
+/// view while it waits for the engine's answer.
 ///
-/// Below [MetaDetailsScreen.wideBreakpoint] the streams are not beside the
-/// episodes but far below them in the same scroll view, so a tap there has
-/// to be answered where it happened: the tile goes selected at once, the
-/// stream section is scrolled into view, and it says it is looking until
-/// the engine answers with that episode's streams.
+/// A torrent stream can be taken offline: the download button pins it
+/// through the [DownloadsClient] with the play path's stream and addon
+/// requests plus a meta snapshot, so Details and the Downloads screen
+/// render with no network. The title is *not* put into the library --
+/// that would put it in the library of every device on the account,
+/// neither downloaded nor linked there. The library screen draws it
+/// because it is downloaded, and the player records progress offline
+/// because the Rust side answers the failed meta fetch from the snapshot
+/// (`downloads::kept_meta`). Playing that release again plays the file on
+/// the device rather than streaming it (`offline_play.dart`).
 ///
-/// A torrent stream can also be taken offline: the tile's download button
-/// pins it through the [DownloadsClient] with everything the play path
-/// hands the player (the raw stream, both addon requests) plus a meta
-/// snapshot, so Details and the Downloads screen render with no network.
-/// The title is *not* put into the library: that would put it in the
-/// library of every device on the account, where it is neither downloaded
-/// nor linked. The library screen draws it because it is downloaded, and
-/// the player records progress offline because the Rust side answers the
-/// failed meta fetch from the snapshot (`downloads::kept_meta`), so it
-/// builds its own `temp` item as it does online. Playing that same
-/// release afterwards plays the file on the device rather than streaming
-/// it, connection or not (`offline_play.dart`).
+/// The sources list has two layouts, chosen by the global
+/// [AppPrefs.streamsSectioned] rather than a per-title setting.
+/// **Sectioned** (the default) groups every addon's answers by
+/// **resolution**, highest rung first, unreadable streams in a section of
+/// their own at the bottom; inside a section the order is [StreamOrder]
+/// and each row names its addon. **Grouped** is a section per addon, in
+/// profile order, each addon's own ranking intact. Every section or group
+/// starts collapsed until opened; which ones are open is remembered
+/// globally ([AppPrefs.openStreamSections], [AppPrefs.openStreamAddons] --
+/// two keys, because an addon may share a name with a resolution), and a
+/// closed header still shows a count and, sectioned, the best swarm
+/// ([StreamSection.summary]).
 ///
-/// The sources list has two layouts, and which one it is in is a global
-/// preference ([AppPrefs.streamsSectioned]) rather than a per-title one:
-/// the section header carries the toggle, the choice follows the user to
-/// the next title, and it is read from the Rust side's preferences file at
-/// start-up so the first list is already the one they left. **Sectioned**
-/// -- every addon's answers together, cut by **resolution**: one
-/// collapsible section per rung, highest first, the streams nothing could
-/// be read from in a section of their own at the bottom that says so
-/// rather than guessing -- is the default, so the layout the sources list
-/// was built for is the one a fresh install actually sees. Inside a
-/// section the order is [StreamOrder], the same for every section, and
-/// each row names the addon it came from since it has no addon heading to
-/// sit under any more.
+/// One release is one row: two listings of the same *content*
+/// ([StreamInfo.sourceKey] -- an info hash and file index, or a URL, the
+/// identity a pin is already keyed by) collapse into one, carrying the
+/// *union* of every listing's trackers ([StreamSourceIndex]) so playback,
+/// a download and the stats poll ask every tracker anybody named. The
+/// sectioned list collapses a source across the whole list and says "Also
+/// from ..." when another addon had it too; the grouped list keeps one
+/// copy per addon and collapses only that addon's own repeats.
 ///
-/// The other layout is **grouped**: a section per addon, in profile order,
-/// each addon's own ranking intact -- what the engine hands over, and what
-/// this list looked like before the sectioned layout existed.
+/// An addon that errors is collected below the working streams, named
+/// from the profile and offering to open its details or uninstall it;
+/// several at once collapse into one summary row. An addon that answers
+/// with *nothing* becomes one quiet line below the streams rather than
+/// its own empty section; a still-waiting addon keeps its label and a
+/// spinner. The three states never mix.
 ///
-/// Every resolution section starts *collapsed*, on every title, until the
-/// viewer opens one: a *closed* header still says how many streams it
-/// holds and the best swarm among them ([StreamSection.summary]) -- an
-/// empty-looking 2160p and a healthy one are different answers -- so a
-/// compact list of what is available is the first thing shown, and opening
-/// one is a choice rather than something already made for the viewer.
-/// Which sections are open is [AppPrefs.openStreamSections]: a *global*
-/// preference like the layout itself, not a per-screen one, so a section
-/// opened on one title is open on the next, and again after a restart. A
-/// resolution the current title does not offer is simply not shown open --
-/// it is never swapped for some other section the viewer did not ask for.
-///
-/// The addon groups collapse the same way and remember the same way, in
-/// [AppPrefs.openStreamAddons] -- a key of its own, because an addon may
-/// be called what a resolution is called and because the two layouts ask
-/// different questions. Nothing remembered means every group shut, on a
-/// fresh install and after the last one is closed; a remembered addon this
-/// title has no sources from is not shown open and never stands in for
-/// another group. A closed group's header says how many streams it holds,
-/// which is all this layout knows without parsing rows it is not asked to
-/// rank.
-///
-/// Everything around the streams is the same in both layouts: the
-/// last-used shortcut, the addons that had nothing, the ones that failed,
-/// and the notice when nobody had anything.
-///
-/// One release is one row. Two addons offering the same torrent -- and one
-/// addon offering it twice -- are the same *content*, identified by
-/// [StreamInfo.sourceKey] (an info hash and a file index, or a direct URL:
-/// the identity a pin is already keyed by), never by what a row looks like.
-/// Two different releases with the same resolution and size are two
-/// sources and stay two rows. The sectioned list collapses them after the
-/// sort and across the whole list -- so what survives is the best-ranked
-/// instance, and a source two addons described differently cannot show up
-/// in two sections -- and says "Also from ..." when another *addon* had
-/// it, silently when one addon merely repeated itself. The grouped list
-/// keeps a copy in each addon's own group -- the groups are what that
-/// layout is for -- marked the same way, and collapses only an addon's
-/// repeats of its own. Either way the surviving row carries
-/// the *union* of every listing's trackers ([StreamSourceIndex]), so the
-/// stream handed to playback, to a download and to the stats poll asks
-/// every tracker anybody named.
-///
-/// An addon that answers a stream request with an error is not listed as an
-/// empty group but collected below the streams that worked, named from the
-/// profile (`ctx`) rather than by the host in its manifest URL, with the two
-/// things worth doing about it: opening its details, whose manifest fetch is
-/// the reachability test, and uninstalling it. Several at once collapse into
-/// one summary row, so a profile full of dead mirrors does not bury the
-/// streams that still play.
-///
-/// An addon that answered with *nothing* is not listed either: most stream
-/// addons have nothing for most episodes, and a labelled "No streams"
-/// section each pushed the real streams off the screen. They become one
-/// quiet line below the streams saying how many there were, which expands
-/// to name them. The three states stay apart: an addon still being waited
-/// on keeps its label and a spinner, one that answered with nothing is in
-/// that line, and one that failed has its own section.
-///
-/// On a TV the title's artwork is behind the whole screen ([TvBackdrop])
-/// and the header over it is the logo, one line of facts and two lines of
-/// description ([TvMetaHeader]) rather than the poster and the collapsing
-/// hero a phone shows: at three metres the poster was a third of the
-/// layout and the rows are what the remote came for.
-///
-/// The episodes are one of those rows there ([TvEpisodeRow]) rather than
-/// the vertical list a phone and a desktop keep: a remote walks a row with
-/// two keys and a list with a hundred, and the panel has width to spare
-/// and no height at all once the backdrop and the sources are on it. The
-/// season pills above it were already a row.
-///
-/// The sources are rows there too ([TvSourceRows]), and not a pane beside
-/// the episodes: a card per resolution rung or per addon -- whichever the
-/// layout preference already says -- and, under whichever card is chosen,
-/// a row of that group's sources. So the whole television screen is one
-/// column of rows the remote walks with four keys, and Back comes down a
-/// ladder like the player's: the open row of sources first, the screen
-/// second.
-///
-/// Focus starts on the source the user most likely wants (the last used
-/// one, else the first group card) as nothing else on a freshly pushed
-/// screen holds any, the remote's menu key or a held select on an episode
-/// is its long press (toggle watched), and a long season list is picked
-/// from a [FilterMenu] rather than a dropdown.
+/// On a TV the artwork fills the screen ([TvBackdrop]) behind a header of
+/// logo, one fact line and two of description ([TvMetaHeader]); episodes
+/// are a row ([TvEpisodeRow]) and sources are rows too ([TvSourceRows]) --
+/// a card per group and, under whichever is chosen, a row of its sources
+/// -- so the whole screen is one column the remote walks with four keys,
+/// and Back comes down a ladder: the open row of sources first, the
+/// screen second. Focus starts on the last-used source, or else the first
+/// group card; the remote's menu key or a held select on an episode
+/// toggles watched, and a long season list is picked from a [FilterMenu].
 class MetaDetailsScreen extends StatefulWidget {
   const MetaDetailsScreen({
     super.key,
@@ -1250,14 +1176,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 ///
 /// The bar is not on the ladder and cannot easily be put on it -- Back and
 /// the actions are separate slots of the bar, and one [TvLadderRow] wraps
-/// one subtree -- so a press down out of one of them was left to Flutter's
-/// directional traversal, which takes the nearest node in the direction
-/// pressed. The downloads button is at the far right of the bar and the
-/// bookmark is at the far right of the header, directly under it; the
-/// description is a block that stops well short of both. So down from
-/// downloads landed on the bookmark and down from Back on the description,
-/// and reading the plot from the downloads button meant going left to Back
-/// first and then down -- which is the report this answers.
+/// one subtree -- so a press down out of one of them falls to Flutter's
+/// directional traversal, which takes the nearest node in the pressed
+/// direction. That geometry is wrong here: the downloads button sits far
+/// right of the bar with the bookmark directly under it, while the
+/// description block stops well short of both, so without this, down from
+/// downloads lands on the bookmark and reading the plot from the downloads
+/// button means going left to Back first.
 ///
 /// Distance is the wrong question here for the same reason it is wrong
 /// between the rows ([TvLadder]): what is under the bar is the header,

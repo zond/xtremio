@@ -1,31 +1,28 @@
 /// Talking to the pairing service in `xtremio-xervice/`: opening a session and
 /// collecting what a phone left on it.
 ///
-/// The service is the half of a Google Drive pairing that needs a client
-/// secret, which a sideloaded app cannot hold: it turns an authorization
-/// code into tokens and a refresh token into an access token. What this
-/// file does is the television's two calls -- `POST /session` for something
-/// to draw, and `GET /session/{id}` until the phone has finished -- and
-/// nothing else. Its README has the whole flow.
+/// The service holds the client secret this sideloaded app cannot: it turns
+/// an authorization code into tokens and a refresh token into an access
+/// token. This file makes the television's two calls -- `POST /session` for
+/// something to draw, and `GET /session/{id}` until the phone has finished
+/// -- and nothing else. Its README has the whole flow.
 ///
-/// **The collecting call is destructive**, which is the one thing a caller
-/// has to build around: the service deletes the session in the same request
-/// that hands the tokens over, so a second read of a session that answered
-/// [DrivePairingCollected] is a `404` and the credential is gone for good.
-/// So a [DrivePairingCollected] is never dropped, never retried and never
-/// asked for twice -- see `DrivePairingScreen` and `DrivePairingJob`, the
-/// two callers, which never collect one session at once.
+/// **The collecting call is destructive**: the service deletes the session
+/// in the same request that hands the tokens over, so a second read of a
+/// session that answered [DrivePairingCollected] is a `404` and the
+/// credential is gone for good. A [DrivePairingCollected] is never dropped,
+/// retried or asked for twice -- see `DrivePairingScreen` and
+/// `DrivePairingJob`, the two callers, which never collect one session at
+/// once.
 ///
-/// **Neither token is written down here.** The refresh token is carried in
-/// one field of one object, straight from the response into
-/// [DriveAccount.linkFiles], and nothing in this file logs a body, a header
-/// or an answer; [DrivePairingCollected.toString] names the files and not
-/// the credential, because a `$answer` in a debug line is the commonest way
-/// a secret gets filed (`AGENTS.md`, "Never log auth material"). The access
-/// token the same answer carries is **not read at all**: it is good for an
-/// hour, this device has nowhere safe to put a second credential, and
-/// `DriveSource` in the streaming server mints its own from the refresh
-/// token through `POST /refresh` when it wants one.
+/// **Neither token is written down here.** The refresh token goes straight
+/// from the response into [DriveAccount.linkFiles]; nothing in this file
+/// logs a body, a header or an answer, and [DrivePairingCollected.toString]
+/// names the files and not the credential (`AGENTS.md`, "Never log auth
+/// material"). The access token the same answer carries is never read: it
+/// is good for an hour, this device has nowhere safe to put a second
+/// credential, and `DriveSource` in the streaming server mints its own from
+/// the refresh token through `POST /refresh` when it wants one.
 library;
 
 import 'dart:async';
@@ -38,22 +35,19 @@ import 'json_exchange.dart';
 /// Where the pick page sends a phone's browser when the picking is done, so
 /// that a viewer this app handed to a browser is handed back to it.
 ///
-/// **Nothing in this app acts on this link**, and that is the design rather
-/// than an omission. `deepLinkAddonManifestUrl` drops a `stremio://` link
-/// with no host -- those are the official clients' own in-app routes -- so
-/// this arrives, means nothing, and is dropped. The whole effect of it is
-/// the platform bringing this app to the front, which is what a hand-back
-/// is. That is what answers the two objections written down against
-/// `app_links` here (see `DrivePairingScreen`): the scheme keeps its one
-/// meaning, "open that addon's details", because this adds no second one;
-/// and a launch link the platform replays on a cold start days later is
-/// dropped then too, because it was never acted on in the first place.
+/// **Nothing in this app acts on this link.** `deepLinkAddonManifestUrl`
+/// drops a `stremio://` link with no host -- those are the official
+/// clients' own in-app routes -- so this arrives, means nothing, and is
+/// dropped. The whole effect is the platform bringing this app to the
+/// front. The scheme keeps its one meaning, "open that addon's details",
+/// since this adds no second one; a launch link the platform replays on a
+/// cold start days later is dropped too, since it was never acted on. See
+/// `DrivePairingScreen` for the objections against `app_links` this answers.
 ///
-/// The end that actually sends it is the service, whose `HAND_BACK_LINK`
-/// (`xtremio-xervice/functions/index.js`) is the copy that matters -- the URL is
-/// hard-coded there so that a page on that origin never navigates to a URL
-/// a client sent it. This constant is the app's side of the agreement and
-/// nothing but a test reads it.
+/// The service sends it: `HAND_BACK_LINK`
+/// (`xtremio-xervice/functions/index.js`) is the copy that matters, hard-coded
+/// so a page on that origin never navigates to a URL a client sent it. This
+/// constant is the app's side of the agreement; nothing but a test reads it.
 const String drivePairingHandBackLink = 'stremio:///pair';
 
 /// The pairing session a link carries, or null when [link] is not one of
@@ -61,19 +55,17 @@ const String drivePairingHandBackLink = 'stremio:///pair';
 ///
 /// **This is the second half of the QR, and the reason the phone can pick
 /// more than one file.** The code a television draws is
-/// `https://<origin>/link?s=<session>`, and it has always been a web page.
-/// On a phone that has this app it is now an **App Link** instead: Android
-/// verifies the app against `/.well-known/assetlinks.json` on that origin
-/// and hands the URL here rather than to a browser. Same QR, same television
-/// screen — a phone without the app still gets the page, which is why that
-/// page stays.
+/// `https://<origin>/link?s=<session>`. A phone without this app opens it as
+/// a plain web page; a phone with this app gets it as an **App Link**
+/// instead -- Android verifies the app against
+/// `/.well-known/assetlinks.json` on that origin and hands the URL here
+/// rather than to a browser.
 ///
-/// It is worth being exact about why this is not the objection recorded in
-/// `DrivePairingScreen`. That one was about `stremio://`, a scheme whose one
-/// meaning is "open that addon's details" and which the platform hands to
-/// anybody. This is an `https` URL on a **domain this project owns and
-/// serves**, claimed by a certificate fingerprint Google checks: nothing
-/// else can send it, and it means one thing.
+/// This is not the objection recorded against `stremio://` in
+/// `DrivePairingScreen`: that scheme means "open that addon's details" and
+/// the platform hands it to anybody. This is an `https` URL on a **domain
+/// this project owns and serves**, claimed by a certificate fingerprint
+/// Google checks -- nothing else can send it, and it means one thing.
 ///
 /// Strict on every part, because a link is an input from outside: the scheme
 /// must be `https`, the host must be exactly the service's own (no
@@ -298,10 +290,6 @@ final class DrivePairingUnreachable extends DrivePairingAnswer {
 /// pairing is done and leave the window to be closed instead. A [television]
 /// is the third: its viewer is looking at the other screen already and is
 /// sent nowhere at all.
-///
-/// While this was one boolean -- did the session want a hand-back -- the
-/// page had no way to tell the two shapes that do not want one apart, and
-/// told a desktop its files were on the way to a television it has not got.
 enum DrivePairingShape {
   television('tv'),
   phone('phone'),

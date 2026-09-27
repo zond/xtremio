@@ -114,8 +114,8 @@ void main() {
       await pumpMenuTiles(tester, width);
       expectTextFits(tester, width, 'the menu tiles at $width dp');
       // Whole, not clipped to the widest thing that happened to fit: this
-      // is the label that used to take the row, and the language lists
-      // are the ones that will grow.
+      // is today's widest label, and the language lists are the ones that
+      // will grow.
       expect(find.text(BufferAhead.wholeFile.label), findsOneWidget);
       expect(find.text('English'), findsNWidgets(2));
     });
@@ -149,8 +149,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(prefs.bufferAhead, BufferAhead.wholeFile);
-    // The whole of the longest label there is, on the width whose row it
-    // used to take all of.
+    // The whole of the longest label there is, on the row's full width at
+    // 320 dp.
     expect(find.text(BufferAhead.wholeFile.label), findsOneWidget);
   });
 

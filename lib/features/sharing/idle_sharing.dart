@@ -21,34 +21,24 @@ import '../../core/core.dart';
 /// terms as everything else.
 ///
 /// **It is on everywhere, and the switch is the whole of the control.**
-/// There used to be a default per device -- a television shares, a phone
-/// does not -- on the reasoning that a box in a wall socket on the house's
-/// line costs nobody anything while a phone spends a battery and a bill.
-/// What that reasoning is really about is a cost the owner cannot see, and
-/// the answer to that is to *show* it rather than to guess at it: a device
-/// this app has never met is not a thing to have opinions about. Keeping a
-/// torrent in the swarm is the polite way to have taken the film in the
-/// first place, so it happens by default, and one press stops it.
+/// There is no per-device default: a device this app has never met is not
+/// a thing to have opinions about. Keeping a torrent in the swarm is the
+/// polite way to have taken the film in the first place, so it happens by
+/// default, and one press stops it.
 ///
 /// **Nothing here asks what the connection costs, and nothing should.**
-/// There was a term for it: a `ConnectivityManager` watcher behind an event
-/// channel that reported whether this device's link was billed by the byte,
-/// and a rule here that refused to seed on a metered one whatever the switch
-/// said. It is gone, and the reason it cannot come back in that shape is
-/// that only Android could answer it: Linux, macOS and Windows -- all
-/// first-class targets -- resolved to "unmetered" unconditionally, so a
-/// laptop tethered to a phone seeded over mobile data under a tile promising
-/// it never would. A rule that is right on one platform and lying on three
-/// is worse than no rule, because the tile is then the thing that is wrong.
-/// What is left is a switch that means what it says. On a phone that means
-/// the data is spent by the time anybody thinks about it, which is accepted
-/// rather than overlooked.
+/// Only Android can report whether a link is metered; Linux, macOS and
+/// Windows -- all first-class targets -- resolve to "unmetered"
+/// unconditionally, so a rule built on that would seed over a phone's
+/// billed tether while a tile promised it never would. A rule right on one
+/// platform and lying on three is worse than no rule. The switch means what
+/// it says; on a phone that means the data is spent, which is accepted
+/// rather than hidden.
 ///
-/// **Charging is deliberately *not* a term either**, though it was
-/// considered: it is invisible, so a switch somebody turned on would do
-/// nothing for most of the day with nothing on screen saying why, which is
-/// the same fault as a button that is drawn and dead; and it changes several
-/// times a day, so the server's policy would flap on every plug and unplug.
+/// **Charging is deliberately *not* a term either**: it is invisible, so a
+/// switch somebody turned on would do nothing for most of the day with
+/// nothing on screen saying why, and it changes several times a day, which
+/// would flap the server's policy on every plug and unplug.
 class IdleSharing {
   const IdleSharing._();
 
@@ -69,12 +59,10 @@ class IdleSharing {
   /// what is left once playback stops -- uploading, and only uploading --
   /// and where to see it happen.
   ///
-  /// It used to promise "about five minutes after playback stops", and
-  /// before that "until the next stream starts". The server did neither:
-  /// the setting was copied into the reconciler's conditions and read by no
-  /// rule, so the switch was drawn and did nothing. **This sentence says
-  /// what the server does at the rev `rust/Cargo.toml` pins**, and changes
-  /// when that does.
+  /// **This sentence must say what the server actually does at the rev**
+  /// `rust/Cargo.toml` **pins**, and change when that does: the copy and
+  /// the behaviour have drifted apart before, leaving a switch drawn that
+  /// did nothing.
   static const String description =
       'Keeps uploading to other people when nothing is playing. Off, '
       'Xtremio shares only while you watch. The light in the corner shows '

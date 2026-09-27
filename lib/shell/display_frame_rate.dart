@@ -52,8 +52,8 @@ abstract interface class DisplayFrameRate {
 /// [DeviceProfile.isTv], which no platform but Android ever reports. So
 /// every other platform's answer here is the same one a missing handler
 /// gives, and both are swallowed: a display that will not switch is the
-/// display every build had until now, and there is nothing for a viewer
-/// to do about it.
+/// display every build has, and there is nothing for a viewer to do about
+/// it.
 class ChannelDisplayFrameRate implements DisplayFrameRate {
   const ChannelDisplayFrameRate({
     this.channel = DeviceProfile.channel,

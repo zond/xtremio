@@ -176,8 +176,7 @@ void main() {
     expect(row(PlaybackStatsOverlay.collecting), findsOneWidget);
     // With its times, though mpv has reported nothing: the seconds are
     // the server's, measured against each stream's own rate, so this row
-    // is whole before the media opens. It used to be bytes alone here,
-    // because the watching was the bytes over mpv's `video-bitrate`.
+    // is whole before the media opens.
     expect(
       row('cache    behind 1.2 GB (20 min) · ahead 340 MB (5 min)'),
       findsOneWidget,

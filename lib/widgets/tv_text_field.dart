@@ -166,14 +166,13 @@ class _TvTextFieldState extends State<TvTextField> {
       listenable: widget.controller,
       builder: (context, _) {
         final text = widget.controller.text;
-        // The ring and the fill are the app's, not this field's. It drew
-        // its own fill of a quarter of [ColorScheme.primary], which was a
-        // cue nothing else in the app used and which the Bold switch
-        // could not reach; the ink here now falls through to
-        // `ThemeData.focusColor`, which is the theme floor's, and the
-        // ring around it comes from the same emphasis every other control
-        // reads. A [FocusTreatment.row], because the field sits in a
-        // column of them and a zoom would put it over its neighbours.
+        // The ring and the fill are the app's, not this field's: the ink
+        // falls through to `ThemeData.focusColor`, the theme floor's, and
+        // the ring comes from the same emphasis every other control reads.
+        // Not a fill of its own -- that would be a cue nothing else in the
+        // app uses, and one the Bold switch could not reach. A
+        // [FocusTreatment.row], because the field sits in a column of them
+        // and a zoom would put it over its neighbours.
         final field = FocusMarked(
           child: RemotePress(
             onTap: onTap,

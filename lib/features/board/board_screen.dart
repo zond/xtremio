@@ -53,18 +53,12 @@ class BoardScreen extends StatefulWidget {
       ? '1 catalog could not be loaded'
       : '$count catalogs could not be loaded';
 
-  // No [TvLadder] here, and that is a deletion rather than an omission.
-  //
-  // The board carried two rungs -- the app bar and the topmost row -- for
-  // one control: the link button, which now lives in the library's app bar
-  // where the files it links belong ([RemoteFilesButton]). With it gone the
-  // board's bar holds a title and nothing that can take focus, so there was
-  // nothing above the rows to reach and nothing for a rung to be about. A
-  // ladder whose upper level wraps an empty bar is a level scheme
-  // disagreeing with what is drawn, which is the failure the ladder exists
-  // to prevent; the reasoning itself moved with the button, to
-  // [LibraryScreen.appBarLevel]. The rows are back to the directional
-  // traversal they always had between them.
+  // No [TvLadder] here, deliberately: the app bar holds only a title,
+  // nothing on it takes focus, and a ladder whose top rung wraps an empty
+  // bar disagrees with what is drawn -- the failure the ladder scheme
+  // exists to prevent. The link button's own rung lives at
+  // [LibraryScreen.appBarLevel]. The rows keep the directional traversal
+  // between them.
 
   @override
   State<BoardScreen> createState() => _BoardScreenState();
@@ -369,13 +363,12 @@ class _RowLayout {
   /// Room kept above and below the tiles in a strip, out of the strip's own
   /// height, for a focused tile to grow into.
   ///
-  /// A strip clips. Once a row holds more tiles than fit, its viewport
-  /// paints behind a clip of exactly its own bounds, and a tile is laid out
-  /// to exactly the viewport's height -- so the zoom a focused tile wears
-  /// ([FocusHighlight.focusedScale]) and the shadow it casts were being cut
-  /// off at both edges, which reads as a crop rather than the lift it is
-  /// meant to be. Only a television zooms anything, so only a television
-  /// spends poster height on the room.
+  /// A strip clips to its own bounds and lays a tile out to exactly the
+  /// viewport's height, so without this room the zoom a focused tile wears
+  /// ([FocusHighlight.focusedScale]) and the shadow it casts would be cut
+  /// off at both edges, reading as a crop rather than the lift it is meant
+  /// to be. Only a television zooms anything, so only a television spends
+  /// poster height on the room.
   final double focusSlack;
 
   /// The row geometry [context] is in.
@@ -405,9 +398,9 @@ class _RowLayout {
 
   /// What the list scrolls by: [baseExtent] plus exactly the room the two
   /// text boxes gained. The poster between them therefore keeps the same
-  /// height at every text scale, instead of being squeezed -- past 2.1x it
-  /// used to go negative, and a negative box is not a cramped layout but a
-  /// `NOT NORMALIZED` constraints failure.
+  /// height at every text scale, instead of being squeezed -- without this,
+  /// past a 2.1x text scale the height goes negative, which is a
+  /// `NOT NORMALIZED` constraints failure, not just a cramped layout.
   double get extent =>
       baseExtent +
       (baseHeaderHeight + PosterTile.captionHeight) * (textFactor - 1);

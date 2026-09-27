@@ -13,8 +13,8 @@ import org.junit.Test
  * the film is").
  *
  * The modes are the owner's, read off `dumpsys display` on a Chromecast
- * with Google TV driving an Acer 1080p projector, which is the panel the
- * 560 dropped frames were counted on.
+ * with Google TV driving an Acer 1080p projector -- the panel that drops
+ * 560 frames without a rate match.
  */
 class FrameRateModeTest {
     private val sixtyHz = FrameRateMode(1074, 1920, 1080, 59.94f)

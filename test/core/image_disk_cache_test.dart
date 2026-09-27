@@ -275,8 +275,8 @@ void main() {
       tester,
     ) async {
       await tester.runAsync(() async {
-        // The build before this one, and every test that never boots the
-        // app: the provider still draws, and every eviction is a fetch.
+        // With no store installed -- as before the app has booted -- the
+        // provider still draws, and every eviction is a fetch.
         ImageDiskCache.install(null);
         var fetches = 0;
         DiskCachedImage.debugFetch = (url) async {

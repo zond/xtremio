@@ -379,7 +379,7 @@ still in the tree, then pop.
 - **`_detach` first** ends every subscription, listener and timer before the
   first `await`. Waiting with the screen up is a state the handlers were not
   written for: media_kit's own `stop` pushes a position of zero, which
-  reached the core as a `TimeChanged` and reset continue-watching. Input
+  reaches the core as a `TimeChanged` and resets continue-watching. Input
   stands down too (keys swallowed, hovers refused, the fade timer not
   re-armed).
 - **`_stillOurs`** (`mounted && !_leaving`) is what every continuation that
@@ -394,9 +394,9 @@ still in the tree, then pop.
   thrown, not discarded.
 - **`PlayerScreen.teardownBound`** (2 s) bounds the viewer's wait, not the
   teardown: past it the screen pops, the teardown continues, and a line is
-  logged (another if a late one lands). It exists because one player on the
-  owner's Chromecast once kept downloading after its screen was left, and
-  nothing since has explained it.
+  logged (another if a late one lands). It is kept as the instrument for
+  the one unexplained failure: a player on a Chromecast that kept
+  downloading after its screen was left.
 
 ### Seeking
 
@@ -571,10 +571,10 @@ playing file onto one the viewer says keeps time (`rust/src/subtitles.rs`,
 `subtitles_match`; `SubtitleMatchClient` in
 `lib/features/player/subtitle_match.dart`). Rust fetches both and turns
 each into a bitmap of **when it has text on screen**, from both timestamps
-of every cue. Comparing cue starts was what this replaced: a translator
-merges lines, and the owner's Swedish Gilmore Girls file has 690 cues
-against the English 1024, only 54 % of its starts within a third of a
-second. A bitmap does not mind merged lines.
+of every cue. Comparing cue starts instead fails when a translator merges
+lines: a Swedish Gilmore Girls file has 690 cues against the English 1024,
+only 54 % of its starts within a third of a second. A bitmap does not mind
+merged lines.
 
 - **One damaged cue does not decide the length.** `cue_spans` drops a cue
   reaching further past the body of the file than a tenth of it or ten

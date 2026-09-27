@@ -61,14 +61,11 @@ async fn lan_media_allowed() -> anyhow::Result<bool> {
 }
 
 /// The LAN listener serves the bytes of torrents this device already has
-/// and can be made to arrange nothing (stream-server `388f68b`, in the pin
-/// since 75c15dc): a `GET` for a hash the server does not hold is a `404`
-/// at once, and the create routes are not there. Before that rev its stream
-/// route was the loopback one, which *created* the torrent with the
-/// request's trackers and answered only once its metadata resolved or
-/// timed out -- so for the length of a cast any host on the network could
-/// make this device join a swarm of its choosing. The timing assertion is
-/// what tells the two apart: a lookup answers now, a creation waits on
+/// and can be made to arrange nothing: a `GET` for a hash the server does
+/// not hold is a `404` at once, and the create routes are not there --
+/// without this, any host on the network could make this device join a
+/// swarm of its choosing for the length of a cast. The timing assertion is
+/// what tells the two apart: a lookup answers at once, a creation waits on
 /// metadata.
 #[tokio::test]
 async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::Result<()> {
@@ -142,15 +139,15 @@ async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::R
     Ok(())
 }
 
-/// The half of start-up that outlived the listener no longer binding at
-/// boot. A cast grants the server's `lanMediaEnabled` permission and the
-/// server persists it; a process killed mid-cast never takes it back, and
-/// the server loads the setting as it finds it and resets it for nobody. So
-/// `server_start` clears it first thing, and what is on disk while nothing
-/// is casting reads "no" whatever the last run did. The kill is staged with
-/// the server's own file: a cast leaves `settings.json` with the permission
-/// granted, and that file is put back after the orderly stop that cleared
-/// it, so the next start finds exactly what a kill leaves.
+/// A cast grants the server's `lanMediaEnabled` permission and the server
+/// persists it; a process killed mid-cast never takes it back, and the
+/// server loads the setting as it finds it and resets it for nobody. So
+/// `server_start` clears it first thing -- without this, a device killed
+/// mid-cast would report the permission granted at the next start, though
+/// nothing is casting. The kill is staged with the server's own file: a
+/// cast leaves `settings.json` with the permission granted, and that file
+/// is put back after the orderly stop that cleared it, so the next start
+/// finds exactly what a kill leaves.
 #[tokio::test]
 async fn a_kill_mid_cast_leaves_no_permission_behind_at_the_next_start() -> anyhow::Result<()> {
     let _serial = SERVER.lock().await;
@@ -289,8 +286,8 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
         "a peer that is not an IP address has no URL"
     );
     // No peer at all -- what iOS leaves us with, since the Cast SDK reports
-    // no receiver address there and only the Android half now reads one off
-    // the route: the host's best-ranked interface, never loopback.
+    // no receiver address there and only the Android half reads one off the
+    // route: the host's best-ranked interface, never loopback.
     let best_effort = tokio::task::spawn_blocking(|| server_lan_media_base_url(None))
         .await??
         .expect("a base URL with no peer named");

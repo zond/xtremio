@@ -34,12 +34,10 @@ void main() {
   testWidgets('Cancel and Play sit at the card\'s trailing edge', (
     tester,
   ) async {
-    // Where they were when the row was a [Row]: a card that is a question
-    // puts its answers where an answer is looked for, at the end of the
-    // line the reading finishes on. A [Wrap] under a [Column]'s cross
-    // axis is handed loose constraints and takes the width of its
-    // children, so `WrapAlignment.end` has nothing to distribute and the
-    // buttons come out flush left, under the "Up next" label.
+    // A card that is a question puts its answers where an answer is
+    // looked for, at the end of the line the reading finishes on. See
+    // [UpNextCard]'s build for why that takes an `Align` around the
+    // `Wrap` and not just `WrapAlignment.end`.
     await pump(tester);
 
     final text = tester.getRect(find.text('S1E2 · $title'));

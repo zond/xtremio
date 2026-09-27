@@ -220,11 +220,10 @@ refreshes" — the header supplier is `POST /refresh`).
 
 **Does picking a *folder* grant `drive.file` access to what is inside
 it?** Google's documentation does not say — the scopes guide, the Picker
-overview and the folders guide were all checked and none of them
-addresses it. It used to decide whether this could ever be more than one
-file at a time; multiselect decides that now, and the answer is yes. So the
-folder question is worth an answer but no longer blocks anything, and the
-Picker still allows a folder to be selected so that it can be had by hand:
+overview and the folders guide are silent on it. Multiselect already
+covers picking more than one file at a time, so the folder question does
+not block anything; it is worth an answer, but nothing depends on it. The
+Picker still allows a folder to be selected, so it can be had by hand:
 pick a folder rather than a file, then
 
 ```sh

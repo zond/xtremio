@@ -22,9 +22,9 @@ import '../../support/tv.dart';
 ///
 /// The header clips the description to a couple of lines, which is right:
 /// a viewer three metres away came to the screen to pick something, not to
-/// read. What was wrong is that the ellipsis was the end of it -- plain
-/// text, no focus stop, no key -- so the rest of the plot could not be
-/// reached at all with a remote. Reported from a Chromecast.
+/// read. But the ellipsis must not be the end of it: plain text past it,
+/// with no focus stop and no key, would leave the rest of the plot
+/// unreachable with a remote.
 ///
 /// So the four things this has to be are checked on descriptions of a
 /// known length rather than on whatever a recorded fixture happens to
@@ -124,11 +124,10 @@ void main() {
   /// Walks up the ladder into the header, and then left onto the
   /// description.
   ///
-  /// Up lands on the bookmark, which is where it landed before there was
-  /// anything else in the header to land on: the row hands the remote to
-  /// its first stop in reading order and the bookmark is drawn at the top
-  /// of it. The description is the wide block under the facts, so it is
-  /// the bookmark's left-hand neighbour.
+  /// Up lands on the bookmark: the row hands the remote to its first stop
+  /// in reading order, and the bookmark is drawn at the top of it. The
+  /// description is the wide block under the facts, so it is the
+  /// bookmark's left-hand neighbour.
   Future<void> upToTheDescription(WidgetTester tester) async {
     for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
       await press(tester, LogicalKeyboardKey.arrowUp);
@@ -206,8 +205,8 @@ void main() {
           'remote it is also a press spent walking past it',
     );
 
-    // And the walk is the one it always was: up from the rungs lands on
-    // the bookmark, and there is nothing beside it to land on.
+    // The walk is unchanged: up from the rungs lands on the bookmark, and
+    // there is nothing beside it to land on.
     for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
       await press(tester, LogicalKeyboardKey.arrowUp);
     }
@@ -287,10 +286,9 @@ void main() {
   testWidgets('one longer than the panel is walked to its last line', (
     tester,
   ) async {
-    // The same bug in a new place: unfolding a plot that runs off the
-    // bottom and then being unable to read the end of it is exactly what
-    // the ellipsis was. [ReadableBlock] is what walks it, a part-screenful
-    // per press, and lets the D-pad go once there is none of it left.
+    // A plot that runs off the bottom must still be reachable to its end:
+    // [ReadableBlock] walks it a part-screenful per press, and lets the
+    // D-pad go once there is none of it left.
     await pump(tester, tallPlot);
     await upToTheDescription(tester);
     await press(tester, LogicalKeyboardKey.select);
@@ -387,10 +385,9 @@ void main() {
   testWidgets('the header has two stops, and they are side by side', (
     tester,
   ) async {
-    // The bookmark is where it always was and is still what a press up
-    // from the rungs lands on; the description is beside it. Both
-    // directions, because a stop reachable one way only is a stop half the
-    // walk falls off.
+    // The bookmark is what a press up from the rungs lands on; the
+    // description is beside it. Both directions, because a stop reachable
+    // one way only is a stop half the walk falls off.
     await pump(tester, longPlot);
     await upToTheDescription(tester);
 

@@ -382,11 +382,11 @@ class _XtremioAppState extends State<XtremioApp> {
   /// more than once -- the launch link comes both as [DeepLinkSource.initialLink]
   /// and as the stream's first event, and a link can be replayed as the
   /// picker's activity hands back to this one. An addon link landing twice
-  /// is a no-op; a pairing link landing twice pushed a second screen over
-  /// the first, whose pick found the first's still open and failed with
-  /// "A pick is already on screen" -- over a first pick that had worked. A
-  /// session is single-use on the service's side as well, so a link for one
-  /// already opened is never worth a second screen.
+  /// is a no-op; without this guard, a pairing link landing twice would push
+  /// a second screen whose pick fails with "A pick is already on screen",
+  /// over a first pick that already worked. A session is single-use on the
+  /// service's side as well, so a link for one already opened is never
+  /// worth a second screen.
   void _openDrivePairing(String session, {bool retry = true}) {
     if (_drivePairingsOpened.contains(session)) return;
     final navigator = _navigator.currentState;
@@ -486,13 +486,11 @@ class _XtremioAppState extends State<XtremioApp> {
   /// Android), as opposed to merely interrupted (`inactive`: a dialog, the
   /// notification shade, a call).
   ///
-  /// What goes here is what a background app should not be holding. On the
-  /// owner's Chromecast with Google TV (2 GB of RAM, about 650 MB of it
-  /// ever available) Android's low-memory killer took this app twice in a
-  /// day at 311-379 MB resident, both times the moment it was backgrounded
-  /// -- at `oom_score_adj` 700 it was the fattest process on the box, so it
-  /// went before the apps cached at 20-150 MB. Until now the process held
-  /// in the background exactly what it held in the foreground.
+  /// A background app is judged on the memory it holds, not on what it is
+  /// doing, and Android's low-memory killer takes the fattest process on
+  /// the box first (see `XtremioBootstrap.imageCacheCeilingBytes` for the
+  /// measurement). So what goes here is what a background app should not
+  /// be holding.
   ///
   /// The decoded images are the part that is the app's own to drop, and
   /// they are dropped whole: everything no widget is showing goes

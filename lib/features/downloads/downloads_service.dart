@@ -15,12 +15,10 @@ import 'downloads_listings.dart';
 /// errored entry is a pin the server refused (a full or missing downloads
 /// volume, the commonest case on a TV box) or a torrent whose add failed,
 /// and in both the server has nothing in flight for it -- no engine, no
-/// peers to wait for -- so a process kept alive for it fetches nothing.
-/// What it did fetch was a "Downloading 1 title · Waiting to start"
-/// notification that never went away, and on Android 15 a `dataSync`
-/// service that ran into its time limit for nothing. What puts it right is
-/// a retry, which re-adds the entry; the row that follows is what brings
-/// the service up. The Rust ticker still counts an error as unfinished
+/// peers to wait for -- so counting it would hold a service (and, on
+/// Android 15, burn its `dataSync` time budget) for a notification that
+/// never moves. A retry re-adds the entry; the row that follows is what
+/// brings the service up. The Rust ticker still counts an error as unfinished
 /// (`Entry::unfinished`), because the boot's re-pin does and the two share
 /// the test; that is its question and not this one's.
 @immutable
@@ -166,11 +164,10 @@ const String kDownloadsCancelAllAction = 'Cancel all';
 /// ([DownloadsRemovalUpdate], pushed by [DownloadsClient.remove]), since
 /// the Rust side emits nothing for one. That is the whole of it: the
 /// listing is taken once at [start], once after a [cancelAll], and once
-/// per addition. It used to be re-read every five seconds for as long as
-/// the service ran, to notice a removal — a full registry, every entry's
-/// `MetaItem` snapshot included, parsed on the UI isolate twelve times a
-/// minute on top of the progress rows already arriving, for one thing the
-/// client could simply say. At rest nothing runs at all.
+/// per addition -- not polled every few seconds to notice a removal, which
+/// would parse every entry's `MetaItem` snapshot on the UI isolate twelve
+/// times a minute on top of the progress rows already arriving, for one
+/// thing the client can simply say. At rest nothing runs at all.
 class DownloadsForegroundService {
   DownloadsForegroundService({
     required this.client,
@@ -290,9 +287,9 @@ class DownloadsForegroundService {
     for (final key in [..._registry.items.keys]) {
       // Asked of the registry the feed keeps current, just before each
       // removal, and not of the listing: every removal is a round trip, and
-      // a download that finished during an earlier one was deleted with
-      // its files -- a film on the device, gone off a button that says it
-      // cancels what is still coming.
+      // a download finishing during an earlier one would otherwise be
+      // deleted with its files off a button that only promised to cancel
+      // what was still coming.
       final view = _registry[key];
       if (view == null || !view.isUnfinished) continue;
       try {
@@ -344,11 +341,9 @@ class DownloadsForegroundService {
   }
 
   /// Brings the service into line with [_registry], after every [_sync]
-  /// before it. Taken out of turn, a download finishing while the first
-  /// start waited on the notification question found the service marked
-  /// running and stopped it, and the start went out after the stop: the
-  /// service stayed up with nothing to hold it for, and every later sync
-  /// took it for already stopped.
+  /// before it: taken out of turn, a stop from one sync could go out after
+  /// the start from a later one, leaving the service running with nothing
+  /// to hold it and every later sync believing it already stopped.
   Future<void> _sync() => _syncs = _syncs.then((_) => _syncNow());
 
   Future<void> _syncNow() async {

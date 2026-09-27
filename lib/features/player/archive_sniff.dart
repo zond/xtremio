@@ -22,10 +22,9 @@ enum ArchiveKind {
   /// The URL prefix the streaming server mounts this format's translator
   /// under (`server/src/lib.rs`, `archive_prefixes`): `/{serverPrefix}/create`
   /// and `/{serverPrefix}/stream/...`. One prefix per format because the
-  /// prefix *is* which translator reads the container -- the server stopped
-  /// guessing from the file's suffix when archives became translations of
-  /// byte ranges. TAR has one too (`tar`), and nothing here sniffs a TAR:
-  /// it has no signature in its first bytes to sniff.
+  /// prefix *is* which translator reads the container, never a guess from
+  /// the file's suffix. TAR has one too (`tar`), and nothing here sniffs a
+  /// TAR: it has no signature in its first bytes to sniff.
   final String serverPrefix;
 }
 

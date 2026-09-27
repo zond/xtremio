@@ -52,14 +52,13 @@ class _SearchScreenState extends State<SearchScreen> {
   CoreFieldNotifier? _search;
 
   /// `ctx`, for the installed addons: a catalog that failed carries only
-  /// the manifest URL it was asked at, and the profile is what turns that
-  /// into an addon with a name that can be checked or uninstalled.
+  /// the manifest URL it was asked at, and the profile turns that into an
+  /// addon with a name that can be checked or uninstalled.
   ///
   /// Subscribed to only once a search has actually failed, by
-  /// [_watchProfileForFailures]: `ctx` is the profile with its
-  /// notifications and events, and every event that touches it would
-  /// otherwise cost a serialize across FFI and a decode here, for a screen
-  /// that reads two fields of the profile.
+  /// [_watchProfileForFailures] -- the same lazy pattern as
+  /// `BoardScreen._ctx`: every event on `ctx` costs an FFI serialize and a
+  /// decode, not worth paying before there is a name to show.
   CoreFieldNotifier? _ctx;
   final TextEditingController _controller = TextEditingController();
   Timer? _debounce;

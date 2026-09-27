@@ -98,16 +98,10 @@ const app = express();
 /**
  * Nothing this function answers may be cached, by anything, ever.
  *
- * Belt and braces, and the braces were missing: Hosting's own header rule
- * once matched `**`, which is every response it proxies -- so `GET
- * /session/{id}` was served from the edge for a minute. A television polled
- * once and the cache answered the rest; a collect made 46 milliseconds after
- * the handover was told the session was still waiting, and a pairing of
- * seventeen files was lost to a cache hit.
- *
  * Every route here is either a one-shot credential exchange or a question
- * whose answer changes by the second, so there is no response worth keeping
- * and none safe to keep. Said here as well as in `firebase.json` because
+ * whose answer changes by the second: without this, a caching edge in front
+ * of it can answer a collect with a stale "still waiting" and lose a
+ * pairing to a cache hit. Said here as well as in `firebase.json` because
  * this one travels with the code.
  */
 app.use((req, res, next) => {
@@ -189,10 +183,10 @@ function pickedFiles(body) {
  *
  * **Measured at pairing time and not left for later.** The height is what
  * puts a Drive source in the right resolution section, and it is the one
- * thing about a linked file that cannot be read off its name. It used to
- * arrive on the first Reload, which is true and useless: nobody presses
- * Reload after linking, so every freshly linked file sat under "Unknown
- * resolution" until they happened to.
+ * thing about a linked file that cannot be read off its name -- left for a
+ * Reload instead, a freshly linked file would sit under "Unknown
+ * resolution" until somebody pressed one, which nobody does right after
+ * linking.
  *
  * `videoMediaMetadata` is absent more often than it is wrong -- Drive fills
  * it in once it has processed an upload, and never for a container it did
@@ -255,9 +249,9 @@ async function withinRate(key, limit) {
  * page ends by sending the browser to [HAND_BACK_LINK] (`phone` alone), and
  * what that page says it has done (a `tv`'s viewer is looking at the other
  * screen; a `desktop`'s is looking at the page, and is told the pairing is
- * in the app and the window can be closed). While this was one boolean the
- * second question had no answer for a desktop, which was told its files were
- * on the way to a television it has not got.
+ * in the app and the window can be closed). A single boolean cannot answer
+ * the second question for a desktop, which would otherwise be told its
+ * files are on the way to a television it has not got.
  */
 const SHAPES = ['tv', 'phone', 'desktop'];
 
@@ -463,8 +457,8 @@ app.get('/session/:id', answered(async (req, res) => {
  *
  * **Why this exists at all.** The Google Picker cannot select more than one
  * file on a phone -- it gates selection on a Ctrl/Cmd key
- * (issuetracker.google.com/issues/334994030, open since 2024) -- while the
- * native Android picker can, measured at seven files in one go. So a phone
+ * (issuetracker.google.com/issues/334994030) -- while the native Android
+ * picker can, measured at seven files in one go. So a phone
  * with this app installed picks natively and posts here; a phone without one
  * still gets the web page, which is why that page and `/session/:id/files`
  * stay exactly as they are.
@@ -595,10 +589,10 @@ app.post('/refresh', answered(async (req, res) => {
     //  * `invalid_grant` -- the viewer revoked us, or the consent screen is
     //    still in Testing, where refresh tokens die after seven days;
     //  * `unauthorized_client` -- the token was issued to another OAuth
-    //    client. Every token from before the move to this project is one:
-    //    without this, a television holding one was told Google could not
-    //    be reached, forever, since the app only ever gives a credential up
-    //    on `pairAgain`.
+    //    client, true of anything minted before this one and not just a
+    //    revoked grant: without `pairAgain` here, a television holding one
+    //    would be told forever that Google could not be reached, since the
+    //    app only ever gives a credential up on `pairAgain`.
     //
     // Anything else -- `invalid_client` is *our* secret being wrong -- is
     // not the viewer's to fix and must not cost them their pairing.

@@ -347,11 +347,11 @@ class _ExpandableTextState extends State<ExpandableText> {
 /// bare number, beside a "Season" label so that a lone `3` says what it is.
 ///
 /// One shape on every device, because a season is a single short token and
-/// a row of them is readable at a glance. The three controls this replaced
-/// -- segments where there was room, a menu on a television, a dropdown
-/// everywhere else -- all spent a press on opening and another on choosing,
-/// and the two that opened a list opened it as a very narrow, very tall
-/// column of digits, which on a remote is a long vertical crawl.
+/// a row of them is readable at a glance. A segmented control where there
+/// is room, a menu on a television, a dropdown everywhere else -- each
+/// would spend a press on opening and another on choosing, and the two
+/// that open a list would open it as a very narrow, very tall column of
+/// digits, which on a remote is a long vertical crawl.
 ///
 /// Three things it has to do that a plain row would not:
 ///

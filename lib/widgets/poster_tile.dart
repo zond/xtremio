@@ -80,13 +80,12 @@ class PosterTile extends StatelessWidget {
 /// The decode is bounded to the box the poster is drawn in. This is the
 /// most numerous image in the app -- a board strip, the discover and search
 /// grids, the library -- and an addon is free to serve a poster at any
-/// size: a TMDB-backed one sends 1000×1500, which decodes to 5.9 MB, so
-/// seventeen tiles filled the whole image cache and every scroll decoded
-/// them again, on the CPU of a 2 GB television. Decoded at the tile's own
-/// width a poster is a few hundred kilobytes, and the same cache holds a
-/// whole board. `cacheWidth` counts physical pixels, which is why the
-/// device's ratio is in it; only the width is given, so the source's own
-/// aspect is kept and `cover` crops as it did.
+/// size: an unbounded TMDB-backed poster (1000x1500) decodes to 5.9 MB,
+/// against a few hundred kilobytes at the tile's own width, so without this
+/// a handful of tiles fill the whole image cache and every scroll re-decodes
+/// them. `cacheWidth` counts physical pixels, which is why the device's
+/// ratio is in it; only the width is given, so the source's own aspect is
+/// kept and `cover` crops as it did.
 class PosterImage extends StatelessWidget {
   const PosterImage({super.key, required this.url});
 

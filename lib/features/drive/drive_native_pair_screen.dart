@@ -15,9 +15,9 @@ import '../../core/core.dart';
 /// **Why bother, when the page already works.** The web Google Picker cannot
 /// select more than one file on a phone: it gates selection on a Ctrl/Cmd
 /// key, so a device with no keyboard holds exactly one
-/// (issuetracker.google.com/issues/334994030, open since April 2024). The
-/// native picker can — measured at seven files in one go. That is the whole
-/// of the difference, and it is why the page is kept rather than replaced.
+/// (issuetracker.google.com/issues/334994030). The native picker can --
+/// measured at seven files in one go. That is the whole of the difference,
+/// and it is why the page is kept rather than replaced.
 ///
 /// **Nothing is stored on this device.** The phone is not the device that
 /// plays anything: it signs in, picks, and hands both halves to the session

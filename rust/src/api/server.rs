@@ -12,10 +12,8 @@ use crate::guard::{guarded, guarded_ok};
 ///
 /// No port: the server binds an ephemeral loopback one and the app reads the
 /// address back off the handle (`server_start` returns it, and `core_init`
-/// retargets stremio-core at it). There used to be `port` and
-/// `fallback_to_ephemeral` here, defaulting to 11470 because that is what
-/// stremio-core's default profile points at -- but nothing downstream reads
-/// the number, so all a preferred port could do was collide.
+/// retargets stremio-core at it). Nothing downstream reads a chosen port
+/// number, so offering one to configure could only cause a collision.
 pub struct ServerConfig {
     /// App-support directory for settings.json, logs/, localFiles/.
     pub config_dir: String,

@@ -173,10 +173,9 @@ class _FocusableTileState extends State<FocusableTile> {
           // a control in here is one the remote can land on and cannot
           // press -- and the ring, which follows the tile's whole subtree,
           // says the tile is focused while the D-pad is really sitting on
-          // a dead button somewhere in it. That was the installed addon
-          // list: down walked its ⋮ menus, one per row, and the walk
-          // could not reach anything below a menu that was not another
-          // menu. Something that must be pressed goes beside the tile.
+          // a dead button inside it (an addon's ⋮ menu, say), with no way
+          // to walk past it to whatever is below. Something that must be
+          // pressed goes beside the tile.
           child: ExcludeFocus(
             child: TileFocus(focused: _focused, child: widget.child),
           ),
@@ -569,10 +568,9 @@ class FocusRing extends StatelessWidget {
   final FocusEmphasis emphasis;
   final Widget child;
 
-  /// Both strokes together, in logical pixels. Four, not the three this
-  /// started at: a television is watched from two or three metres, not
-  /// from forty centimetres, and on a 320 dpi box each of these is two
-  /// physical pixels.
+  /// Both strokes together, in logical pixels: wide enough to read from
+  /// the two or three metres a television is watched from, not the forty
+  /// centimetres a phone is -- on a 320 dpi box, two physical pixels each.
   static const double width = 4;
 
   /// Both strokes together in [FocusEmphasis.bold].

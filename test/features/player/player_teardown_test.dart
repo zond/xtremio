@@ -11,29 +11,11 @@ import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
-/// Leaving a player has to stop it, and the order it does that in is the
-/// whole of what this file pins.
-///
-/// On the owner's Chromecast one RD/HTTP title played for ninety seconds
-/// and was backed out of. 158 MB came back at the press and the volume
-/// then kept draining at a steady ~32 Mbps with no player on screen, until
-/// a force-stop returned 928 MB in one piece: an mpv had outlived the
-/// screen that owned it, and was still filling a cache file with no
-/// directory entry.
-///
-/// The screen used to have it backwards. It left at once, released the
-/// engine two frames later through a future nobody held, and sent the
-/// `quit` -- the one thing that actually ends the read -- only if a
-/// ten-second deadline expired. So the fast fix was withheld until the
-/// slow path had failed, and the video texture and the audio device were
-/// let go by whatever media_kit did in the background, at no defined
-/// moment relative to mpv being gone.
-///
-/// It is the other way round now: `quit` first, then wait for the teardown
-/// with the picture still on screen and the sinks still being drained,
-/// then leave. Outcomes alone cannot tell that apart from what it replaced
-/// -- both end with a released engine and no screen -- so what is asserted
-/// here is the order.
+/// Pins the order [PlayerScreen._leave] stops a player in: `quit` first,
+/// then the teardown awaited with the picture still on screen and the
+/// sinks still draining, then the pop. See docs/ARCHITECTURE.md, "Leaving
+/// the player" -- without this order, a released engine can outlive the
+/// screen that owned it and keep reading with nothing left to show for it.
 void main() {
   /// The player pushed onto a route, which is how the app opens it and
   /// what [PlayerHarness.pump] on its own is not: mounted as the root
@@ -58,7 +40,7 @@ void main() {
   }
 
   /// Everything the app said about the player that was not the routine
-  /// `info` line: what a report would have carried out of that evening.
+  /// `info` line -- what a diagnostics report would show.
   List<String> complaints(List<String> lines) => [
     for (final line in lines)
       if (line.startsWith('warn player') || line.startsWith('error player'))
@@ -72,8 +54,8 @@ void main() {
   testWidgets('leaving sends the quit before it waits for anything', (
     tester,
   ) async {
-    // The inversion, at its narrowest. `quit` is the kill and it is what
-    // makes the `stop` inside media_kit's own teardown come back promptly
+    // `quit` is the kill, and it is what makes the `stop` inside
+    // media_kit's own teardown come back promptly
     // instead of waiting out a five-minute `network-timeout`, so it goes
     // out at the press -- not on a deadline, and not behind the teardown
     // it is there to unstick.
@@ -278,9 +260,8 @@ void main() {
     expect(engine.disposeAsked, isTrue, reason: 'and the teardown ran');
     expect(engine.disposed, isFalse, reason: 'and mpv never answered');
 
-    // Where the ninety seconds used to go: no line, no bound, nothing a
-    // copied report could have shown. This is the only instrument that
-    // would say the unexplained failure had come back.
+    // Without this line, a teardown that never comes back leaves nothing a
+    // copied report could show.
     expect(
       complaints(lines),
       isNotEmpty,

@@ -571,9 +571,8 @@ void leadSubtractionTests() {
     test('keeps the pack and gives the rest back to the lead', () {
       // Recorded row 4's shape. Ten of its fifteen words are the lead over
       // again; the pack is the five that are not, and the whole reason the
-      // line is on the card. The old rule kept all fifteen to protect
-      // those five, which is how a phone came to show two lines that were
-      // ninety per cent the same string.
+      // line is on the card -- keeping all fifteen to protect those five
+      // would show two lines that are ninety per cent the same string.
       expect(
         restOf(
           torrent(
@@ -923,9 +922,9 @@ void recordedAddonAnswers() {
       tracker: 'RARBG',
       lead: 'The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE',
       rest: const [
-        // Was `The.Matrix.1999.RERIP.2160p.UHD.BluRay.x265.10bit.HDR
-        // .TrueHD.7.1.Atmos-IAMABLE`, four fifths of it the lead over
-        // again, in the addon's own dots.
+        // The addon's own line reads `The.Matrix.1999.RERIP.2160p.UHD
+        // .BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE`, in its own
+        // dots; four fifths of it is the lead over again.
         '10bit.HDR.TrueHD.7.1.Atmos',
         '👤 99 💾 35.09 GB ⚙️ RARBG',
       ],
@@ -1012,8 +1011,9 @@ void recordedAddonAnswers() {
       tracker: '1337x',
       lead: 'The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
       rest: const [
-        // Was the whole of `[PACK] The Matrix 4K UHD Collection
-        // (1999-2003) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]`.
+        // The addon's line is the whole of `[PACK] The Matrix 4K UHD
+        // Collection (1999-2003) (2160p HDR BDRip x265 10bit DTS)
+        // [4KLiGHT]`.
         'PACK 4K UHD Collection 1999-2003',
         '👤 80 💾 4.98 GB ⚙️ 1337x',
       ],
@@ -1050,9 +1050,9 @@ void recordedAddonAnswers() {
           'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO.CASTELLANO'
           '.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN',
       rest: const [
-        // Was `The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos
-        // .H265.MP4-BEN.THE.MEN`: seventeen words of the lead and one of
-        // its own.
+        // The addon's own line reads `The.Matrix.1999.2160p.MAX.WEB-DL.DV
+        // .HDR.MULTi.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN`: seventeen words
+        // of the lead and one of its own.
         'MULTi',
         '👤 11 💾 24.45 GB ⚙️ ThePirateBay',
         'Multi Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇫🇷 / 🇮🇳',
@@ -1112,11 +1112,12 @@ void recordedAddonAnswers() {
           'The Matrix (1999) Remastered RiffTrax sextuple audio 720p.10bit'
           '.BluRay.x265-budgetbits',
       rest: const [
-        // Was `The Matrix Trilogy (1999-2003) Remastered RiffTrax multi
-        // audio 720p.10bit.BluRay.x265-budgetbits`: eleven of its fourteen
-        // words are the lead's, and the three that are not say it is the
-        // trilogy, that the trilogy runs to 2003, and that the audio on it
-        // is `multi` where the file's own name says `sextuple`.
+        // The addon's line reads `The Matrix Trilogy (1999-2003)
+        // Remastered RiffTrax multi audio 720p.10bit.BluRay.x265
+        // -budgetbits`: eleven of its fourteen words are the lead's, and
+        // the three that are not say it is the trilogy, that the trilogy
+        // runs to 2003, and that the audio on it is `multi` where the
+        // file's own name says `sextuple`.
         'Trilogy 1999-2003 multi',
         '👤 6 💾 1.11 GB ⚙️ 1337x',
         'Multi Audio / 🇬🇧',
@@ -1136,8 +1137,9 @@ void recordedAddonAnswers() {
           'Breaking Bad (2008) S01E01 '
           '(2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)',
       rest: const [
-        // Was the whole line over again with `S01` where the lead has
-        // `S01E01`. Seventy-eight characters for a difference of three.
+        // The addon's line is the whole line over again, with `S01`
+        // where the lead has `S01E01` -- seventy-eight characters for a
+        // difference of three.
         'S01',
         '👤 83 💾 6.27 GB ⚙️ ThePirateBay',
       ],
@@ -1173,12 +1175,12 @@ void recordedAddonAnswers() {
       tracker: '1337x',
       lead: 'Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD',
       rest: const [
-        // Was `Breaking Bad COMPLETE S01-S05 2160p WEB-DL Rus Ukr Eng
-        // DTS-HD MA5.1 x264-TrollUHD [RiCK]`. Half of it was the lead. The
-        // half that stays is the scope, the three dubs and the group that
-        // put it together -- `[RiCK]` without its brackets, because the
-        // words between them and it have gone and a bracket with no
-        // partner is not punctuation any more.
+        // The addon's line reads `Breaking Bad COMPLETE S01-S05 2160p
+        // WEB-DL Rus Ukr Eng DTS-HD MA5.1 x264-TrollUHD [RiCK]`. Half of
+        // it is the lead; what stays is the scope, the three dubs and
+        // the group that put it together -- `[RiCK]` without its
+        // brackets, since a bracket with nothing between it and its
+        // partner is not punctuation.
         'COMPLETE S01-S05 WEB-DL Rus Ukr Eng RiCK',
         '👤 49 💾 50.81 GB ⚙️ 1337x',
         '🇬🇧 / 🇷🇺 / 🇺🇦',
@@ -1244,8 +1246,10 @@ void recordedAddonAnswers() {
       tracker: 'Torrent9',
       lead: 'Breaking.Bad.S01E01.MULTi.1080p.WEB.DDP5.1.x264-TFA',
       rest: const [
-        // Was `Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA`:
-        // fifty-three characters, one word of which the lead had not said.
+        // The addon's line reads
+        // `Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA`:
+        // fifty-three characters, one word of which the lead does not
+        // say.
         'iNTEGRALE',
         '👤 6 💾 2.69 GB ⚙️ Torrent9',
         'Multi Audio / 🇫🇷',
@@ -1338,8 +1342,8 @@ void recordedAddonAnswers() {
           '30 Rock (2006) - S02E11 - MILF Island '
           '(1080p AMZN WEBRip x265 Silence)',
       rest: const [
-        // Was `30 Rock (2006) Season 1-7 S01-S07 (1080p AMZN WEBRip x265
-        // HEVC 10bit AAC 5.1 Silence) [QxR]`.
+        // The addon's line reads `30 Rock (2006) Season 1-7 S01-S07
+        // (1080p AMZN WEBRip x265 HEVC 10bit AAC 5.1 Silence) [QxR]`.
         'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
         '\u{1F464} 117 \u{1F4BE} 388.27 MB \u2699\uFE0F 1337x',
       ],
@@ -1356,7 +1360,7 @@ void recordedAddonAnswers() {
       tracker: 'TorrentGalaxy',
       lead: '30.Rock.S02E11.1080p.BluRay.x265-KONTRAST',
       rest: const [
-        // Was `30.Rock.S02.1080p.BluRay.x265-KONTRAST`.
+        // The addon's line reads `30.Rock.S02.1080p.BluRay.x265-KONTRAST`.
         'S02',
         '\u{1F464} 106 \u{1F4BE} 413.65 MB \u2699\uFE0F TorrentGalaxy',
       ],
@@ -1412,7 +1416,7 @@ void recordedAddonAnswers() {
       tracker: 'ThePirateBay',
       lead: '30 Rock - S02E11 - MILF Island (1080p.H265.AAC)',
       rest: const [
-        // Was `30 Rock Complete (1080p.H265.AAC.mkv)`.
+        // The addon's line reads `30 Rock Complete (1080p.H265.AAC.mkv)`.
         'Complete',
         '\u{1F464} 5 \u{1F4BE} 168.52 MB \u2699\uFE0F ThePirateBay',
       ],
@@ -1430,7 +1434,8 @@ void recordedAddonAnswers() {
           '30.Rock.S02E11.MILF.Island.1080p.DTS-HD.MA.5.1.AVC.'
           'REMUX-FraMeSToR',
       rest: const [
-        // Was `30 Rock S02 1080p DTS-HD MA 5.1 AVC REMUX-FraMeSToR`.
+        // The addon's line reads `30 Rock S02 1080p DTS-HD MA 5.1 AVC
+        // REMUX-FraMeSToR`.
         'S02',
         '\u{1F464} 4 \u{1F4BE} 4.95 GB \u2699\uFE0F 1337x',
       ],
@@ -1609,8 +1614,8 @@ void recordedAddonAnswers() {
               .contains('🇸🇪'))
             row['addon'],
       ];
-      // Exactly one recorded stream offers it, which is the point: before
-      // this parser nothing in the app could have said so.
+      // Exactly one recorded stream offers it, which is the point: the
+      // parser is what makes the app able to say so at all.
       expect(withSwedish, ['torrentio']);
     });
   });

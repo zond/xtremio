@@ -32,22 +32,22 @@ import 'remote_press.dart';
 /// ([TvLadderRow.advanceOnSelect]). A season pill switches the season when
 /// the remote lands on it, an episode loads its streams, a source group
 /// opens: by the time select is pressed there is nothing left for it to
-/// do, and viewers pressed it and saw nothing happen. On those rows select
-/// still does what the card does, and then what down does.
+/// do, and a press that visibly does nothing reads as broken. On those
+/// rows select still does what the card does, and then what down does.
 ///
 /// Levels are numbers rather than positions in a list because the rows
 /// they name come and go: a film has no episode row, a title nobody has
 /// played has no last-used source. Leave gaps ([TvLadderRow.level]), and a
 /// row that is not on screen is simply not registered.
 ///
-/// **A ladder can collapse** ([TvLadderRung]). A screen whose every rung is
-/// drawn out is a wall: the details screen had the seasons, the episodes,
-/// two rows of chips, the last-used source, the groups and their sources
-/// all on the panel at once, and a 720p television has room for about half
-/// of that. So each rung can be a header line instead -- what it is called
-/// and what it holds -- with one of them open at a time. What is open is
-/// the screen's to decide, not this widget's: which rung a title is *for*
-/// is a question about the title.
+/// **A ladder can collapse** ([TvLadderRung]). A screen with every rung
+/// open at once is a wall: the details screen's seasons, episodes, two
+/// rows of chips, last-used source, and groups and their sources would
+/// fill about twice what a 720p television has room for. So each rung can
+/// be a header line instead -- what it is called and what it holds --
+/// with one of them open at a time. What is open is the screen's to
+/// decide, not this widget's: which rung a title is *for* is a question
+/// about the title.
 class TvLadder extends StatefulWidget {
   const TvLadder({super.key, required this.child});
 
@@ -85,10 +85,10 @@ class TvLadderController {
   /// Where the remote was in each row, by level and not by row.
   ///
   /// A row that is on screen keeps this itself. A rung that collapses
-  /// takes its rows out of the tree entirely ([TvLadderRung]), and a row
-  /// that has been disposed of remembers nothing -- so walking into the
-  /// sources and coming back to the episodes landed on the first episode
-  /// of the season rather than on the one whose sources those were. The
+  /// takes its rows out of the tree entirely ([TvLadderRung]), so a
+  /// disposed row's own memory would not survive it: keeping it only there
+  /// would land back on the season's first episode, not the one whose
+  /// sources those were, after walking into the sources and back. The
   /// level is the row's identity across that, which is what it already is
   /// for the walk itself.
   final Map<int, int> _remembered = {};
@@ -221,11 +221,10 @@ class TvLadderRowState extends State<TvLadderRow> {
   /// is built during *layout*: the details header's description measures
   /// the words against the width it is given ([LayoutBuilder]), and a node
   /// attached at layout is attached after everything beside it that was
-  /// attached at build. The row's first stop was then the bookmark drawn to
-  /// the description's right, which is what a press down out of the app bar
-  /// landed on -- a stop three metres away is read left to right, and the
-  /// order the walk knew was the order the frame happened to be assembled
-  /// in.
+  /// attached at build. Left to that, the row's first stop would be the
+  /// bookmark drawn to the description's right, and a press down out of
+  /// the app bar would land there -- a stop three metres away is read left
+  /// to right, not in the order the frame happened to be assembled in.
   ///
   /// A row that knows better declares its order with [FocusTraversalOrder],
   /// the same annotation an [OrderedTraversalPolicy] above those stops

@@ -156,8 +156,8 @@ void main() {
     tester,
   ) async {
     // Forty-eight logical pixels of room under the fold and a block that
-    // needs two hundred: the case the owner met, where the last lines of
-    // the model-test report stayed off the bottom of the television.
+    // needs two hundred: without scrolling, a block this tall would land
+    // with its last lines off the bottom of the screen.
     useScreen(tester, tvSize);
     await tester.pumpWidget(
       page([

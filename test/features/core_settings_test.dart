@@ -148,7 +148,7 @@ void main() {
       expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isFalse);
       // …through a `ctx` pull asked for before the engine handled it, which
       // answers the settings from before the change: taken as the
-      // authority, it snapped the control back and had the next change
+      // authority, it would snap the control back and have the next change
       // send the old value again.
       core.setState(CoreField.ctx, loadCtxLoggedOutFixture());
       await tester.pumpAndSettle();
@@ -369,7 +369,7 @@ void main() {
       tester,
     ) async {
       // Nothing has been chosen, so what the switch shows is the default,
-      // and the default no longer varies by device: the app does not guess
+      // and the default is the same on every device: the app does not guess
       // at what this connection costs anybody.
       await pumpSettings(tester, prefs: AppPrefs.inMemory(), device: tv);
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
@@ -439,8 +439,7 @@ void main() {
       // What turning it on buys is on the tile, not in a help page.
       expect(find.text(FocusEmphasis.bold.description), findsOneWidget);
 
-      // One press, where the dropdown this replaced cost a press to open,
-      // a walk to the value and a press to choose.
+      // A single press turns it on, with nothing to open or pick from.
       await tester.tap(theSwitch());
       await tester.pumpAndSettle();
 
@@ -457,9 +456,8 @@ void main() {
     testWidgets('a choice made before the switch existed survives it', (
       tester,
     ) async {
-      // The stored key and both stored spellings are unchanged, so a
-      // preferences file written by the dropdown build comes back as the
-      // switch turned on -- and turning it off writes the other spelling
+      // Both stored spellings round-trip, so a stored value from either UI
+      // reads back correctly, and turning it off writes the false spelling
       // rather than removing the key.
       final stored = FakePrefsClient({
         AppPrefs.focusEmphasisKey: FocusEmphasis.bold.stored,

@@ -456,8 +456,7 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
 /// retargets it -- `crate::core::pin_to_embedded` rewrites the
 /// streaming server URL in the settings and not the addon -- while the
 /// embedded server is always on a port the OS picked (`server::spawn`
-/// binds port 0; it has not asked for 11470 since the fallback that
-/// handled a taken port went). So the ports never match, on every boot and
+/// binds port 0, never 11470). So the ports never match, on every boot and
 /// not only when no server is running at all: the by-name rule is the one
 /// that applies to the local addon, and dropping it as an edge case would
 /// count its loopback answer as network evidence every time.

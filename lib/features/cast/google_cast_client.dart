@@ -118,10 +118,9 @@ class GoogleCastClient implements CastClient {
   /// A receiver that refuses the film says so here and nowhere else: the
   /// load is handed to the SDK, which answers at once, and the refusal
   /// arrives later as a status of `idle` with a reason. Without this, a
-  /// receiver that turned the media down and a receiver that never heard
-  /// of us looked identical from the sender -- a listener that started,
-  /// ran for twenty seconds and stopped, with nothing in between (the
-  /// field log of 2026-09-21, casting from the phone to the television).
+  /// receiver that turned the media down and one that never heard of us
+  /// look identical from the sender: a listener that started, ran, and
+  /// stopped, with nothing in between to say why.
   void _logWhatTheReceiverSays(GoggleCastMediaStatus? status) {
     final reason = status?.idleReason;
     final said = status == null
@@ -279,13 +278,11 @@ class GoogleCastClient implements CastClient {
   ///
   /// **A LOAD sent before the session is up reaches nobody.** Starting a
   /// session answers as soon as the platform has taken the request, long
-  /// before the receiver has launched its application, and the film was
-  /// handed over in that gap: the receiver came up with no media on it
-  /// and went on reporting "No media status" until the sender gave up.
-  /// From the sending side that looked exactly like a receiver that could
-  /// not reach us -- it asked the LAN listener for nothing, because it had
-  /// never been told to ask for anything (the field log of 2026-09-21,
-  /// both ends).
+  /// before the receiver has launched its application; a load handed over
+  /// into that gap leaves the receiver with no media, reporting "No media
+  /// status" until the sender gives up -- indistinguishable, from the
+  /// sending side, from a receiver that could never reach us, since it
+  /// never asked the LAN listener for anything either.
   ///
   /// [reports] says whether each session the platform reports is
   /// connected; [now] answers the same question about the session standing
@@ -357,14 +354,12 @@ class GoogleCastClient implements CastClient {
   ///
   /// A silence is the answer this call never having existed gives: iOS has
   /// no such lookup, an old build has no such channel method, and a route
-  /// can go stale between discovering it and casting to it. The server then
-  /// ranks its own interfaces, which is what it did for every platform
-  /// before this -- which is why the row is forgotten before it is asked
-  /// for. Only ever writing would let a silence reuse the address of the
-  /// last cast to this receiver, so the ranking a silence is documented to
-  /// fall back to would never be reached at all, and a receiver moved to
-  /// another part of the network would be handed an interface chosen for
-  /// where it used to be. There is no test for this and there cannot be
+  /// can go stale between discovering it and casting to it. The row is
+  /// removed before the lookup runs, not merely replaced after one
+  /// succeeds, so a silence falls back to the server's own interface
+  /// ranking rather than reusing this receiver's last known address --
+  /// which would be wrong for a receiver that has since moved to another
+  /// part of the network. There is no test for this and there cannot be
   /// one here: everything below the first line is the platform's, and
   /// `isSupported` is false wherever the tests run.
   Future<void> _rememberAddress(String id) async {

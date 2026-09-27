@@ -13,32 +13,23 @@ import 'diagnostics_log.dart';
 /// disk, so that dropping a decoded one costs a local read rather than a
 /// download.
 ///
-/// **There was no such cache, and the ceiling was chosen as if there
-/// were.** `dart:io`'s `HttpClient` implements no HTTP cache of any kind,
-/// and Flutter's `NetworkImage` gives it none: it fetches into memory,
-/// hands the bytes to the decoder and forgets them. So every eviction
-/// `XtremioBootstrap.imageCacheCeilingBytes` caused, and every one of the
-/// wholesale `ImageCache.clear`s `XtremioApp` does when the app is
-/// backgrounded, was paid for the next time the picture was drawn with a
-/// DNS lookup, a TLS handshake and a round trip to metahub -- on a
-/// television, over whatever the house wifi is doing. A ceiling that is
-/// cheap to cross is what lets it be lowered, and until this existed
-/// crossing it was the most expensive thing the app could do.
-///
-/// On the owner's Chromecast with Google TV, browsing two titles and
-/// returning to the board leaves Flutter's cache at 33 MB of its 33 MB
-/// ceiling in 80 images, against a settled native heap of 42 MB for the
-/// whole process: about four fifths of everything the app retains after
-/// browsing is decoded artwork, and the low-memory killer has taken this
-/// app at 203 MB and at 147 MB resident.
+/// **Nothing else caches an image.** `dart:io`'s `HttpClient` implements no
+/// HTTP cache, and Flutter's `NetworkImage` fetches into memory, hands the
+/// bytes to the decoder and forgets them. Without this, every eviction
+/// `XtremioBootstrap.imageCacheCeilingBytes` forces, and every wholesale
+/// `ImageCache.clear` `XtremioApp` runs on backgrounding, costs a DNS
+/// lookup, a TLS handshake and a round trip to metahub on the next draw --
+/// on a television, over whatever the house wifi is doing. The low-memory
+/// killer has taken this app at 147 MB resident, so that decoded-image
+/// ceiling has to stay low, and a cheap eviction is what a low ceiling
+/// needs.
 ///
 /// **What is stored is the file the addon served, not the decode.** A
 /// poster is twenty to forty kilobytes of JPEG and about four hundred
 /// kilobytes of texture, so the bytes here are an order of magnitude
 /// smaller than the ones they refill, and they are the ones a re-decode
 /// needs. Nothing here decides how a picture is decoded: the bound stays
-/// where it was, on the `ResizeImage` round the provider (see
-/// [DiskCachedImage.bounded]), so what is drawn is what was drawn before.
+/// on the `ResizeImage` round the provider (see [DiskCachedImage.bounded]).
 ///
 /// **The index is the whole point of the cold path.** Whether a URL is
 /// here is answered by [has] from a map built once at [openIn], never by
@@ -68,7 +59,7 @@ class ImageDiskCache {
   /// well over a thousand pictures, where Flutter's 32 MiB of decoded
   /// images holds eighty. Everything a browsing session touches, and most
   /// of a library, therefore survives every eviction and every
-  /// backgrounding, which is what the ceiling above it was costing.
+  /// backgrounding at no re-fetch cost.
   ///
   /// It is deliberately *not* taken out of the server's `cacheSize`
   /// budget (`rust/src/storage.rs`, reported on the `cache:` line). That
@@ -100,8 +91,8 @@ class ImageDiskCache {
   ///
   /// Null is the honest state and not a failure: a test that never boots
   /// the app has no store, and neither has a device whose cache directory
-  /// could not be made. Both draw exactly what they drew before -- every
-  /// fetch goes to the network, which is what the app did until now.
+  /// could not be made. Both draw as if there were no store at all: every
+  /// fetch goes to the network.
   static ImageDiskCache? get instance => _instance;
 
   /// Puts [cache] in place for the life of the process (null takes one

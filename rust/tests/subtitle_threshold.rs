@@ -8,11 +8,11 @@
 //! scored, and the extreme pairs at either end -- and the tests here say
 //! that the constant still falls where the numbers put it.
 //!
-//! **The corpus is real files, because the number the threshold replaced
-//! was set on a case that does not occur.** That one came from
-//! English-to-English pairs, which share a timing grid because one was
-//! derived from the other, and it refused the owner's own Swedish file.
-//! So this is gathered from the OpenSubtitles addon the app itself asks:
+//! **The corpus is real files, because English-to-English pairs are not a
+//! case that occurs.** They share a timing grid, since one is derived from
+//! the other, and a threshold tuned on them refuses a real file -- the
+//! owner's own Swedish subtitle, for one. So this is gathered from the
+//! OpenSubtitles addon the app itself asks:
 //! forty titles -- films and episodes of several series -- in every
 //! language offered for them, which is both the languages that merge lines
 //! heavily and the ones that split them.
@@ -50,10 +50,10 @@ use xtremio_core::subtitles::{align, cue_spans, Cue, CONVINCING};
 /// The median start error, in seconds, under which a transform is taken to
 /// be the right one, and the share of cues that must land that close.
 ///
-/// A third of a second because that is what the measurement this replaced
-/// called a matching cue; half of them because a translation that merges
-/// lines gives the merged line its own beat, so a perfectly good pairing
-/// only ever has some of its starts on the other file's.
+/// A third of a second is the median start error that marks a matching cue;
+/// half of them because a translation that merges lines gives the merged
+/// line its own beat, so a perfectly good pairing only ever has some of its
+/// starts on the other file's.
 const RIGHT_MEDIAN: f64 = 0.35;
 const RIGHT_WITHIN: f64 = 0.5;
 
@@ -133,9 +133,9 @@ fn the_threshold_sits_above_every_one_a_mismatch_reached() {
 
 #[test]
 fn the_measurement_is_wide_enough_to_have_set_a_number() {
-    // Five pairings of one episode is what the placeholder was picked on,
-    // and the reason it was a placeholder. Anything that thins the corpus
-    // to that again should fail here rather than quietly weaken the case.
+    // Five pairings of one episode is too thin a corpus to set this number
+    // on: anything that thins the corpus to that again should fail here
+    // rather than quietly weaken the case.
     let recorded = Calibration::read();
     assert!(recorded.gathered.titles >= 20, "{:?}", recorded.gathered);
     assert!(recorded.gathered.languages >= 15, "{:?}", recorded.gathered);

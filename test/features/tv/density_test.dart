@@ -332,10 +332,10 @@ void main() {
       tester,
     ) async {
       // The header and the caption are text in boxes of a fixed height, so
-      // both have to grow with the text -- and the row with them. What may
-      // not happen is the poster paying for it: the strip is what is left
-      // over between the two boxes, and squeezing it there shrank the
-      // picture and, far enough up the scale, went negative.
+      // both grow with the text, and the row with them. The poster must not
+      // pay for it: the strip is what is left over between the two boxes,
+      // and squeezing it there shrinks the picture and, far enough up the
+      // scale, would drive it negative.
       useScreen(tester, tvSize);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
@@ -364,8 +364,8 @@ void main() {
         );
       }
 
-      // 3x on top of the television's own 1.15: past where the old
-      // arithmetic drove the picture to nothing.
+      // 3x on top of the television's own 1.15: large enough that an
+      // unclamped split drives the poster to nothing.
       final (posterAtOne, rowAtOne) = await measure(1);
       final (posterHuge, rowHuge) = await measure(3);
 

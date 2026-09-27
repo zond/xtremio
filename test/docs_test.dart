@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// The reference walls live in `docs/` now, and the README is a map to
-/// them. A wall nobody can find is worse than a wall, so these tests
+/// The reference walls live in `docs/`, and the README is a map to them.
+/// A wall nobody can find is worse than a wall, so these tests
 /// hold the two things that make the split work: every link between the
 /// documents resolves, and the README stays short enough to be read on
 /// arrival.
@@ -42,11 +42,10 @@ void main() {
     });
 
     test('the README fits on arrival', () {
-      // It was 1637 lines, of which 1008 were architecture. What is left is
-      // the front page: what xtremio is and does, how to get it, how it
+      // The front page: what xtremio is and does, how to get it, how it
       // works, what it runs on, what is next, the map, and the licence.
-      // Anything that pushes it back past a couple of hundred lines belongs
-      // in a document the map names instead.
+      // Anything that pushes it past a couple of hundred lines belongs in
+      // a document the map names instead.
       final lines = File('README.md').readAsLinesSync().length;
       expect(lines, lessThan(220), reason: 'README.md is $lines lines');
     });

@@ -42,7 +42,7 @@ void main() {
     // launches its application, comes up with no media on it, and reports
     // "No media status" until the sender gives up -- which from the
     // sending side is indistinguishable from a receiver that cannot reach
-    // us (the field log of 2026-09-21, read at both ends).
+    // us.
     test('a session that connects while we wait is waited for', () async {
       final reports = StreamController<bool>();
       final ready = GoogleCastClient.connected(

@@ -17,16 +17,11 @@ import '../../support/tv.dart';
 /// Reaching the link button on a television, and getting from it to a code to
 /// scan.
 ///
-/// **This file used to walk the board**, because that is where the button was:
-/// three of its tests were about the two rungs of a [TvLadder] the board hung
-/// on for this one control, and the fourth was the press that opens the list
-/// of services. The button is in the library's app bar now, and so is the
-/// walk. The rung tests did not come with it and are not replaced here:
-/// there is no ladder to test on the library (`library_screen.dart` says
-/// why), and the claim they were making about regions -- up out of the row
-/// reaches the bar, down out of the bar does not land in the grid -- is made
-/// against the library in `library_focus_test.dart`, where the rest of that
-/// screen's walk already lives.
+/// The button is in the library's app bar; there is no ladder to test here
+/// on its own (`library_screen.dart` says why), and the claim about
+/// regions -- up out of the row reaches the bar, down out of the bar does
+/// not land in the grid -- is made against the library in
+/// `library_focus_test.dart`, where the rest of that screen's walk lives.
 ///
 /// What is here is the part that is about this feature rather than about the
 /// screen under it: the button, the dialog it opens, the one row on that
@@ -95,9 +90,9 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.text('Google Drive'), findsOneWidget);
 
-    // The row takes the remote on arrival, so a dialog whose only
-    // button-shaped control used to be Cancel now opens with the remote on
-    // the thing to do.
+    // The row takes the remote on arrival, so the dialog opens with the
+    // remote on the thing to do, not on Cancel, its only other
+    // button-shaped control.
     expect(focusedLabel(tester), 'Google Drive');
     expect(
       focusMarks(),

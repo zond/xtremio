@@ -55,10 +55,9 @@ final class SubtitleTiming {
   /// own timing.
   ///
   /// A measurement and not a menu of values: the owner's own Swedish
-  /// file wants 1.0440 where the PAL constant is 1.0427, which is three
-  /// seconds across an episode. The toggle that offered the constant and
-  /// its reciprocal is gone for exactly that reason -- it was too blunt
-  /// for the case it was written for.
+  /// file wants 1.0440 where the PAL constant is 1.0427, three seconds
+  /// across an episode -- too fine a difference for a fixed choice of the
+  /// constant and its reciprocal to reach.
   final double? calibratedSpeed;
 
   /// The offset a measurement solved for, in seconds, and null when none
@@ -274,14 +273,13 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// surface meant to be operated *after* the OSD bar has faded, so the
   /// ring is the only thing saying what the centre key will press.
   ///
-  /// It used to be two pixels of [ColorScheme.primary], which was the
-  /// same mistake in a different colour -- a mid-luminance violet line is
-  /// what `FocusRing` refuses to draw, and it was deaf to the viewer's
-  /// [FocusEmphasis] besides. It is the floor's stroke now, at the
-  /// emphasis in force, so the panel and the rest of the app say the same
-  /// thing at the same weight. Kept as a style of its own rather than
-  /// left to `FocusTheme` because the panel is operated on a phone and a
-  /// desktop too, and the floor is a television's.
+  /// The ring is the floor's stroke at the viewer's [FocusEmphasis] in
+  /// force, so the panel and the rest of the app say the same thing at
+  /// the same weight -- not a fixed [ColorScheme.primary] line, which is
+  /// the mid-luminance violet `FocusRing` refuses to draw and takes no
+  /// account of the emphasis setting. Kept as a style of its own rather
+  /// than left to `FocusTheme` because the panel is operated on a phone
+  /// and a desktop too, and the floor is a television's.
   static ButtonStyle focusRing(BuildContext context) => ButtonStyle(
     side: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.focused)
@@ -394,14 +392,14 @@ class SubtitleTimingOverlay extends StatelessWidget {
                       onPress: (fire) => onShift(shiftStrideAt(fire)),
                     ),
                   ),
-                  // Read only: nothing here presses a multiplier any
-                  // more, and what is on it was measured rather than
-                  // judged. It is still shown, because the panel is the
-                  // surface operated after the OSD bar has faded and a
-                  // stretch in force is otherwise invisible -- a subtitle
-                  // that is right at this moment and wrong in ten minutes
-                  // looks exactly like one that is right. The two gaps
-                  // keep the number in the same column as the shift's.
+                  // Read only: nothing here presses a multiplier, and
+                  // what is on it was measured rather than judged. Still
+                  // shown, because the panel is the surface operated
+                  // after the OSD bar has faded and a stretch in force is
+                  // otherwise invisible -- a subtitle right at this
+                  // moment and wrong in ten minutes looks exactly like
+                  // one that is right. The two gaps keep the number in
+                  // the same column as the shift's.
                   _TimingRow(
                     label: speedLabel,
                     value: timing.speedText,

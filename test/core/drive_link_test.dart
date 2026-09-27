@@ -79,8 +79,8 @@ void main() {
     expect(_file().toJson().containsKey('durationMillis'), isFalse);
     expect(_file(height: 1080).toJson()['height'], 1080);
 
-    // Exactly what a preferences file written by the build before this one
-    // holds: the four keys that were there, and neither of the new ones.
+    // A preferences entry with only the four original keys, missing both
+    // of the newer ones.
     final stored = LinkedDriveFile.fromJson({
       'id': 'drive-file-1',
       'name': 'one.mkv',

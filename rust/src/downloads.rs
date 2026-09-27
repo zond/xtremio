@@ -394,11 +394,11 @@ impl Entry {
     /// torrent the backend does not have right now (an unmounted downloads
     /// volume) -- reports a placeholder with no path, no length and no
     /// progress. Those are treated as *unknown*, the way `path` and `size`
-    /// already were: taking them at face value demoted a complete, playable
-    /// download to `queued, 0 B` on the first refresh after a restart and
-    /// erased a `completedAt` nothing can recover. The server's own reason
-    /// still comes through, so a complete entry can explain why it is not
-    /// reachable.
+    /// already were: taken at face value they would demote a complete,
+    /// playable download to `queued, 0 B` on the first refresh after a
+    /// restart and erase a `completedAt` nothing can recover. The server's
+    /// own reason still comes through, so a complete entry can explain why
+    /// it is not reachable.
     fn apply_live(&mut self, info: &DownloadInfo, now: DateTime<Utc>) {
         let mut progress = Progress::of("", self);
         progress.apply_live(info, now);
@@ -595,11 +595,11 @@ impl Registry {
     /// an entry this build cannot read is kept
     /// verbatim (see [`Registry::unreadable`]). What is refused is a file
     /// that is not the shape this build writes: not JSON, not an object, no
-    /// `items` object, a `version` that is not a number. Each of those
-    /// used to read as an empty registry, and this list is the only record
-    /// of what the user asked to keep -- the launch hands the server its
-    /// pin set ([`pins`]) and the server sweeps everything the set does not
-    /// name -- so "empty" is the answer that deletes every download. A
+    /// `items` object, a `version` that is not a number. None of those may
+    /// read as an empty registry: this list is the only record of what the
+    /// user asked to keep -- the launch hands the server its pin set
+    /// ([`pins`]) and the server sweeps everything the set does not name --
+    /// so "empty" is the answer that deletes every download. A
     /// file whose `items` a later build made an array reads as unreadable,
     /// which keeps everything, rather than as nothing, which keeps nothing.
     pub fn parse(bytes: &[u8]) -> anyhow::Result<Self> {
@@ -727,15 +727,10 @@ static REGISTRY_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomi
 /// to keep -- the server keeps none of its own and is told the pin set from
 /// here ([`pins`]) -- so answering "no downloads" for a truncated flush is
 /// answering "delete them all", and the first thing to act on it would be
-/// the server's launch sweep.
-///
-/// It used to be moved aside and the read answered with an empty registry.
-/// Both halves were wrong once the server stopped keeping its own record:
-/// the empty answer is the delete-everything answer, and moving the file
-/// aside made the condition last exactly one launch -- that boot would keep
-/// the bytes, and the next, reading no file at all, would name an empty pin
-/// set and sweep every download. Left in place, the condition holds across
-/// launches and the disk keeps what it held until the file reads again.
+/// the server's launch sweep. Moving the file aside instead would only make
+/// the condition last one launch: the next boot, reading no file at all,
+/// would still name an empty pin set and sweep everything. Left in place,
+/// the disk keeps what it held until the file reads again.
 fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
     #[cfg(test)]
     REGISTRY_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -1169,7 +1164,8 @@ pub struct AddRequest {
     pub name: String,
     #[serde(default)]
     pub poster: Option<String>,
-    /// The addon's raw stream JSON; must be a torrent (`infoHash`).
+    /// The addon's raw stream JSON: a torrent (`infoHash`), a web link
+    /// (`url`) or a linked Drive file (`xtremio-drive:<fileId>`).
     pub stream: serde_json::Value,
     /// Overrides the stream's own `fileIdx`, for a caller that resolved the
     /// episode's index itself. Negative (the `-1` the player's URL carries)
@@ -2307,11 +2303,12 @@ impl OpenOutcome {
 /// disk, and a magnet still resolving its metadata all report `complete:
 /// false` over bytes that may be entirely present.
 ///
-/// Reading that as "not held" cost both of the things this type prevents: at
-/// boot it marked a whole, present download `gone` and let it decay into a
-/// re-download nobody asked for, and on Play it refused a file that was on
-/// the device, which `offline_play.dart` answers by falling back to the
-/// addon's own stream -- fetching a film from peers that was already here.
+/// Reading that as "not held" would cost both of the things this type
+/// prevents: at boot it would mark a whole, present download `gone` and let
+/// it decay into a re-download nobody asked for; on Play it would refuse a
+/// file that was on the device, which `offline_play.dart` answers to by
+/// falling back to the addon's own stream -- fetching a film from peers
+/// that was already here.
 ///
 /// An absence of knowledge is not a negative fact. So the caller is handed
 /// the distinction and has to decide what to do with it.
@@ -2360,9 +2357,7 @@ fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> Held {
 /// what a download has on this device is its pieces and the only reader of
 /// those is the embedded server. The URL is therefore its media route for
 /// this torrent and file (`{base}/{infoHash}/{fileIdx}`), served from the
-/// disk with no peer, no tracker and no network involved -- the same
-/// independence the `file://` URL before it had, through the one process
-/// that can now read the bytes.
+/// disk with no peer, no tracker and no network involved.
 ///
 /// **Two things have to be true, and the row is only one of them.**
 /// [`State::Complete`] is the registry's last reading, and a reading can be
@@ -2371,9 +2366,7 @@ fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> Held {
 /// cache directory), and neither event goes back and rewrites the rows. So
 /// the server is asked what it is holding *now*, and a row it does not back
 /// is refused with [`OpenFailure::NotHeld`] -- see there for what the URL
-/// would otherwise have started. The old build had the same guard in the
-/// shape its model allowed, an `is_file()` on the download's path; the file
-/// went, and the check has to go on existing without it.
+/// would otherwise have started.
 ///
 /// `entry.path` is not consulted, and must not be: the server answers it as
 /// a *name* for the file, and no whole file is ever written there.
@@ -2465,8 +2458,8 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
 ///
 /// **What makes an offline download remember where it got to.** The player
 /// records progress into a library item: one already on the device, or one
-/// it builds from the meta it fetches. Offline the fetch fails, so a title
-/// that was downloaded and never played had neither, and played without
+/// it builds from the meta it fetches. Offline the fetch fails, so without
+/// this a title downloaded and never played has neither, and plays without
 /// being recorded. With this answering the failed fetch, the player builds
 /// the item the way it does online -- a `temp` one, kept as it plays -- and
 /// the title never has to be put into the library for it (which would put
@@ -2506,12 +2499,12 @@ fn kept_meta_in(
 }
 
 /// The process state for a caller that only wants to *read* it. Reaching
-/// for the resurrecting accessor here is what let an FFI call in flight
+/// for the resurrecting accessor here would let an FFI call in flight
 /// across a shutdown put a fresh state back into the process: a listing
 /// the app started (the downloads notification's, say) is not cancelled
 /// before the app awaits `core_shutdown`, so one landing in the window
-/// undid the shutdown's whole point. See [`crate::state::state`] for which
-/// callers may build one -- the ones that *install* something.
+/// would undo the shutdown's whole point. See [`crate::state::state`] for
+/// which callers may build one -- the ones that *install* something.
 fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
     crate::state::current()
         .ok_or_else(|| anyhow::anyhow!("the core is not initialized; is `core_init` done?"))
@@ -3000,9 +2993,9 @@ pub fn repin_drive_downloads() {
 /// as long as the tracker takes), so it may not look a state up either, and
 /// it stops once its instance has been retired. See [`load_in`].
 ///
-/// Stopping there is also why [`update_in`]'s no-resurrection has no test
-/// left: this was the one path a shutdown could drive into it, and the
-/// point of the check is that it no longer does.
+/// Stopping there is also why [`update_in`]'s no-resurrection guarantee
+/// cannot be exercised through this path: the check here is what keeps a
+/// shutdown from ever driving into it.
 ///
 /// It is also where the file's intents are finished (see the module docs):
 /// removals a kill interrupted first, so a cancelled download is not

@@ -202,14 +202,14 @@ class BufferAheadSection extends StatelessWidget {
 /// **A switch, not a dropdown.** [FocusEmphasis] has exactly two values, so
 /// a menu is a control too many: it costs a press to open, a walk to the
 /// value and a press to choose where a switch costs one press, and on a
-/// television a dropdown is the shape that once trapped the D-pad in the
-/// streaming-server settings. It is labelled for what turning it on does
+/// television a dropdown risks trapping the D-pad (as one did in the
+/// streaming-server settings). It is labelled for what turning it on does
 /// rather than for the axis it sits on, and it is a [SwitchListTile] like
 /// "Binge watching" above rather than a shape of its own.
 ///
 /// **The enum is still what is stored and what the ring reads**, both
-/// values and the same key, so somebody who chose Bold before this keeps
-/// it and nothing about the drawing changes.
+/// values and the same key, so a stored choice of Bold is unaffected and
+/// nothing about the drawing changes.
 class FocusEmphasisSection extends StatelessWidget {
   const FocusEmphasisSection({super.key, required this.prefs});
 
@@ -535,26 +535,14 @@ class ChoiceTile<T> extends StatelessWidget {
 /// where it does not fit. A [DropdownButton] measures itself against its
 /// *widest* item rather than the chosen one -- "Download the whole file"
 /// among the buffer choices, "Portuguese (Brazil)" among the languages --
-/// and `ListTile` lets `trailing` be as wide as it likes in the whole
-/// content width, then lays the title and the subtitle out in what is left
-/// of that, clamped at zero. So the menu had the row and the words had
-/// what was left: the "Buffer ahead" tile was 184 dp tall on a 360 dp
-/// phone with its title clipped to 67 dp, and 376 dp tall at 320 dp with
-/// 27 dp of it. Turn the system font up a third and a 360 dp phone gets a
-/// 1002 dp tile -- a screenful and a half for one row -- and 320 dp gets
-/// no title at all. Nothing was wrong at the 900 dp every other test of
-/// this screen mounts it at, which is the only width it had ever been laid
-/// out at.
+/// and `ListTile` lets `trailing` be as wide as it likes, squeezing the
+/// title and subtitle into whatever is left, clamped at zero: at a larger
+/// system font a 360 dp phone's "Buffer ahead" tile grew past 1000 dp for
+/// one row, with the title clipped away entirely at some widths.
 ///
 /// **A widget test sees the worse end of it**, because the test font draws
-/// every glyph a square: that makes the menu 395 dp wide against the
-/// 320 dp of content a 360 dp phone has, and a `trailing` measuring
-/// exactly the tile width is the assertion "Trailing widget consumes the
-/// entire tile width", which takes the screen down with a cascade of
-/// `hasSize` failures behind it. It fires below about 436 dp; above that
-/// nothing throws and the tile is 920 dp tall until about 700 dp, so the
-/// width at which the screen stops throwing is nowhere near the width at
-/// which it is right.
+/// every glyph a square, so `trailing` claims the whole tile width and a
+/// `hasSize` assertion throws below about 436 dp.
 ///
 /// On a line of its own the menu has that line to itself at any width, so
 /// nothing here depends on how long the longest label happens to be --
