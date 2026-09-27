@@ -18,6 +18,10 @@ class FakeDriveFileOpener implements DriveFileOpener {
   /// Every open that was asked for, in order.
   final List<DriveOpenRequest> asked = [];
 
+  /// While set, every open waits on it before answering: what a test needs
+  /// to press again while the server is still being asked.
+  Future<void>? pending;
+
   @override
   Future<DriveOpened> openDriveFile({
     required String fileId,
@@ -27,6 +31,7 @@ class FakeDriveFileOpener implements DriveFileOpener {
     asked.add(
       DriveOpenRequest(fileId: fileId, refreshToken: refreshToken, name: name),
     );
+    if (pending != null) await pending;
     if (answers.isEmpty) return fakeDrivePlayable(name: name);
     return answers.length == 1 ? answers.first : answers.removeAt(0);
   }

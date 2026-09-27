@@ -33,9 +33,6 @@ class DiscoverScreen extends StatefulWidget {
   /// Catalog to open; null lets the engine choose.
   final ResourceRequest? request;
 
-  /// From this width on, types are a segmented button rather than chips.
-  static const double wideBreakpoint = 720;
-
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
 }
@@ -120,6 +117,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// engine choose) and takes the field over.
   void _load(ResourceRequest? request) {
     _request = request;
+    // A load starts the catalog again from its first page, so a next page
+    // asked for before it is not one this list is still waiting on.
+    _nextPageRequestedAt = -1;
     claimField();
     _client?.dispatch(
       request == null
@@ -128,10 +128,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     );
   }
 
-  void _select(ResourceRequest request) {
-    _nextPageRequestedAt = -1;
-    _load(request);
-  }
+  void _select(ResourceRequest request) => _load(request);
 
   bool _onScroll(ScrollNotification notification, DiscoverState state) {
     if (notification.metrics.extentAfter < 600 &&
@@ -197,12 +194,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 160,
-          childAspectRatio: 0.56,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-        ),
+        gridDelegate: posterGridDelegate,
         itemCount: items.length + (state.isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= items.length) {
@@ -297,7 +289,7 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWide =
-        MediaQuery.sizeOf(context).width >= DiscoverScreen.wideBreakpoint;
+        MediaQuery.sizeOf(context).width >= FilterSegments.breakpoint;
     final types = _options(selectable.types, label: contentTypeLabel);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),

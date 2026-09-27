@@ -321,24 +321,40 @@ class AppPrefs extends ChangeNotifier {
   String? get drivePendingSession => _drivePendingSession;
   bool _driveTokenDead = false;
 
-  /// Reads every stored preference. Called once at start-up, before any
-  /// screen that reads one can be on the stack, so the first list is
-  /// already laid out the way it was left.
+  /// Reads every stored preference. Called once at start-up, and not
+  /// waited for: `XtremioApp` builds its first screens beside it, so a
+  /// preference can be set while the read is out.
+  ///
+  /// **A value set during the load wins over the stored one**, which is
+  /// older by definition. The keys written meanwhile ([_setWhileLoading])
+  /// are left out of what is read, and the values whose absence reads as
+  /// the default are not read at all for them -- an absence that would
+  /// otherwise put the default over what was just set.
   Future<void> load() async {
     final client = this.client;
     if (client == null) return;
-    final Map<String, dynamic> stored;
+    final Map<String, dynamic> fetched;
+    final written = _setWhileLoading = <String>{};
     try {
-      stored = await client.getAll();
+      fetched = await client.getAll();
     } catch (error) {
       // Preferences are conveniences: a failure here is a run with the
       // defaults, never a failure to start.
       if (kDebugMode) debugPrint('preferences unavailable: $error');
       return;
+    } finally {
+      _setWhileLoading = null;
     }
+    final stored = {
+      for (final entry in fetched.entries)
+        if (!written.contains(entry.key)) entry.key: entry.value,
+    };
+    bool loaded(String key) => !written.contains(key);
     var changed = false;
     final sectioned = stored[streamsSectionedKey];
-    if (sectioned is bool) {
+    if (!loaded(streamsSectionedKey)) {
+      // Set during the load, so neither name is read.
+    } else if (sectioned is bool) {
       if (sectioned != _streamsSectioned) {
         _streamsSectioned = sectioned;
         changed = true;
@@ -406,45 +422,55 @@ class AppPrefs extends ChangeNotifier {
     // Rows this build cannot read are dropped rather than failing the
     // load; an adjustment forgotten is the failure this whole store is
     // built to accept.
-    final sync = SubtitleSyncMemory.fromJson(stored[subtitleSyncKey]);
-    if (sync != _subtitleSync) {
-      _subtitleSync = sync;
-      changed = true;
+    if (loaded(subtitleSyncKey)) {
+      final sync = SubtitleSyncMemory.fromJson(stored[subtitleSyncKey]);
+      if (sync != _subtitleSync) {
+        _subtitleSync = sync;
+        changed = true;
+      }
     }
-    final picks = SubtitlePickMemory.fromJson(stored[subtitlePicksKey]);
-    if (picks != _subtitlePicks) {
-      _subtitlePicks = picks;
-      changed = true;
+    if (loaded(subtitlePicksKey)) {
+      final picks = SubtitlePickMemory.fromJson(stored[subtitlePicksKey]);
+      if (picks != _subtitlePicks) {
+        _subtitlePicks = picks;
+        changed = true;
+      }
     }
-    final similar = SimilarMemory.fromJson(stored[similarSuggestionsKey]);
-    if (similar != _similarSuggestions) {
-      _similarSuggestions = similar;
-      changed = true;
+    if (loaded(similarSuggestionsKey)) {
+      final similar = SimilarMemory.fromJson(stored[similarSuggestionsKey]);
+      if (similar != _similarSuggestions) {
+        _similarSuggestions = similar;
+        changed = true;
+      }
     }
-    final linked = LinkedDriveFiles.fromJson(stored[driveLinkedFilesKey]);
-    if (linked != _driveLinkedFiles) {
-      _driveLinkedFiles = linked;
-      changed = true;
+    if (loaded(driveLinkedFilesKey)) {
+      final linked = LinkedDriveFiles.fromJson(stored[driveLinkedFilesKey]);
+      if (linked != _driveLinkedFiles) {
+        _driveLinkedFiles = linked;
+        changed = true;
+      }
     }
     final tokenDead = stored[driveTokenDeadKey];
     if (tokenDead is bool && tokenDead != _driveTokenDead) {
       _driveTokenDead = tokenDead;
       changed = true;
     }
-    final pending = stored[drivePendingSessionKey];
-    final pendingSession = pending is String && pending.isNotEmpty
-        ? pending
-        : null;
-    if (pendingSession != _drivePendingSession) {
-      _drivePendingSession = pendingSession;
-      changed = true;
+    if (loaded(drivePendingSessionKey)) {
+      final pending = stored[drivePendingSessionKey];
+      final pendingSession = pending is String && pending.isNotEmpty
+          ? pending
+          : null;
+      if (pendingSession != _drivePendingSession) {
+        _drivePendingSession = pendingSession;
+        changed = true;
+      }
     }
     if (changed) notifyListeners();
     // After the values are in memory, because nothing above waits on it:
     // a removal that fails is tried again at the next start, and the
     // value it failed to remove was not being read anyway.
     for (final key in retiredKeys) {
-      if (stored.containsKey(key)) await _write(key, null);
+      if (fetched.containsKey(key)) await _write(key, null);
     }
   }
 
@@ -571,9 +597,14 @@ class AppPrefs extends ChangeNotifier {
     await _write(drivePendingSessionKey, value);
   }
 
+  /// The keys written since [load] asked for the stored values, while it
+  /// is waiting for them; null otherwise.
+  Set<String>? _setWhileLoading;
+
   Future<void> _write(String key, Object? value) async {
     final client = this.client;
     if (client == null) return;
+    _setWhileLoading?.add(key);
     try {
       await client.set(key, value);
     } catch (error) {

@@ -67,21 +67,6 @@ class AccountSection extends StatefulWidget {
   /// about the circle changes, and the bound has something to come from.
   static const double avatarRadius = 20;
 
-  /// The `source.event` of an `Error` event, when it has one.
-  static String? errorSourceOf(RuntimeCoreEvent event) {
-    final source = _sourceOf(event);
-    return source?['event'] as String?;
-  }
-
-  /// The `error.message` of an `Error` event, when it has one.
-  static String? errorMessageOf(RuntimeCoreEvent event) {
-    final args = event.args;
-    if (args is! Map<String, dynamic>) return null;
-    final error = args['error'];
-    final message = error is Map<String, dynamic> ? error['message'] : null;
-    return message is String && message.isNotEmpty ? message : null;
-  }
-
   /// The `library_missing` flag of a `UserLibraryMissing` event, whether
   /// it arrived plainly (`false` after a sync, `true` in the engine's unit
   /// tests only) or as the source of the `Error` the login path wraps it
@@ -92,21 +77,12 @@ class AccountSection extends StatefulWidget {
       case 'UserLibraryMissing':
         final eventArgs = event.args;
         args = eventArgs is Map<String, dynamic> ? eventArgs : null;
-      case 'Error' when errorSourceOf(event) == 'UserLibraryMissing':
-        final sourceArgs = _sourceOf(event)?['args'];
-        args = sourceArgs is Map<String, dynamic> ? sourceArgs : null;
+      case 'Error' when event.errorSource == 'UserLibraryMissing':
+        args = event.errorSourceArgs;
       default:
         return null;
     }
     return args?['library_missing'] as bool? ?? true;
-  }
-
-  static Map<String, dynamic>? _sourceOf(RuntimeCoreEvent event) {
-    if (event.name != 'Error') return null;
-    final args = event.args;
-    if (args is! Map<String, dynamic>) return null;
-    final source = args['source'];
-    return source is Map<String, dynamic> ? source : null;
   }
 
   @override
@@ -165,6 +141,10 @@ class _AccountSectionState extends State<AccountSection> {
       setState(() => _libraryMissing = libraryMissing);
       return;
     }
+    if (event.settlesLibrarySync) {
+      setState(() => _syncing = false);
+      return;
+    }
     switch (event.name) {
       case 'UserAuthenticated':
         setState(() {
@@ -179,22 +159,15 @@ class _AccountSectionState extends State<AccountSection> {
           _syncing = false;
           _error = null;
         });
-      case 'LibrarySyncWithAPIPlanned':
-        setState(() => _syncing = false);
-      case 'Error':
-        switch (AccountSection.errorSourceOf(event)) {
-          case 'UserAuthenticated':
-            setState(() {
-              _pending = false;
-              _error =
-                  AccountSection.errorMessageOf(event) ??
-                  (_registering
-                      ? 'The account could not be created'
-                      : 'Could not sign in');
-            });
-          case 'LibrarySyncWithAPIPlanned':
-            setState(() => _syncing = false);
-        }
+      case 'Error' when event.errorSource == 'UserAuthenticated':
+        setState(() {
+          _pending = false;
+          _error =
+              event.errorMessage ??
+              (_registering
+                  ? 'The account could not be created'
+                  : 'Could not sign in');
+        });
     }
   }
 

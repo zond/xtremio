@@ -60,6 +60,42 @@ final class RuntimeCoreEvent extends CoreEvent {
 
   Object? get args => event['args'];
 
+  /// The `source.event` of an `Error` event: the name of the event that
+  /// failed. Null for any other event.
+  String? get errorSource => _errorSource?['event'] as String?;
+
+  /// The `source.args` of an `Error` event: the arguments of the event that
+  /// failed, which for a login can be account details -- read a field of
+  /// them, never log them. Null for any other event.
+  Map<String, dynamic>? get errorSourceArgs {
+    final args = _errorSource?['args'];
+    return args is Map<String, dynamic> ? args : null;
+  }
+
+  /// The `error.message` of an `Error` event, when it has a non-empty one.
+  String? get errorMessage {
+    if (name != 'Error') return null;
+    final args = this.args;
+    if (args is! Map<String, dynamic>) return null;
+    final error = args['error'];
+    final message = error is Map<String, dynamic> ? error['message'] : null;
+    return message is String && message.isNotEmpty ? message : null;
+  }
+
+  /// Whether this ends a library sync, done or failed: what a "Sync now"
+  /// spinner waits for.
+  bool get settlesLibrarySync =>
+      name == 'LibrarySyncWithAPIPlanned' ||
+      errorSource == 'LibrarySyncWithAPIPlanned';
+
+  Map<String, dynamic>? get _errorSource {
+    if (name != 'Error') return null;
+    final args = this.args;
+    if (args is! Map<String, dynamic>) return null;
+    final source = args['source'];
+    return source is Map<String, dynamic> ? source : null;
+  }
+
   @override
   String toString() => 'RuntimeCoreEvent($name)';
 }

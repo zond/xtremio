@@ -121,15 +121,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (landed == null) return;
     final confirmed = [
       for (final MapEntry(:key, :value) in _unconfirmed.entries)
-        if (_shows(key, landed[key], value)) key,
+        if (landed[key] == value) key,
     ];
     if (confirmed.isEmpty) return;
     setState(() => confirmed.forEach(_unconfirmed.remove));
   }
-
-  /// Whether a pull's [landed] value for [key] is the [sent] one.
-  static bool _shows(String key, Object? landed, Object? sent) =>
-      landed == sent;
 
   /// The streaming-server field pulled (or failed to): piggyback the DHT
   /// read on that same trigger rather than giving it a poll of its own.

@@ -15,7 +15,7 @@ import 'package:xtremio/shell/tv_density.dart';
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
 import 'fake_proxy_streams.dart';
-import 'fake_playhead_reporter.dart';
+import 'fake_playback_hints.dart';
 import 'fake_stream_numbers_client.dart';
 import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
@@ -116,10 +116,9 @@ class PlayerHarness {
   late final FakeStreamNumbersClient streamNumbers = FakeStreamNumbersClient()
     ..callLog = calls;
 
-  /// Where the app told the server the player was; see
-  /// [FakePlayheadReporter].
-  late final FakePlayheadReporter playhead = FakePlayheadReporter()
-    ..callLog = calls;
+  /// What the app hinted to the server about the playback; see
+  /// [FakePlaybackHints].
+  late final FakePlaybackHints hints = FakePlaybackHints()..callLog = calls;
 
   /// What a stream that failed before loading turns out to be, as the
   /// screen's archive check hears it: nothing, until a test says otherwise.
@@ -237,7 +236,7 @@ class PlayerHarness {
         },
         proxyStreams: proxyStreams,
         streamNumbers: streamNumbers,
-        playhead: playhead,
+        hints: hints,
         archiveSniff: _archiveSniff,
         archiveRoute: _archiveRoute,
         child: MaterialApp(

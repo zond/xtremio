@@ -942,6 +942,46 @@ void main() {
       expect(service.collects.length, 1);
     });
 
+    testWidgets('a poll out when a native pick goes to the job does not arm '
+        'another', (tester) async {
+      // Cancelling the timer is not stopping the polling: the read already
+      // out comes back to a screen still waiting, and one that re-armed
+      // would race the job's own collect -- two destructive reads of one
+      // session.
+      final screenRead = Completer<DrivePairingAnswer>();
+      final jobRead = Completer<DrivePairingAnswer>();
+      final gate = Completer<void>();
+      final service = FakeDrivePairingService()..hold = screenRead;
+      final account = await _account(service: service);
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: account,
+          picker: _FakeNativePicker(_picked, gate: gate),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(DrivePairingScreen.defaultPollEvery);
+      expect(service.collects, hasLength(1), reason: "the screen's read");
+
+      service.hold = jobRead;
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(service.handovers, hasLength(1));
+      expect(service.collects, hasLength(2), reason: "and the job's");
+
+      screenRead.complete(const DrivePairingWaiting(signedIn: true));
+      await _tick(tester, times: 3);
+      expect(service.collects, hasLength(2));
+
+      jobRead.complete(fakeCollected());
+      await tester.pumpAndSettle();
+      expect(account.state, DriveLinkState.linked);
+      expect(service.collects, hasLength(2));
+    });
+
     testWidgets('an answer about a session the screen has left behind '
         'changes nothing', (tester) async {
       final service = FakeDrivePairingService();

@@ -169,12 +169,11 @@ class SubtitleMenu extends StatefulWidget {
   static String alternativesLabel(
     SubtitleLanguageGroup group, {
     required bool expanded,
-  }) {
-    final others = group.options.length - 1;
-    if (expanded) return 'Hide other ${group.language} files';
-    return '$others other ${group.language} '
-        '${others == 1 ? 'file' : 'files'}';
-  }
+  }) => SubtitleReferenceMenu.othersLabel(
+    group.language,
+    group.options.length - 1,
+    expanded: expanded,
+  );
 
   @override
   State<SubtitleMenu> createState() => _SubtitleMenuState();
@@ -346,11 +345,7 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
           expanded: _expanded.contains(group.language),
         ),
         expanded: _expanded.contains(group.language),
-        onTap: () => setState(() {
-          if (!_expanded.remove(group.language)) {
-            _expanded.add(group.language);
-          }
-        }),
+        onTap: () => setState(() => _toggleLanguage(_expanded, group.language)),
       ),
       if (_expanded.contains(group.language))
         for (final option in group.options)
@@ -481,11 +476,8 @@ class _SubtitleReferenceMenuState extends State<SubtitleReferenceMenu> {
             expanded: expanded,
           ),
           expanded: expanded,
-          onTap: () => setState(() {
-            if (!_expanded.remove(group.language)) {
-              _expanded.add(group.language);
-            }
-          }),
+          onTap: () =>
+              setState(() => _toggleLanguage(_expanded, group.language)),
         ),
         if (expanded)
           for (final option in candidates.skip(1)) _referenceTile(option),
@@ -603,7 +595,6 @@ class PlayerSettingsSheet extends StatelessWidget {
   const PlayerSettingsSheet({
     super.key,
     required this.rate,
-    required this.rates,
     required this.onRate,
     required this.settings,
     required this.onSetting,
@@ -613,8 +604,10 @@ class PlayerSettingsSheet extends StatelessWidget {
   });
 
   final double rate;
-  final List<double> rates;
   final ValueChanged<double> onRate;
+
+  /// The playback speeds offered.
+  static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// How far ahead this playback is buffering, and what became of the
   /// last choice.
@@ -879,4 +872,9 @@ class _MenuTile extends StatelessWidget {
     selected: selected,
     onTap: onTap,
   );
+}
+
+/// Shows [language]'s other files in a subtitle sheet, or hides them again.
+void _toggleLanguage(Set<String> expanded, String language) {
+  if (!expanded.remove(language)) expanded.add(language);
 }

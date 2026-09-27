@@ -276,8 +276,6 @@ class DrivePairingScreen extends StatefulWidget {
   State<DrivePairingScreen> createState() => _DrivePairingScreenState();
 }
 
-/// Where the screen is, which is also which of the three outcomes it landed
-/// on once it stops moving.
 /// Whether this device is doing its own picking, and how far it has got.
 ///
 /// Drawn instead of the scan/browser wording, which is about somebody
@@ -287,6 +285,8 @@ class DrivePairingScreen extends StatefulWidget {
 /// ends it.
 enum _Picking { no, choosing, adding }
 
+/// Where the screen is, which is also which of the three outcomes it landed
+/// on once it stops moving.
 enum _Stage {
   /// Asking the service for a session.
   opening,
@@ -335,6 +335,12 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// session when it answered, so a second hand-over is a second write of
   /// the same token at best and a lost one at worst.
   bool _collected = false;
+
+  /// A native pick went to the account's job, which collects from here on.
+  /// Latches, and ends this screen's polling for good: cancelling [_poll]
+  /// stops only a timer, and a poll already out would otherwise come back
+  /// and arm the next -- a second destructive read racing the job's.
+  bool _handedToJob = false;
 
   /// See [_Picking]. Only ever anything but `no` on a device that picks
   /// without a browser.
@@ -413,10 +419,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     super.dispose();
   }
 
-  /// Whether a finished pairing should put this app back in front of the
-  /// viewer, which is asked of the service when the session is opened.
-  ///
-  /// Which of the three shapes this device is, in the service's terms.
+  /// Which of the three shapes this device is, in the service's terms --
+  /// which is also what decides whether a finished pairing puts this app
+  /// back in front of the viewer ([DrivePairingShape.handsBack]).
   ///
   /// The television first, because `hasTouch` is true on some of them and
   /// the remote is what decides that split everywhere else in this app.
@@ -606,6 +611,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         // awaited here**. This screen's own polling stops first, so the
         // collecting read -- destructive, and answering exactly once --
         // happens in one place.
+        _handedToJob = true;
         _poll?.cancel();
         _window?.cancel();
         unawaited(
@@ -644,12 +650,13 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// is what the viewer sees.
   void _armPoll() {
     _poll?.cancel();
+    if (_handedToJob) return;
     _poll = Timer(widget.pollEvery, _pollOnce);
   }
 
   Future<void> _pollOnce() async {
     final session = _session;
-    if (session == null || _collected) return;
+    if (session == null || _collected || _handedToJob) return;
     final answer = await widget.service.collect(session.sessionId);
 
     // A collected pairing is never dropped, whatever else has happened
@@ -666,6 +673,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     // Everything else is about the session being waited for, so an answer
     // for one this screen has moved past says nothing.
     if (!mounted ||
+        _handedToJob ||
         _stage != _Stage.waiting ||
         _session?.sessionId != session.sessionId) {
       return;

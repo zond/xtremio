@@ -246,11 +246,10 @@ class XtremioBootstrap extends StatefulWidget {
   /// network.
   ///
   /// One number on every device rather than a television's own. A phone
-  /// decodes at three times the density, so 32 MiB there is a few dozen
-  /// posters rather than a hundred, which is still more than one screen
-  /// shows; nothing this app does on a desktop needs a bigger cache either.
-  /// If re-decoding on a phone ever shows, raise it through the device
-  /// profile rather than here.
+  /// decodes at three times the density, so 16 MiB there holds a third as
+  /// many posters as on a television; nothing this app does on a desktop
+  /// needs a bigger cache either. If re-decoding on a phone ever shows,
+  /// raise it through the device profile rather than here.
   ///
   /// The other half is `XtremioApp`, which empties the cache when the app
   /// goes to the background: a ceiling bounds what a foreground app holds,

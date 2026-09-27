@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -223,8 +222,6 @@ class PlayerScreen extends StatefulWidget {
 
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
-
-  static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// Below this width the transport sits in the middle of the video and
   /// the volume slider is dropped (hardware keys on phones).
@@ -606,7 +603,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Where the server is told how long the film is, which is what its
   /// retention sizes a stream's lookahead from. Not where it is told where
   /// the viewer is: it works that out from what the reads do.
-  PlayheadReporter? _playheadReporter;
+  PlaybackHints? _playbackHints;
 
   /// What a stream that failed before it loaded is asked, to tell an
   /// archive from a film ([PlaybackScope.archiveSniffOf]).
@@ -1142,7 +1139,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _displayFrameRate = displayFrameRate;
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
-    _playheadReporter = PlaybackScope.playheadOf(context);
+    _playbackHints = PlaybackScope.hintsOf(context);
     _archiveSniff = PlaybackScope.archiveSniffOf(context);
     _archiveRoute = PlaybackScope.archiveRouteOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
@@ -1406,6 +1403,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  /// Re-opens the stream at the position it is playing at, so a new
+  /// `buffer=` takes effect without restarting the playback -- and only
+  /// then.
+  ///
+  /// The window reaches libmpv through the URL and nowhere else, so a
+  /// re-open that would hand it the URL it is already reading buys
+  /// nothing and costs the picture: the demuxer starts again, the cache
+  /// it had filled is dropped and the film stops for as long as the new
+  /// read takes to come back. So a choice with the `buffer=` already in
+  /// force ([BufferAhead.wholeFile] and [BufferAhead.maximum] share a
+  /// wire) re-opens nothing, and nor does any choice on a stream the
+  /// parameter is not written on ([_bufferOnUrlFor]).
   void _reopenForBuffer(String previousWire) {
     if (_bufferAhead.wire == previousWire || !_bufferOnUrlFor(_opened)) return;
     _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
@@ -1500,20 +1509,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (choice.storesTheFile) unawaited(_keepWholeFile());
   }
 
-  /// Re-opens the stream at the position it is playing at, so a new
-  /// `buffer=` takes effect without restarting the playback -- and only
-  /// then.
-  ///
-  /// The window reaches libmpv through the URL and nowhere else, so a
-  /// re-open that would hand it the URL it is already reading buys
-  /// nothing and costs the picture: the demuxer starts again, the cache
-  /// it had filled is dropped and the film stops for as long as the new
-  /// read takes to come back. Which is the whole of what two choices with
-  /// the same `buffer=` did ([BufferAhead.wholeFile] and
-  /// [BufferAhead.maximum] share a wire, so a refused pin re-opened at
-  /// the value already in force), and the whole of what any choice did to
-  /// a stream the parameter is not written on ([_bufferOnUrlFor]).
-
   /// Where a re-open of the stream on screen should start.
   ///
   /// [_position] only means something once the media is in: media_kit
@@ -1527,7 +1522,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// no new route, and the core's idea of the stream untouched.
   void _reopenAt(Duration start, {required String reason}) {
     final url = _opened;
-    if (url == null || _handedOver || _casting) return;
+    if (url == null || _leaving || _handedOver || _casting) return;
     _cancelOpenRetry();
     _openStart = start;
     _openRetries = 0;
@@ -1822,7 +1817,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final fileIdx = _openedFileIdx;
     if (request == null || fileIdx == null) return;
     try {
-      await _playheadReporter?.noteDuration(
+      await _playbackHints?.noteDuration(
         infoHash: request.infoHash,
         fileIdx: fileIdx,
         filters: _openedFilters,
@@ -1839,7 +1834,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// on to report are counted for this video; see [_reportStall].
   Future<void> _reportPlayerOpened(String infoHash) async {
     try {
-      await _playheadReporter?.notePlayerOpened(infoHash: infoHash);
+      await _playbackHints?.notePlayerOpened(infoHash: infoHash);
     } catch (_) {
       // A hint; see [_reportDuration].
     }
@@ -1855,7 +1850,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final request = _torrentStatsRequest;
     if (request == null || !_playingNormally) return;
     try {
-      await _playheadReporter?.notePlayerStalled(infoHash: request.infoHash);
+      await _playbackHints?.notePlayerStalled(infoHash: request.infoHash);
     } catch (_) {
       // A hint; see [_reportDuration].
     }
@@ -2101,11 +2096,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // re-opens the same URL. One translation per stream.
     if (_translatedUrl != null) return;
     final kind = await _archiveSniff(url);
-    if (kind == null || !mounted || _engineError != error) return;
+    if (kind == null || !_stillOurs || _engineError != error) return;
     DiagnosticsLog.info('player', 'the source is a ${kind.label}');
     final request = _archiveRequest(kind, url, fileInTorrent);
     final routed = request == null ? null : await _archiveRoute(request);
-    if (!mounted || _engineError != error) return;
+    if (!_stillOurs || _engineError != error) return;
     switch (routed) {
       case ArchiveMember(url: final member):
         DiagnosticsLog.info(
@@ -2699,7 +2694,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _buffering = true);
     _syncStatsPolls();
     _showControls();
-    _reopenAt(position, reason: 'failBuffer $_falseEnds');
+    _reopenAt(position, reason: 'false-end $_falseEnds');
   }
 
   void _onTracks(PlaybackTracks tracks) {
@@ -3361,14 +3356,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _restoreExternalSubtitle() {
     final subtitle = _externalSubtitle;
     if (subtitle == null) return;
-    _engine
-        ?.setExternalSubtitle(
-          subtitle.url,
-          title: SubtitleMenu.externalLabel(subtitle),
-          language: subtitle.lang.isEmpty ? null : subtitle.lang,
-        )
-        .ignore();
+    _addExternalSubtitle(subtitle)?.ignore();
   }
+
+  /// Hands [subtitle]'s file to the engine, named the way the menu names
+  /// it.
+  Future<void>? _addExternalSubtitle(SubtitleInfo subtitle) =>
+      _engine?.setExternalSubtitle(
+        subtitle.url,
+        title: SubtitleMenu.externalLabel(subtitle),
+        language: subtitle.lang.isEmpty ? null : subtitle.lang,
+      );
 
   /// Writes [_timing] to the player: the multiplier and the offset
   /// together, always both, so neither can be left holding a value the
@@ -3521,11 +3519,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         builder: (context, json, _) {
           final state = json == null ? null : PlayerState.fromJson(json);
           return SubtitleReferenceMenu(
-            groups: groupSubtitlesByLanguage(
-              _offeredSubtitles(state?.externalSubtitleSources ?? const []),
-              addonName: _subtitleAddonName,
-              release: _syncRelease,
-            ),
+            groups: _subtitleGroups(state),
             playingId: playing.url.toString(),
             onPick: (subtitle) {
               reference = subtitle;
@@ -3636,11 +3630,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       activeSubtitleId: subtitle.url.toString(),
     );
     _resetSubtitleTiming(subtitle);
-    _engine?.setExternalSubtitle(
-      subtitle.url,
-      title: SubtitleMenu.externalLabel(subtitle),
-      language: subtitle.lang.isEmpty ? null : subtitle.lang,
-    );
+    _addExternalSubtitle(subtitle);
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(
         enabled: true,
@@ -3839,11 +3829,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           beforeSubtitle: beforeSubtitle,
           auto: true,
         );
-        applied = _engine?.setExternalSubtitle(
-          external.url,
-          title: SubtitleMenu.externalLabel(external),
-          language: external.lang.isEmpty ? null : external.lang,
-        );
+        applied = _addExternalSubtitle(external);
       } else if (embedded != null) {
         _tracks.value = before.copyWith(activeSubtitleId: embedded.id);
         _resetSubtitleTiming();
@@ -3968,6 +3954,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _resumeUpNext();
   }
 
+  /// The addon files [state] offers, by language, as both subtitle sheets
+  /// list them.
+  List<SubtitleLanguageGroup> _subtitleGroups(PlayerState? state) =>
+      groupSubtitlesByLanguage(
+        // Ordered before grouping, so the numbering and "the first option
+        // is what a tap applies" hold over the order the rows are actually
+        // in.
+        _offeredSubtitles(state?.externalSubtitleSources ?? const []),
+        addonName: _subtitleAddonName,
+        // The same name a shift is remembered against, so a row marked for
+        // this release and a correction put back for it are talking about
+        // the same file.
+        release: _syncRelease,
+      );
+
   Future<void> _openSubtitleMenu() async {
     var adjustTiming = false;
     await _showSheet(
@@ -3975,17 +3976,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         valueListenable: _player!,
         builder: (context, json, _) {
           final state = json == null ? null : PlayerState.fromJson(json);
-          final groups = groupSubtitlesByLanguage(
-            // Ordered before grouping, so the numbering and "the first
-            // option is what a tap applies" hold over the order the rows
-            // are actually in.
-            _offeredSubtitles(state?.externalSubtitleSources ?? const []),
-            addonName: _subtitleAddonName,
-            // The same name a shift is remembered against, so a row
-            // marked for this release and a correction put back for it
-            // are talking about the same file.
-            release: _syncRelease,
-          );
+          final groups = _subtitleGroups(state);
           return ValueListenableBuilder<PlaybackTracks>(
             valueListenable: _tracks,
             builder: (context, tracks, _) => SubtitleMenu(
@@ -4064,7 +4055,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       _openDownloads();
                     },
               rate: _rate,
-              rates: PlayerScreen.rates,
               onRate: (rate) {
                 _setRate(rate);
                 setSheetState(() {});
@@ -4538,15 +4528,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // ever going to name that file, and "try again in a moment" would
       // be a wait that never ends.
       //
-      // Never true of a member, and by the state rather than by a clause
-      // of its own: a translation only ever happens out of [_failPlayback],
-      // which stops the polling and clears the request before the sniff
-      // goes out, and the reopen that plays the member does not start it
-      // again ([_openStream] returns on the unchanged URL). So a member
-      // whose name says nothing is an unknown file here, which is the
-      // answer -- the server has opened the container and said what is
-      // inside it -- and not a wait that would never end. There is a test
-      // that says so.
+      // A member is judged by the same state, with no clause of its own.
+      // A translation only ever happens out of [_failPlayback], which stops
+      // the polling and clears the request; the reopen that plays the
+      // member ([_reopenAt]) puts it back ([_restoreTorrentStats]). So a
+      // member of a torrent served here is pending until a poll names the
+      // torrent's file, as the stream was before it failed, and a member of
+      // a link never is.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {
@@ -4823,7 +4811,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       await lan.setLanMedia(enabled: true);
     } catch (error) {
-      if (kDebugMode) debugPrint('LAN media listener refused: $error');
+      DiagnosticsLog.warn('player', 'LAN media listener refused: $error');
       return null;
     }
     _lanMediaOn = true;
@@ -4872,7 +4860,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       await _lanMedia?.setLanMedia(enabled: false);
     } catch (error) {
-      if (kDebugMode) debugPrint('could not stop the LAN listener: $error');
+      DiagnosticsLog.warn('player', 'could not stop the LAN listener: $error');
     }
   }
 
@@ -5909,12 +5897,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                     ),
                   ),
-                  // Outside the bar's [AnimatedOpacity] on purpose: this
-                  // is the layer that must still be there when the OSD has
-                  // faded, which is the whole of what it is for. Top right,
-                  // opposite the stats panel and clear of the subtitles it
-                  // is being used to judge.
-                  // Outside the OSD's fade as well: it says why the
+                  // Outside the OSD's fade: it says why the
                   // subtitle the viewer is looking for is not there, and
                   // the bar is not what they are looking at.
                   if (_subtitleFailure case final failure?)
@@ -5942,6 +5925,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                       ),
                     ),
+                  // Outside the bar's [AnimatedOpacity] on purpose: this
+                  // is the layer that must still be there when the OSD has
+                  // faded, which is the whole of what it is for. Top right,
+                  // opposite the stats panel and clear of the subtitles it
+                  // is being used to judge.
                   if (_timingShown)
                     SafeArea(
                       child: Padding(

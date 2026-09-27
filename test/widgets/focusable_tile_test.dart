@@ -618,6 +618,35 @@ void main() {
     });
   });
 
+  testWidgets('a control handed a new node is highlighted by that node', (
+    tester,
+  ) async {
+    // The node is the caller's, and a rebuild may hand a different one: the
+    // highlight has to follow the node the control actually wears.
+    final first = FocusNode();
+    final second = FocusNode();
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    Widget chip(FocusNode node) => FocusHighlighted(
+      borderRadius: BorderRadius.circular(8),
+      focusNode: node,
+      builder: (context, node) =>
+          Focus(focusNode: node, child: const SizedBox.square(dimension: 40)),
+    );
+    bool highlighted() =>
+        tester.widget<FocusHighlight>(find.byType(FocusHighlight)).focused;
+
+    await tester.pumpWidget(harness(chip(first)));
+    await tester.pumpWidget(harness(chip(second)));
+    second.requestFocus();
+    await tester.pumpAndSettle();
+    expect(highlighted(), isTrue);
+
+    second.unfocus();
+    await tester.pumpAndSettle();
+    expect(highlighted(), isFalse);
+  });
+
   group('a row is marked without being moved', () {
     /// Three buttons, each its own focus stop under its own [FocusMarked].
     Widget rows() => Column(

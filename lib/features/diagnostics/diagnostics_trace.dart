@@ -12,10 +12,9 @@ import '../../core/core.dart';
 /// the line on what a file's reads look like -- is behind a setting of its
 /// own, because it is in the server's log filter and nothing else can
 /// reach that. The player's half ([MediaKitEngine.verboseLog]) reads the
-/// same preference directly when a player opens. The app's own two halves
-/// are set from here, since neither has anywhere else to read a preference
-/// from: whole URLs in the log (`DiagnosticsLog.unredacted`) and a line
-/// per image as it decodes ([ImageCacheLog.perImage]).
+/// same preference directly when a player opens. The app's own half is set
+/// from here, since it has nowhere else to read a preference from: whole
+/// URLs in the log (`DiagnosticsLog.unredacted`).
 ///
 /// One of these for the whole app, built by `XtremioApp`, on the pattern
 /// of `IdleSharingPolicy` and for the same reason: nothing else in the app
@@ -74,14 +73,6 @@ class DiagnosticsTraceSync {
     // while it is on. Here and not in [_push], because this side needs no
     // server and must not wait for one.
     DiagnosticsLog.unredacted = wanted;
-    // **Not the per-image line.** [ImageCacheLog.perImage] used to follow
-    // this switch, and a line per picture is a hundred for one screen of
-    // posters -- which drowned the log somebody had turned verbose logging
-    // on to read. It answered the question it was built for (what a poster
-    // costs resident, measured on the television) and nothing is asking it
-    // now, so it stays off and the machinery stays dormant: turning it on
-    // is a line of code for whoever next needs to measure decodes, and
-    // costs nothing while it is off.
     if (wanted == _sent) return;
     _sent = wanted;
     _writes = _writes.then((_) => _push(wanted));

@@ -241,8 +241,6 @@ class _XtremioAppState extends State<XtremioApp> {
   late final IdleSharingPolicy _sharing;
   late final DiagnosticsTraceSync _trace;
 
-  /// The image cache's figures in the log, on the same terms: one of them
-  /// for the app, started when it comes up and stopped when it goes away.
   /// The one activity monitor, on the same terms: one server to ask, so one
   /// thing asking it. The shell turns it on and off with what is on screen.
   late final SharingActivityMonitor _activity;

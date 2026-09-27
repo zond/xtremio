@@ -93,11 +93,6 @@ final class DownloadView {
   /// (40): the same rule the Rust side dispatches on (`is_proxy_key`).
   bool get isTorrent => infoHash.length != 64;
 
-  /// Where a finished link download plays from, as the server reports it
-  /// in its listing; `null` for a torrent, whose media route the app
-  /// builds itself.
-  String? get playUrl => json['playUrl'] as String?;
-
   /// The stream's trackers, as the pin was taken with.
   List<String> get announce => [
     for (final tracker in (json['announce'] as List<dynamic>? ?? const []))

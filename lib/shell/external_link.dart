@@ -48,9 +48,6 @@ class UrlLauncherLinkOpener implements ExternalLinkOpener {
   }
 }
 
-/// Provides the [ExternalLinkOpener] to the widget tree. Without a scope
-/// the real [UrlLauncherLinkOpener] is used, so the app needs none; tests
-/// wrap the widget under test in one with a fake.
 /// Opens [url] in the system browser through the [ExternalLinkScope] — never
 /// an in-app web view, which would hide the address bar; a SnackBar when
 /// nothing could open it.
@@ -63,6 +60,9 @@ Future<void> openInBrowser(BuildContext context, String url) async {
   }
 }
 
+/// Provides the [ExternalLinkOpener] to the widget tree. Without a scope
+/// the real [UrlLauncherLinkOpener] is used, so the app needs none; tests
+/// wrap the widget under test in one with a fake.
 class ExternalLinkScope extends InheritedWidget {
   const ExternalLinkScope({
     super.key,

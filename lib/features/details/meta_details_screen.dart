@@ -13,6 +13,7 @@ import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/tv_ladder.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/text_overflow.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
 import '../addons/addons_screen.dart';
@@ -298,37 +299,31 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Numbered with gaps because most of them are conditional -- a film has
   /// no seasons or episodes, a title nobody has played has no last-used
   /// source, and the row of sources only exists while a group is open.
-  /// Only what is drawn is registered, and a press walks past the rest.
-  /// The block above the pills: on a television that is the title, its
-  /// facts and the bookmark. A rung, so a press down from the bookmark
-  /// reaches the pills instead of whatever geometry finds below a narrow
-  /// row packed at the left -- which was the episode row on a good day and
-  /// the heading's controls on a bad one, and either way left the episode
-  /// row arrived at sideways, with its memory of where the viewer was
-  /// overwritten by wherever the press landed.
-  /// On a television most of these sit inside a [TvLadderRung], whose
-  /// header is a rung of the walk in its own right: the walk goes header,
-  /// header, header down the screen, and only the open rung puts its own
-  /// rows between two of them.
+  /// Only what is drawn is registered, and a press walks past the rest. On
+  /// a television most of these sit inside a [TvLadderRung], whose header
+  /// is a rung of the walk in its own right: the walk goes header, header,
+  /// header down the screen, and only the open rung puts its own rows
+  /// between two of them.
   ///
-  /// **These are the order things are drawn down the panel, and the two
-  /// are one list even though they are built by two methods.** The title
-  /// and the episodes come from [_infoSlivers] and everything from the
-  /// last-used source down from [_tvSourceSlivers], and the screen lays
-  /// them out info-then-sources -- so the continue-watching rung is
-  /// *below* the episodes on the panel, whatever order the two methods are
-  /// called in. It was numbered above them, and a press up from the
-  /// last-used card went to the title and stepped over the episodes
-  /// entirely: the ladder walks these numbers and the viewer walks the
-  /// panel, so a number out of order is a rung the D-pad cannot reach from
-  /// its neighbour.
+  /// **The numbers are the order things are drawn down the panel**, though
+  /// two methods build them: the title and the episodes come from
+  /// [_infoSlivers], everything from the last-used source down from
+  /// [_tvSourceSlivers], and the panel lays them out info-then-sources. The
+  /// ladder walks these numbers and the viewer walks the panel, so a number
+  /// out of order is a rung the D-pad cannot reach from its neighbour.
   ///
-  /// [_ladderAppBar] is the one number with no row under it. The bar's Back
-  /// and its actions sit in the bar's own slots, which no one widget can
-  /// wrap, so they are not a row of the ladder -- but a press down out of
-  /// one has to land on the ladder all the same, and this is the level it
-  /// enters from ([_AboveTheLadder]).
+  /// This one has no row under it. The bar's Back and its actions sit in
+  /// the bar's own slots, which no one widget can wrap, so they are not a
+  /// row of the ladder -- but a press down out of one has to land on the
+  /// ladder all the same, and this is the level it enters from
+  /// ([_AboveTheLadder]).
   static const int _ladderAppBar = -10;
+
+  /// The block above the pills: on a television the title, its facts and
+  /// the bookmark. A rung, so a press down from the bookmark reaches the
+  /// pills rather than whatever geometry finds below a narrow row packed at
+  /// the left, which would leave the episode row arrived at sideways and
+  /// its memory of where the viewer was overwritten.
   static const int _ladderInfo = 0;
   static const int _ladderEpisodesHeader = 20;
   static const int _ladderSeasons = 24;
@@ -590,7 +585,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _DetailsRung.continueWatching,
       if (state.hasVideos) _DetailsRung.episodes,
       _DetailsRung.sources,
-      _DetailsRung.episodes,
       _DetailsRung.addons,
     ]) {
       if (drawn.contains(rung)) return rung;
@@ -954,24 +948,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
-  /// Opens the player on [stream] -- or on the file this device already
-  /// holds of it.
-  ///
-  /// A finished download of *this* release is played from the disk even
-  /// with a connection: there is nothing the server can add to a whole
-  /// file. Only that release, though -- picking another stream tile is a
-  /// request for that source, not for the copy on disk. The addon requests
-  /// are the ones the picker has either way, which is what keeps
-  /// continue-watching moving offline.
-  ///
-  /// A download whose file went away since it finished (an unplugged
-  /// volume, a deletion from outside the app) streams instead and says so,
-  /// rather than opening a player on a URL with no file behind it.
-  ///
-  /// Asking the registry is a round trip, so the tile stays tappable
-  /// between the tap and the push: a second tap is dropped rather than
-  /// pushing a second player, each of which would load the shared `player`
-  /// field and start an engine of its own.
   /// Plays one row of the sources list, whichever kind of source it is and
   /// whichever of the two layouts drew it.
   ///
@@ -1043,6 +1019,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
   }
 
+  /// Opens the player on [stream] -- or on the file this device already
+  /// holds of it.
+  ///
+  /// A finished download of *this* release is played from the disk even
+  /// with a connection: there is nothing the server can add to a whole
+  /// file. Only that release, though -- picking another stream tile is a
+  /// request for that source, not for the copy on disk. The addon requests
+  /// are the ones the picker has either way, which is what keeps
+  /// continue-watching moving offline.
+  ///
+  /// A download whose file went away since it finished (an unplugged
+  /// volume, a deletion from outside the app) streams instead,
+  /// rather than opening a player on a URL with no file behind it.
+  ///
+  /// Asking the registry is a round trip, so the tile stays tappable
+  /// between the tap and the push: a second tap is dropped rather than
+  /// pushing a second player, each of which would load the shared `player`
+  /// field and start an engine of its own.
   Future<void> _play(
     MetaDetailsState state,
     StreamGroup group,
@@ -1071,7 +1065,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         download.isComplete &&
         download.stream.isSameSource(stream)) {
       playback = await offlinePlayback(client, download);
-      if (!mounted) return;
     }
     if (!mounted) return;
     final result = await Navigator.of(context).push<PlayerScreenResult>(
@@ -1866,24 +1859,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                   ...driveRows,
                   for (final group in listed)
                     for (final stream in group.streams)
-                      (
-                        group: group,
-                        drive: null,
-                        stream: stream,
-                        facts: StreamFacts.of(
-                          stream,
-                          addonName: _addonNameOf(profile, group),
-                        ),
-                        alsoFrom: const <String>[],
-                      ),
+                      _rowOf(profile, group, stream),
                 ],
-                (row) => row.facts!,
+                (row) => row.facts,
                 order,
               ),
               sources,
-              (row) => row.facts?.addonName ?? '',
+              (row) => row.facts.addonName ?? '',
             ),
-            (row) => row.facts!,
+            (row) => row.facts,
           )
         : const <StreamSection<_SourceRow>>[];
     // The grouped layout: each addon's own ranking, with the addon's own
@@ -1932,16 +1916,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                     // for it once here is what makes one row look the
                     // same whichever way the list is grouped.
                     for (final stream in group.streams)
-                      (
-                        group: group,
-                        drive: null,
-                        stream: stream,
-                        facts: StreamFacts.of(
-                          stream,
-                          addonName: _addonNameOf(profile, group),
-                        ),
-                        alsoFrom: const <String>[],
-                      ),
+                      _rowOf(profile, group, stream),
                   ],
                   sources,
                   (_) => _addonNameOf(profile, group),
@@ -2308,6 +2283,27 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     ].join(' · ');
   }
 
+  /// A card that is a line of accounting rather than a source: what it
+  /// says and what a press on it does, and nothing of a stream's.
+  static TvSource _accountingCard({
+    required IconData icon,
+    required String title,
+    required List<String> lines,
+    required VoidCallback onSelect,
+    VoidCallback? onHold,
+  }) => (
+    icon: icon,
+    title: title,
+    lines: lines,
+    pills: const [],
+    notes: const [],
+    highlighted: false,
+    download: null,
+    downloading: false,
+    onSelect: onSelect,
+    onHold: onHold,
+  );
+
   /// What the addons did other than answer with streams, as a rung of its
   /// own at the foot of the ladder; null when there is nothing to account
   /// for.
@@ -2351,28 +2347,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       ].join(' · '),
       sources: [
         if (foundNothing)
-          (
+          _accountingCard(
             icon: Icons.extension_outlined,
             title: _NoStreamsNotice.addonsLabel,
             lines: [_NoStreamsNotice.explanation],
-            pills: const [],
-            notes: const [],
-            highlighted: false,
-            download: null,
-            downloading: false,
             onSelect: _openAddons,
-            onHold: null,
           ),
         for (final failure in failures)
-          (
+          _accountingCard(
             icon: Icons.cloud_off_outlined,
             title: failure.name,
             lines: [failure.message],
-            pills: const [],
-            notes: const [],
-            highlighted: false,
-            download: null,
-            downloading: false,
             onSelect: () => openAddonDetails(context, failure.transportUrl),
             onHold: failure.isRemovable && !locked
                 ? () =>
@@ -2387,17 +2372,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         // takes, which is also what lets the remote walk the row far
         // enough to read the last of them.
         for (final addon in quiet)
-          (
+          _accountingCard(
             icon: Icons.inbox_outlined,
             title: addon.name,
             lines: const [kAddonHadNothing],
-            pills: const [],
-            notes: const [],
-            highlighted: false,
-            download: null,
-            downloading: false,
             onSelect: () => openAddonDetails(context, addon.transportUrl),
-            onHold: null,
           ),
       ],
     );
@@ -2439,14 +2418,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final stream = row.stream;
     final group = row.group;
     final bound = _downloadsFor(downloads, group);
+    final read = row.facts;
     final addon =
-        row.facts?.addonName ??
+        read.addonName ??
         (group == null ? driveSourceLabel : _addonNameOf(_profileNow, group));
-    // The grouped layout ranks inside one addon's own answer and so reads
-    // nothing out of the streams; the card wants the pills and the tags
-    // either way, and reading them twice is cheaper than carrying a second
-    // list through the derivation for the sake of one row.
-    final read = row.facts ?? StreamFacts.of(stream, addonName: addon);
     final shown = StreamPresentation.of(stream, addonName: addon);
     return (
       icon: _StreamTile._iconFor(stream.kind),
@@ -2649,6 +2624,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _driveAccount?.files.matching(widget.id, videoId: videoId) ??
       const <LinkedDriveFile>[];
 
+  /// The row for [stream] as [group] answered it, read once.
+  static _SourceRow _rowOf(
+    ProfileState? profile,
+    StreamGroup group,
+    StreamInfo stream,
+  ) => (
+    group: group,
+    drive: null,
+    stream: stream,
+    facts: StreamFacts.of(stream, addonName: _addonNameOf(profile, group)),
+    alsoFrom: const <String>[],
+  );
+
   /// One linked file as a row of the sources list.
   ///
   /// The reading is [StreamFacts.of], the same parser every addon's stream
@@ -2721,16 +2709,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 /// and it cannot collide with a URL or with a `meta:` prefixed one.
 const String driveSourceStorageLabel = 'drive';
 
-/// The download affordances for one row, or none at all for a row no addon
-/// answered with.
-///
-/// A linked Drive file is already on the viewer's own Drive and has no
-/// addon request for a pin to record; the server can keep one (its proxy
-/// cache pins Drive files by id) but this screen does not offer it yet --
-/// the pin needs the pairing's refresh token, which lives with the Drive
-/// account, not with a stream. Handing it a bound [_StreamDownloads] would
-/// let it read the video's download as one to *replace*, so it is handed
-/// none.
 /// The downloads binding for one source group: an addon's, recorded
 /// against its request, or -- for the group with no addon behind it, the
 /// linked Drive files -- one that pins with no request at all.
@@ -3095,14 +3073,13 @@ class _ExpandableTextState extends State<_ExpandableText> {
     final style = theme.textTheme.bodyMedium;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: style),
+        final overflows = textOverflows(
+          context,
+          widget.text,
+          style: style,
           maxLines: _ExpandableText.collapsedLines,
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: constraints.maxWidth);
-        final overflows = painter.didExceedMaxLines;
-        painter.dispose();
+          maxWidth: constraints.maxWidth,
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3138,7 +3115,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
 /// and the two that opened a list opened it as a very narrow, very tall
 /// column of digits, which on a remote is a long vertical crawl.
 ///
-/// Two things it has to do that a plain row would not:
+/// Three things it has to do that a plain row would not:
 ///
 /// - **Every pill is built at once**: a [Row] inside a
 ///   [SingleChildScrollView], never a lazy [ListView]. Flutter's
@@ -3866,9 +3843,9 @@ typedef _SourceGroup = ({
 /// One row of the sources list, in either layout: the stream as it will be
 /// played -- with the trackers every listing of it named -- the addon group
 /// it came from (a download records the request its stream came from, so
-/// the group has to travel with it), what could be read out of it (the flat
-/// list only; the grouped one has a heading and [StreamHints]) and the
-/// other addons that offered the same source.
+/// the group has to travel with it), what could be read out of it -- in
+/// either layout, so one row looks the same whichever way the list is
+/// grouped -- and the other addons that offered the same source.
 /// A row with no [group] is a linked Google Drive file and carries [drive]
 /// instead: the two are exactly the two kinds of row, which is why a null
 /// check on either settles it. [stream] is then the placeholder
@@ -3879,7 +3856,7 @@ typedef _SourceRow = ({
   StreamGroup? group,
   LinkedDriveFile? drive,
   StreamInfo stream,
-  StreamFacts? facts,
+  StreamFacts facts,
   List<String> alsoFrom,
 });
 
@@ -3939,15 +3916,6 @@ final class _StreamDownloads {
   DownloadView? entryOf(StreamInfo stream) {
     final entry = videoEntry();
     return entry != null && entry.stream.isSameSource(stream) ? entry : null;
-  }
-
-  /// The download this stream would replace: the same video kept from
-  /// another release, which is a different file. Pinning this one drops
-  /// that pin and the server deletes its bytes, so the tile has to say so
-  /// instead of looking like a first download.
-  DownloadView? replacedBy(StreamInfo stream) {
-    final entry = videoEntry();
-    return entry != null && !entry.stream.isSameSource(stream) ? entry : null;
   }
 
   /// Starts the download of [stream]; null when the server has nothing to

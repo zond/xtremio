@@ -36,7 +36,6 @@ class FakeCastClient implements CastClient {
   int disconnects = 0;
   int plays = 0;
   int pauses = 0;
-  int stops = 0;
   final List<Duration> seeks = [];
 
   /// Every `load`: the media and the position it was asked to start at.
@@ -117,9 +116,6 @@ class FakeCastClient implements CastClient {
   }
 
   @override
-  CastDevice? get connectedDevice => _connected;
-
-  @override
   Future<CastDevice?> connect(CastDevice device) async {
     connectAttempts.add(device);
     if (connectPending != null) await connectPending;
@@ -166,9 +162,6 @@ class FakeCastClient implements CastClient {
 
   @override
   Future<void> seek(Duration position) async => seeks.add(position);
-
-  @override
-  Future<void> stop() async => stops++;
 
   @override
   Stream<CastStatus> get status => _statusController.stream;

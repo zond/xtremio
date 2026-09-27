@@ -60,10 +60,16 @@ final class MetaItem extends MetaItemPreview {
 
   /// Sorted by (season, episode) with season 0 (specials) last, as the
   /// engine serializes them.
-  List<VideoInfo> get videos => [
+  ///
+  /// Built once per item JSON ([_videos]) and unmodifiable: a series page
+  /// reads it through [seasons], [videosOfSeason] and [videoById] several
+  /// times a build, and a view is made afresh on every read of its field.
+  List<VideoInfo> get videos => _videos[json] ??= List.unmodifiable([
     for (final video in (json['videos'] as List<dynamic>? ?? const []))
       VideoInfo(video as Map<String, dynamic>),
-  ];
+  ]);
+
+  static final Expando<List<VideoInfo>> _videos = Expando('videos');
 
   /// Distinct seasons ascending, specials (season 0) last; empty for a
   /// movie or a series whose videos carry no season.
@@ -142,7 +148,6 @@ final class VideoInfo {
   String get id => json['id'] as String;
   String get title => json['title'] as String? ?? '';
   String? get thumbnail => json['thumbnail'] as String?;
-  String? get overview => json['overview'] as String?;
 
   /// ISO-8601, when the addon knows the air date.
   String? get released => json['released'] as String?;

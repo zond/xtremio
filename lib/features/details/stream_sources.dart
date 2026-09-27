@@ -39,9 +39,6 @@ final class StreamSourceIndex {
     return StreamSourceIndex._(sources);
   }
 
-  /// Nothing was listed: every stream is its own source.
-  static const StreamSourceIndex empty = StreamSourceIndex._({});
-
   final Map<String, _SharedSource> _sources;
 
   /// How many distinct sources were listed, however many addons listed

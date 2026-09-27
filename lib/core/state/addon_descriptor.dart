@@ -105,9 +105,6 @@ final class ManifestBehaviorHints {
 
   final Map<String, dynamic> json;
 
-  bool get adult => json['adult'] as bool? ?? false;
-  bool get p2p => json['p2p'] as bool? ?? false;
-
   /// Has a `/configure` page.
   bool get configurable => json['configurable'] as bool? ?? false;
 

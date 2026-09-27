@@ -139,18 +139,24 @@ class _TvTextFieldState extends State<TvTextField> {
   Widget build(BuildContext context) =>
       DeviceScope.isTv(context) ? _buildTv(context) : _buildField();
 
-  Widget _buildField() => TextField(
-    controller: widget.controller,
-    decoration: widget.decoration.copyWith(suffixIcon: _clearButton()),
-    enabled: widget.enabled,
-    autofocus: widget.autofocus,
-    keyboardType: widget.kind.keyboardType,
-    obscureText: widget.kind.isSecret,
-    autocorrect: widget.kind.autocorrects,
-    autofillHints: widget.autofillHints,
-    textInputAction: widget.textInputAction,
-    onChanged: widget.onChanged,
-    onSubmitted: widget.onSubmitted,
+  /// Rebuilt on the controller, not on the parent: whether there is
+  /// anything to clear changes with every edit, and a parent that does not
+  /// rebuild on typing would leave the button as it was.
+  Widget _buildField() => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) => TextField(
+      controller: widget.controller,
+      decoration: widget.decoration.copyWith(suffixIcon: _clearButton()),
+      enabled: widget.enabled,
+      autofocus: widget.autofocus,
+      keyboardType: widget.kind.keyboardType,
+      obscureText: widget.kind.isSecret,
+      autocorrect: widget.kind.autocorrects,
+      autofillHints: widget.autofillHints,
+      textInputAction: widget.textInputAction,
+      onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
+    ),
   );
 
   Widget _buildTv(BuildContext context) {

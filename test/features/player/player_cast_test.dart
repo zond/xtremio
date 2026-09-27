@@ -1618,7 +1618,7 @@ void _durationDuringACast() {
       await tester.pumpAndSettle();
 
       expect(
-        harness.playhead.durations,
+        harness.hints.durations,
         contains(6669),
         reason: "the length is the bitrate, and it is what sizes the window",
       );
@@ -1644,7 +1644,7 @@ void _durationDuringACast() {
         await tester.pumpAndSettle();
       }
 
-      expect(harness.playhead.durations, [
+      expect(harness.hints.durations, [
         6669,
       ], reason: 'a length does not go stale, so repeating it buys nothing');
     });

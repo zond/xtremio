@@ -55,7 +55,6 @@ final class UserInfo {
   String get email => json['email'] as String? ?? '';
   String? get avatar => json['avatar'] as String?;
   String? get fbId => json['fbId'] as String?;
-  String? get appleId => json['appleId'] as String?;
   DateTime? get lastModified => _date(json['lastModified']);
   DateTime? get dateRegistered => _date(json['dateRegistered']);
 

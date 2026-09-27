@@ -74,13 +74,6 @@ class DrivePairingJob extends ChangeNotifier {
 
   bool get running => _sessionId != null;
 
-  /// Hands a native pick over and collects what it becomes.
-  ///
-  /// Returns when it is done, but **nothing has to wait for it**: the job
-  /// notifies, and a screen that has gone away simply is not listening any
-  /// more. Two of these never run at once — a second call while one is in
-  /// flight is dropped, because the collecting read is destructive and two
-  /// of them would turn one pairing into one pairing and one `404`.
   /// What these lines are written under: `drive`, beside the app's
   /// `images`, `player` and `boot`. In logcat that reads as
   /// `xtremio_core::app: drive: …`.
@@ -94,6 +87,13 @@ class DrivePairingJob extends ChangeNotifier {
   /// without these lines took an hour each time.
   static const String target = 'drive';
 
+  /// Hands a native pick over and collects what it becomes.
+  ///
+  /// Returns when it is done, but **nothing has to wait for it**: the job
+  /// notifies, and a screen that has gone away simply is not listening any
+  /// more. Two of these never run at once — a second call while one is in
+  /// flight is dropped, because the collecting read is destructive and two
+  /// of them would turn one pairing into one pairing and one `404`.
   Future<void> finish({
     required String sessionId,
     required String serverAuthCode,

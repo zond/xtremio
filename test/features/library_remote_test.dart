@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
-import 'package:xtremio/features/drive/linked_files.dart';
 import 'package:xtremio/features/drive/remote_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -103,8 +102,10 @@ void main() {
     DriveFileLister? lister,
     NavigatorObserver? observer,
     DownloadsRegistry? downloaded,
+    Future<void>? downloadsHeld,
   }) {
-    final downloads = FakeDownloadsClient(registry: downloaded);
+    final downloads = FakeDownloadsClient(registry: downloaded)
+      ..pending = downloadsHeld;
     addTearDown(downloads.dispose);
     final screen = LibraryScreen(
       driveOpener: opener ?? FakeDriveFileOpener(),
@@ -700,6 +701,38 @@ void main() {
       expect(find.byType(PlayerScreen), findsOneWidget);
     });
 
+    testWidgets('and a second press on it before the player is up is dropped', (
+      tester,
+    ) async {
+      useNarrowScreen(tester);
+      final asked = Completer<void>();
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          downloaded: downloadsOnly(
+            {'tt0063350:tt0063350'},
+            noMeta: {'tt0063350:tt0063350'},
+          ),
+          downloadsHeld: asked.future,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final tile = find.widgetWithText(
+        LibraryItemTile,
+        'Night of the Living Dead',
+      );
+      await tester.tap(tile);
+      await tester.pump();
+      await tester.tap(tile);
+      await tester.pump();
+      asked.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(PlayerScreen, skipOffstage: false), findsOneWidget);
+    });
+
     testWidgets('a linked file nothing matched is drawn under All without the '
         'Remote filter, and not under a type or Downloaded', (tester) async {
       useNarrowScreen(tester);
@@ -794,7 +827,6 @@ void main() {
       // of linked episodes is one card, so naming one of them would be a
       // claim the card cannot make. The press still carries the episode.
       expect(find.text('S1E1 · 2008'), findsNothing);
-      expect(find.byIcon(LinkedDriveFilesView.unmatchedIcon), findsNothing);
     });
 
     testWidgets('a file nothing matched is a generic video icon and the raw '
@@ -843,8 +875,8 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      expect(find.text(LinkedDriveFilesView.matchedByNameNote), findsOneWidget);
-      for (final example in LinkedDriveFilesView.nameExamples) {
+      expect(find.text(LibraryScreen.matchedByNameNote), findsOneWidget);
+      for (final example in LibraryScreen.nameExamples) {
         expect(find.text(example), findsOneWidget);
       }
     });
@@ -1030,6 +1062,40 @@ void main() {
       );
       expect(pushed.names, [PlayerScreen.routeName]);
       expect(find.byType(MetaDetailsScreen), findsNothing);
+    });
+
+    testWidgets('a second press before the player is up pushes nothing more', (
+      tester,
+    ) async {
+      // The card stays hit-testable while the server is asked for the
+      // file, and a second player over the first is a second engine.
+      final asked = Completer<void>();
+      final opener = FakeDriveFileOpener()..pending = asked.future;
+      final pushed = _Pushed();
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          opener: opener,
+          observer: pushed,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      pushed.names.clear();
+
+      final tile = find.widgetWithText(LibraryItemTile, 'ep6.avi');
+      await tester.tap(tile);
+      await tester.pump();
+      await tester.tap(tile);
+      await tester.pump();
+      asked.complete();
+      await tester.pump();
+
+      expect(opener.asked, hasLength(1));
+      expect(pushed.names, [PlayerScreen.routeName]);
     });
 
     testWidgets('a refusal is a line to read, not a screen', (tester) async {
@@ -1240,7 +1306,7 @@ void main() {
       // each other, and then both found on the one screen: either half
       // alone would let the sentence go on naming a control that is gone.
       expect(
-        LinkedDriveFilesView.matchedByNameNote,
+        LibraryScreen.matchedByNameNote,
         contains('reload button beside ${LibraryScreen.remoteLabel}'),
       );
       useNarrowScreen(tester);
@@ -1255,7 +1321,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      expect(find.text(LinkedDriveFilesView.matchedByNameNote), findsOneWidget);
+      expect(find.text(LibraryScreen.matchedByNameNote), findsOneWidget);
       expect(reloadButton(), findsOneWidget);
     });
 

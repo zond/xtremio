@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/readout.dart';
-import '../../widgets/tv_text_field.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
 import '../player/subtitle_color_chips.dart';
@@ -22,13 +21,12 @@ import '../sharing/sharing_activity.dart';
 ///
 /// The focus indicator is the theme floor's throughout -- switch rows,
 /// plain rows, the language dropdowns -- for the reason [SettingsScreen]
-/// gives. The two exceptions are drawn elsewhere and marked there: the
-/// folder field is a [TvTextField] and the subtitle colours are chips.
+/// gives. The one exception is drawn elsewhere and marked there: the
+/// subtitle colours are chips.
 ///
 /// And what is read rather than pressed is a [Readout], which on a
-/// television is a stop wearing the ring alone: the subtitle preview and
-/// the line saying why a server URL was refused. Nothing the floor can
-/// mark, because nothing there is a control.
+/// television is a stop wearing the ring alone: the subtitle preview.
+/// Nothing the floor can mark, because it is not a control.
 typedef SettingWriter = void Function(String key, Object? value);
 
 /// The widget key of the control for one settings key.
@@ -255,9 +253,8 @@ class FocusEmphasisSection extends StatelessWidget {
 /// It writes only the preference; what reaches the server is
 /// [IdleSharingPolicy]'s to send, so that one object decides for the whole
 /// app and this screen is one of the things that can change its mind. It is
-/// the *embedded* server either way -- with a remote server chosen, this
-/// still governs the one on this device, which is the one holding what this
-/// device fetched.
+/// the *embedded* server it governs, the one holding what this device
+/// fetched.
 ///
 /// **And it says when a "Not now" is holding it off.** The status light's
 /// popup can stop the sharing for the rest of the run without touching the

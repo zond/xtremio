@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/poster_tile.dart';
 import '../player/player_screen.dart';
 import 'download_labels.dart';
@@ -568,30 +569,11 @@ class _NothingDownloaded extends StatelessWidget {
   const _NothingDownloaded();
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Icon(
-            Icons.download_outlined,
-            size: 48,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text('Nothing downloaded', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Open a title, pick a torrent stream and press download to keep '
-            'it on this device.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.download_outlined,
+    title: 'Nothing downloaded',
+    detail:
+        'Open a title, pick a stream and press download to keep it on '
+        'this device.',
+  );
 }

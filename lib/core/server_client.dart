@@ -116,19 +116,19 @@ abstract interface class StreamNumbersReader {
   Future<StreamNumbers?> streamNumbers(Uri url);
 }
 
-/// Telling the server how long the film is.
+/// What the player tells the server about a playback that the server
+/// cannot see for itself: how long the film is, and when a player opened
+/// on a torrent or stalled on it.
 ///
-/// The name is from when it also told the server where the player was.
-/// It does not any more: where the player *is* the server works out from
-/// what the reads do (the read-pattern detector), and the length is the
-/// one thing about the playback it cannot -- the film's bitrate, and with
-/// it the seconds a buffer profile asks for, are the length divided into
-/// the file's size.
+/// Where the player *is* the server works out from what the reads do (the
+/// read-pattern detector); the length is what it cannot -- the film's
+/// bitrate, and with it the seconds a buffer profile asks for, are the
+/// length divided into the file's size.
 ///
 /// Named on its own so the player screen can be handed a recorder in
-/// tests, and because it is the one call in here that is a *hint*: it
-/// answers nothing, and the server has its own answer without it.
-abstract interface class PlayheadReporter {
+/// tests, and because these calls are *hints*: they answer nothing, and
+/// the server has its own answer without them.
+abstract interface class PlaybackHints {
   /// How long the film is, with no position -- what a cast can say and
   /// nothing else: a receiver reports seconds, and seconds do not convert
   /// to a byte offset without a constant bitrate. The length *is* the
@@ -232,7 +232,7 @@ class ServerClient
         StreamNumbersReader,
         ServerSettingsAccess,
         ServerSettingsWriter,
-        PlayheadReporter {
+        PlaybackHints {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.

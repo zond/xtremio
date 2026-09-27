@@ -163,9 +163,6 @@ abstract interface class CastClient {
   /// the nulls of that switch arrive while the switch is under way.
   Stream<CastDevice?> get session;
 
-  /// The connected receiver, without waiting for an event.
-  CastDevice? get connectedDevice;
-
   /// Connects to [device] and answers the receiver the session is with, or
   /// null when it could not be started.
   ///
@@ -185,9 +182,6 @@ abstract interface class CastClient {
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
-
-  /// Stops playback without ending the session.
-  Future<void> stop();
 
   /// What the receiver reports, as it reports it.
   Stream<CastStatus> get status;
@@ -223,9 +217,6 @@ class UnsupportedCastClient implements CastClient {
   Stream<CastDevice?> get session => const Stream.empty();
 
   @override
-  CastDevice? get connectedDevice => null;
-
-  @override
   Future<CastDevice?> connect(CastDevice device) async => null;
 
   @override
@@ -242,9 +233,6 @@ class UnsupportedCastClient implements CastClient {
 
   @override
   Future<void> seek(Duration position) async {}
-
-  @override
-  Future<void> stop() async {}
 
   @override
   Stream<CastStatus> get status => const Stream.empty();

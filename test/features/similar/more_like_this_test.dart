@@ -144,24 +144,6 @@ void main() {
     expect(await feature().forItem(type: 'movie', id: 'tt1'), isEmpty);
     expect(storage.stored[AppPrefs.similarSuggestionsKey], isNull);
   });
-
-  test('a title already resolved this run is not searched again', () async {
-    var searched = 0;
-    Future<List<Map<String, dynamic>>> searching(
-      String type,
-      String query,
-    ) async {
-      searched++;
-      return _catalogue(type, query);
-    }
-
-    final feature1 = feature(search: searching);
-    await feature1.forItem(type: 'movie', id: 'tt1');
-    final searches = searched;
-    await feature1.forItem(type: 'movie', id: 'tt1');
-
-    expect(searched, searches);
-  });
 }
 
 /// A catalogue holding the two films the fake server names, and nothing

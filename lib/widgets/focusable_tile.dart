@@ -439,6 +439,21 @@ class _FocusHighlightedState extends State<FocusHighlighted> {
     if (_focused && DeviceScope.isTv(context)) widget.onFocused?.call();
   }
 
+  /// A node handed in, taken away or swapped moves the listener with it, so
+  /// the highlight follows the node the control is actually given.
+  @override
+  void didUpdateWidget(FocusHighlighted oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode == widget.focusNode) return;
+    (oldWidget.focusNode ?? _owned)?.removeListener(_onFocusChange);
+    if (widget.focusNode != null) {
+      _owned?.dispose();
+      _owned = null;
+    }
+    _node.addListener(_onFocusChange);
+    _focused = _node.hasFocus;
+  }
+
   @override
   void dispose() {
     _node.removeListener(_onFocusChange);

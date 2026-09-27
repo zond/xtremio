@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
+import 'package:xtremio/features/dev/dev_streams.dart';
+import 'package:xtremio/features/player/archive_route.dart';
+import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/subtitle_match.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
@@ -167,8 +170,37 @@ void main() {
       'cast plays': scene.cast?.plays ?? 0,
       'cast seeks': scene.cast?.seeks.length ?? 0,
       'LAN listener starts': scene.lan?.toggles.where((on) => on).length ?? 0,
+      'archive routes asked': scene.harness.archiveRoutes.length,
     };
   }
+
+  /// A link mpv cannot open because it is a ZIP, whose member the server
+  /// would serve: the failure that sends the screen off to the sniff and
+  /// then to the archive routes, both round trips, and a re-open of the
+  /// member on the engine at the end of them.
+  PlayerHarness zipLink(Completer<void> wedged) =>
+      PlayerHarness(
+          player: {
+            'selected': {'stream': DevStreams.bigBuckBunnyHttp},
+            'stream': {
+              'type': 'Ready',
+              'content': [
+                {'streaming_url': DevStreams.bigBuckBunnyHttp['url']},
+                DevStreams.bigBuckBunnyHttp,
+              ],
+            },
+          },
+          stream: DevStreams.bigBuckBunnyHttp,
+          configureEngine: (engine) => engine
+            ..openError = 'Failed to recognize file format.'
+            ..disposeGate = wedged,
+        )
+        ..archiveKind = ArchiveKind.zip
+        ..archiveRouting = ArchiveMember(
+          Uri.parse(
+            '${PlayerHarness.recordedServerBaseUrl}/zip/stream/a/F.mkv',
+          ),
+        );
 
   final inFlight = <InFlight>[
     (
@@ -483,6 +515,44 @@ void main() {
           harness: harness,
           cast: cast,
           lan: lan,
+          answer: answered.complete,
+        );
+      },
+    ),
+    (
+      what: 'the sniff of a source that failed',
+      reaches: "the server's archive routes and the engine",
+      suspend: (tester, wedged) async {
+        // Reading the start of the stream is a request with a timeout of
+        // seconds, and what follows it asks the server for the member and
+        // re-opens the engine on it.
+        final answered = Completer<void>();
+        final harness = zipLink(wedged)..archiveSniffPending = answered.future;
+        await harness.pumpPushed(tester);
+        expect(harness.archiveSniffs, hasLength(1), reason: 'it is out');
+        expect(harness.archiveRoutes, isEmpty);
+        return (
+          harness: harness,
+          cast: null,
+          lan: null,
+          answer: answered.complete,
+        );
+      },
+    ),
+    (
+      what: 'the ask for the member inside an archive',
+      reaches: 'the engine',
+      suspend: (tester, wedged) async {
+        // The server opening the container can take many seconds, and its
+        // answer is a re-open of the engine on the film inside.
+        final answered = Completer<void>();
+        final harness = zipLink(wedged)..archiveRoutePending = answered.future;
+        await harness.pumpPushed(tester);
+        expect(harness.archiveRoutes, hasLength(1), reason: 'it is out');
+        return (
+          harness: harness,
+          cast: null,
+          lan: null,
           answer: answered.complete,
         );
       },

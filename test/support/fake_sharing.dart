@@ -57,9 +57,13 @@ class FakeSharingActivity implements SharingActivityClient {
   /// How many readings have been taken, so a test can see the polling stop.
   int reads = 0;
 
+  /// While set, every reading waits on it before answering.
+  Future<void>? pending;
+
   @override
   Future<BackgroundTraffic> fetch() async {
     reads += 1;
+    if (pending != null) await pending;
     final failure = this.failure;
     if (failure != null) throw failure;
     return answer;

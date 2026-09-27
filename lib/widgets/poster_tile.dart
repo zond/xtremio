@@ -4,6 +4,16 @@ import '../core/image_disk_cache.dart';
 import '../core/state/meta_item_preview.dart';
 import 'focusable_tile.dart';
 
+/// The grid a page of [PosterTile]s is laid out in: a poster and its name
+/// in each cell, as many across as fit.
+const SliverGridDelegateWithMaxCrossAxisExtent posterGridDelegate =
+    SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 160,
+      childAspectRatio: 0.56,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+    );
+
 /// A poster with the item's name underneath; falls back to a neutral box
 /// when there is no poster or it fails to load.
 class PosterTile extends StatelessWidget {

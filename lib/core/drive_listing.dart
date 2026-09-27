@@ -34,7 +34,6 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -42,6 +41,7 @@ import 'package:flutter/foundation.dart';
 import 'drive_account.dart';
 import 'drive_link.dart';
 import 'drive_pairing.dart';
+import 'json_exchange.dart';
 
 /// Why a listing could not be had. Each is a different sentence to a
 /// viewer, which is why none of them is a message from somewhere else.
@@ -155,7 +155,7 @@ class XtremioDriveFileLister implements DriveFileLister {
   /// the loopback rather than against a stub of the parsing.
   final Uri? filesEndpoint;
 
-  /// How long any one of the calls is given.
+  /// How long any one of the calls is given, its body included.
   final Duration timeout;
 
   /// Google's own listing endpoint.
@@ -232,18 +232,16 @@ class XtremioDriveFileLister implements DriveFileLister {
 
   /// An access token for [refreshToken], or a refusal thrown.
   Future<String> _accessToken(HttpClient client, String refreshToken) async {
-    final answer = await _send(
+    final (status, json) = await _exchange(
       client,
       'POST',
       Uri.parse('$origin/refresh'),
       body: {'refreshToken': refreshToken},
-    ).timeout(timeout);
-    if (answer.statusCode == HttpStatus.tooManyRequests) {
-      await answer.drain<void>();
+    );
+    if (status == HttpStatus.tooManyRequests) {
       throw const _ListingRefused(DriveListingFailure.tooOften);
     }
-    final json = await _json(answer);
-    if (answer.statusCode != HttpStatus.ok) {
+    if (status != HttpStatus.ok) {
       // `pairAgain` is the service saying Google answered `invalid_grant`:
       // the viewer revoked us, or the consent screen is still in Testing.
       // Nothing else is read as terminal, because a wrong guess here
@@ -284,14 +282,13 @@ class XtremioDriveFileLister implements DriveFileLister {
         'pageToken': ?pageToken,
       },
     );
-    final answer = await _send(
+    final (status, json) = await _exchange(
       client,
       'GET',
       url,
       bearer: accessToken,
-    ).timeout(timeout);
-    final json = await _json(answer);
-    if (answer.statusCode != HttpStatus.ok) {
+    );
+    if (status != HttpStatus.ok) {
       throw const _ListingRefused(DriveListingFailure.unreachable);
     }
     final page = parseDriveFilesPage(json);
@@ -301,48 +298,31 @@ class XtremioDriveFileLister implements DriveFileLister {
     return page;
   }
 
-  static Future<HttpClientResponse> _send(
+  /// One request and its whole body, within [timeout]: a body that stalls
+  /// part-way is as much a hang as a connection that never answers.
+  ///
+  /// A redirect is not followed (see [sendWithoutRedirects]) and reads as
+  /// a non-`200`, which is [DriveListingFailure.unreachable].
+  Future<(int, Map<String, dynamic>?)> _exchange(
     HttpClient client,
     String method,
     Uri url, {
     Map<String, Object?>? body,
     String? bearer,
-  }) async {
-    final request = await client.openUrl(method, url);
-    // Nothing here follows a redirect: both ends answer JSON directly, and
-    // a followed redirect is how an `Authorization` header ends up at a
-    // host nobody meant to send it to. A redirect reads as a non-`200`,
-    // which is [DriveListingFailure.unreachable].
-    request.followRedirects = false;
-    if (bearer != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
+  }) {
+    Future<(int, Map<String, dynamic>?)> exchange() async {
+      final answer = await sendWithoutRedirects(
+        client,
+        method,
+        url,
+        body: body,
+        bearer: bearer,
+      );
+      final json = await readJsonObject(answer, maxBytes: _maxBodyBytes);
+      return (answer.statusCode, json);
     }
-    if (body != null) {
-      final bytes = utf8.encode(jsonEncode(body));
-      request.headers.contentType = ContentType.json;
-      request.contentLength = bytes.length;
-      request.add(bytes);
-    }
-    return request.close();
-  }
 
-  static Future<Map<String, dynamic>?> _json(HttpClientResponse answer) async {
-    final bytes = <int>[];
-    var tooBig = false;
-    await for (final chunk in answer) {
-      // Read to the end even past the cap, so the connection is finished
-      // with rather than abandoned half-read.
-      if (tooBig) continue;
-      bytes.addAll(chunk);
-      tooBig = bytes.length > _maxBodyBytes;
-    }
-    if (tooBig) return null;
-    try {
-      final decoded = jsonDecode(utf8.decode(bytes));
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } on Object {
-      return null;
-    }
+    return exchange().timeout(timeout);
   }
 }
 
@@ -451,10 +431,11 @@ final class DriveReloadRefused extends DriveReloaded {
 ///    [LinkedDriveFile.reconciledWith]'s doing rather than a step here, so
 ///    no caller can write a new name and keep a stale match.
 ///  * a stored file Drive has **measured** since it was linked takes the
-///    height and duration it measured. Nothing reads them yet; they are
-///    recorded now because they arrive in the answer to a call being made
-///    anyway, and because the alternatives are a filename and a probe that
-///    both lie (see [LinkedDriveFile.height]).
+///    height and duration it measured. The height decides the file's
+///    resolution section on its details page; the duration is not read
+///    yet. Both are recorded because they arrive in the answer to a call
+///    being made anyway, and because the alternatives are a filename and a
+///    probe that both lie (see [LinkedDriveFile.height]).
 ///  * a stored file **absent** from the listing loses its row: the grant is
 ///    gone or the file is, and a row that cannot play is worse than no row.
 ///  * **nothing is added.** The listing reaches files this install never

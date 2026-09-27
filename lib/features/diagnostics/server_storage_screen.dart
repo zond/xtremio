@@ -42,9 +42,9 @@ Future<List<String>> platformDataRoots() async {
 /// than on the Downloads screen -- a download has no location of its own
 /// to be moved to.
 ///
-/// A copy button, a clean-now button and rows, all on the app's own
-/// surface: the theme floor marks every one of them and this screen adds
-/// nothing, the same decision [SettingsScreen] explains.
+/// A refresh button, a clean-now button, the folder controls and rows, all
+/// on the app's own surface: the theme floor marks every one of them and
+/// this screen adds nothing, the same decision [SettingsScreen] explains.
 class ServerStorageScreen extends StatefulWidget {
   const ServerStorageScreen({
     super.key,

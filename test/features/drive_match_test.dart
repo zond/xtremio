@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
 import 'package:xtremio/features/drive/drive_match.dart';
-import 'package:xtremio/features/drive/linked_files.dart';
+import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
 
 import '../support/fake_prefs_client.dart';
@@ -118,14 +118,10 @@ void main() {
       // The note tells a viewer to name their files like these, so this is
       // the note's own claim under test: change the parser and find out here
       // rather than on a television.
-      final film = ReleaseIdentity.ofName(
-        LinkedDriveFilesView.nameExamples.first,
-      );
+      final film = ReleaseIdentity.ofName(LibraryScreen.nameExamples.first);
       expect(film.title, 'The Matrix');
       expect(film.year, 1999);
-      final episode = ReleaseIdentity.ofName(
-        LinkedDriveFilesView.nameExamples.last,
-      );
+      final episode = ReleaseIdentity.ofName(LibraryScreen.nameExamples.last);
       expect(episode.title, 'Breaking Bad');
       expect(episode.season, 2);
       expect(episode.episode, 11);

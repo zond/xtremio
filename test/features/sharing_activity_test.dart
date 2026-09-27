@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/sharing/sharing_activity.dart';
@@ -104,6 +106,28 @@ void main() {
     await nextReading(tester);
     expect(monitor.active, isTrue);
     monitor.dispose();
+  });
+
+  testWidgets('a failure that lands after the monitor is gone says nothing', (
+    tester,
+  ) async {
+    final server = FakeSharingActivity(answer: traffic(up: true));
+    final monitor = monitorOver(server);
+    monitor.watching = true;
+    await answered(tester);
+    expect(monitor.active, isTrue);
+
+    final gate = Completer<void>();
+    server
+      ..pending = gate.future
+      ..failure = StateError('server is shutting down');
+    await tester.pump(period);
+    expect(server.reads, 2, reason: 'a reading is out');
+    monitor.dispose();
+
+    gate.complete();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('stops asking, and forgets, when nobody is watching', (

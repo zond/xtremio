@@ -120,14 +120,16 @@ class SharingActivityMonitor extends ChangeNotifier {
     try {
       reading = await client.fetch();
     } catch (error) {
+      if (kDebugMode) debugPrint('sharing activity unavailable: $error');
+      // An answer, failed or not, that arrived after the watch stopped (or
+      // the monitor was disposed) belongs to nobody.
+      if (!watching) return;
       // The server may not be up, or may be shutting down. Not knowing is
       // not the same as knowing nothing is moving, but it is drawn the
       // same way: nothing.
-      if (kDebugMode) debugPrint('sharing activity unavailable: $error');
       _update(BackgroundTraffic.none);
       return;
     }
-    // A reading that arrived after the watch stopped belongs to nobody.
     if (!watching) return;
     _update(reading);
   }

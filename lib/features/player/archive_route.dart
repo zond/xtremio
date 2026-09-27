@@ -20,9 +20,9 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import '../../core/json_exchange.dart';
 import 'archive_sniff.dart';
 
 /// What the server said about a container that was sent to it.
@@ -180,7 +180,7 @@ Future<ArchiveRouting?> _route(
   // trip: what the engine is handed is then a URL ending in the film's own
   // name, which is what ffmpeg's format probing and every log line want.
   final selection = _streamUrl(request, key);
-  final answer = await _send(client, 'GET', selection, followRedirects: false);
+  final answer = await sendWithoutRedirects(client, 'GET', selection);
   final location = answer.headers.value(HttpHeaders.locationHeader);
   final refusal = await _refusalOf(answer);
   if (refusal != null) return refusal;
@@ -199,11 +199,10 @@ Future<ArchiveRouting?> _route(
   // -- from "can't be played" into the sentence that says why. It cannot
   // produce a member: with nothing selected the route answers `404` for
   // that too. See the step-7 report; the fix is on the server's side.
-  final indexed = await _send(
+  final indexed = await sendWithoutRedirects(
     client,
     'GET',
     _streamUrl(request, key, asQuery: true),
-    followRedirects: false,
   );
   return _refusalOf(indexed);
 }
@@ -216,21 +215,18 @@ Future<Object?> _create(HttpClient client, ArchiveRouteRequest request) async {
   final create = Uri.parse(
     '${_base(request.serverBase)}/${request.kind.serverPrefix}/create',
   );
-  final body = utf8.encode(
-    jsonEncode({
+  final answer = await sendWithoutRedirects(
+    client,
+    'POST',
+    create,
+    body: {
       'urls': [url.toString()],
-    }),
+    },
   );
-  final send = await client.openUrl('POST', create);
-  send.followRedirects = false;
-  send.headers.contentType = ContentType.json;
-  send.headers.contentLength = body.length;
-  send.add(body);
-  final answer = await send.close();
   // The status decides which half of the body this is, and the body is
   // read once: a refusal's two fields, or the session key.
   if (answer.statusCode != HttpStatus.ok) return _refusalOf(answer);
-  final json = await _json(answer);
+  final json = await readJsonObject(answer, maxBytes: _maxBodyBytes);
   final key = json?['key'];
   return key is String && key.isNotEmpty ? key : null;
 }
@@ -257,17 +253,6 @@ String _base(Uri base) {
   return written.endsWith('/')
       ? written.substring(0, written.length - 1)
       : written;
-}
-
-Future<HttpClientResponse> _send(
-  HttpClient client,
-  String method,
-  Uri url, {
-  required bool followRedirects,
-}) async {
-  final request = await client.openUrl(method, url);
-  request.followRedirects = followRedirects;
-  return request.close();
 }
 
 /// The refusal [answer] carries, or null when it is not one.
@@ -297,7 +282,7 @@ Future<ArchiveRefused?> _refusalOf(HttpClientResponse answer) async {
     await answer.drain<void>();
     return null;
   }
-  final json = await _json(answer);
+  final json = await readJsonObject(answer, maxBytes: _maxBodyBytes);
   final kind = json?['refused'];
   final message = json?['message'];
   if (kind is String && message is String && message.isNotEmpty) {
@@ -313,25 +298,6 @@ Future<ArchiveRefused?> _refusalOf(HttpClientResponse answer) async {
 /// it reads is a two-field JSON object, and a route that answered a film
 /// instead is not one to swallow.
 const int _maxBodyBytes = 64 * 1024;
-
-Future<Map<String, dynamic>?> _json(HttpClientResponse answer) async {
-  final bytes = <int>[];
-  var tooBig = false;
-  await for (final chunk in answer) {
-    // Read to the end even past the cap, so the connection is finished
-    // with rather than abandoned half-read.
-    if (tooBig) continue;
-    bytes.addAll(chunk);
-    tooBig = bytes.length > _maxBodyBytes;
-  }
-  if (tooBig) return null;
-  try {
-    final decoded = jsonDecode(utf8.decode(bytes));
-    return decoded is Map<String, dynamic> ? decoded : null;
-  } on Object {
-    return null;
-  }
-}
 
 /// What the viewer is told when the server refused the container.
 ///

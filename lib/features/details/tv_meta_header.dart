@@ -6,6 +6,7 @@ import '../../widgets/download_badge.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/readout.dart';
 import '../../widgets/remote_press.dart';
+import '../../widgets/text_overflow.dart';
 
 /// What a title says about itself on a television: the logo, one line of
 /// facts, and enough of the description to know whether this is the film
@@ -323,17 +324,13 @@ class _TvDescriptionState extends State<TvDescription>
       builder: (context, constraints) {
         // Measured the way the phone measures its own: the clamped text
         // laid out at the width it will really have, inside the padding.
-        final painter =
-            TextPainter(
-              text: TextSpan(text: widget.text, style: style),
-              maxLines: TvMetaHeader.descriptionLines,
-              textDirection: Directionality.of(context),
-              textScaler: MediaQuery.textScalerOf(context),
-            )..layout(
-              maxWidth: constraints.maxWidth - TvDescription.inset.horizontal,
-            );
-        final overflows = painter.didExceedMaxLines;
-        painter.dispose();
+        final overflows = textOverflows(
+          context,
+          widget.text,
+          style: style,
+          maxLines: TvMetaHeader.descriptionLines,
+          maxWidth: constraints.maxWidth - TvDescription.inset.horizontal,
+        );
         final padded = Padding(padding: TvDescription.inset, child: words);
         // The padding is there either way, so a title whose plot happens
         // to fit is laid out exactly where a title whose plot does not is.

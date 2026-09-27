@@ -30,14 +30,6 @@ class StorageVolume {
     return '${DownloadView.humanSize(free)} free of '
         '${DownloadView.humanSize(total)}';
   }
-
-  /// How full the volume is, `0..1`, or null with nothing to divide.
-  double? get usedFraction {
-    final free = freeBytes;
-    final total = totalBytes;
-    if (free == null || total == null || total <= 0) return null;
-    return ((total - free) / total).clamp(0, 1).toDouble();
-  }
 }
 
 /// What the embedded server's storage costs right now: the one root every

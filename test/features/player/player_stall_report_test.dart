@@ -45,8 +45,8 @@ void main() {
     final harness = bunny();
     await harness.pump(tester);
 
-    expect(harness.playhead.opened, [infoHash]);
-    expect(harness.playhead.stalls, isEmpty);
+    expect(harness.hints.opened, [infoHash]);
+    expect(harness.hints.stalls, isEmpty);
   });
 
   testWidgets('buffering counts as a stall only once the video has played', (
@@ -58,7 +58,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: "the open's own wait, before a frame, is not a stall",
     );
@@ -70,7 +70,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: 'a jump to the resume point is a load, not playback',
     );
@@ -79,7 +79,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: 'a quarter of a second of film is not yet watching',
     );
@@ -92,7 +92,7 @@ void main() {
 
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.playhead.stalls, [
+    expect(harness.hints.stalls, [
       infoHash,
     ], reason: 'the popup, after the film has actually been playing');
 
@@ -100,7 +100,7 @@ void main() {
     harness.engine.emitPosition(const Duration(milliseconds: 899_500));
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.playhead.stalls, [
+    expect(harness.hints.stalls, [
       infoHash,
       infoHash,
     ], reason: 'every stall is one report; the server counts them');
@@ -122,7 +122,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: 'a seek deepens nothing, whatever it waits for',
     );
@@ -136,7 +136,7 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.playhead.stalls, [infoHash]);
+    expect(harness.hints.stalls, [infoHash]);
   });
 
   testWidgets('a scrub back is not a run of stalls', (tester) async {
@@ -154,11 +154,7 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitPosition(const Duration(seconds: 6202));
     await pumpEvents(tester);
-    expect(
-      harness.playhead.stalls,
-      isEmpty,
-      reason: 'nothing has buffered yet',
-    );
+    expect(harness.hints.stalls, isEmpty, reason: 'nothing has buffered yet');
 
     for (final at in const [6190, 6180, 6170, 6157, 6145, 6133]) {
       // The rewind, seen only as the position moving back...
@@ -174,7 +170,7 @@ void main() {
       await pumpEvents(tester);
     }
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: 'a rewind is a seek, whoever asked mpv for it',
     );
@@ -186,7 +182,7 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.playhead.stalls, [infoHash]);
+    expect(harness.hints.stalls, [infoHash]);
   });
 
   testWidgets('buffering after a change of window is not a stall', (
@@ -214,7 +210,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.playhead.stalls,
+      harness.hints.stalls,
       isEmpty,
       reason: 'the new window filling, not a stall',
     );

@@ -80,10 +80,10 @@ class _BoardScreenState extends State<BoardScreen> {
   /// into an addon with a name that can be checked or uninstalled.
   ///
   /// Subscribed to only once a catalog has actually failed, by
-  /// [_watchProfileForFailures]: `ctx` is the whole context -- the library
-  /// included -- so every event that touches it costs a serialize across
-  /// FFI and a decode here, and the board stays mounted under the player
-  /// while a film reports its progress.
+  /// [_watchProfileForFailures]: `ctx` is the profile with its
+  /// notifications and events, every event that touches it costs a
+  /// serialize across FFI and a decode here, and the board stays mounted
+  /// under the player while a film reports its progress.
   CoreFieldNotifier? _ctx;
   final ScrollController _scroll = ScrollController();
   Timer? _debounce;
@@ -158,16 +158,22 @@ class _BoardScreenState extends State<BoardScreen> {
     _debounce = Timer(BoardScreen.scrollDebounce, _updateRange);
   }
 
+  /// Each read below is one parse per change of its field, however many
+  /// times a build asks.
+  final _boardParse = ParsedField(CatalogsWithExtraState.fromJson);
+  final _continueWatchingParse = ParsedField(ContinueWatchingState.fromJson);
+  final _profileParse = ParsedField(ProfileState.fromCtx);
+
   CatalogsWithExtraState get _boardState =>
-      CatalogsWithExtraState.fromJson(_board?.value ?? const {});
+      _boardParse.of(_board?.value ?? const {});
 
   ContinueWatchingState get _continueWatchingState =>
-      ContinueWatchingState.fromJson(_continueWatching?.value ?? const {});
+      _continueWatchingParse.of(_continueWatching?.value ?? const {});
 
   /// The profile behind `ctx`; null until its first pull comes back.
   ProfileState? get _profile {
     final ctx = _ctx?.value;
-    return ctx == null ? null : ProfileState.fromCtx(ctx);
+    return ctx == null ? null : _profileParse.of(ctx);
   }
 
   /// The addons behind the rows that were dropped, one card's worth each.

@@ -326,7 +326,7 @@ class PlaybackScope extends InheritedWidget {
     this.dhtStatus,
     this.proxyStreams,
     this.streamNumbers,
-    this.playhead,
+    this.hints,
     this.archiveSniff,
     this.archiveRoute,
     required super.child,
@@ -364,10 +364,11 @@ class PlaybackScope extends InheritedWidget {
   /// up.
   final StreamNumbersReader? streamNumbers;
 
-  /// How long the film is, told to the server -- the one thing about the
-  /// playback it cannot work out from the reads. Injectable so a test can
-  /// see what was reported without reaching FFI.
-  final PlayheadReporter? playhead;
+  /// What the server is told about the playback that it cannot work out
+  /// from the reads: the film's length, and a player opening on or
+  /// stalling on a torrent. Injectable so a test can see what was reported
+  /// without reaching FFI.
+  final PlaybackHints? hints;
 
   /// What a stream that failed to open is asked, to say whether it is an
   /// archive rather than a film (absent, [sniffArchive], which reads the
@@ -408,8 +409,8 @@ class PlaybackScope extends InheritedWidget {
   static StreamNumbersReader streamNumbersOf(BuildContext context) =>
       _maybeOf(context)?.streamNumbers ?? const ServerClient();
 
-  static PlayheadReporter playheadOf(BuildContext context) =>
-      _maybeOf(context)?.playhead ?? const ServerClient();
+  static PlaybackHints hintsOf(BuildContext context) =>
+      _maybeOf(context)?.hints ?? const ServerClient();
 
   static Future<ArchiveKind?> Function(Uri url) archiveSniffOf(
     BuildContext context,
@@ -428,7 +429,7 @@ class PlaybackScope extends InheritedWidget {
       dhtStatus != oldWidget.dhtStatus ||
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
-      playhead != oldWidget.playhead ||
+      hints != oldWidget.hints ||
       archiveSniff != oldWidget.archiveSniff ||
       archiveRoute != oldWidget.archiveRoute;
 }
@@ -545,38 +546,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// has no display rate to show and mpv has none to reason with, which is
   /// what the override supplies.
   ///
-  /// **`video-sync=display-resample` was here, and is not any more.** The
-  /// argument for it was that a 23.976 fps film on a 59.94 Hz output is
-  /// laid on a 2.5:1 cadence -- two refreshes for one frame, three for the
-  /// next -- and that mpv's own answer to a mismatched rate is to lock the
-  /// video to the display and resample the audio by the difference. Asking
-  /// the panel for the film's own rate (`DisplayFrameRate`,
-  /// docs/ANDROID.md) removed the cadence and did not remove the drops: at
-  /// a confirmed 23.976 Hz the OSD still read **2779 vo / 0 decoder**,
-  /// roughly one frame in five decoded on time and thrown away at
-  /// presentation. That looked like a timing fault, so display sync was
-  /// set against it, on the standard that it had to start and had to beat
-  /// 2779.
-  ///
-  /// It did neither, and the diagnosis was wrong. `display-sync-active`
-  /// read `no` in every capture -- the override is enough for mpv to have
-  /// a rate, not enough for the mode to engage -- so display sync never
-  /// ran, and the 2779 were never its to fix. They were the decoder:
-  /// `hwdec=mediacodec-copy` reading every frame back into a ByteBuffer at
-  /// 86% of a core and delivering them late. Asking for the direct decoder
-  /// instead ([configurationFor]) took the process from 224% of a core to
-  /// 45% and the drops to `1 vo / 0 decoder`. (An earlier note here read
-  /// `hevc_mediacodec: Both surface and native_window are NULL` in logcat
-  /// as the copy path announcing itself. It is not: the line appears with
-  /// the direct decoder too, as the 2026-09-17 captures showed. The OSD's
-  /// hwdec row is the check, not the log.)
-  ///
-  /// What `display-resample` did in the meantime was put the audio on a
-  /// correction loop against a rate mpv cannot verify, and the sound drew
-  /// audibly ahead of the picture over a few minutes. Removing it fixed
-  /// that with no cadence cost: SurfaceFlinger presents 126 consecutive
-  /// frames at 41.70-41.71 ms. The two faults were independent, which is
-  /// why fixing the decoder did not fix the drift.
+  /// **`video-sync` is not set here**, and display sync is not used: why
+  /// it was tried and taken out again, and what the dropped frames it was
+  /// set against really were, is at [displayRateProperties].
   static const Map<String, String> mpvOverrides = {
     'network-timeout': '300',
     'cache-on-disk': 'no',
@@ -620,11 +592,12 @@ class MediaKitEngine implements PlaybackEngine {
   /// audio clock, which is what [displayRateOff] gives back and why the
   /// two maps carry the same one key.
   ///
-  /// **Display sync was tried here and taken out again, on the terms this
-  /// file set for it.** [mpvOverrides] argued for
-  /// `video-sync=display-resample` and named the standard it would be kept
-  /// on: display sync has to actually start, and the vo drop count has to
-  /// beat 2779. It failed both. `display-sync-active` read `no` in every
+  /// **Display sync was tried and taken out again, on the terms set for
+  /// it.** `video-sync=display-resample` was set against the drops a
+  /// 23.976 fps film still showed on a panel asked for 23.976 Hz (**2779
+  /// vo / 0 decoder** on the stats OSD), on the standard that display sync
+  /// had to actually start and the vo drop count had to beat 2779. It
+  /// failed both. `display-sync-active` read `no` in every
   /// capture on the owner's Chromecast -- the override is enough for mpv
   /// to *have* a rate but not enough for the mode to engage -- and what
   /// removed the drops was not this at all but `hwdec=mediacodec` in place
@@ -1634,7 +1607,7 @@ class MediaKitEngine implements PlaybackEngine {
   /// case; nothing in this process can do anything about the second.
   ///
   /// That is the strongest single argument for the player keeping no disk
-  /// cache: a stuck core thread now costs 64 MiB of packet memory, a
+  /// cache: a stuck core thread now costs 40 MiB of packet memory, a
   /// socket, and the server engine that socket keeps live, instead of a
   /// gigabyte of a 4 GB television that only a force-stop returns.
   ///
@@ -1654,8 +1627,8 @@ class MediaKitEngine implements PlaybackEngine {
   /// that ever destroys the handle, so a teardown that lands late still
   /// lands correctly rather than onto a pointer this method freed.
   ///
-  /// The handle is read here and not captured when the fallback was armed,
-  /// and `NativePlayer.disposed` is asked with it. media_kit sets that flag
+  /// The handle is read here, when the quit is sent, and not captured
+  /// earlier, and `NativePlayer.disposed` is asked with it. media_kit sets that flag
   /// before it schedules its destroy, so a teardown that finished while
   /// this was on its way sends nothing at all -- a `quit` on freed memory
   /// is the same crash by the other road.

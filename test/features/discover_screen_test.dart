@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -16,7 +18,7 @@ void main() {
     child: MaterialApp(home: DiscoverScreen(request: request)),
   );
 
-  /// Phone width, below [DiscoverScreen.wideBreakpoint].
+  /// Phone width, below [FilterSegments.breakpoint].
   void useNarrowScreen(WidgetTester tester) {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
@@ -675,6 +677,47 @@ void main() {
     expect(find.byType(SegmentedButton<int>), findsNothing);
     expect(find.byType(DropdownMenu<int>), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('a reload of the catalog asks for its next page again', (
+    tester,
+  ) async {
+    // Coming back to a field another screen took loads the catalog from its
+    // first page, so a next page asked for before that is not one the list
+    // is still waiting for.
+    final fixture = loadDiscoverFixture();
+    final core = FakeCoreClient(state: {CoreField.discover: fixture});
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    List<CoreAction> nextPages() => [
+      for (final action in core.dispatched)
+        if (action.action['action'] == 'CatalogWithFilters') action,
+    ];
+
+    await tester.drag(find.byType(GridView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(GridView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(nextPages(), hasLength(1));
+
+    unawaited(
+      Navigator.of(tester.element(find.byType(DiscoverScreen)))
+          .push(MaterialPageRoute<void>(builder: (_) => const SizedBox())),
+    );
+    await tester.pumpAndSettle();
+    core.setState(CoreField.discover, {'selected': null, 'catalog': []});
+    await tester.pump();
+    Navigator.of(tester.element(find.byType(SizedBox).last)).pop();
+    await tester.pumpAndSettle();
+    expect(loads(core), hasLength(2), reason: 'the catalog was loaded again');
+
+    core.setState(CoreField.discover, {...fixture});
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(GridView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(GridView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(nextPages(), hasLength(2));
   });
 
   testWidgets('loads the next page once near the end of the grid', (

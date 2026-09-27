@@ -32,7 +32,7 @@ void main() {
     },
   );
 
-  /// Phone width, below [LibraryScreen.wideBreakpoint].
+  /// Phone width, below [FilterSegments.breakpoint].
   void useNarrowScreen(WidgetTester tester) {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;

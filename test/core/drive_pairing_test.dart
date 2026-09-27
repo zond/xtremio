@@ -324,6 +324,39 @@ void main() {
       await server.close(force: true);
       expect(await dead.collect('abc-123'), isA<DrivePairingUnreachable>());
     });
+
+    test(
+      'a body that stalls half way is a poll that timed out, not a hang',
+      () async {
+        // The timeout covers the whole exchange: a service that sends its
+        // headers and then nothing would otherwise hold the collect -- and the
+        // job waiting on it -- for ever.
+        final stalling = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => stalling.close(force: true));
+        stalling.listen((request) async {
+          await request.drain<void>();
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..contentLength = 64
+            ..write('{"status":');
+          await request.response.flush();
+        });
+        final slow = XtremioDrivePairingService(
+          origin: 'http://127.0.0.1:${stalling.port}',
+          timeout: const Duration(milliseconds: 300),
+        );
+        await expectLater(
+          slow.collect('abc-123').timeout(const Duration(seconds: 5)),
+          completion(isA<DrivePairingUnreachable>()),
+        );
+        await expectLater(
+          slow
+              .open(shape: DrivePairingShape.television)
+              .timeout(const Duration(seconds: 5)),
+          completion(isA<DrivePairingUnavailable>()),
+        );
+      },
+    );
   });
 
   group('a stored session', () {

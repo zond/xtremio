@@ -529,12 +529,9 @@ void main() {
 
   group('event helpers', () {
     test('read only the source name, the message and the flag', () {
-      expect(AccountSection.errorSourceOf(authError), 'UserAuthenticated');
-      expect(
-        AccountSection.errorMessageOf(authError),
-        'Wrong email or password',
-      );
-      expect(AccountSection.errorSourceOf(userAuthenticated), isNull);
+      expect(authError.errorSource, 'UserAuthenticated');
+      expect(authError.errorMessage, 'Wrong email or password');
+      expect(userAuthenticated.errorSource, isNull);
       expect(AccountSection.libraryMissingOf(userAuthenticated), isNull);
       expect(AccountSection.libraryMissingOf(authError), isNull);
       expect(

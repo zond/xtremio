@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
-import 'package:xtremio/features/drive/linked_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
@@ -231,11 +230,6 @@ void main() {
         'https://images.metahub.space/poster/small/tt2543164/img',
       );
       expect(find.byType(PosterImage), findsNWidgets(3));
-      expect(
-        find.byIcon(LinkedDriveFilesView.unmatchedIcon),
-        findsNothing,
-        reason: 'a matched file has a poster, so it is drawn with one',
-      );
       expect(
         find.text('Arrival.2016.mkv'),
         findsNothing,

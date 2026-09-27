@@ -181,10 +181,6 @@ enum AddonHealthVerdict {
 final class AddonHealth {
   const AddonHealth({required this.declared, required this.records});
 
-  /// Nothing known: an addon that declares nothing a record is kept for,
-  /// and has none.
-  static const AddonHealth unknown = AddonHealth(declared: {}, records: {});
-
   /// The kinds this addon's manifest declares that a record is kept for.
   /// The [useless] rule reads against these and not against what happens to
   /// have been observed, so an addon is never called useless for a kind it

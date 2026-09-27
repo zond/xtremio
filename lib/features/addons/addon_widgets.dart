@@ -153,18 +153,8 @@ class AddonErrorSnackBars extends StatefulWidget {
   /// The message to show for [event], or null when it is not an addon
   /// mutation failure.
   static String? messageOf(RuntimeCoreEvent event) {
-    if (event.name != 'Error') return null;
-    final args = event.args;
-    if (args is! Map<String, dynamic>) return null;
-    final source = args['source'];
-    if (source is! Map<String, dynamic> || !sources.contains(source['event'])) {
-      return null;
-    }
-    final error = args['error'];
-    final message = error is Map<String, dynamic> ? error['message'] : null;
-    return message is String && message.isNotEmpty
-        ? message
-        : 'The addon could not be changed';
+    if (!sources.contains(event.errorSource)) return null;
+    return event.errorMessage ?? 'The addon could not be changed';
   }
 
   @override

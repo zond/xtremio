@@ -80,3 +80,28 @@ class CoreFieldNotifier extends ValueNotifier<Map<String, dynamic>?> {
     super.dispose();
   }
 }
+
+/// One parse of a field's JSON, kept for as long as the JSON is the same
+/// object.
+///
+/// A pull hands over a new map whenever the field changed, so an
+/// `identical` map is an unchanged field and its parse can be reused: a
+/// screen that reads its state from several places in one build parses it
+/// once instead of once per read.
+class ParsedField<T> {
+  ParsedField(this.parse);
+
+  final T Function(Map<String, dynamic> json) parse;
+
+  Map<String, dynamic>? _json;
+  late T _parsed;
+
+  /// [json] parsed, from the last parse when it is the same map.
+  T of(Map<String, dynamic> json) {
+    if (!identical(json, _json)) {
+      _parsed = parse(json);
+      _json = json;
+    }
+    return _parsed;
+  }
+}

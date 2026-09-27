@@ -25,6 +25,28 @@ void main() {
     expect(notified, 1);
   });
 
+  test('a value set while the load is out is not overwritten by it', () async {
+    // The app does not wait for the load before its first screens, and what
+    // the load read is older than anything set since.
+    final prefs = AppPrefs(
+      client: FakePrefsClient({
+        AppPrefs.streamsSectionedKey: true,
+        AppPrefs.verboseDiagnosticsKey: true,
+      }),
+    );
+    addTearDown(prefs.dispose);
+
+    final loading = prefs.load();
+    await prefs.setStreamsSectioned(false);
+    // Absent from the file, where an absence reads as "nothing pending".
+    await prefs.setDrivePendingSession('session-1');
+    await loading;
+
+    expect(prefs.streamsSectioned, isFalse);
+    expect(prefs.drivePendingSession, 'session-1');
+    expect(prefs.verboseDiagnostics, isTrue, reason: 'the rest is read');
+  });
+
   test(
     'a change is written through and read back by a fresh AppPrefs',
     () async {

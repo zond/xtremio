@@ -47,9 +47,6 @@ import 'addon_widgets.dart';
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
 
-  /// From this width on, types are a segmented button rather than chips.
-  static const double wideBreakpoint = 720;
-
   /// Label of the `type: null` (installed) and `type: "all"` (community)
   /// entries.
   static const String allTypesLabel = 'All';
@@ -84,11 +81,11 @@ class _AddonsScreenState extends State<AddonsScreen> {
   /// which is rebuilt on every answer from the engine.
   RemoteAddonSort _remoteSort = RemoteAddonSort.catalogOrder;
 
-  @override
-  void initState() {
-    super.initState();
-    _search.addListener(() => setState(() {}));
-  }
+  /// One parse of each field per change of it: a sort or a health answer
+  /// rebuilds the tabs without any of the three having moved.
+  final _profileParse = ParsedField(ProfileState.fromCtx);
+  final _installedParse = ParsedField(InstalledAddonsState.fromJson);
+  final _remoteParse = ParsedField(RemoteAddonsState.fromJson);
 
   @override
   void didChangeDependencies() {
@@ -231,7 +228,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                 final ctx = _ctx!.value;
                 final profile = ctx == null
                     ? const ProfileState({})
-                    : ProfileState.fromCtx(ctx);
+                    : _profileParse.of(ctx);
                 final installedJson = _installed!.value;
                 final remoteJson = _remote!.value;
                 return Column(
@@ -244,7 +241,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                           _InstalledTab(
                             state: installedJson == null
                                 ? null
-                                : InstalledAddonsState.fromJson(installedJson),
+                                : _installedParse.of(installedJson),
                             locked: profile.addonsLocked,
                             health: _health!,
                             sort: _sort,
@@ -263,7 +260,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                           _CommunityTab(
                             state: remoteJson == null
                                 ? null
-                                : RemoteAddonsState.fromJson(remoteJson),
+                                : _remoteParse.of(remoteJson),
                             profile: profile,
                             search: _search,
                             sort: _remoteSort,
@@ -371,7 +368,7 @@ class _TypeFilter<R> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWide =
-        MediaQuery.sizeOf(context).width >= AddonsScreen.wideBreakpoint;
+        MediaQuery.sizeOf(context).width >= FilterSegments.breakpoint;
     return isWide
         ? FilterSegments(options: options, onSelect: onSelect)
         : FilterChips(options: options, onSelect: onSelect);
@@ -593,8 +590,10 @@ class _CommunityTab extends StatelessWidget {
           request: type.request,
         ),
     ];
-    final addons = sortedRemoteAddons(filter(state.addons, search.text), sort);
     final error = state.lastError;
+    // One lookup for every tile's "installed", not a walk of the profile's
+    // addons per tile.
+    final installed = {for (final addon in profile.addons) addon.transportUrl};
     return Column(
       children: [
         Padding(
@@ -644,48 +643,57 @@ class _CommunityTab extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: state.addons.isEmpty
-              ? (error != null && !error.isEmptyContent
-                    ? _Failed(
-                        message: error.message,
-                        onRetry: () => onSelect(state.selected!),
-                      )
-                    : state.isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : const _Empty('No addons in this catalog'))
-              : addons.isEmpty
-              ? const _Empty('No addons match')
-              : NotificationListener<ScrollNotification>(
-                  onNotification: (n) => onScroll(n, state),
-                  child: ListView.separated(
-                    itemCount: addons.length + (state.isLoading ? 1 : 0),
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      if (index == addons.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final addon = addons[index];
-                      return AddonTile(
-                        addon: addon,
-                        onTap: () => onOpen(addon),
-                        memoryId: 'community/${addon.transportUrl}',
-                        defaultFocus: index == 0,
-                        trailing: _CommunityAction(
-                          addon: addon,
-                          installed: profile.isAddonInstalled(
-                            addon.transportUrl,
-                          ),
-                          locked: profile.addonsLocked,
-                          onInstall: () => onInstall(addon),
-                          onConfigure: () => onConfigure(addon),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+          child: ListenableBuilder(
+            // The search is typed a key at a time, and what it changes is
+            // this list: the filters above and the field itself stay put.
+            listenable: search,
+            builder: (context, _) {
+              final addons = sortedRemoteAddons(
+                filter(state.addons, search.text),
+                sort,
+              );
+              return state.addons.isEmpty
+                  ? (error != null && !error.isEmptyContent
+                        ? _Failed(
+                            message: error.message,
+                            onRetry: () => onSelect(state.selected!),
+                          )
+                        : state.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : const _Empty('No addons in this catalog'))
+                  : addons.isEmpty
+                  ? const _Empty('No addons match')
+                  : NotificationListener<ScrollNotification>(
+                      onNotification: (n) => onScroll(n, state),
+                      child: ListView.separated(
+                        itemCount: addons.length + (state.isLoading ? 1 : 0),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          if (index == addons.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          final addon = addons[index];
+                          return AddonTile(
+                            addon: addon,
+                            onTap: () => onOpen(addon),
+                            memoryId: 'community/${addon.transportUrl}',
+                            defaultFocus: index == 0,
+                            trailing: _CommunityAction(
+                              addon: addon,
+                              installed: installed.contains(addon.transportUrl),
+                              locked: profile.addonsLocked,
+                              onInstall: () => onInstall(addon),
+                              onConfigure: () => onConfigure(addon),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+            },
+          ),
         ),
       ],
     );

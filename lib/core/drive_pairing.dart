@@ -13,7 +13,8 @@
 /// that hands the tokens over, so a second read of a session that answered
 /// [DrivePairingCollected] is a `404` and the credential is gone for good.
 /// So a [DrivePairingCollected] is never dropped, never retried and never
-/// asked for twice -- see `DrivePairingScreen`, which is the only caller.
+/// asked for twice -- see `DrivePairingScreen` and `DrivePairingJob`, the
+/// two callers, which never collect one session at once.
 ///
 /// **Neither token is written down here.** The refresh token is carried in
 /// one field of one object, straight from the response into
@@ -28,10 +29,11 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
+import 'json_exchange.dart';
 
 /// Where the pick page sends a phone's browser when the picking is done, so
 /// that a viewer this app handed to a browser is handed back to it.
@@ -394,31 +396,36 @@ class XtremioDrivePairingService implements DrivePairingService {
 
   final String origin;
 
-  /// How long one call is given. Generous: this runs while a viewer is
-  /// looking at a QR code, and a poll that timed out is one poll.
+  /// How long one call is given, from the connect to the end of its body.
+  /// Generous: this runs while a viewer is looking at a QR code, and a poll
+  /// that timed out is one poll.
   final Duration timeout;
 
   @override
   Future<DrivePairingOpening> open({required DrivePairingShape shape}) async {
     final client = HttpClient()..connectionTimeout = timeout;
-    try {
-      final answer = await _send(
+    Future<DrivePairingOpening> exchange() async {
+      final answer = await sendWithoutRedirects(
         client,
         'POST',
         Uri.parse('$origin/session'),
         body: {'shape': shape.wire},
-      ).timeout(timeout);
+      );
       if (answer.statusCode == HttpStatus.tooManyRequests) {
         await answer.drain<void>();
         return const DrivePairingUnavailable(tooManyCodes);
       }
-      final json = await _json(answer);
+      final json = await readJsonObject(answer, maxBytes: _maxBodyBytes);
       if (answer.statusCode != HttpStatus.ok) {
         return const DrivePairingUnavailable(notReached);
       }
       final session = DrivePairingSession.fromJson(json);
       if (session == null) return const DrivePairingUnavailable(notUnderstood);
       return DrivePairingOpened(session);
+    }
+
+    try {
+      return await exchange().timeout(timeout);
     } on Object {
       // Every way a socket can fail is one sentence to a viewer, and the
       // exception's own text is not it: a DNS failure and a refused
@@ -430,23 +437,25 @@ class XtremioDrivePairingService implements DrivePairingService {
   }
 
   @override
-  @override
   Future<DrivePairingHandover> handOverNativePick({
     required String sessionId,
     required String serverAuthCode,
     required List<String> fileIds,
   }) async {
     final client = HttpClient()..connectionTimeout = timeout;
-    try {
-      final answer = await _send(
+    Future<int> exchange() async {
+      final answer = await sendWithoutRedirects(
         client,
         'POST',
         Uri.parse('$origin/session/$sessionId/android'),
         body: {'serverAuthCode': serverAuthCode, 'fileIds': fileIds},
-      ).timeout(timeout);
-      final status = answer.statusCode;
+      );
       await answer.drain<void>();
-      return switch (status) {
+      return answer.statusCode;
+    }
+
+    try {
+      return switch (await exchange().timeout(timeout)) {
         HttpStatus.ok => DrivePairingHandover.taken,
         // Not there, not waiting any more, or its ten minutes are up: all
         // three mean this session cannot be given anything, and all three
@@ -471,12 +480,12 @@ class XtremioDrivePairingService implements DrivePairingService {
   @override
   Future<DrivePairingAnswer> collect(String sessionId) async {
     final client = HttpClient()..connectionTimeout = timeout;
-    try {
-      final answer = await _send(
+    Future<DrivePairingAnswer> exchange() async {
+      final answer = await sendWithoutRedirects(
         client,
         'GET',
         Uri.parse('$origin/session/$sessionId'),
-      ).timeout(timeout);
+      );
       switch (answer.statusCode) {
         case HttpStatus.gone:
           await answer.drain<void>();
@@ -490,7 +499,11 @@ class XtremioDrivePairingService implements DrivePairingService {
           await answer.drain<void>();
           return const DrivePairingUnreachable();
       }
-      return _readAnswer(await _json(answer));
+      return _readAnswer(await readJsonObject(answer, maxBytes: _maxBodyBytes));
+    }
+
+    try {
+      return await exchange().timeout(timeout);
     } on Object {
       return const DrivePairingUnreachable();
     } finally {
@@ -543,45 +556,7 @@ class XtremioDrivePairingService implements DrivePairingService {
       'The pairing service answered '
       'something this version does not understand.';
 
-  static Future<HttpClientResponse> _send(
-    HttpClient client,
-    String method,
-    Uri url, {
-    Map<String, Object?>? body,
-  }) async {
-    final request = await client.openUrl(method, url);
-    // Nothing here follows a redirect: both routes answer JSON directly,
-    // and the one redirect the service issues is the phone's.
-    request.followRedirects = false;
-    if (body != null) {
-      final bytes = utf8.encode(jsonEncode(body));
-      request.headers.contentType = ContentType.json;
-      request.contentLength = bytes.length;
-      request.add(bytes);
-    }
-    return request.close();
-  }
-
   /// How much of a body this reads before calling it malformed. Every body
   /// it reads is a small JSON object.
   static const int _maxBodyBytes = 16 * 1024;
-
-  static Future<Map<String, dynamic>?> _json(HttpClientResponse answer) async {
-    final bytes = <int>[];
-    var tooBig = false;
-    await for (final chunk in answer) {
-      // Read to the end even past the cap, so the connection is finished
-      // with rather than abandoned half-read.
-      if (tooBig) continue;
-      bytes.addAll(chunk);
-      tooBig = bytes.length > _maxBodyBytes;
-    }
-    if (tooBig) return null;
-    try {
-      final decoded = jsonDecode(utf8.decode(bytes));
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } on Object {
-      return null;
-    }
-  }
 }

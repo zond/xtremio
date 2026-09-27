@@ -271,6 +271,38 @@ void main() {
       );
     });
 
+    test('a body that stalls half way is a refusal, not a hang', () async {
+      // The timeout covers each call's body as well as its connect: a
+      // service that sends its headers and then nothing would otherwise
+      // hold the reload for ever.
+      final stalling = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => stalling.close(force: true));
+      stalling.listen((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..contentLength = 64
+          ..write('{"accessToken":');
+        await request.response.flush();
+      });
+      final slow = XtremioDriveFileLister(
+        origin: 'http://127.0.0.1:${stalling.port}',
+        timeout: const Duration(milliseconds: 300),
+      );
+      await expectLater(
+        slow
+            .listFiles(refreshToken: _refreshToken)
+            .timeout(const Duration(seconds: 5)),
+        completion(
+          isA<DriveListingFailed>().having(
+            (failed) => failed.reason,
+            'reason',
+            DriveListingFailure.unreachable,
+          ),
+        ),
+      );
+    });
+
     test('the rate limit has a sentence of its own', () async {
       refreshStatus = HttpStatus.tooManyRequests;
       refreshBody = {'error': 'too many refreshes'};

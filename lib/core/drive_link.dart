@@ -372,14 +372,15 @@ final class LinkedDriveFiles {
 
   /// One per file. The order is recency, and nothing reads it as anything
   /// else, so [linking] is free to move what it touches to the front.
-  final List<LinkedDriveFile> entries;
-
+  ///
   /// No bound, unlike the other lists in the preferences file. Those drop
   /// their oldest row because the worst it costs is asking a model again;
   /// dropping a row here would take a file off a list the viewer is shown
   /// while the token still reaches it, which is the list telling them
   /// something untrue. A row is about two hundred bytes and a person picks
   /// films by hand.
+  final List<LinkedDriveFile> entries;
+
   bool get isEmpty => entries.isEmpty;
 
   bool get isNotEmpty => entries.isNotEmpty;

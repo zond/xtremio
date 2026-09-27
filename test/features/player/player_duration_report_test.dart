@@ -24,7 +24,7 @@ void main() {
     await harness.pump(tester);
 
     expect(
-      harness.playhead.durations,
+      harness.hints.durations,
       isEmpty,
       reason: 'nothing is stated before the file says what it is',
     );
@@ -33,7 +33,7 @@ void main() {
     await pumpEvents(tester);
 
     expect(
-      harness.playhead.durations,
+      harness.hints.durations,
       contains(6669),
       reason: "the film's length, which with the file's size is its bitrate",
     );
@@ -47,7 +47,7 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await pumpEvents(tester);
 
-    expect(harness.playhead.durations, [
+    expect(harness.hints.durations, [
       6669,
     ], reason: 'a length does not go stale, so repeating it buys nothing');
   });
@@ -82,11 +82,11 @@ void main() {
     await pumpEvents(tester);
 
     expect(
-      harness.playhead.durations,
+      harness.hints.durations,
       contains(6669),
       reason: 'the length was dropped because the URL says -1',
     );
-    final file = harness.playhead.files.single;
+    final file = harness.hints.files.single;
     expect(
       file.fileIdx,
       -1,

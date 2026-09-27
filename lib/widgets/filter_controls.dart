@@ -49,6 +49,10 @@ class FilterSegments<R> extends StatelessWidget {
     required this.onSelect,
   });
 
+  /// From this width on, a screen's types are a segmented button rather
+  /// than [FilterChips].
+  static const double breakpoint = 720;
+
   final List<FilterOption<R>> options;
   final ValueChanged<R> onSelect;
 
@@ -106,6 +110,13 @@ class FilterChips<R> extends StatelessWidget {
   );
 }
 
+/// Whether [options] at [index] opens a group, and so is drawn under a
+/// heading naming it.
+bool _headsGroup<R>(List<FilterOption<R>> options, int index) {
+  final group = options[index].group;
+  return group != null && (index == 0 || options[index - 1].group != group);
+}
+
 /// A read-only dropdown over [options]; the selected one is the entry the
 /// engine flagged, so a new state moves the selection without local state.
 ///
@@ -114,13 +125,6 @@ class FilterChips<R> extends StatelessWidget {
 /// is a text field whose only focusable part is its trailing arrow, and
 /// the menu it opens highlights entries in step with the arrow keys but
 /// picks one only on Enter, which a remote does not send.
-/// Whether [options] at [index] opens a group, and so is drawn under a
-/// heading naming it.
-bool _headsGroup<R>(List<FilterOption<R>> options, int index) {
-  final group = options[index].group;
-  return group != null && (index == 0 || options[index - 1].group != group);
-}
-
 class FilterMenu<R> extends StatelessWidget {
   const FilterMenu({
     super.key,

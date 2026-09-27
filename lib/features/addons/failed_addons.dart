@@ -281,12 +281,7 @@ class UninstallAddonDialog extends StatelessWidget {
 /// reachability test a failing addon asks for, and Install / Uninstall are
 /// there too.
 void openAddonDetails(BuildContext context, String transportUrl) {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      settings: const RouteSettings(name: 'addon-details'),
-      builder: (_) => AddonDetailsScreen(transportUrl: transportUrl),
-    ),
-  );
+  Navigator.of(context).push(AddonDetailsScreen.route(transportUrl));
 }
 
 /// Drops [addon] from the profile once the user has said so. Uninstalling

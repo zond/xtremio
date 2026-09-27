@@ -56,10 +56,10 @@ class _SearchScreenState extends State<SearchScreen> {
   /// into an addon with a name that can be checked or uninstalled.
   ///
   /// Subscribed to only once a search has actually failed, by
-  /// [_watchProfileForFailures]: `ctx` is the whole context — the library
-  /// included — so every event that touches it would otherwise cost a
-  /// serialize across FFI and a decode here, for a screen that reads two
-  /// fields of the profile.
+  /// [_watchProfileForFailures]: `ctx` is the profile with its
+  /// notifications and events, and every event that touches it would
+  /// otherwise cost a serialize across FFI and a decode here, for a screen
+  /// that reads two fields of the profile.
   CoreFieldNotifier? _ctx;
   final TextEditingController _controller = TextEditingController();
   Timer? _debounce;
@@ -98,16 +98,21 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
+  /// Each read below is one parse per change of its field, however many
+  /// times a build asks.
+  final _stateParse = ParsedField(CatalogsWithExtraState.fromJson);
+  final _profileParse = ParsedField(ProfileState.fromCtx);
+
   CatalogsWithExtraState? get _state {
     final json = _search?.value;
-    return json == null ? null : CatalogsWithExtraState.fromJson(json);
+    return json == null ? null : _stateParse.of(json);
   }
 
   /// The profile behind `ctx`; null until it is subscribed to and its first
   /// pull comes back.
   ProfileState? get _profile {
     final ctx = _ctx?.value;
-    return ctx == null ? null : ProfileState.fromCtx(ctx);
+    return ctx == null ? null : _profileParse.of(ctx);
   }
 
   /// New search state may be the first with an addon to name, and may have
@@ -335,9 +340,11 @@ class _Results extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Each row's items once: [CatalogRow.items] flattens the pages on every
+    // read, and the grid's builder reads it per tile.
     final sections = [
       for (final row in state.visibleRows)
-        if (row.items.isNotEmpty) row,
+        if (row.items case final items when items.isNotEmpty) (row, items),
     ];
     if (sections.isEmpty && failures.isEmpty) {
       return isLoading ? const SizedBox.expand() : _NoResults(query: query);
@@ -350,20 +357,15 @@ class _Results extends StatelessWidget {
         // which is the one thing this screen must never do.
         if (sections.isEmpty && !isLoading)
           SliverToBoxAdapter(child: _NothingAnswered(query: query)),
-        for (final row in sections) ...[
+        for (final (row, items) in sections) ...[
           SliverToBoxAdapter(child: _SectionHeader(row: row)),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 160,
-                childAspectRatio: 0.56,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-              ),
-              itemCount: row.items.length,
+              gridDelegate: posterGridDelegate,
+              itemCount: items.length,
               itemBuilder: (context, index) {
-                final item = row.items[index];
+                final item = items[index];
                 return PosterTile(item: item, onTap: () => onOpen(item));
               },
             ),
@@ -395,10 +397,7 @@ class _SectionHeader extends StatelessWidget {
   static String titleFor(CatalogRow row) {
     final label = row.label;
     final type = label?.type ?? row.firstRequest.path.type;
-    final addon =
-        label?.addonName ??
-        Uri.tryParse(row.firstRequest.base)?.host ??
-        row.firstRequest.base;
+    final addon = row.addonName;
     return [
       if (type.isNotEmpty) contentTypeLabel(type),
       if (addon.isNotEmpty) addon,

@@ -56,14 +56,6 @@ final class MoreLikeThis {
   /// same reason and in the same shape as `PlaybackScope.archiveSniff`.
   final CatalogueSearch search;
 
-  /// What has already been resolved this run, by `type/id`.
-  ///
-  /// The suggestions are remembered across restarts and the *resolution*
-  /// is not: it is a handful of searches against whatever the catalogues
-  /// hold today, and a poster that changed is a poster that should change.
-  /// Within one run, though, going back to a title should not ask again.
-  final Map<String, List<SimilarTitle>> _resolved = {};
-
   /// The types the server answers for: Stremio's own `movie` and `series`.
   static const Set<String> _askable = {'movie', 'series'};
 
@@ -77,15 +69,11 @@ final class MoreLikeThis {
     required String id,
   }) async {
     if (!_askable.contains(type)) return const [];
-    final key = '$type/$id';
-    if (_resolved[key] case final already?) return already;
+    // The suggestions are remembered across restarts and the *resolution*
+    // is not: it is a handful of searches against whatever the catalogues
+    // hold today, and a poster that changed is a poster that should change.
     final suggestions = await _suggestionsFor(type: type, id: id);
-    final resolved = await resolveSuggestions(
-      suggestions,
-      subjectId: id,
-      search: search,
-    );
-    return _resolved[key] = resolved;
+    return resolveSuggestions(suggestions, subjectId: id, search: search);
   }
 
   /// What the model said about this title: off the preferences file when

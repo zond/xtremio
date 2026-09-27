@@ -12,6 +12,7 @@ import 'package:flutter_chrome_cast/models.dart';
 import 'package:flutter_chrome_cast/session.dart';
 
 import '../../core/diagnostics_log.dart';
+import '../../shell/device_profile.dart';
 import 'cast_client.dart';
 
 /// [CastClient] over `flutter_chrome_cast` (the Google Cast SDK).
@@ -38,10 +39,6 @@ class GoogleCastClient implements CastClient {
   /// converted stream might need.
   static const String _defaultApplicationId =
       GoogleCastDiscoveryCriteria.kDefaultApplicationId;
-
-  /// The channel `MainActivity` answers `castDeviceAddress` on -- the same
-  /// one `DeviceProfile.detect` asks about the device this app runs on.
-  static const MethodChannel deviceChannel = MethodChannel('xtremio/device');
 
   final String applicationId;
 
@@ -259,11 +256,6 @@ class GoogleCastClient implements CastClient {
           )
           .map(_deviceOf);
 
-  @override
-  CastDevice? get connectedDevice => isSupported && _initialised
-      ? _deviceOf(GoogleCastSessionManager.instance.currentSession)
-      : null;
-
   CastDevice? _deviceOf(GoogleCastSession? session) {
     final device = session?.device;
     if (device == null) return null;
@@ -379,7 +371,7 @@ class GoogleCastClient implements CastClient {
     if (!Platform.isAndroid) return;
     _addresses.remove(id);
     try {
-      final address = await deviceChannel.invokeMethod<String>(
+      final address = await DeviceProfile.channel.invokeMethod<String>(
         'castDeviceAddress',
         {'id': id},
       );
@@ -462,11 +454,6 @@ class GoogleCastClient implements CastClient {
     await GoogleCastRemoteMediaClient.instance.seek(
       GoogleCastMediaSeekOption(position: position),
     );
-  }
-
-  @override
-  Future<void> stop() async {
-    if (_initialised) await GoogleCastRemoteMediaClient.instance.stop();
   }
 
   @override

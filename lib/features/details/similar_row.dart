@@ -91,8 +91,7 @@ class SimilarScope extends InheritedWidget {
 /// **The box is reserved, not fitted.** The answer arrives seconds
 /// in, sometimes never, and by then the viewer is reading the screen. A
 /// row that grew from nothing to 228 px when it landed would move
-/// everything under it out from under them, which is the same fault the
-/// source detail strip is a fixed height for.
+/// everything under it out from under them.
 class SimilarTitlesRow extends StatelessWidget {
   const SimilarTitlesRow({
     super.key,

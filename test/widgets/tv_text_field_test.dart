@@ -237,6 +237,27 @@ void main() {
       expect(calls, isEmpty);
     });
 
+    testWidgets('Clear comes and goes with the text, with no rebuild from '
+        'above', (tester) async {
+      // A parent that does not rebuild on typing is the ordinary case: the
+      // field owns whether there is anything to clear.
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        host(controller, isTv: false, onClear: controller.clear),
+      );
+      expect(find.byTooltip('Clear'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'typed here');
+      await tester.pump();
+      expect(find.byTooltip('Clear'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pump();
+      expect(controller.text, isEmpty);
+      expect(find.byTooltip('Clear'), findsNothing);
+    });
+
     testWidgets('a password field obscures itself as it always did', (
       tester,
     ) async {

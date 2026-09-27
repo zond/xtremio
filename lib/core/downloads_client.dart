@@ -47,8 +47,9 @@ final class DownloadRequest {
   /// The video inside the meta; the meta id itself for a movie.
   final String videoId;
 
-  /// The addon's stream. Must be a torrent — anything else is the one thing
-  /// `downloads_add` refuses with an exception rather than a failure.
+  /// The addon's stream. Must be a torrent, a web link or a linked Drive
+  /// file -- anything else is the one thing `downloads_add` refuses with an
+  /// exception rather than a failure.
   final StreamInfo stream;
 
   /// stremio-core's meta type (`movie`, `series`, ...).
@@ -300,7 +301,8 @@ final class DownloadRemoveResult {
 /// torrents.
 abstract interface class DownloadsClient {
   /// Pins the request's stream and records it. A refused pin comes back as
-  /// [DownloadAddResult.error]; only a stream that is not a torrent throws.
+  /// [DownloadAddResult.error]; only a malformed request or a stream that is
+  /// not a torrent, a web link or a linked Drive file throws.
   ///
   /// The call blocks until the pin is taken, which for a magnet means
   /// waiting on its metadata.

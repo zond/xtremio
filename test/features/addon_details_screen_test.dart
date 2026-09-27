@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
+import 'package:xtremio/features/addons/failed_addons.dart';
 import 'package:xtremio/shell/external_link.dart';
 
 import '../support/fake_core_client.dart';
@@ -53,6 +54,35 @@ void main() {
     for (final action in core.dispatched)
       if (action.action['action'] == 'Ctx') action,
   ];
+
+  testWidgets('a failing addon opens the same named route a deep link '
+      'recognises', (tester) async {
+    // `XtremioApp` drops a link to the addon already on top by the route's
+    // arguments, so every way to this screen carries them.
+    final pushed = <Route<dynamic>>[];
+    await tester.pumpWidget(
+      CoreScope(
+        client: fakeCore(),
+        child: ExternalLinkScope(
+          opener: FakeLinkOpener(),
+          child: MaterialApp(
+            navigatorObservers: [_Recording(pushed)],
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => openAddonDetails(context, cinemeta),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(pushed.last.settings.name, AddonDetailsScreen.routeName);
+    expect(pushed.last.settings.arguments, cinemeta);
+  });
 
   testWidgets('loads the manifest on mount, renders it, unloads on dispose', (
     tester,
@@ -352,4 +382,14 @@ void main() {
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('Addon is protected'), findsOneWidget);
   });
+}
+
+class _Recording extends NavigatorObserver {
+  _Recording(this.pushed);
+
+  final List<Route<dynamic>> pushed;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      pushed.add(route);
 }

@@ -1,19 +1,21 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
+import '../../widgets/poster_tile.dart';
 import '../../widgets/tv_ladder.dart';
 import '../details/meta_details_screen.dart';
 import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../drive/drive_match.dart';
-import '../drive/linked_files.dart';
 import '../drive/remote_files.dart';
 import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
@@ -80,25 +82,22 @@ class LibraryScreen extends StatefulWidget {
     this.driveLister = const XtremioDriveFileLister(),
   });
 
-  /// How a linked Drive file is turned into something playable, for the
-  /// Remote list. A parameter for the reason `DrivePairingScreen.opener` is
-  /// one: a widget test must not be pointed at the deployed server.
+  /// How a linked Drive file nothing matched is turned into something
+  /// playable when its card is pressed. A parameter for the reason
+  /// `DrivePairingScreen.opener` is one: a widget test must not be pointed
+  /// at the deployed server.
   final DriveFileOpener driveOpener;
 
   /// How the catalogue is asked when a linked Drive file is matched to a
   /// title, for the same reason: a widget test answers it with a list rather
   /// than reaching Cinemeta. This screen owns that pass -- see
-  /// [_LibraryScreenState._matching] -- so the seam is here and not on the
-  /// Remote list.
+  /// [_LibraryScreenState._matching] -- so the seam is here.
   final CatalogueSearch driveSearch;
 
   /// How Drive is asked what the linked files are called now, for **Reload**
   /// -- and for the same reason again: the real one goes to the pairing
   /// service and to Google, and a widget test goes to neither.
   final DriveFileLister driveLister;
-
-  /// From this width on, types are a segmented button rather than chips.
-  static const double wideBreakpoint = 720;
 
   /// The initial request: every type, last watched first, page 1.
   static const LibraryRequest initialRequest = LibraryRequest();
@@ -133,6 +132,37 @@ class LibraryScreen extends StatefulWidget {
   /// "Reload", not refresh: what it does is fetch the list again, and
   /// refresh is what a television does sixty times a second.
   static const String reloadLabel = 'Reload';
+
+  /// The line [_NamingNote] draws above the linked files.
+  ///
+  /// **It earns its place because the failure is invisible otherwise.** The
+  /// name is the whole of the evidence, and a file in somebody's own Drive
+  /// is named however they named it. A viewer looking at a raw
+  /// `holiday video 2.avi` has no way to know that the file's *name* is
+  /// what was searched for, and so no way to know that renaming it would
+  /// fix it.
+  ///
+  /// **It names the button, and the button is what makes it true.**
+  /// `files.list` answers with each file's *current* name, so a rename
+  /// reaches this device when [reloadLabel] asks (`reloadLinkedDriveFiles`),
+  /// a new name drops the match the old one earned
+  /// ([LinkedDriveFile.renamed]), and the search runs again against it.
+  /// The button is an icon with no word on it, so the sentence places it:
+  /// just before the [remoteLabel] pill. A test holds the two together, so
+  /// this cannot start naming a control that is not there.
+  static const String matchedByNameNote =
+      'Titles are matched from the file name. Rename a file in Drive, then '
+      'press the reload button beside Remote to try once more:';
+
+  /// Shown under [matchedByNameNote] rather than described: somebody
+  /// skimming copies the example and does not read the sentence. Both are
+  /// walked by `drive_match_test.dart`, so a change to the parser that
+  /// stopped either one parsing fails there rather than leaving the note
+  /// telling a lie.
+  static const List<String> nameExamples = [
+    'The Matrix 1999.mkv',
+    'Breaking Bad S02E11.mkv',
+  ];
 
   /// What the app bar's way to the downloads screen is called. Not
   /// "Downloaded": that is the pill beside the types, and it says what to
@@ -195,8 +225,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// A filter over the engine's own items and not a body of its own, which
   /// is what tells it from [_remote]: a downloaded title *is* a library
   /// title, so it belongs in the engine's list with the rest, while a
-  /// linked Drive file is not one and replaces the list. Nothing is
-  /// dispatched for either -- the engine knows nothing about downloads.
+  /// linked Drive file is not one and is merged in beside it. Nothing is
+  /// dispatched for either -- the engine knows nothing about downloads or
+  /// Drive.
   bool _downloadedOnly = false;
 
   /// A reload is in flight, so a second press is dropped. Nothing is drawn
@@ -205,29 +236,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// anything" is the sentence the reload finishes with.
   bool _reloading = false;
 
+  /// A play is between its press and its player. Asking the server for the
+  /// file is a round trip and the card stays hit-testable across it, so a
+  /// second press would push a second player over the first, each with an
+  /// engine of its own.
+  bool _playing = false;
+
   /// This device's Drive pairing, as it was last read off the scope.
   DriveAccount? _drive;
 
   /// **The one matching pass over the linked files, and the only one.**
   ///
-  /// It lives here rather than in [LinkedDriveFilesView] because matching
-  /// is not about the Remote list: it is what decides whether a linked file
+  /// It lives here because matching is what decides whether a linked file
   /// has a card under **Movies**, **Series** and **All** at all
-  /// ([_appended]), and those are this screen's. While the run belonged to
-  /// the Remote view, a file linked and never looked at under Remote had no
-  /// match and so appeared nowhere -- a viewer who linked a film and came
-  /// straight to their library saw an empty page, with nothing on it to say
-  /// why.
+  /// ([_appended]), and those are this screen's: it runs whether or not
+  /// anybody presses Remote, so a film linked and never looked at under
+  /// Remote still has its card.
   ///
   /// **One run, so one notion of "already asked".** [DriveMatchRun] claims
   /// each file in its own `_asked` set before it awaits, and that is the
   /// whole of what stops a file being searched for twice; a second run
   /// beside it would be a second set that knew nothing of the first, and
   /// two passes walking the same files. So this is the only [DriveMatchRun]
-  /// the app builds -- the Remote list starts none and is handed none, it
-  /// draws what the account holds -- and **Reload** clears this one
-  /// ([DriveMatchRun.askAgain]) rather than signalling a view to clear its
-  /// own.
+  /// the app builds, and **Reload** clears this one
+  /// ([DriveMatchRun.askAgain]).
   DriveMatchRun? _matching;
 
   @override
@@ -256,6 +288,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ?..removeListener(_onDownloadsChanged)
         ..dispose();
       _downloadsClient = downloadsClient;
+      _downloadKeys = const {};
+      _downloadedMeta = const {};
       _downloads = downloadsClient == null
           ? null
           : (DownloadsController(downloadsClient)
@@ -313,12 +347,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Asks about every linked file that has no match yet, without being
   /// waited for.
   ///
-  /// `unawaited` and sequential, because neither half of what this feeds is
-  /// allowed to wait on a catalogue: the library grid draws the engine's own
-  /// cards long before Cinemeta has answered about anybody's Drive, and the
-  /// Remote list draws every row perfectly well without a match. Each answer
-  /// is written to the account, which notifies, which redraws the one card
-  /// or row it was about -- and brings [didChangeDependencies] round again,
+  /// `unawaited` and sequential, because the grid is not allowed to wait on
+  /// a catalogue: it draws the engine's own cards, and a linked file as its
+  /// raw name, long before Cinemeta has answered about anybody's Drive.
+  /// Each answer is written to the account, which notifies, which redraws
+  /// the one card it was about -- and brings [didChangeDependencies] round
+  /// again,
   /// where a pass with nothing left to ask about is a walk over the files
   /// and no request at all.
   void _matchLinkedFiles() {
@@ -341,33 +375,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// A download finished, started or was removed. Both controls this
   /// screen draws about downloads are derived from that list, and one of
   /// them can appear or vanish on it, so the row is rebuilt.
+  ///
+  /// Only when an entry came or went. The feed ticks about once a second
+  /// while anything is arriving, and a tick moves bytes -- nothing this
+  /// screen draws -- so it rebuilds nothing.
   void _onDownloadsChanged() {
     if (!mounted) return;
+    final items = _downloads?.registry.items ?? const {};
+    if (setEquals(items.keys.toSet(), _downloadKeys)) return;
     // The filter cannot outlive the thing it filters: with the last
     // download gone the pill goes with it, and a body still filtered by it
     // would be empty with no control on screen to explain why.
     setState(() {
+      _downloadKeys = items.keys.toSet();
+      _downloadedMeta = {for (final view in items.values) view.metaId};
       if (!_hasDownloads) _downloadedOnly = false;
     });
   }
 
   void _onEvent(CoreEvent event) {
     if (!_syncing || event is! RuntimeCoreEvent) return;
-    final settled = switch (event.name) {
-      'LibrarySyncWithAPIPlanned' => true,
-      'Error' => _errorSource(event) == 'LibrarySyncWithAPIPlanned',
-      _ => false,
-    };
-    if (settled && mounted) setState(() => _syncing = false);
-  }
-
-  /// The `source.event` of an `Error` event, when it has one. Only the name
-  /// is read: the args of an error can carry account details.
-  static String? _errorSource(RuntimeCoreEvent event) {
-    final args = event.args;
-    if (args is! Map<String, dynamic>) return null;
-    final source = args['source'];
-    return source is Map<String, dynamic> ? source['event'] as String? : null;
+    if (event.settlesLibrarySync && mounted) setState(() => _syncing = false);
   }
 
   /// Selects one of the engine's own options: its request, verbatim. The
@@ -478,6 +506,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   DownloadsController? _downloads;
   DownloadsClient? _downloadsClient;
 
+  /// The registry's entries as this screen last drew them, and the titles
+  /// they are of; see [_onDownloadsChanged].
+  Set<String> _downloadKeys = const {};
+  Set<String> _downloadedMeta = const {};
+
   /// Whether anything is on disk at all, finished or still arriving.
   ///
   /// **In progress counts.** A download that is still running is the one a
@@ -486,9 +519,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// behind a screen with no way to it.
   bool get _hasDownloads => _downloads?.registry.items.isNotEmpty ?? false;
 
-  /// Whether [item] is one of them.
-  bool _isDownloaded(String metaId) =>
-      _downloads?.ofMeta(metaId).isNotEmpty ?? false;
+  /// Whether [metaId] is one of them.
+  bool _isDownloaded(String metaId) => _downloadedMeta.contains(metaId);
+
+  /// The details screen for a linked file's [match], reached the way a
+  /// search result reaches it: the type, the meta id and -- for an episode
+  /// -- the video id, and no flag for the details screen to read.
+  void _openDriveMatch(LinkedDriveMatch match) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MetaDetailsScreen(
+          type: match.type,
+          id: match.cinemetaId,
+          videoId: match.videoId,
+        ),
+      ),
+    );
+  }
 
   void _open(LibraryItemView item) {
     Navigator.of(context).push(
@@ -563,6 +610,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   List<LinkedDriveMatch> _appended(
     BuildContext context,
     LibraryState? state,
+    List<LibraryItemView> shown,
     List<DownloadView> kept,
   ) {
     // An unloaded field has no selection to read, and a merge that guessed
@@ -580,8 +628,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // matched remote title straight back -- Downloaded read as Remote.
     if (_downloadedOnly) return const [];
     // A build of the app that cannot link anything has nothing to merge,
-    // which is not a failure to report -- the same reading the Remote list
-    // makes of a missing scope.
+    // which is not a failure to report.
     final files = DriveAccountScope.maybeOf(context)?.files;
     if (files == null) return const [];
     return files.unlistedMatches(
@@ -589,7 +636,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // already narrowed to titles that have a linked file, so a match whose
       // title was filtered out of it is one this list has to put back.
       listed: {
-        for (final item in _shown(state)) item.id,
+        for (final item in shown) item.id,
         // A matched title that is also downloaded already has a card.
         for (final view in kept) view.metaId,
       },
@@ -599,8 +646,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   bool get _isLoggedIn {
     final ctx = _ctx?.value;
-    return ctx != null && ProfileState.fromCtx(ctx).isLoggedIn;
+    return ctx != null && _profileParse.of(ctx).isLoggedIn;
   }
+
+  /// One parse of each field per change of it, however often it is read.
+  final _libraryParse = ParsedField(LibraryState.fromJson);
+  final _profileParse = ParsedField(ProfileState.fromCtx);
 
   @override
   Widget build(BuildContext context) {
@@ -608,9 +659,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
       listenable: Listenable.merge([_library!, _ctx!]),
       builder: (context, _) {
         final json = _library!.value;
-        final state = json == null ? null : LibraryState.fromJson(json);
-        final kept = _kept(state);
-        final appended = _appended(context, state, kept);
+        final state = json == null ? null : _libraryParse.of(json);
+        // Each list once per build: the grid, the merges and the choice of
+        // empty message all read them.
+        final shown = state == null ? const <LibraryItemView>[] : _shown(state);
+        final kept = _kept(state, shown);
+        final appended = _appended(context, state, shown, kept);
+        final unmatched = state == null || !state.isLoaded
+            ? const <LinkedDriveFile>[]
+            : _unmatched(state);
         final isLoggedIn = _isLoggedIn;
         return TvLadder(
           child: Scaffold(
@@ -709,19 +766,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       // one merge away is the worst answer on this screen.
                       // The engine still decides *which* message, because it
                       // is the engine's filter either one is about.
-                      : _shown(state).isNotEmpty ||
+                      : shown.isNotEmpty ||
                             kept.isNotEmpty ||
                             appended.isNotEmpty ||
-                            _unmatched(state).isNotEmpty
+                            unmatched.isNotEmpty
                       ? _tvGroup(
                           context,
-                          _buildGrid(
-                            state,
-                            _shown(state),
-                            kept,
-                            appended,
-                            _unmatched(state),
-                          ),
+                          _buildGrid(state, shown, kept, appended, unmatched),
                         )
                       // A local filter that narrowed the grid to nothing
                       // says so in its own words: the library is not empty,
@@ -740,11 +791,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  /// The engine's items, then [appended] -- one lazy grid and not two, so
-  /// that merging a card does not cost a page of tiles that nobody has
-  /// scrolled to. The count grows by what was appended and the builder
-  /// picks the list by index; nothing walks the engine's items to build
-  /// them.
   /// The engine's items as this screen draws them: all of them, or only
   /// the ones this device has on disk.
   ///
@@ -772,30 +818,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   /// Plays a linked file nothing matched, and says so in one line when it
-  /// will not play. The same two calls the Remote list has always made.
+  /// will not play.
   Future<void> _playUnmatched(LinkedDriveFile file) async {
     final account = _drive;
-    if (account == null) return;
-    final opened = await openLinkedDriveFile(
-      account: account,
-      file: file,
-      opener: widget.driveOpener,
-    );
-    if (!mounted) return;
-    switch (opened) {
-      case DriveFilePlayable():
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            settings: const RouteSettings(name: PlayerScreen.routeName),
-            builder: (_) => PlayerScreen(
-              stream: driveStreamJson(file: file, playable: opened),
+    if (account == null || _playing) return;
+    _playing = true;
+    try {
+      final opened = await openLinkedDriveFile(
+        account: account,
+        file: file,
+        opener: widget.driveOpener,
+      );
+      if (!mounted) return;
+      switch (opened) {
+        case DriveFilePlayable():
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              settings: const RouteSettings(name: PlayerScreen.routeName),
+              builder: (_) => PlayerScreen(
+                stream: driveStreamJson(file: file, playable: opened),
+              ),
             ),
-          ),
-        );
-      case DriveFileRefused(:final reason):
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(SnackBar(content: Text(driveFailureMessage(reason))));
+          );
+        case DriveFileRefused(:final reason):
+          ScaffoldMessenger.maybeOf(
+            context,
+          )?.showSnackBar(SnackBar(content: Text(driveFailureMessage(reason))));
+      }
+    } finally {
+      _playing = false;
     }
   }
 
@@ -815,11 +866,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// not loaded yet has a card coming, and one appended now would be drawn
   /// twice when that page arrives -- the grid is scrolled to its end by the
   /// time this matters anyway, since this is drawn after the last page.
-  List<DownloadView> _kept(LibraryState? state) {
+  List<DownloadView> _kept(LibraryState? state, List<LibraryItemView> shown) {
     if (state == null || !state.isLoaded || _remote) return const [];
     if (state.hasNextPage) return const [];
     final type = state.selected?.type;
-    final cards = {for (final item in _shown(state)) item.id};
+    final cards = {for (final item in shown) item.id};
     return [
       for (final view
           in _downloads?.registry.items.values ?? const <DownloadView>[])
@@ -832,14 +883,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// when the download kept the title's meta, which is what that page is
   /// drawn from offline; played straight off the device when it did not,
   /// since a page about a title nothing describes would be empty.
-  void _openKept(DownloadView view) {
+  Future<void> _openKept(DownloadView view) async {
     if (view.meta != null) {
       _open(_cardForDownload(view));
       return;
     }
     final client = DownloadsScope.maybeOf(context);
-    if (client == null) return;
-    unawaited(DownloadsScreen.playFromDevice(context, client, view));
+    if (client == null || _playing) return;
+    _playing = true;
+    try {
+      await DownloadsScreen.playFromDevice(context, client, view);
+    } finally {
+      _playing = false;
+    }
   }
 
   /// The linked files nothing matched, which have no title to filter by and
@@ -865,6 +921,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
+  /// The engine's items, then [appended] -- one lazy grid and not two, so
+  /// that merging a card does not cost a page of tiles that nobody has
+  /// scrolled to. The count grows by what was appended and the builder
+  /// picks the list by index; nothing walks the engine's items to build
+  /// them.
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,
@@ -881,12 +942,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 160,
-          childAspectRatio: 0.56,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-        ),
+        gridDelegate: posterGridDelegate,
         itemCount: afterAppended + unmatched.length,
         itemBuilder: (context, index) {
           if (index >= afterAppended) {
@@ -904,8 +960,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             final match = appended[index - afterKept];
             return LibraryItemTile(
               item: _cardFor(match),
-              // The Remote list's press, shared rather than written twice.
-              onTap: () => openDriveMatch(context, match),
+              onTap: () => _openDriveMatch(match),
               // And no long press: every action in that sheet is a `Ctx`
               // action about a library item, and this title is not one.
               memoryId: 'linked-${match.cinemetaId}',
@@ -915,7 +970,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             final view = kept[index - afterItems];
             return LibraryItemTile(
               item: _cardForDownload(view),
-              onTap: () => _openKept(view),
+              onTap: () => unawaited(_openKept(view)),
               // No long press, for the reason a matched file has none: the
               // sheet's actions are about a library item, and this is not.
               memoryId: 'kept-${view.metaId}',
@@ -933,20 +988,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  /// [match] as the card it belongs to.
-  ///
-  /// A [LibraryItemView] and not a tile of its own, so that a merged card is
-  /// drawn by the same widget as its neighbours and cannot drift from them:
-  /// the poster treatment, the caption and the shape are the grid's, not a
-  /// second copy of them. The poster is [LinkedDriveMatch.posterUrl], which
-  /// is the id and not a stored string.
-  ///
-  /// **What is deliberately absent is everything that would be invented.**
-  /// No `state`: no progress bar, no watched mark, no notification badge and
-  /// no episode caption -- the card is the *show*, and three linked episodes
-  /// of it are one card, so naming one of them under the poster would be a
-  /// claim about the card that the card cannot make. The press still opens
-  /// the episode, because that is what the file is.
   /// A linked file nothing matched, as a card. Its own name and no poster,
   /// because that is the whole of what is known about it.
   static LibraryItemView _cardForFile(LinkedDriveFile file) => LibraryItemView({
@@ -971,6 +1012,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  /// [match] as the card it belongs to.
+  ///
+  /// A [LibraryItemView] and not a tile of its own, so that a merged card is
+  /// drawn by the same widget as its neighbours and cannot drift from them:
+  /// the poster treatment, the caption and the shape are the grid's, not a
+  /// second copy of them. The poster is [LinkedDriveMatch.posterUrl], which
+  /// is the id and not a stored string.
+  ///
+  /// **What is deliberately absent is everything that would be invented.**
+  /// No `state`: no progress bar, no watched mark, no notification badge and
+  /// no episode caption -- the card is the *show*, and three linked episodes
+  /// of it are one card, so naming one of them under the poster would be a
+  /// claim about the card that the card cannot make. The press still opens
+  /// the episode, because that is what the file is.
   static LibraryItemView _cardFor(LinkedDriveMatch match) => LibraryItemView({
     '_id': match.cinemetaId,
     'type': match.type,
@@ -1062,7 +1117,7 @@ class _FilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWide =
-        MediaQuery.sizeOf(context).width >= LibraryScreen.wideBreakpoint;
+        MediaQuery.sizeOf(context).width >= FilterSegments.breakpoint;
     final types = [
       for (final type in selectable.types)
         FilterOption(
@@ -1310,35 +1365,15 @@ class _EmptyFilter extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.filter_list_off_outlined,
-              size: 48,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(message(type), style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              'Pick "${LibraryScreen.allTypesLabel}" above to see every '
-              'title you have.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: EmptyState(
+      icon: Icons.filter_list_off_outlined,
+      title: message(type),
+      detail:
+          'Pick "${LibraryScreen.allTypesLabel}" above to see every '
+          'title you have.',
+    ),
+  );
 }
 
 /// A local filter -- Remote or Downloaded -- that left nothing under the
@@ -1361,40 +1396,16 @@ class _EmptyLocal extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.filter_list_off_outlined,
-              size: 48,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message(type: type, remote: remote),
-              style: theme.textTheme.titleMedium,
-            ),
-            if (type != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Pick "${LibraryScreen.allTypesLabel}" above to see every '
+  Widget build(BuildContext context) => Center(
+    child: EmptyState(
+      icon: Icons.filter_list_off_outlined,
+      title: message(type: type, remote: remote),
+      detail: type == null
+          ? null
+          : 'Pick "${LibraryScreen.allTypesLabel}" above to see every '
                 '${remote ? 'linked file' : 'download'}.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 class _EmptyLibrary extends StatelessWidget {
@@ -1403,38 +1414,17 @@ class _EmptyLibrary extends StatelessWidget {
   final bool isLoggedIn;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.video_library_outlined,
-              size: 48,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text('Your library is empty', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              isLoggedIn
-                  ? 'Add titles from their details page and they show '
-                        'up here on every device.'
-                  : '${_SignInHint.text} — sign in to your Stremio account '
-                        'in Settings to get your library on this device.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: EmptyState(
+      icon: Icons.video_library_outlined,
+      title: 'Your library is empty',
+      detail: isLoggedIn
+          ? 'Add titles from their details page and they show '
+                'up here on every device.'
+          : '${_SignInHint.text} — sign in to your Stremio account '
+                'in Settings to get your library on this device.',
+    ),
+  );
 }
 
 /// How a linked file gets a title, said where the linked files are.
@@ -1458,9 +1448,9 @@ class _NamingNote extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(LinkedDriveFilesView.matchedByNameNote, style: quiet),
+          Text(LibraryScreen.matchedByNameNote, style: quiet),
           const SizedBox(height: 2),
-          for (final example in LinkedDriveFilesView.nameExamples)
+          for (final example in LibraryScreen.nameExamples)
             Text(
               example,
               style: quiet?.copyWith(fontFamily: 'monospace'),
