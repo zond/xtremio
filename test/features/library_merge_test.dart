@@ -299,6 +299,30 @@ void main() {
       expect(find.widgetWithText(LibraryItemTile, 'Arrival'), findsOneWidget);
     });
 
+    testWidgets('not while the engine has a page left to send: the title '
+        'may be on it, and would be drawn twice', (tester) async {
+      final pending = library();
+      pending['selectable'] = {
+        ...pending['selectable'] as Map<String, dynamic>,
+        'next_page': {
+          'request': {'type': null, 'sort': LibrarySort.lastWatched, 'page': 2},
+        },
+      };
+      await tester.pumpWidget(
+        harness(
+          fakeCore(library: pending),
+          drive: await account(
+            files: [
+              (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(cards(tester), ['Lanterns', 'The Whisper Man']);
+    });
+
     testWidgets('a file nothing matched is its own card, after the titles: a '
         'file in Drive is in the library, title or not', (tester) async {
       await tester.pumpWidget(

@@ -568,6 +568,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // An unloaded field has no selection to read, and a merge that guessed
     // at one would be the second opinion this whole arrangement avoids.
     if (state == null || !state.isLoaded) return const [];
+    // Only once the engine has no page left to send, as [_kept] waits: a
+    // matched title in the library but on a page not loaded yet has a card
+    // coming, and one appended now would be drawn twice when that page
+    // arrives. This is drawn after the last page anyway.
+    if (state.hasNextPage) return const [];
     // Downloaded is a filter on what is on this device, and a linked file
     // is by definition not: a matched title with no download has no card
     // under it, and one with a download is already in the grid. Without

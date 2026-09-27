@@ -107,13 +107,13 @@ every such entry, so the research-only subset can always be recovered.
 
 ## What the app does with this
 
-Nothing, any more. The keys used to ship with the app (`ship_keys.py`
-cut them to about 30 KB) so that a viewer who pasted their own API key
-could run a "Test this model" check from Settings against them. The app
-has no key, no model setting and no check now: the model is chosen here
-and named in `xtremio-xervice/functions/similar.js`, and these numbers are
-what that choice rests on. `ship_keys.py` still writes the asset path the
-app used; nothing reads it.
+Nothing, any more. The keys used to ship with the app, cut to about
+30 KB, so that a viewer who pasted their own API key could run a "Test
+this model" check from Settings against them. The app has no key, no model
+setting and no check now, and the script that cut them is gone with the
+asset it wrote: the model is chosen here and named in
+`xtremio-xervice/functions/similar.js`, and these numbers are what that
+choice rests on.
 
 ## What was measured, 2026-09-22
 
