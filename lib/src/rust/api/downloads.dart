@@ -7,12 +7,14 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// Pins a torrent stream as an offline download and records it.
+/// Pins a stream as an offline download and records it.
 ///
 /// `request_json` is `{"metaId","videoId","type","name","poster","stream",
 /// "fileIdx"?,"meta"?,"streamRequest"?,"metaRequest"?}`; `stream` is the
-/// addon's raw stream JSON and must be a torrent (`infoHash`), `fileIdx`
-/// overrides the stream's own index for a caller that resolved the episode
+/// addon's raw stream JSON and must be a torrent (`infoHash`), a web link
+/// (`url`) or a linked Drive file (`xtremio-drive:<fileId>`), which the
+/// server keys as one file each (see `crate::downloads::is_proxy_key`).
+/// `fileIdx` overrides the stream's own index for a caller that resolved the episode
 /// itself. A stream with no `fileIdx`, or a negative one (the `-1` the
 /// player's URL carries), downloads the file that URL would play: the
 /// `fileMustInclude` match, else the largest media file, asked of the
@@ -25,7 +27,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// the pin, `{"ok":false,"key":…,"error":{"kind":…,"message":…}}` —
 /// `insufficientSpace` (with `required`/`available`/`margin` in bytes),
 /// `fileNotFound`, `magnetAdd`, `backend` or `unavailable`. Only a
-/// malformed request or a stream that is not a torrent raises. Blocks the
+/// malformed request or a stream that is none of the three raises. Blocks the
 /// FRB worker while the pin is taken (a magnet resolves its metadata
 /// first); never call from the UI thread.
 Future<String> downloadsAdd({required String requestJson}) => RustLib
@@ -90,8 +92,9 @@ Future<String> downloadsStartFresh() =>
 /// was played.
 ///
 /// Answers `{"ok":true,"key":…,"url":"http://127.0.0.1:…/{infoHash}/{fileIdx}",
-/// "entry":{…}}` for a finished download, stamping the entry's
-/// `lastPlayedAt` as it goes. **There is no file to open**: torrent data is
+/// "entry":{…}}` for a finished torrent download — a link or Drive
+/// download answers the media route the server names for its key instead —
+/// stamping the entry's `lastPlayedAt` as it goes. **There is no file to open**: torrent data is
 /// one file per piece in the server's store, so a kept download plays
 /// through the embedded server's media route, off the pieces already on
 /// this device — no peer, no tracker, no network. Two things have to be

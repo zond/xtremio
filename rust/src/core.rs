@@ -69,11 +69,12 @@ pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 /// The stremio-core half of [`AppState`]: the Runtime, where its events go
 /// and the ones with nowhere to go yet. Three locks rather than one because
 /// they are taken for unrelated reasons -- a dispatch reads the Runtime
-/// while the pump is delivering an event. The one nesting is the sink
-/// swap, which holds `event_sink` while it drains `pending`
-/// ([`set_event_sink_in`]); nothing takes them the other way round --
-/// [`emit`] lets the sink guard go before it buffers -- so that order is
-/// the whole of the lock discipline here.
+/// while the pump is delivering an event. The one nesting is `event_sink`
+/// held while `pending` is taken -- by the sink swap, which drains it
+/// ([`set_event_sink_in`]), and by a sink that closed, which buffers into
+/// it ([`sink_refused`]); nothing takes them the other way round -- [`emit`]
+/// lets the sink guard go before it buffers for a missing sink -- so that
+/// order is the whole of the lock discipline here.
 #[derive(Default)]
 pub struct CoreState {
     runtime: RwLock<Option<Runtime<XtremioEnv, XtremioModel>>>,
@@ -120,8 +121,6 @@ impl CoreState {
 pub struct InitConfig {
     /// Persisted stremio-core buckets (`<key>.json`).
     pub storage_dir: PathBuf,
-    /// Reserved for an HTTP cache; created but unused for now.
-    pub cache_dir: PathBuf,
     /// Start the embedded server first and point the engine at it.
     pub server: Option<server::StartConfig>,
 }
@@ -167,31 +166,72 @@ fn set_event_sink_in(app: &AppState, sink: EventSink) {
     // `NewState` for a field Dart had just pulled went undelivered. The
     // replay is a few hundred port posts at most and the callback does not
     // re-enter the core, so what parks parks briefly.
+    //
+    // A sink that closes partway through the replay keeps what it did not
+    // take: the event it refused and everything behind it go back to the
+    // front of the buffer, in order, for the next subscriber.
     let mut slot = app.core.sink_mut();
-    let pending: Vec<String> = app.core.pending().drain(..).collect();
+    let mut pending: VecDeque<String> = app.core.pending().drain(..).collect();
     let mut open = true;
-    for event in pending {
-        if !sink(event) {
+    while let Some(event) = pending.pop_front() {
+        if !sink(event.clone()) {
+            pending.push_front(event);
             open = false;
             break;
         }
     }
+    if !open {
+        let mut buffered = app.core.pending();
+        while let Some(event) = pending.pop_back() {
+            buffered.push_front(event);
+        }
+        buffered.truncate(MAX_PENDING_EVENTS);
+    }
     *slot = open.then_some(sink);
+}
+
+/// The address of the closure behind a sink, which is how [`emit`] tells
+/// the sink that refused an event from one installed since. The sinks the
+/// FFI installs each own their `StreamSink`, so no two share an address (a
+/// capture-less closure would: a zero-sized box does not allocate).
+fn sink_address(sink: &EventSink) -> *const () {
+    &**sink as *const (dyn Fn(String) -> bool + Send + Sync) as *const ()
 }
 
 fn emit(app: &AppState, event: String) {
     let delivered = {
         let guard = app.core.sink();
-        guard.as_ref().map(|sink| sink(event.clone()))
+        guard
+            .as_ref()
+            .map(|sink| (sink(event.clone()), sink_address(sink)))
     };
     match delivered {
-        Some(true) => {}
-        Some(false) => {
-            tracing::info!("core event sink closed; buffering events");
-            *app.core.sink_mut() = None;
-            buffer(app, event);
-        }
+        Some((true, _)) => {}
+        Some((false, closed)) => sink_refused(app, closed, event),
         None => buffer(app, event),
+    }
+}
+
+/// [`emit`]'s answer to a sink that refused `event`, `closed` being that
+/// sink's [`sink_address`].
+///
+/// The read guard is gone by now, and a subscribe can have installed a new
+/// sink in the gap -- an activity recreated. Only the sink that refused
+/// comes out of the slot; a newer one is handed the event instead. Buffered
+/// with the slot still held, so a subscribe cannot drain the buffer between
+/// the two and leave this event behind it.
+fn sink_refused(app: &AppState, closed: *const (), event: String) {
+    let mut slot = app.core.sink_mut();
+    if slot
+        .as_ref()
+        .is_some_and(|sink| sink_address(sink) == closed)
+    {
+        tracing::info!("core event sink closed; buffering events");
+        *slot = None;
+        buffer(app, event);
+    } else {
+        drop(slot);
+        emit(app, event);
     }
 }
 
@@ -270,19 +310,6 @@ fn migration_refuses_the_boot(error: &EnvError) -> bool {
         EnvError::Serde(_) => false,
         EnvError::StorageSchemaVersionUpgrade(source) => migration_refuses_the_boot(source),
         _ => true,
-    }
-}
-
-/// Whether `url` names this machine: the two loopback addresses and the
-/// name that resolves to them. Shared with [`crate::addon_health`], which
-/// needs the same answer for the opposite reason -- what is on loopback is
-/// this app's own stub, never an addon whose reachability says anything.
-pub(crate) fn is_loopback(url: &Url) -> bool {
-    match url.host() {
-        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
-        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
-        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
-        None => false,
     }
 }
 
@@ -371,9 +398,6 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         Some(server_config) => Some(server::start_in(&app, server_config)?),
         None => None,
     };
-
-    std::fs::create_dir_all(&config.cache_dir)
-        .with_context(|| format!("create core cache dir {:?}", config.cache_dir))?;
 
     if let Err(error) = env::block_on(XtremioEnv::migrate_storage_schema()) {
         if migration_refuses_the_boot(&error) {
@@ -782,6 +806,67 @@ mod tests {
         );
         assert!(app.core.pending().is_empty(), "and nothing is stranded");
         assert!(app.core.sink().is_some(), "with the sink installed");
+    }
+
+    /// A sink that closes partway through the replay loses nothing: what it
+    /// did not take goes back to the front of the buffer, in order.
+    #[test]
+    fn a_replay_that_closes_keeps_what_it_did_not_deliver() {
+        let app = AppState::default();
+        for i in 0..5 {
+            emit(&app, format!("e{i}"));
+        }
+        let taken = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink: EventSink = {
+            let taken = Arc::clone(&taken);
+            Box::new(move |event| {
+                let mut taken = taken.lock().unwrap();
+                if taken.len() == 2 {
+                    return false;
+                }
+                taken.push(event);
+                true
+            })
+        };
+        set_event_sink_in(&app, sink);
+        assert_eq!(*taken.lock().unwrap(), ["e0", "e1"]);
+        assert!(app.core.sink().is_none(), "the closed sink is not kept");
+        assert_eq!(
+            app.core.pending().iter().collect::<Vec<_>>(),
+            ["e2", "e3", "e4"]
+        );
+    }
+
+    /// A refusal clears the slot only if the sink that refused is still in
+    /// it. One installed since -- an activity recreated between the refusal
+    /// and the clear -- stays, and is handed the event.
+    #[test]
+    fn a_closed_sink_does_not_take_its_successor_with_it() {
+        let app = AppState::default();
+        let old: EventSink = Box::new(|_| false);
+        let closed = sink_address(&old);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let new: EventSink = Box::new(move |event| tx.send(event).is_ok());
+        let _keep_old_allocated = old;
+        set_event_sink_in(&app, new);
+
+        sink_refused(&app, closed, "refused by the old sink".into());
+        assert!(app.core.sink().is_some(), "the new sink stays installed");
+        assert_eq!(
+            rx.try_iter().collect::<Vec<_>>(),
+            ["refused by the old sink"]
+        );
+        assert!(app.core.pending().is_empty());
+
+        // The sink in the slot refusing is what clears it.
+        let current = sink_address(app.core.sink().as_ref().unwrap());
+        drop(rx);
+        sink_refused(&app, current, "refused by the new sink".into());
+        assert!(app.core.sink().is_none());
+        assert_eq!(
+            app.core.pending().iter().collect::<Vec<_>>(),
+            ["refused by the new sink"]
+        );
     }
 
     /// The bytes of a bucket that will not parse are kept beside the key,

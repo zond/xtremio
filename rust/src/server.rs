@@ -141,7 +141,9 @@ pub const DRIVE_NOT_LINKED: &str =
 pub struct StartConfig {
     /// settings.json, logs/, localFiles/ live here (app support dir).
     pub config_dir: PathBuf,
-    /// Torrent piece cache (app cache dir; may be purged by the OS).
+    /// The torrent-data root a fresh install starts with: `dataDirectory`
+    /// in `lib/main.dart`, the app's external files directory on Android
+    /// (which the system does not purge) and the app cache elsewhere.
     pub cache_dir: PathBuf,
 }
 
@@ -713,12 +715,17 @@ fn outcome_of(
             // The *kind*, never the sentence: a refusal's text is written
             // in the server and says nothing secret, but a habit of
             // logging what an error said is how the one that does gets
-            // filed. See `AGENTS.md`, "Never log auth material".
-            tracing::warn!(
-                pair_again = false,
-                "a linked Drive file could not be opened"
-            );
-            let _ = error;
+            // filed. See `AGENTS.md`, "Never log auth material". The two
+            // refusals with a kind of their own are answered above, so the
+            // kind here is the variant's, and a status code is a number.
+            use stream_server::{DriveError, DriveOpenError};
+            let (kind, status) = match &error {
+                DriveOpenError::Drive(DriveError::Unreachable(_)) => ("unreachable", None),
+                DriveOpenError::Drive(DriveError::Refused(status)) => ("refused", Some(*status)),
+                DriveOpenError::Drive(DriveError::Source(_)) => ("source", None),
+                _ => ("other", None),
+            };
+            tracing::warn!(kind, status = ?status, "a linked Drive file could not be opened");
             DriveOpenOutcome::refused(DriveOpenFailure::Unreachable)
         }
     }
@@ -726,8 +733,13 @@ fn outcome_of(
 
 /// Applies `patch` as `POST /settings` would (same keys, validation and
 /// persistence) and returns the settings afterwards.
+///
+/// An observer of the running server, so it asks for the process's state
+/// rather than building one ([`crate::state::state`] is for installers):
+/// with no core up it answers "not running".
 pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSettings> {
-    update_settings_in(&crate::state::state(), patch)
+    let app = crate::state::current().ok_or_else(not_running)?;
+    update_settings_in(&app, patch)
 }
 
 /// [`update_settings`] against a given state, which is how a test writes a
@@ -1084,20 +1096,6 @@ mod tests {
         assert_eq!(refused.to_string(), DRIVE_NOT_LINKED);
     }
 
-    /// `with_handle` (stats, settings) and `token_for` (`Env::fetch`) both
-    /// only need to observe the running handle, so they must run
-    /// concurrently rather than serialise on `ServerState`'s lock: a slow
-    /// stats poll must never stall an addon/catalog fetch waiting on its
-    /// bearer token. Runs a call in one thread via `with_handle`'s closure
-    /// (blocked on a barrier then a sleep) and asserts `token_for` returns
-    /// from another thread almost immediately, well inside the sleep -- with
-    /// a `Mutex` held across the call it would take as long as the sleep.
-    ///
-    /// Against a state of its own, so it neither takes the process's
-    /// embedded server away from another test nor has to be serialized
-    /// against one: what is under test is a property of `ServerState`, and
-    /// starting a second server on its own ephemeral port and temp dirs is
-    /// how that gets said.
     /// The Verbose logging switch writes one of the embedded server's
     /// settings, and that write is the only thing that can turn the two
     /// traces on in this process: the server installed no filter of its
@@ -1165,6 +1163,20 @@ mod tests {
         stop_in(&second).expect("server stop");
     }
 
+    /// `with_handle` (stats, settings) and `token_for` (`Env::fetch`) both
+    /// only need to observe the running handle, so they must run
+    /// concurrently rather than serialise on `ServerState`'s lock: a slow
+    /// stats poll must never stall an addon/catalog fetch waiting on its
+    /// bearer token. Runs a call in one thread via `with_handle`'s closure
+    /// (blocked on a barrier then a sleep) and asserts `token_for` returns
+    /// from another thread almost immediately, well inside the sleep -- with
+    /// a `Mutex` held across the call it would take as long as the sleep.
+    ///
+    /// Against a state of its own, so it neither takes the process's
+    /// embedded server away from another test nor has to be serialized
+    /// against one: what is under test is a property of `ServerState`, and
+    /// starting a second server on its own ephemeral port and temp dirs is
+    /// how that gets said.
     #[test]
     fn with_handle_readers_run_concurrently_with_token_for() {
         // It starts a server, which writes the process's log filter.

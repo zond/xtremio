@@ -11,10 +11,9 @@ use crate::guard::{guarded, guarded_ok};
 pub struct CoreConfig {
     /// Where stremio-core persists its buckets (`<key>.json`).
     pub storage_dir: String,
-    /// Reserved for an HTTP cache; created but unused for now.
-    pub cache_dir: String,
     /// When set, the embedded server is started first and the engine is
-    /// pointed at it (unless the profile names a remote server).
+    /// pointed at it, whatever streaming server the profile held
+    /// (`crate::core::pin_to_embedded`).
     pub server: Option<ServerConfig>,
 }
 
@@ -42,7 +41,6 @@ pub fn core_init(config: CoreConfig) -> anyhow::Result<CoreInitResult> {
     guarded(|| {
         let outcome = crate::core::init(crate::core::InitConfig {
             storage_dir: config.storage_dir.into(),
-            cache_dir: config.cache_dir.into(),
             server: config.server.map(Into::into),
         })?;
         Ok(CoreInitResult {

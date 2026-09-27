@@ -71,7 +71,7 @@
 //! live in exactly one place.
 //!
 //! Every entry point takes the [`crate::state::AppState`] it counts into --
-//! [`load_in`], [`commit_in`], [`flush_in`] -- the way
+//! [`load_in`], [`commit_in_at`], [`flush_in`] -- the way
 //! `crate::server::stop_in` does, and for the same two reasons. The
 //! runtime-event pump outlives a shutdown by design, so an event still in
 //! flight has to be counted into the state that pump was started for and
@@ -100,8 +100,9 @@ use stremio_core::constants::{
 };
 use url::Url;
 
-/// The preferences key the whole table is stored under. The app reads it
-/// through the preferences FFI it already has.
+/// The preferences key the whole table is stored under. Only this module
+/// reads or writes it; the app asks [`report`] instead (see the module
+/// docs for why).
 pub const PREFS_KEY: &str = "addonHealth";
 
 /// How long a count takes to halve. Two weeks: long enough that a handful
@@ -298,12 +299,23 @@ pub fn key_for(transport_url: &Url) -> String {
         .port()
         .map(|port| format!(":{port}"))
         .unwrap_or_default();
-    let digest = Sha256::digest(transport_url.as_str().as_bytes());
-    let mut hash = String::with_capacity(KEY_DIGEST_HEX);
-    for byte in digest.iter().take(KEY_DIGEST_HEX / 2) {
-        hash.push_str(&format!("{byte:02x}"));
-    }
+    let hash = short_hex(
+        &Sha256::digest(transport_url.as_str().as_bytes()),
+        KEY_DIGEST_HEX,
+    );
     format!("{host}{port}#{hash}")
+}
+
+/// The first `hex_len` lower-case hex characters of `digest`: how a key
+/// here and a request's identity in [`crate::addon_observer`] both shorten
+/// theirs. `hex_len` is even; a digest is far longer than either.
+pub(crate) fn short_hex(digest: &[u8], hex_len: usize) -> String {
+    use std::fmt::Write;
+    let mut hex = String::with_capacity(hex_len);
+    for byte in digest.iter().take(hex_len / 2) {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
 }
 
 /// Every addon's records, keyed by [`key_for`].
@@ -471,11 +483,23 @@ fn is_own_stub(base: &Url, is_embedded: impl FnOnce(&Url) -> bool) -> bool {
     is_local_addon(base) || base.as_str() == DRIVE_TRACKING_MANIFEST || is_embedded(base)
 }
 
+/// Whether `url` names this machine: the two loopback addresses and the
+/// name that resolves to them. What is on loopback is this app's own stub,
+/// never an addon whose reachability says anything.
+fn is_loopback(url: &Url) -> bool {
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+        None => false,
+    }
+}
+
 /// Whether `base` is the streaming server's local addon: on this machine,
 /// and either under [`LOCAL_ADDON_PATH`] or on the port the profile expects
 /// the server at. Pure, and true whether or not a server is running.
 fn is_local_addon(base: &Url) -> bool {
-    crate::core::is_loopback(base)
+    is_loopback(base)
         && (base.path().starts_with(LOCAL_ADDON_PATH)
             || base.port_or_known_default() == Some(DEFAULT_SERVER_PORT))
 }
@@ -500,13 +524,18 @@ impl Sweep {
 
     /// Notes one settled answer, unless it came from this app's own stub
     /// rather than from an addon out on the network -- see [`is_own_stub`].
-    pub fn observe(&mut self, base: &Url, kind: ResourceKind, outcome: Outcome) {
-        self.observe_with(base, kind, outcome, crate::server::is_embedded_url);
+    /// `key` is [`key_for`] of `base`, which the caller holds already (the
+    /// observer keys every request by it), so it is not hashed twice.
+    pub fn observe(&mut self, base: &Url, key: String, kind: ResourceKind, outcome: Outcome) {
+        if is_own_stub(base, crate::server::is_embedded_url) {
+            return;
+        }
+        self.observed.push((key, kind, outcome));
     }
 
     /// [`Sweep::observe`] against a given "is this the embedded server"
-    /// answer, so the rule is a pure function and the skip is testable
-    /// without starting a server.
+    /// answer, keying `base` itself, so the rule is a pure function and the
+    /// skip is testable without starting a server.
     pub fn observe_with(
         &mut self,
         base: &Url,
@@ -622,21 +651,25 @@ pub fn load_in(app: &AppState) {
     }
 }
 
-/// Commits one sweep into `app` and writes the table out if a write is
-/// due. Answers whether the sweep was recorded (see [`Sweep::commit_into`]).
-pub fn commit_in(app: &AppState, sweep: Sweep) -> bool {
+/// [`commit_in_at`] through the wall clock, for the tests that do not hold
+/// one still.
+#[cfg(test)]
+fn commit_in(app: &AppState, sweep: Sweep) -> bool {
     commit_in_at(app, sweep, Utc::now())
 }
 
-/// [`commit_in`] as of `now` rather than the wall clock: the instant the
-/// counts are aged to and the answers stamped with is a parameter here, as
-/// it already is for [`Table::record`] and [`Sweep::commit_into`] beneath.
-/// A test that records the same answer twice can then hold the clock still
-/// and see exactly two. Through the real clock the second answer lands a
-/// few microseconds after the first, and if a millisecond boundary falls
-/// between them the first count is aged by `0.5^(1ms / 14 days)` -- about
-/// `1 - 3e-10` -- before the second is added, so "two answers is 2.0" holds
-/// only when both happen to share a millisecond.
+/// Commits one sweep into `app` and writes the table out if a write is
+/// due. Answers whether the sweep was recorded (see [`Sweep::commit_into`]).
+///
+/// As of `now` rather than the wall clock: the instant the counts are aged to
+/// and the answers stamped with is a parameter here, as it already is for
+/// [`Table::record`] and [`Sweep::commit_into`] beneath. A test that records
+/// the same answer twice can then hold the clock still and see exactly two.
+/// Through the real clock the second answer lands a few microseconds after the
+/// first, and if a millisecond boundary falls between them the first count is
+/// aged by `0.5^(1ms / 14 days)` -- about `1 - 3e-10` -- before the second is
+/// added, so "two answers is 2.0" holds only when both happen to share a
+/// millisecond.
 pub fn commit_in_at(app: &AppState, sweep: Sweep, now: DateTime<Utc>) -> bool {
     let mut counted = app.addon_health.counted();
     app.addon_health.sweeps.fetch_add(1, Ordering::Relaxed);

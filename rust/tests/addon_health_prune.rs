@@ -32,7 +32,6 @@ fn aged(table: &mut Table, url: &str, age_days: i64) -> String {
 fn config(root: &std::path::Path) -> CoreConfig {
     CoreConfig {
         storage_dir: root.join("core").display().to_string(),
-        cache_dir: root.join("cache").display().to_string(),
         server: None,
     }
 }

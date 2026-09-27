@@ -71,7 +71,7 @@ list.
   library, streams and server-URL buckets are `#[serde(skip)]` -- so the
   Library screen reads its own `library` field
   (`LibraryWithFilters<NotRemovedFilter>`).
-- Where the raw model lacks what the UI needs, `get_state_json` adds a
+- Where the raw model lacks what the UI needs, `XtremioModel::snapshot` adds a
   sibling key rather than reshaping the field: `meta_details` gains
   `watchedVideoIds`, `board`/`search` gain `catalogLabels` (catalog and
   addon names resolved from the profile's manifests, aligned with

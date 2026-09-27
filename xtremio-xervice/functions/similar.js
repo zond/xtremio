@@ -214,7 +214,7 @@ async function answerFor(key, type, id) {
 function mountSimilar(app, key) {
   app.get('/similar/:type/:id', async (req, res) => {
     const {type, id} = req.params;
-    if (!(type in TYPES) || !ID.test(id)) {
+    if (!Object.hasOwn(TYPES, type) || !ID.test(id)) {
       res.status(400).json({error: 'a Cinemeta movie or series id'});
       return;
     }

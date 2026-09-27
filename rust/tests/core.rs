@@ -15,7 +15,6 @@ use xtremio_core::api::server::{server_base_url, ServerConfig};
 fn config(root: &std::path::Path) -> CoreConfig {
     CoreConfig {
         storage_dir: root.join("core").display().to_string(),
-        cache_dir: root.join("cache").join("core").display().to_string(),
         server: Some(ServerConfig {
             config_dir: root.join("server").display().to_string(),
             cache_dir: root.join("cache").join("server").display().to_string(),

@@ -20,8 +20,8 @@
 //! server is then told it cannot know the pin set, and keeps everything.
 //!
 //! Live progress is not stored by the server per download either: it comes
-//! from `ServerHandle::downloads()` and is merged in by [`refresh`], which
-//! the FFI list call and the ~1 Hz [`ticker`] both use.
+//! from `ServerHandle::downloads()` and is merged in by [`merge_live_in`],
+//! which the FFI list call and the ~1 Hz [`ticker`] both use.
 //!
 //! ## The row leads the server in and follows it out
 //!
@@ -71,7 +71,7 @@ const TICK: Duration = Duration::from_secs(1);
 
 /// How long a change to nothing but `downloaded` may wait for the disk.
 ///
-/// The registry's byte count is a cache of the server's own -- [`refresh`]
+/// The registry's byte count is a cache of the server's own -- [`refresh_in`]
 /// merges it in, and the app never computes progress itself -- so what a
 /// skipped write costs is a stale number in a listing taken with no server
 /// to ask, until the next write that matters. What writing every tick costs
@@ -141,7 +141,8 @@ struct FileStamp {
 /// on the server for as long as a magnet takes to resolve; holding one lock
 /// across all of that would stall the progress sink and every other
 /// download call with it. The order, where two are needed, is `ticking`
-/// then `file` -- [`ensure_ticker`] is the only place that takes both.
+/// then `file` -- [`ensure_ticker_in`] and the [`ticker`]'s stop check are
+/// the only places that take both.
 #[derive(Default)]
 pub struct DownloadsState {
     /// Serializes read-modify-write cycles on the registry file: the FFI
@@ -786,10 +787,6 @@ fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
     Some(named)
 }
 
-/// [`pins_in`] of the registry on disk, or `None` when it would not read --
-/// see [`read_registry`] -- or names something this build cannot place.
-/// Called once, by [`crate::server::start`], before the server opens its
-/// session.
 /// The proxy downloads to keep, for `ServerConfig::proxy_pins`: what every
 /// row that is a link download and wants its pin names, rebuilt from the
 /// stream the row stores. `None` under the same rule as [`pins_in`]: an
@@ -847,6 +844,10 @@ pub fn proxy_pins() -> Option<Vec<stream_server::ProxyPinKey>> {
     }
 }
 
+/// [`pins_in`] of the registry on disk, or `None` when it would not read --
+/// see [`read_registry`] -- or names something this build cannot place.
+/// Called once, by [`crate::server::start`], before the server opens its
+/// session.
 pub fn pins() -> Option<stream_server::PinSet> {
     let pins = match load() {
         Ok(registry) => pins_in(&registry),
@@ -965,8 +966,8 @@ fn update_then<T>(
 /// The same, with a say in whether the change is worth a write. `needed` is
 /// asked what `f` did -- the registry before and after -- and a `false`
 /// leaves the file as it was, edits and all: the caller must be one whose
-/// change the next write picks up again anyway. [`refresh`] is that caller,
-/// and the only one.
+/// change the next write picks up again anyway. [`merge_live_in`] is that
+/// caller, and the only one.
 fn update_when_in<T>(
     app: &AppState,
     f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
@@ -1200,9 +1201,6 @@ pub fn is_proxy_key(info_hash: &str) -> bool {
     info_hash.len() == 64 && info_hash.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-/// The proxy pin a stream names, or `None` for a torrent or anything that
-/// is not an `http(s)` link: the addon URL, and the request headers
-/// stremio-core puts in `h=` (`behaviorHints.proxyHeaders.request`).
 /// The scheme a linked Google Drive file is listed under among a title's
 /// sources (`driveSourceScheme` in `lib/core/drive_source.dart`): the
 /// stream's `url` is `xtremio-drive:<fileId>`, and nothing else about the
@@ -1220,6 +1218,9 @@ pub fn drive_file_id_of_stream(stream: &serde_json::Value) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
+/// The proxy pin a stream names, or `None` for a torrent or anything that
+/// is not an `http(s)` link: the addon URL, and the request headers
+/// stremio-core puts in `h=` (`behaviorHints.proxyHeaders.request`).
 pub fn proxy_pin_of_stream(stream: &serde_json::Value) -> Option<stream_server::ProxyPinKey> {
     if stream
         .get("infoHash")
@@ -2436,21 +2437,6 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
     })
 }
 
-/// Merges the server's live download stats into the registry and reports
-/// the rows that moved, narrow enough to push once a second. The file is
-/// rewritten for anything but a byte count, and for a byte count no more
-/// often than [`PROGRESS_WRITE_INTERVAL`].
-pub fn refresh() -> anyhow::Result<Vec<Progress>> {
-    refresh_in(&not_initialized_unless_running()?)
-}
-
-/// The process state for a caller that only wants to *read* it. Reaching
-/// for the resurrecting accessor here is what let an FFI call in flight
-/// across a shutdown put a fresh state back into the process: the Android
-/// notification service re-lists every five seconds and nothing cancels
-/// that timer before the app awaits `core_shutdown`, so a tick landing in
-/// the window undid the shutdown's whole point. See [`crate::state::state`]
-/// for which callers may build one -- the ones that *install* something.
 /// The meta a download kept of its title, as the addon answered it
 /// (`{"meta": ...}`), for a meta request that could not reach that addon.
 ///
@@ -2496,15 +2482,27 @@ fn kept_meta_in(
     })
 }
 
+/// The process state for a caller that only wants to *read* it. Reaching
+/// for the resurrecting accessor here is what let an FFI call in flight
+/// across a shutdown put a fresh state back into the process: a listing
+/// the app started (the downloads notification's, say) is not cancelled
+/// before the app awaits `core_shutdown`, so one landing in the window
+/// undid the shutdown's whole point. See [`crate::state::state`] for which
+/// callers may build one -- the ones that *install* something.
 fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
     crate::state::current()
         .ok_or_else(|| anyhow::anyhow!("the core is not initialized; is `core_init` done?"))
 }
 
-/// [`refresh`] against a state the caller already holds -- the ticker's, so
-/// that a tick finishing after a shutdown merges into the registry of the
-/// state it was started for and re-arms nothing but that state's ticker.
-/// See [`load_in`].
+/// Merges the server's live download stats into `app`'s registry and
+/// reports the rows that moved, narrow enough to push once a second. The
+/// file is rewritten for anything but a byte count, and for a byte count no
+/// more often than [`PROGRESS_WRITE_INTERVAL`].
+///
+/// Against a state the caller already holds -- the ticker's, so that a tick
+/// finishing after a shutdown merges into the registry of the state it was
+/// started for and re-arms nothing but that state's ticker. See
+/// [`load_in`].
 ///
 /// The live stats are the one thing still asked of the process rather than
 /// of `app`, and they may be: `crate::server::downloads` reads
@@ -2566,10 +2564,10 @@ fn merge_live_in<T>(
     )?;
     // A refresh is also where an entry can go *back* to unfinished -- a
     // torrent that is checking again, a file that went away, a pin the
-    // server lost -- and nothing else would restart the poll: `add` and
-    // `set_event_sink` are its only other callers and neither runs
-    // afterwards, so progress would stay silent for the rest of the
-    // session.
+    // server lost -- and nothing else would restart the poll: `add`,
+    // `set_event_sink` and the boot's `reconcile_pins_in` are its only other
+    // callers and none of them runs afterwards, so progress would stay
+    // silent for the rest of the session.
     ensure_ticker_in(app);
     Ok(result)
 }
@@ -2673,7 +2671,8 @@ fn anything_unfinished_in(app: &AppState) -> bool {
 }
 
 /// Starts the progress ticker unless one already runs or nothing is
-/// unfinished. Called after every add and whenever a sink arrives.
+/// unfinished. Called after every add, whenever a sink arrives, after every
+/// merge and at the end of the boot's re-pin.
 pub fn ensure_ticker() {
     ensure_ticker_in(&crate::state::state());
 }
@@ -2702,11 +2701,18 @@ pub fn ensure_ticker_in(app: &Arc<AppState>) {
 /// whole refresh is the window. So every call the tick makes is an `_in`
 /// against the state in hand; one that looked a state up would create the
 /// one the shutdown has just taken.
+///
+/// The locks are taken on blocking threads too, never on the worker: the
+/// registry's is held across server calls (an unpin under [`update_then`])
+/// that can queue behind a magnet, and [`ensure_ticker_in`] holds
+/// `ticking` while it waits for the registry's, so either one taken here
+/// would stall one of `CONCURRENT`'s few workers for as long.
 async fn ticker(app: Arc<AppState>) {
     loop {
         tokio::time::sleep(TICK).await;
         if !crate::state::is_current(&app) {
-            *app.downloads.ticking() = false;
+            let tick = Arc::clone(&app);
+            let _ = tokio::task::spawn_blocking(move || *tick.downloads.ticking() = false).await;
             return;
         }
         let tick = Arc::clone(&app);
@@ -2715,10 +2721,20 @@ async fn ticker(app: Arc<AppState>) {
             Ok(Err(error)) => tracing::debug!(%error, "downloads progress tick failed"),
             Err(error) => tracing::warn!(%error, "downloads progress tick panicked"),
         }
-        let mut ticking = app.downloads.ticking();
-        if !anything_unfinished_in(&app) {
-            *ticking = false;
-            return;
+        let tick = Arc::clone(&app);
+        let go_on = tokio::task::spawn_blocking(move || {
+            let mut ticking = tick.downloads.ticking();
+            if !anything_unfinished_in(&tick) {
+                *ticking = false;
+                return false;
+            }
+            true
+        })
+        .await;
+        match go_on {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => tracing::warn!(%error, "downloads progress check panicked"),
         }
     }
 }
@@ -2806,35 +2822,85 @@ pub fn reconcile_pins() {
     reconcile_pins_in(&crate::state::state())
 }
 
-/// [`reconcile_pins`] against a state the caller already holds -- `init`'s,
-/// which is the state this work belongs to. It is the other half of the
-/// boot that can still be running after a shutdown (a magnet blocks it for
-/// as long as the tracker takes), so it may not look a state up either, and
-/// it stops once its instance has been retired. See [`load_in`].
-///
-/// Stopping there is also why [`update_in`]'s no-resurrection has no test
-/// left: this was the one path a shutdown could drive into it, and the
-/// point of the check is that it no longer does.
-///
-/// It is also where the file's intents are finished (see the module docs):
-/// removals a kill interrupted first, so a cancelled download is not
-/// re-pinned only to be dropped again; the pins of swapped-out files last,
-/// once the re-pin has put the swap's new pin in place.
 /// Pins one unfinished download again and writes a refusal down as its
 /// state; `false` when `app` was retired under the pin, which is the
 /// caller's signal to stop (see [`reconcile_pins_in`] for why a pin
 /// issued after a shutdown must not be written down).
 fn repin_unfinished_in(app: &Arc<AppState>, key: &str, entry: &Entry) -> bool {
-    match pin_entry(entry) {
-        Ok(_) => tracing::info!(key, "re-pinned an unfinished download"),
+    repin_unfinished_with(app, key, entry, pin_entry, release_replaced)
+}
+
+/// [`repin_unfinished_in`] with the pin and the release handed in, which
+/// is how a test changes the registry while the pin is in flight.
+///
+/// `entry` is a reading taken before the loop started, and the pin blocks
+/// for as long as a magnet takes: the screens are up meanwhile, and the row
+/// can be cancelled, or the key given to another file, before it answers.
+/// So what the pin answered is acted on only under one hold of the file's
+/// lock, against a row that still wants this very file -- the shape
+/// [`add`]'s [`record_pin`] and [`unstage_add`] have for the same window. A
+/// pin that lands with no row wanting its file is released there, or it
+/// downloads for the rest of the session with nothing naming it; a refusal
+/// is written only onto the row it was asked for, never onto whatever holds
+/// the key now.
+fn repin_unfinished_with(
+    app: &Arc<AppState>,
+    key: &str,
+    entry: &Entry,
+    pin: impl FnOnce(&Entry) -> anyhow::Result<DownloadInfo>,
+    mut release: impl FnMut(&str, &Replaced),
+) -> bool {
+    let (info_hash, file_idx) = (entry.info_hash.as_str(), entry.file_idx);
+    // A row cancelled before its turn came is not pinned at all.
+    let still_wanted = load_locked(&mut app.downloads.file()).map(|registry| {
+        registry
+            .items
+            .get(key)
+            .is_some_and(|row| row.unfinished() && names(row, info_hash, file_idx))
+    });
+    if let Ok(false) = still_wanted {
+        return true;
+    }
+    let answer = pin(entry);
+    if !crate::state::is_current(app) {
+        return false;
+    }
+    match answer {
+        Ok(_) => {
+            // Released with the lock still held: see [`update_then`].
+            let settled = update_when_then_in(
+                app,
+                |registry| Ok(!pin_is_wanted(registry, info_hash, file_idx)),
+                |_, _, _| true,
+                |unwanted| {
+                    if *unwanted {
+                        release(
+                            key,
+                            &Replaced {
+                                info_hash: info_hash.to_owned(),
+                                file_idx,
+                            },
+                        );
+                    }
+                },
+            );
+            match settled {
+                Ok(false) => tracing::info!(key, "re-pinned an unfinished download"),
+                Ok(true) => tracing::info!(key, "re-pinned a download that was taken meanwhile"),
+                Err(error) => {
+                    tracing::warn!(key, %error, "could not check the re-pinned download's row")
+                }
+            }
+        }
         Err(error) => {
             let failure = PinFailure::classify(&error);
             tracing::warn!(key, message = failure.message(), "could not re-pin");
-            if !crate::state::is_current(app) {
-                return false;
-            }
             let _ = update_in(app, |registry| {
-                if let Some(entry) = registry.items.get_mut(key) {
+                if let Some(entry) = registry
+                    .items
+                    .get_mut(key)
+                    .filter(|entry| !entry.is_leaving() && names(entry, info_hash, file_idx))
+                {
                     entry.state = State::Error;
                     entry.error = Some(failure.message().to_owned());
                 }
@@ -2876,6 +2942,20 @@ pub fn repin_drive_downloads() {
     }
 }
 
+/// [`reconcile_pins`] against a state the caller already holds -- `init`'s,
+/// which is the state this work belongs to. It is the other half of the
+/// boot that can still be running after a shutdown (a magnet blocks it for
+/// as long as the tracker takes), so it may not look a state up either, and
+/// it stops once its instance has been retired. See [`load_in`].
+///
+/// Stopping there is also why [`update_in`]'s no-resurrection has no test
+/// left: this was the one path a shutdown could drive into it, and the
+/// point of the check is that it no longer does.
+///
+/// It is also where the file's intents are finished (see the module docs):
+/// removals a kill interrupted first, so a cancelled download is not
+/// re-pinned only to be dropped again; the pins of swapped-out files last,
+/// once the re-pin has put the swap's new pin in place.
 pub fn reconcile_pins_in(app: &Arc<AppState>) {
     finish_pending_removals_in(app);
     let items = match load_in(app) {
@@ -4034,6 +4114,153 @@ mod tests {
             assert_eq!(
                 load().expect("the registry after").items["tt1:tt1"].replaces,
                 None
+            );
+        });
+    }
+
+    /// The boot's re-pin blocks for as long as a magnet takes, with the
+    /// screens up: a row cancelled meanwhile has its new pin released,
+    /// under the registry's lock, and a refusal is written only onto the
+    /// row it was asked for -- never onto a leaving row, or onto another
+    /// file that took the key.
+    #[test]
+    fn a_boot_repin_acts_only_for_the_row_that_still_wants_it() {
+        crate::env::with_storage_dir(|_| {
+            let app = crate::state::state();
+            let put = |row: Entry| {
+                update(|registry| {
+                    registry.items.clear();
+                    registry.items.insert("tt1:tt1".into(), row);
+                    Ok(())
+                })
+                .expect("the registry going in")
+            };
+            let meanwhile = |edit: fn(&mut Entry)| {
+                update(|registry| {
+                    match registry.items.get_mut("tt1:tt1") {
+                        Some(row) => edit(row),
+                        None => unreachable!("the row is there going in"),
+                    }
+                    Ok(())
+                })
+                .expect("the write while the pin is in flight")
+            };
+            let row = naming("abc", 2);
+            let file = Replaced {
+                info_hash: "abc".into(),
+                file_idx: 2,
+            };
+
+            // Removed while the pin was in flight: the pin goes, with the
+            // lock held.
+            put(row.clone());
+            let mut released = Vec::new();
+            assert!(repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| {
+                    update(|registry| {
+                        registry.items.remove("tt1:tt1");
+                        Ok(())
+                    })
+                    .expect("the removal while the pin is in flight");
+                    Ok(pinned("abc", 2, false))
+                },
+                |_, replaced| {
+                    assert!(
+                        app.downloads.file.try_lock().is_err(),
+                        "released {replaced:?} with the registry's lock let go"
+                    );
+                    released.push(replaced.clone());
+                },
+            ));
+            assert_eq!(released, vec![file.clone()]);
+
+            // Marked for removal meanwhile: released too, and the refusal
+            // of the same pin leaves the mark's row alone.
+            put(row.clone());
+            released.clear();
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| {
+                    meanwhile(|row| {
+                        row.pending_removal = Some(PendingRemoval { delete_files: true })
+                    });
+                    Ok(pinned("abc", 2, false))
+                },
+                |_, replaced| released.push(replaced.clone()),
+            );
+            assert_eq!(released, vec![file.clone()]);
+            put(row.clone());
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| {
+                    meanwhile(|row| {
+                        row.pending_removal = Some(PendingRemoval { delete_files: true })
+                    });
+                    Err(anyhow::anyhow!("refused"))
+                },
+                |_, replaced| panic!("released {replaced:?} for a refused pin"),
+            );
+            let after = load().expect("the registry after");
+            assert_eq!(after.items["tt1:tt1"].state, State::Queued);
+            assert_eq!(after.items["tt1:tt1"].error, None);
+
+            // The key given to another file meanwhile: that row is not
+            // written over with this file's refusal.
+            put(row.clone());
+            released.clear();
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| {
+                    meanwhile(|row| row.info_hash = "def".into());
+                    Err(anyhow::anyhow!("refused"))
+                },
+                |_, replaced| panic!("released {replaced:?} for a refused pin"),
+            );
+            let after = load().expect("the registry after");
+            assert_eq!(after.items["tt1:tt1"].state, State::Queued);
+            assert_eq!(after.items["tt1:tt1"].error, None);
+
+            // Still wanted: kept, and a refusal is the row's own state.
+            put(row.clone());
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| Ok(pinned("abc", 2, false)),
+                |_, replaced| panic!("released {replaced:?} that the row wants"),
+            );
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| Err(anyhow::anyhow!("refused")),
+                |_, replaced| panic!("released {replaced:?} for a refused pin"),
+            );
+            assert_eq!(
+                load().expect("the registry after").items["tt1:tt1"].state,
+                State::Error
+            );
+
+            // Cancelled before its turn came: not pinned at all.
+            put(Entry {
+                pending_removal: Some(PendingRemoval { delete_files: true }),
+                ..row.clone()
+            });
+            repin_unfinished_with(
+                &app,
+                "tt1:tt1",
+                &row,
+                |_| panic!("pinned a row that was cancelled before its turn"),
+                |_, replaced| panic!("released {replaced:?}"),
             );
         });
     }

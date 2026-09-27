@@ -37,7 +37,6 @@ fn a_failed_meta_fetch_is_answered_from_the_download() -> anyhow::Result<()> {
 
     core_init(CoreConfig {
         storage_dir: storage.display().to_string(),
-        cache_dir: tmp.path().join("core-cache").display().to_string(),
         server: None,
     })?;
 

@@ -36,7 +36,7 @@ between a phone signing in and a television collecting it.
 ## What a session carries
 
 `GET /session/{id}` answers a `ready` session with the tokens and the
-files, and names the files **twice**:
+files:
 
 ```json
 {
@@ -47,26 +47,17 @@ files, and names the files **twice**:
   "files": [
     {"fileId": "…", "name": "S01E01.mkv", "mimeType": "video/x-matroska"},
     {"fileId": "…", "name": "S01E02.mkv", "mimeType": "video/x-matroska"}
-  ],
-  "file": {"fileId": "…", "name": "S01E01.mkv", "mimeType": "video/x-matroska"}
+  ]
 }
 ```
 
-`files` is the list, in the order the viewer picked them. `file` is the
-first of them, and it is there for a build from before several could be
-picked: that build reads `file` and knows nothing of `files`, and this read
-is the only one it gets — the session is deleted as it answers, so a body it
-could make nothing of would be a pairing lost rather than a pairing
-retried. One file out of twelve is a poor answer; none is worse.
-
-The other direction needs nothing: a session written by a service that only
-ever stored `file` still answers with it, and the app reads that as a list
-of one.
+`files` is the list, in the order the viewer picked them.
 
 ## Two shapes, and the hand-back
 
-`POST /session` takes `{"handBack": true}`, and that is the only thing this
-service knows about which kind of device asked.
+`POST /session` takes `{"shape": "tv" | "phone" | "desktop"}` (anything
+else is `tv`), and that is the only thing this service knows about which
+kind of device asked.
 
 A television's viewer looks up at the screen, so the pick page ends with
 "on the way to your television" and stops. A phone's viewer was handed to a
@@ -84,7 +75,7 @@ effect is the platform switching tasks. The URL is this service's constant
 origin navigating to a client-supplied URL, with a signed-in viewer in front
 of it, is an open redirect.
 
-The flag is only ever set by a build that asked for it, which is what makes
+`phone` is only ever sent by a build that asked for the hand-back, which is what makes
 it safe to navigate to a custom scheme: the app that asked is the app on the
 device. The confirmation is drawn and a **Back to Xtremio** button shown
 before the navigation is attempted, so a browser that refuses to follow a
@@ -202,7 +193,7 @@ The whole point of the proof is the last step. No television needed:
 HOST=https://xtremio-xervice.web.app
 
 # 1. Stand in for the television. (A phone pairing sends
-#    -H 'Content-Type: application/json' -d '{"handBack":true}' instead.)
+#    -H 'Content-Type: application/json' -d '{"shape":"phone"}' instead.)
 curl -s -X POST $HOST/session | tee /tmp/s.json
 # open the `link` from that on a phone, sign in, pick one video or several
 
@@ -211,7 +202,6 @@ ID=$(python3 -c "import json;print(json.load(open('/tmp/s.json'))['sessionId'])"
 curl -s $HOST/session/$ID | tee /tmp/t.json
 
 # 3. The proof: one kilobyte, from the middle of the first file picked.
-#    `files` has every one of them; `file` is this same first entry.
 TOKEN=$(python3 -c "import json;print(json.load(open('/tmp/t.json'))['accessToken'])")
 FILE=$(python3 -c "import json;print(json.load(open('/tmp/t.json'))['files'][0]['fileId'])")
 curl -s -D- -o /tmp/chunk.bin \

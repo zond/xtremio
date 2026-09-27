@@ -1612,11 +1612,9 @@ impl SseDecode for crate::api::core::CoreConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_storageDir = <String>::sse_decode(deserializer);
-        let mut var_cacheDir = <String>::sse_decode(deserializer);
         let mut var_server = <Option<crate::api::server::ServerConfig>>::sse_decode(deserializer);
         return crate::api::core::CoreConfig {
             storage_dir: var_storageDir,
-            cache_dir: var_cacheDir,
             server: var_server,
         };
     }
@@ -1923,7 +1921,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::core::CoreConfig {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.storage_dir.into_into_dart().into_dart(),
-            self.cache_dir.into_into_dart().into_dart(),
             self.server.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -2061,7 +2058,6 @@ impl SseEncode for crate::api::core::CoreConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.storage_dir, serializer);
-        <String>::sse_encode(self.cache_dir, serializer);
         <Option<crate::api::server::ServerConfig>>::sse_encode(self.server, serializer);
     }
 }

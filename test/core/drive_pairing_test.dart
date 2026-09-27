@@ -200,12 +200,6 @@ void main() {
               'mimeType': 'video/x-matroska',
             },
           ],
-          // The first of them again, for a build that knows nothing of `files`.
-          // This build reads the list and ignores it.
-          'file': {
-            'fileId': 'drive-file-1',
-            'name': 'Gilmore Girls S01E01.mkv',
-          },
         };
         final answer = await service().collect('abc-123');
         final collected = answer as DrivePairingCollected;
@@ -231,10 +225,10 @@ void main() {
       },
     );
 
-    test('and a session naming one file the old way still works', () async {
-      // What a service from before several could be picked answers with:
-      // `file` and no `files` at all. One file is a list of one, and nothing
-      // past this point treats it as a special case.
+    test('a session naming no list of files is gone', () async {
+      // The service names the files as a list and nothing else; a single
+      // `file` is the spelling of a service long since replaced, and the
+      // session is deleted either way, so there is nothing to ask again.
       collectBody = {
         'status': 'ready',
         'refreshToken': fakeRefreshToken,
@@ -246,15 +240,7 @@ void main() {
           'mimeType': 'video/x-matroska',
         },
       };
-      final collected =
-          await service().collect('abc-123') as DrivePairingCollected;
-      expect(collected.files, [
-        (
-          fileId: 'drive-file-1',
-          name: 'Arrival (2016) 2160p.mkv',
-          mimeType: 'video/x-matroska',
-        ),
-      ]);
+      expect(await service().collect('abc-123'), isA<DrivePairingGone>());
     });
 
     test('a row with no id is dropped, not the eleven beside it', () async {

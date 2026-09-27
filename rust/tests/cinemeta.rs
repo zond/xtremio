@@ -17,7 +17,6 @@ fn discover_loads_cinemeta_top_movies() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
     core_init(CoreConfig {
         storage_dir: tmp.path().join("core").display().to_string(),
-        cache_dir: tmp.path().join("cache").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),

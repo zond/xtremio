@@ -173,7 +173,6 @@ final class RustCoreClient implements CoreClient {
     final result = await rust.coreInit(
       config: rust.CoreConfig(
         storageDir: '${support.path}/core',
-        cacheDir: '${cache.path}/core',
         server: embeddedServer
             ? rust_server.ServerConfig(
                 configDir: '${support.path}/server',

@@ -20,7 +20,7 @@ use serde::Serialize;
 /// cannot be asked about (it is gone, or the platform will not say), which
 /// the report shows as unknown rather than as zero -- a volume nobody could
 /// measure is not a full one.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Volume {
     pub path: String,
@@ -35,7 +35,7 @@ impl Volume {
         let existing = existing_ancestor(path);
         Self {
             path: path.to_string_lossy().to_string(),
-            free_bytes: free_bytes(path),
+            free_bytes: existing.and_then(free_bytes),
             total_bytes: existing.and_then(|dir| fs4::total_space(dir).ok()),
         }
     }
@@ -96,9 +96,10 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
     }
 }
 
-/// Bytes the volume holding `path` will still give an unprivileged writer,
-/// or `None` when that cannot be read (the path is on nothing that exists,
-/// or the platform will not say).
+/// Bytes the volume holding `dir` will still give an unprivileged writer,
+/// or `None` when the platform will not say. `dir` is one that exists --
+/// [`existing_ancestor`] finds it, and [`Volume::of`] asks it once for both
+/// of its readings.
 ///
 /// `fs4::available_space` is `statvfs`'s `f_frsize * f_bavail` -- `df`'s
 /// Available column, root's reserve excluded -- which is the same call and
@@ -128,10 +129,8 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
 /// `None`, never 0, on failure: a volume nobody could measure is not a
 /// full one, and a report that showed it as full would accuse a device
 /// whose filesystem simply will not answer.
-pub fn free_bytes(path: &Path) -> Option<u64> {
-    // Ask about the deepest ancestor that exists: a directory nobody has
-    // created yet still sits on a volume.
-    existing_ancestor(path).and_then(|dir| fs4::available_space(dir).ok())
+fn free_bytes(dir: &Path) -> Option<u64> {
+    fs4::available_space(dir).ok()
 }
 
 /// The deepest existing ancestor of `path`, itself included. A volume can
@@ -210,7 +209,9 @@ mod tests {
         // ancestor walk runs out before it finds anything to ask about.
         // Unreadable must not be reported as zero -- a caller would then
         // refuse a cache on a device that has plenty of room.
-        assert_eq!(free_bytes(Path::new("xtremio-no-such-path-4c1f")), None);
+        let volume = Volume::of(Path::new("xtremio-no-such-path-4c1f"));
+        assert_eq!(volume.free_bytes, None);
+        assert_eq!(volume.total_bytes, None);
     }
 
     #[test]

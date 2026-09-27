@@ -1,9 +1,10 @@
 //! FRB surface for "Match to another subtitle": two subtitle files in,
 //! the ratio and the offset that map one onto the other out.
 //!
-//! Here rather than in Dart because it is two HTTP fetches and a sweep
-//! over two arrays of a few hundred numbers, and neither belongs on the UI
-//! thread of a device as modest as a Chromecast with Google TV.
+//! Here rather than in Dart because it is two HTTP fetches and a search
+//! over ratios and shifts for the best overlap of two on-screen bitmaps
+//! (`crate::subtitles`), and neither belongs on the UI thread of a device
+//! as modest as a Chromecast with Google TV.
 //!
 //! Neither URL is ever logged or put in an error. An addon's URL can carry
 //! a debrid API key, which `AGENTS.md` puts in the same class as the auth

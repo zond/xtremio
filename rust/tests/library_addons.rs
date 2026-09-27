@@ -182,7 +182,6 @@ fn library_follows_add_and_remove() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
     core_init(CoreConfig {
         storage_dir: tmp.path().join("core").display().to_string(),
-        cache_dir: tmp.path().join("cache").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),
@@ -277,7 +276,6 @@ fn record_library_and_addons_fixtures() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
     core_init(CoreConfig {
         storage_dir: tmp.path().join("core").display().to_string(),
-        cache_dir: tmp.path().join("cache").display().to_string(),
         server: None,
     })?;
 

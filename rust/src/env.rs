@@ -328,7 +328,7 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()>
 /// on it.
 ///
 /// **The URL never reaches the error.** An addon's URL can carry a debrid
-/// API key (`AGENTS.md`, "Deep links open an addon"), and `reqwest` puts
+/// API key (`AGENTS.md`, "Never log auth material"), and `reqwest` puts
 /// the URL it was given into its own `Display`, so every error out of it
 /// is stripped with `without_url` before it becomes a message anyone can
 /// log.
@@ -524,9 +524,18 @@ impl Env for XtremioEnv {
             let bytes = match fetch_bytes(request, host).await {
                 Ok(bytes) => bytes,
                 Err(error) => {
-                    let kept = meta_request.and_then(|(base, kind, id)| {
-                        crate::downloads::kept_meta(&base, &kind, &id)
-                    });
+                    // Off the worker: the registry's lock is a std mutex,
+                    // and it is held across server calls that can queue
+                    // behind a magnet, so waiting on it here would stall
+                    // one of `CONCURRENT`'s few workers with it.
+                    let kept = match meta_request {
+                        Some((base, kind, id)) => CONCURRENT
+                            .spawn_blocking(move || crate::downloads::kept_meta(&base, &kind, &id))
+                            .await
+                            .ok()
+                            .flatten(),
+                        None => None,
+                    };
                     match kept {
                         Some(kept) => {
                             tracing::debug!("meta answered from a download");
@@ -552,9 +561,12 @@ impl Env for XtremioEnv {
         future::lazy(move |_| {
             let path = path.ok_or(EnvError::StorageUnavailable)?;
             match std::fs::read(&path) {
+                // Never the error's own text: it quotes the refused value,
+                // and a bucket holds addon URLs with their keys in them.
+                // See [`crate::serde_fault`].
                 Ok(bytes) => serde_json::from_slice::<T>(&bytes)
                     .map(Some)
-                    .map_err(|error| EnvError::Serde(error.to_string())),
+                    .map_err(|error| EnvError::Serde(crate::serde_fault::cause(&error))),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(error) => Err(EnvError::StorageReadError(error.to_string())),
             }
@@ -818,6 +830,32 @@ mod tests {
             std::fs::write(dir.join("bad.json"), b"{not json").expect("write");
             let error = block_on(XtremioEnv::get_storage::<Item>("bad")).unwrap_err();
             assert!(matches!(error, EnvError::Serde(_)), "{error:?}");
+        });
+    }
+
+    /// A bucket that will not parse is reported without what it holds:
+    /// serde and `url` quote the refused string, and an addon's transport
+    /// URL carries its debrid key in the path.
+    #[test]
+    fn a_refused_storage_value_is_not_in_the_error() {
+        #[derive(Debug, Deserialize)]
+        struct Addon {
+            #[allow(dead_code)]
+            transport_url: url::Url,
+        }
+        with_storage_dir(|dir| {
+            let json = br#"{"transport_url": "debridkey-hunter2/manifest.json"}"#;
+            let leak = serde_json::from_slice::<Addon>(json).expect_err("not a URL");
+            assert!(
+                leak.to_string().contains("hunter2"),
+                "serde still quotes the value: {leak}"
+            );
+            std::fs::write(dir.join("addons.json"), json).expect("write");
+            let error = block_on(XtremioEnv::get_storage::<Addon>("addons")).unwrap_err();
+            assert!(
+                matches!(&error, EnvError::Serde(message) if !message.contains("hunter2")),
+                "the key reached the message: {error:?}"
+            );
         });
     }
 

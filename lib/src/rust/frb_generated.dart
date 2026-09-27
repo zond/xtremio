@@ -1525,12 +1525,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreConfig dco_decode_core_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return CoreConfig(
       storageDir: dco_decode_String(arr[0]),
-      cacheDir: dco_decode_String(arr[1]),
-      server: dco_decode_opt_box_autoadd_server_config(arr[2]),
+      server: dco_decode_opt_box_autoadd_server_config(arr[1]),
     );
   }
 
@@ -1713,13 +1712,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreConfig sse_decode_core_config(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_storageDir = sse_decode_String(deserializer);
-    var var_cacheDir = sse_decode_String(deserializer);
     var var_server = sse_decode_opt_box_autoadd_server_config(deserializer);
-    return CoreConfig(
-      storageDir: var_storageDir,
-      cacheDir: var_cacheDir,
-      server: var_server,
-    );
+    return CoreConfig(storageDir: var_storageDir, server: var_server);
   }
 
   @protected
@@ -1954,7 +1948,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_core_config(CoreConfig self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.storageDir, serializer);
-    sse_encode_String(self.cacheDir, serializer);
     sse_encode_opt_box_autoadd_server_config(self.server, serializer);
   }
 

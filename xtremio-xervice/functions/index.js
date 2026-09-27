@@ -117,6 +117,31 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 /**
+ * An async route whose failure is answered rather than left hanging.
+ *
+ * Express 4 does not look at the promise a handler returns, so a rejected
+ * one -- Firestore unavailable, a fetch that could not connect, Google
+ * answering a 5xx page that `json()` cannot parse -- reached nobody: no
+ * response, and the television or the phone waited out the whole request
+ * timeout for an answer that was never coming. This answers 502 instead.
+ *
+ * **Nothing of the failure goes out, and only its name goes in the log.**
+ * A request here carries a refresh token or an auth code, and an error's
+ * message can quote the request it failed on; the viewer's client needs to
+ * know only that the service did not answer, which is what it already does
+ * with any other 5xx.
+ */
+function answered(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch((error) => {
+      console.error(`${req.method} ${req.route?.path}: ${error?.name || 'error'}`);
+      if (res.headersSent) return;
+      res.status(502).json({error: 'the service could not answer'});
+    });
+  };
+}
+
+/**
  * Where this service lives, as a viewer's phone sees it.
  *
  * Written down rather than read off the request. Behind a Hosting rewrite
@@ -135,14 +160,8 @@ function origin() {
 }
 
 /**
- * The files out of one `POST /session/<id>/files` body, cleaned up.
- *
- * Two shapes are read. `{files: [...]}` is what the pick page sends now,
- * one entry per file the viewer chose. A bare `{fileId, name, mimeType}`
- * is the one file the page used to send, and is still accepted because
- * Hosting may hand a browser a cached copy of the old page for an hour
- * after a deploy -- a pairing half way through a deploy should finish, not
- * fail.
+ * The files out of one `POST /session/<id>/files` body, cleaned up: its
+ * `{files: [...]}`, one entry per file the viewer chose.
  *
  * A row with no file id is dropped rather than refused: the id is the only
  * field a byte range is asked for, and the rest have answers for being
@@ -150,9 +169,7 @@ function origin() {
  * dropping is what the caller sees as an empty list.
  */
 function pickedFiles(body) {
-  const sent = Array.isArray(body.files)
-      ? body.files
-      : (body.fileId ? [body] : []);
+  const sent = Array.isArray(body.files) ? body.files : [];
   const files = [];
   for (const one of sent) {
     const fileId = typeof one?.fileId === 'string' ? one.fileId.trim() : '';
@@ -250,14 +267,10 @@ const SHAPES = ['tv', 'phone', 'desktop'];
  * Anything unrecognised is a television, which is the safe end of the two
  * decisions above: no hand-back is sent to a browser that may have nothing
  * to handle it, and the page says the least about a screen it cannot see.
- * An app built before the shape was sent said only whether it wanted a
- * hand-back, which is a phone and no other shape, so those builds keep
- * pairing and keep their confirmation.
  */
 function shapeOf(body) {
   const asked = (body || {}).shape;
-  if (SHAPES.includes(asked)) return asked;
-  return (body || {}).handBack === true ? 'phone' : 'tv';
+  return SHAPES.includes(asked) ? asked : 'tv';
 }
 
 /**
@@ -266,7 +279,7 @@ function shapeOf(body) {
  * What it says about itself is its shape, and see [SHAPES] for what that is
  * for and why it is three words rather than a flag.
  */
-app.post('/session', async (req, res) => {
+app.post('/session', answered(async (req, res) => {
   const from = req.ip || 'unknown';
   if (!await withinRate(`session-${from}`, 60)) {
     return res.status(429).json({error: 'too many sessions'});
@@ -284,7 +297,7 @@ app.post('/session', async (req, res) => {
     link: `${origin()}/link?s=${id}`,
     expiresAt: expiresAt.toISOString(),
   });
-});
+}));
 
 /**
  * 4. Google sends the viewer back here with a code.
@@ -293,7 +306,7 @@ app.post('/session', async (req, res) => {
  * pending: without that, anyone could hand this endpoint a code and have
  * the tokens written onto a session a television is watching.
  */
-app.get('/oauth/callback', async (req, res) => {
+app.get('/oauth/callback', answered(async (req, res) => {
   const {code, state, error} = req.query;
   if (error) return res.redirect(`/pick?s=${state || ''}&error=${error}`);
   if (!code || !state) return res.status(400).send('missing code or state');
@@ -331,7 +344,7 @@ app.get('/oauth/callback', async (req, res) => {
     accessExpiresAt: new Date(Date.now() + granted.expires_in * 1000),
   });
   res.redirect(`/pick?s=${state}`);
-});
+}));
 
 /**
  * What the Picker page needs to draw itself: a token, where to send the
@@ -343,7 +356,7 @@ app.get('/oauth/callback', async (req, res) => {
  * because two of the three shapes are handed back nowhere and still have
  * different things said to them.
  */
-app.get('/session/:id/token', async (req, res) => {
+app.get('/session/:id/token', answered(async (req, res) => {
   const session = await db.collection('sessions').doc(req.params.id).get();
   if (!session.exists) return res.status(404).json({error: 'no session'});
   const it = session.data();
@@ -355,17 +368,15 @@ app.get('/session/:id/token', async (req, res) => {
     handBack: it.shape === 'phone' ? HAND_BACK_LINK : null,
     shape: SHAPES.includes(it.shape) ? it.shape : 'tv',
   });
-});
+}));
 
 /**
  * 5. The phone says which files the viewer picked.
  *
  * One scan links as many files as the viewer chose in the one Picker, which
- * is what makes a season a single pairing rather than twelve. Both spellings
- * of the route answer: `/files` is what the page asks for now, and `/file`
- * is what a copy of the page cached before a deploy asks for.
+ * is what makes a season a single pairing rather than twelve.
  */
-app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
+app.post('/session/:id/files', answered(async (req, res) => {
   const files = pickedFiles(req.body || {});
   if (files.length === 0) return res.status(400).json({error: 'no files'});
   if (files.length > MAX_FILES) {
@@ -396,7 +407,7 @@ app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
       : {...files[at], height: null, durationMillis: null});
   await ref.update({status: 'ready', files: described});
   res.json({ok: true, files: described.length});
-});
+}));
 
 /**
  * 6. The television collects, once.
@@ -404,16 +415,8 @@ app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
  * The session is deleted in the same breath: a refresh token that has been
  * handed over is not something to leave lying in a database, and a pickup
  * that could happen twice is a pickup somebody else could make.
- *
- * The files go over twice, and deliberately. `files` is the list, which is
- * what a build that knows about several reads. `file` is the first of them,
- * which is what a build from before this reads -- it knows nothing of
- * `files`, and a body with only `files` on it would be a `ready` session it
- * could make nothing of, on a session that no longer exists to ask again.
- * One file arriving out of a pairing that picked twelve is a poor answer;
- * losing the pairing is a worse one.
  */
-app.get('/session/:id', async (req, res) => {
+app.get('/session/:id', answered(async (req, res) => {
   const ref = db.collection('sessions').doc(req.params.id);
   const session = await ref.get();
   if (!session.exists) return res.status(404).json({error: 'no session'});
@@ -424,31 +427,15 @@ app.get('/session/:id', async (req, res) => {
   }
   if (it.status !== 'ready') return res.json({status: it.status});
   await ref.delete();
-  // `file` is a session written before this deploy -- one that was `ready`
-  // while the function was being replaced, whose ten minutes are still
-  // running. Reading only `files` there would drop the file the viewer
-  // picked.
-  const files = Array.isArray(it.files)
-      ? it.files
-      : (it.file ? [it.file] : []);
   res.json({
     status: 'ready',
     refreshToken: it.refreshToken,
     accessToken: it.accessToken,
     accessExpiresAt: it.accessExpiresAt.toDate().toISOString(),
-    files,
-    file: files[0],
+    files: Array.isArray(it.files) ? it.files : [],
   });
-});
+}));
 
-/**
- * 7. A fresh access token, later, for a film longer than one.
- *
- * This is the only reason the service outlives the pairing: an access
- * token is good for about an hour and a film is not, so the byte ranges
- * being read at minute sixty-one need a token nobody could mint without
- * the client secret.
- */
 /**
  * 5b. A phone running *this app* says who signed in and what they picked, in
  * one call.
@@ -478,7 +465,7 @@ app.get('/session/:id', async (req, res) => {
  * them against Cinemeta and shows them to somebody, and a name is not a
  * thing a client should be able to make up about somebody else's Drive.
  */
-app.post('/session/:id/android', async (req, res) => {
+app.post('/session/:id/android', answered(async (req, res) => {
   const {serverAuthCode} = req.body || {};
   const fileIds = (req.body || {}).fileIds;
   if (!serverAuthCode || typeof serverAuthCode !== 'string') {
@@ -556,9 +543,17 @@ app.post('/session/:id/android', async (req, res) => {
     files,
   });
   res.json({ok: true, files: files.length});
-});
+}));
 
-app.post('/refresh', async (req, res) => {
+/**
+ * 7. A fresh access token, later, for a film longer than one.
+ *
+ * This is the only reason the service outlives the pairing: an access
+ * token is good for about an hour and a film is not, so the byte ranges
+ * being read at minute sixty-one need a token nobody could mint without
+ * the client secret.
+ */
+app.post('/refresh', answered(async (req, res) => {
   const refreshToken = (req.body || {}).refreshToken;
   if (!refreshToken) return res.status(400).json({error: 'no refreshToken'});
   const key = crypto.createHash('sha256').update(refreshToken).digest('hex')
@@ -604,7 +599,7 @@ app.post('/refresh', async (req, res) => {
     accessToken: granted.access_token,
     expiresIn: granted.expires_in,
   });
-});
+}));
 
 exports.api = onRequest(
     {secrets: [CLIENT_ID, CLIENT_SECRET], region: 'europe-west1'},

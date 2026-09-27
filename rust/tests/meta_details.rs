@@ -18,6 +18,17 @@ use xtremio_core::api::server::ServerConfig;
 
 const META_ID: &str = "tt0063350";
 
+/// Held for the length of each recorder: `core_init` and `core_shutdown`
+/// act on the one process-wide state, and `--ignored` runs both recorders
+/// at once on separate threads, so one would shut down the core the other
+/// is recording from.
+static CORE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// [`CORE`], through a poison a failed recorder leaves behind.
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    CORE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn state(field: &str) -> serde_json::Value {
     serde_json::from_str(&core_get_state(field.to_owned()).expect(field)).expect("valid JSON")
 }
@@ -36,10 +47,10 @@ fn is_settled(loadable: &serde_json::Value) -> bool {
 #[test]
 #[ignore = "needs internet access to the default Stremio addons"]
 fn meta_details_and_player_for_a_public_domain_torrent() -> anyhow::Result<()> {
+    let _serial = serial();
     let tmp = tempfile::tempdir()?;
     core_init(CoreConfig {
         storage_dir: tmp.path().join("core").display().to_string(),
-        cache_dir: tmp.path().join("cache").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),
@@ -237,10 +248,10 @@ fn load_meta_details(stream_path: Option<serde_json::Value>) -> anyhow::Result<(
 #[test]
 #[ignore = "needs internet access to the default Stremio addons"]
 fn meta_details_for_a_series_and_a_selected_episode() -> anyhow::Result<()> {
+    let _serial = serial();
     let tmp = tempfile::tempdir()?;
     core_init(CoreConfig {
         storage_dir: tmp.path().join("core").display().to_string(),
-        cache_dir: tmp.path().join("cache").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),

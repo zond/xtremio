@@ -63,7 +63,6 @@ fn a_drive_play_keeps_its_place() -> anyhow::Result<()> {
 
     core_init(CoreConfig {
         storage_dir: storage.display().to_string(),
-        cache_dir: tmp.path().join("core-cache").display().to_string(),
         server: None,
     })?;
 

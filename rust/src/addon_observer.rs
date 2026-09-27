@@ -154,11 +154,7 @@ impl RequestId {
                 hasher.update(part.as_bytes());
             }
         }
-        let digest = hasher.finalize();
-        let mut path = String::with_capacity(PATH_DIGEST_HEX);
-        for byte in digest.iter().take(PATH_DIGEST_HEX / 2) {
-            path.push_str(&format!("{byte:02x}"));
-        }
+        let path = crate::addon_health::short_hex(&hasher.finalize(), PATH_DIGEST_HEX);
         Self {
             addon: key_for(&request.base),
             kind,
@@ -271,7 +267,8 @@ impl Walk<'_> {
             return;
         }
         if self.previous.get(&id) != Some(&outcome) {
-            self.sweep.observe(&loadable.request.base, kind, outcome);
+            self.sweep
+                .observe(&loadable.request.base, id.addon, kind, outcome);
         }
     }
 }

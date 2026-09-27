@@ -46,7 +46,6 @@ fn the_server_is_handed_the_pins_the_registry_names() -> anyhow::Result<()> {
     assert!(xtremio_core::env::storage_dir().is_none());
     core_init(CoreConfig {
         storage_dir: storage.display().to_string(),
-        cache_dir: tmp.path().join("core-cache").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: cache_root.display().to_string(),

@@ -506,14 +506,6 @@ class XtremioDrivePairingService implements DrivePairingService {
   /// is [DrivePairingUnreachable] and so is polled again -- a service that
   /// grew a fourth waiting state is not a pairing this screen should give
   /// up on.
-  ///
-  /// **Two spellings of the files, and `files` wins.** A `ready` body names
-  /// them as a list, and names the first of them again as `file` for a build
-  /// that knows nothing of lists. This build reads the list when there is
-  /// one and falls back to the single `file` when there is not, which is
-  /// what a service from before several could be picked answers with -- and
-  /// that is the whole of what an older service needs, since one file is a
-  /// list of one and nothing here treats it as a special case.
   static DrivePairingAnswer _readAnswer(Map<String, dynamic>? json) {
     final status = json?['status'];
     if (status == 'pending') return const DrivePairingWaiting(signedIn: false);
@@ -531,9 +523,7 @@ class XtremioDrivePairingService implements DrivePairingService {
     final listed = json?['files'];
     final files = <DrivePairingFile>[
       if (listed is List)
-        for (final one in listed) ?_pairedFile(one)
-      else
-        ?_pairedFile(json?['file']),
+        for (final one in listed) ?_pairedFile(one),
     ];
     // And a `ready` naming nothing this build can read is the same dead end
     // as one with no grant: the session is gone, so there is nothing to ask

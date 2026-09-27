@@ -432,7 +432,9 @@ class ServerConfig {
   /// App-support directory for settings.json, logs/, localFiles/.
   final String configDir;
 
-  /// App-cache directory for the torrent piece cache.
+  /// The torrent-data root a fresh install starts with: `dataDirectory`
+  /// in `lib/main.dart`, the app's external files directory on Android
+  /// (which the system does not purge) and the app cache elsewhere.
   final String cacheDir;
 
   const ServerConfig({required this.configDir, required this.cacheDir});

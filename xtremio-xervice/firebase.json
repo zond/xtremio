@@ -25,10 +25,6 @@
         "function": "api"
       },
       {
-        "source": "/probe/**",
-        "function": "api"
-      },
-      {
         "source": "/similar/**",
         "function": "similar"
       },

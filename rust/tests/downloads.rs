@@ -911,7 +911,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert!(xtremio_core::server::downloads()?.is_empty());
     core_init(CoreConfig {
         storage_dir: storage.display().to_string(),
-        cache_dir: tmp.path().join("cache").join("core").display().to_string(),
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: cache_root.display().to_string(),

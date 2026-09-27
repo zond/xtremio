@@ -27,7 +27,6 @@ fn config(root: &std::path::Path, run: &str) -> CoreConfig {
     let root = root.join(run);
     CoreConfig {
         storage_dir: storage.display().to_string(),
-        cache_dir: root.join("cache").join("core").display().to_string(),
         server: Some(ServerConfig {
             config_dir: root.join("server").display().to_string(),
             cache_dir: root.join("cache").join("server").display().to_string(),
@@ -69,13 +68,15 @@ const AN_ADDON: &str = "https://v3-cinemeta.strem.io/manifest.json";
 /// follow is shutdown's forced one.
 fn dirty_the_health_table(app: &AppState) {
     let mut sweep = Sweep::new();
+    let addon = Url::parse(AN_ADDON).expect("parse");
     sweep.observe(
-        &Url::parse(AN_ADDON).expect("parse"),
+        &addon,
+        addon_health::key_for(&addon),
         ResourceKind::Catalog,
         Outcome::Answered,
     );
     assert!(
-        addon_health::commit_in(app, sweep),
+        addon_health::commit_in_at(app, sweep, chrono::Utc::now()),
         "one addon answering is evidence"
     );
 }

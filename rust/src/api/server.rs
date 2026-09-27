@@ -19,7 +19,9 @@ use crate::guard::{guarded, guarded_ok};
 pub struct ServerConfig {
     /// App-support directory for settings.json, logs/, localFiles/.
     pub config_dir: String,
-    /// App-cache directory for the torrent piece cache.
+    /// The torrent-data root a fresh install starts with: `dataDirectory`
+    /// in `lib/main.dart`, the app's external files directory on Android
+    /// (which the system does not purge) and the app cache elsewhere.
     pub cache_dir: String,
 }
 

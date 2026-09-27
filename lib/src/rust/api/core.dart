@@ -41,21 +41,15 @@ class CoreConfig {
   /// Where stremio-core persists its buckets (`<key>.json`).
   final String storageDir;
 
-  /// Reserved for an HTTP cache; created but unused for now.
-  final String cacheDir;
-
   /// When set, the embedded server is started first and the engine is
-  /// pointed at it (unless the profile names a remote server).
+  /// pointed at it, whatever streaming server the profile held
+  /// (`crate::core::pin_to_embedded`).
   final ServerConfig? server;
 
-  const CoreConfig({
-    required this.storageDir,
-    required this.cacheDir,
-    this.server,
-  });
+  const CoreConfig({required this.storageDir, this.server});
 
   @override
-  int get hashCode => storageDir.hashCode ^ cacheDir.hashCode ^ server.hashCode;
+  int get hashCode => storageDir.hashCode ^ server.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -63,7 +57,6 @@ class CoreConfig {
       other is CoreConfig &&
           runtimeType == other.runtimeType &&
           storageDir == other.storageDir &&
-          cacheDir == other.cacheDir &&
           server == other.server;
 }
 

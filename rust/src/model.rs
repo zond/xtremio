@@ -264,7 +264,10 @@ impl XtremioModel {
     }
 
     /// Serializes one field to JSON: [`Self::snapshot`] and then
-    /// [`FieldSnapshot::into_json`], for a caller that holds nothing else.
+    /// [`FieldSnapshot::into_json`], for a caller that holds nothing else --
+    /// the tests, since `crate::core` takes the snapshot under the model's
+    /// lock and serializes it after.
+    #[cfg(test)]
     pub fn get_state_json(&self, field: &XtremioModelField) -> serde_json::Result<String> {
         self.snapshot(field)?.into_json()
     }
@@ -395,17 +398,14 @@ pub fn parse_field(name: &str) -> anyhow::Result<XtremioModelField> {
         .map_err(|_| anyhow::anyhow!("unknown model field `{name}`"))
 }
 
-/// The `snake_case` name of a field, as used in `NewState` events.
-pub fn field_name(field: &XtremioModelField) -> String {
+/// The `snake_case` name of a field, as used in `NewState` events: what
+/// the tests hold [`parse_field`] to.
+#[cfg(test)]
+fn field_name(field: &XtremioModelField) -> String {
     match serde_json::to_value(field) {
         Ok(serde_json::Value::String(name)) => name,
         _ => format!("{field:?}"),
     }
-}
-
-// Keep the serde bound explicit for `field_name`.
-fn _assert_field_serializes(field: &XtremioModelField) -> impl Serialize + '_ {
-    field
 }
 
 #[cfg(test)]
