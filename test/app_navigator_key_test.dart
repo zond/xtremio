@@ -3,22 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 
+import 'support/empty_board.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 /// A core with a `ctx` and a board that plans no catalogs, so the shell
 /// settles instead of spinning.
-FakeCoreClient coreWith(Map<String, dynamic> ctx) => FakeCoreClient(
-  state: {
-    CoreField.ctx: ctx,
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
+FakeCoreClient coreWith(Map<String, dynamic> ctx) =>
+    FakeCoreClient(state: {CoreField.ctx: ctx, CoreField.board: emptyBoard()});
 
 /// Pushes with nothing but the key — no [BuildContext] anywhere, which is
 /// the situation a link arriving from the platform is in.

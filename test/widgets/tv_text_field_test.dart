@@ -5,7 +5,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_text_entry.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
-const tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../support/tv.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

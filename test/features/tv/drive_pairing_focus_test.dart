@@ -11,7 +11,6 @@ import 'package:xtremio/shell/tv_density.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_drive_pairing_service.dart';
-import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
@@ -43,17 +42,7 @@ void main() {
     },
   );
 
-  Future<DriveAccount> account() async {
-    final prefs = AppPrefs.inMemory();
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
-    return drive;
-  }
+  Future<DriveAccount> account() => driveAccount();
 
   Widget harness(FakeCoreClient core, DriveAccount drive) => DeviceScope(
     profile: tv,

@@ -32,6 +32,7 @@ import 'package:xtremio/widgets/tv_text_field.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_diagnostics_client.dart';
 import '../../support/fake_downloads_client.dart';
+import '../../support/fake_drive_native_picker.dart';
 import '../../support/fake_drive_pairing_service.dart';
 import '../../support/fake_secret_store.dart';
 import '../../support/fake_server_cache.dart';
@@ -641,7 +642,7 @@ void main() {
         onTv(
           DriveNativePairScreen(
             sessionId: 'session-1',
-            picker: const _NoNativePicker(),
+            picker: const NoNativePicker(),
             service: FakeDrivePairingService(),
           ),
           pushed: true,
@@ -1291,7 +1292,7 @@ void main() {
           child: onTv(
             DriveNativePairScreen(
               sessionId: 'session-1',
-              picker: const _NoNativePicker(),
+              picker: const NoNativePicker(),
               service: FakeDrivePairingService(),
             ),
             pushed: true,
@@ -1622,17 +1623,4 @@ class _StuckCache implements ServerCacheControl {
   Future<Map<String, dynamic>> updateSettings(
     Map<String, dynamic> patch,
   ) async => throw StateError('server not running');
-}
-
-/// A picker that says this device has none, which is the answer on every
-/// device this suite runs on and the state that draws both stops.
-class _NoNativePicker implements DriveNativePicker {
-  const _NoNativePicker();
-
-  @override
-  Future<bool> available() async => false;
-
-  @override
-  Future<DriveNativePickResult> pick() async =>
-      const DriveNativePickUnavailable();
 }

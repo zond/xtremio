@@ -10,8 +10,8 @@ import 'package:xtremio/features/player/up_next_card.dart';
 import '../../support/fake_cast_client.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fake_drive_file_opener.dart';
+import '../../support/fake_drive_pairing_service.dart';
 import '../../support/fake_prefs_client.dart';
-import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -296,14 +296,7 @@ void main() {
 
   /// A paired device with the next episode's file linked and matched to it.
   Future<DriveAccount> withNextEpisodeOnDrive() async {
-    final prefs = AppPrefs(client: FakePrefsClient());
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefsClient: FakePrefsClient());
     await drive.link(
       refreshToken: 'a-refresh-token',
       files: [

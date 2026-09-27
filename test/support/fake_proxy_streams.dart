@@ -12,11 +12,6 @@ class FakeProxyStreams implements ProxyStreamControl {
   /// there is nothing to ask about.
   final List<String> closed = [];
 
-  /// What [closeProxyStreams] answers -- how many live streams the server
-  /// would say carried the token. One by default; zero is the ordinary
-  /// answer for a player whose stream had already finished.
-  int liveStreams = 1;
-
   /// Thrown instead of answering, when set. The real call is a synchronous
   /// FFI hop and a panic in the core crosses it as an exception, which a
   /// teardown must survive: it is on the way to releasing the player.
@@ -33,6 +28,7 @@ class FakeProxyStreams implements ProxyStreamControl {
     callLog?.add('close-streams');
     closed.add(token);
     if (failure case final failure?) throw failure;
-    return liveStreams;
+    // How many live streams the server would say carried the token.
+    return 1;
   }
 }

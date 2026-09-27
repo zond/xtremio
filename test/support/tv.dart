@@ -112,9 +112,6 @@ Set<FocusMark> focusMarks() {
   return {if (_ringLit(context)) FocusMark.ring, ..._floorMarks(context)};
 }
 
-/// The remote is standing on something this app marks.
-bool focusIsMarked() => focusMarks().isNotEmpty;
-
 /// The nearest [FocusHighlight] on either side of the focused node, lit.
 ///
 /// Either side, because the two families put it in different places: a

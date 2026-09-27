@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/archive_route.dart';
 import 'package:xtremio/features/player/archive_sniff.dart';
 
+import '../../support/real_http.dart';
+
 /// Sending a container to the streaming server instead of giving up on it.
 ///
 /// The server reads an archive or a disc image as ranges of itself
@@ -16,7 +18,6 @@ import 'package:xtremio/features/player/archive_sniff.dart';
 void main() {
   group('routeArchive', () {
     late HttpServer server;
-    HttpOverrides? overrides;
 
     /// Every request the server saw, as `METHOD <request-target>` with the
     /// target exactly as it arrived -- which is the point for a torrent
@@ -41,10 +42,7 @@ void main() {
     late Object? queryBody;
 
     setUp(() async {
-      // The test binding answers every request with a 400 of its own;
-      // these talk to a real server on the loopback.
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       seen = [];
       created = [];
       createStatus = HttpStatus.ok;
@@ -88,7 +86,6 @@ void main() {
     });
 
     tearDown(() async {
-      HttpOverrides.global = overrides;
       await server.close(force: true);
     });
 

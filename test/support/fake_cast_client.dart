@@ -187,10 +187,6 @@ class FakeLanMediaControl implements LanMediaControl {
   /// The address a start reports.
   String address;
 
-  /// When set, a start throws it (the server is not running, the bind
-  /// failed), and nothing is left listening.
-  Object? startError;
-
   bool running = false;
 
   /// Every `setLanMedia`, in order: the listener's life as the screen ran
@@ -220,13 +216,7 @@ class FakeLanMediaControl implements LanMediaControl {
   Future<String?> setLanMedia({required bool enabled}) async {
     toggles.add(enabled);
     if (enabled && enablePending != null) await enablePending;
-    // Above the failure below because the server resets above its own: a
-    // start that cannot bind has still ended the last session's count.
     requestsServed = 0;
-    if (enabled && startError != null) {
-      running = false;
-      throw startError!;
-    }
     running = enabled;
     return enabled ? address : null;
   }

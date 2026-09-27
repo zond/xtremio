@@ -10,6 +10,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fixtures.dart';
+import '../support/tv.dart';
 
 /// Settings → Player / Subtitles / Interface / Streaming server: every
 /// control dispatches `UpdateSettings` with the recorded settings map and
@@ -362,8 +363,6 @@ void main() {
   });
 
   group('share while idle', () {
-    const tv = DeviceProfile(isTv: true, hasTouch: false);
-
     Finder theSwitch() => find.byKey(settingKey(AppPrefs.shareWhileIdleKey));
 
     testWidgets('starts on wherever it is drawn, and says what it does', (
@@ -427,8 +426,6 @@ void main() {
   });
 
   group('bold focus', () {
-    const tv = DeviceProfile(isTv: true, hasTouch: false);
-
     Finder theSwitch() => find.byKey(settingKey(AppPrefs.focusEmphasisKey));
 
     testWidgets('a television is offered Bold, and it goes to the '

@@ -6,6 +6,8 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/similar/similar_titles.dart';
 import 'package:xtremio/features/similar/xtremio_similar_titles.dart';
 
+import '../../support/real_http.dart';
+
 /// Asking the xtremio-xervice server what a title is like, over a server on
 /// the loopback that answers what `xtremio-xervice/functions/similar.js` does.
 ///
@@ -16,7 +18,6 @@ import 'package:xtremio/features/similar/xtremio_similar_titles.dart';
 void main() {
   group('XtremioSimilarTitles', () {
     late HttpServer server;
-    HttpOverrides? overrides;
 
     /// Every request the server was sent: its method and path.
     late List<String> requests;
@@ -32,10 +33,7 @@ void main() {
         );
 
     setUp(() async {
-      // The test binding answers every request with a 400 of its own;
-      // this one talks to a real server on the loopback.
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       requests = [];
       answer(HttpStatus.ok, {'titles': const [], 'version': 1});
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -59,7 +57,6 @@ void main() {
 
     tearDown(() async {
       await server.close(force: true);
-      HttpOverrides.global = overrides;
     });
 
     XtremioSimilarTitles provider({

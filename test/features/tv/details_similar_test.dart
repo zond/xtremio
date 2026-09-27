@@ -18,6 +18,7 @@ import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/stream_groups.dart';
 import '../../support/tv.dart';
 
 /// The "More like this" rung: when there is one at all, and what an answer
@@ -29,26 +30,10 @@ import '../../support/tv.dart';
 /// completes when it wants the answer to land.
 const movieId = 'tt0063350';
 
-Map<String, dynamic> streamGroup(
-  String host,
-  List<Map<String, dynamic>> streams,
-) => {
-  'request': {
-    'base': 'https://$host/manifest.json',
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {'type': 'Ready', 'content': streams},
-};
-
 /// The film, with one addon answering.
 Map<String, dynamic> film() => loadMetaDetailsFixture()
   ..['streams'] = [
-    streamGroup('alpha.example', [
+    readyGroup('alpha.example', [
       {
         'infoHash': '1'.padLeft(40, '0'),
         'name': 'Alpha 1080p',

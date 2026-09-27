@@ -18,6 +18,7 @@ import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/stream_groups.dart';
 import '../../support/tv.dart';
 
 /// The ladder itself: which rung a title opens on, what select and down do
@@ -29,19 +30,6 @@ import '../../support/tv.dart';
 const movieId = 'tt0063350';
 const seriesId = 'tt0903747';
 const pilotId = '$seriesId:1:1';
-
-Map<String, dynamic> streamGroup(
-  String host,
-  String type,
-  String id,
-  List<Map<String, dynamic>> streams,
-) => {
-  'request': {
-    'base': 'https://$host/manifest.json',
-    'path': {'resource': 'stream', 'type': type, 'id': id, 'extra': <Object>[]},
-  },
-  'content': {'type': 'Ready', 'content': streams},
-};
 
 Map<String, dynamic> torrent(String hash, String name, String description) => {
   'infoHash': hash,
@@ -75,7 +63,7 @@ Map<String, dynamic> plotted(Map<String, dynamic> fixture) {
 /// The film, with one addon answering.
 Map<String, dynamic> film() => loadMetaDetailsFixture()
   ..['streams'] = [
-    streamGroup('alpha.example', 'movie', movieId, [
+    readyGroup('alpha.example', [
       torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
     ]),
   ];
@@ -117,11 +105,11 @@ Map<String, dynamic> playedSeries() {
 Map<String, dynamic> series() =>
     loadSeriesEpisodeMetaDetailsFixture()
       ..['streams'] = [
-        streamGroup('alpha.example', 'series', pilotId, [
+        readyGroup('alpha.example', type: 'series', id: pilotId, [
           torrent(hash(1), 'Pilot 1080p', '👤 20 💾 2 GB'),
         ]),
         {
-          ...streamGroup('mirror.example', 'series', pilotId, const []),
+          ...streamGroup('mirror.example', null, type: 'series', id: pilotId),
           'content': {
             'type': 'Err',
             'content': {
@@ -495,13 +483,7 @@ void main() {
         film()
           ..['streams'] = [
             ...(film()['streams'] as List<dynamic>),
-            {
-              ...streamGroup('quiet.example', 'movie', movieId, const []),
-              'content': {
-                'type': 'Err',
-                'content': {'type': 'EmptyContent'},
-              },
-            },
+            emptyGroup('quiet.example'),
           ],
         sectioned: true,
       );
@@ -625,13 +607,7 @@ void main() {
       // and a press down out of it that nothing can answer is left alone
       // rather than swallowed -- a dead D-pad is the one outcome worse
       // than landing somewhere unexpected.
-      final loading = film()
-        ..['streams'] = [
-          {
-            ...streamGroup('slow.example', 'movie', movieId, const []),
-            'content': null,
-          },
-        ];
+      final loading = film()..['streams'] = [streamGroup('slow.example', null)];
       await mount(tester, loading, sectioned: true, settle: false);
 
       expect(rungs(tester), [kSourcesLabel]);
@@ -665,10 +641,7 @@ void main() {
       // reach the line and then leave it, both.
       final loading = series()
         ..['streams'] = [
-          {
-            ...streamGroup('slow.example', 'series', pilotId, const []),
-            'content': null,
-          },
+          streamGroup('slow.example', null, type: 'series', id: pilotId),
         ];
       await mount(tester, loading, type: 'series', id: seriesId, settle: false);
 

@@ -22,42 +22,17 @@ import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/stream_groups.dart';
 import '../../support/tv.dart';
 
 const seriesId = 'tt0903747';
 const pilotId = '$seriesId:1:1';
 
-/// A Torrentio-style stream group for the selected episode, to graft onto
-/// the series fixture (the default addons have no torrents for it).
-Map<String, dynamic> torrentGroup(String videoId) => {
-  'request': {
-    'base': 'https://torrentio.example/manifest.json',
-    'path': {
-      'resource': 'stream',
-      'type': 'series',
-      'id': videoId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {
-    'type': 'Ready',
-    'content': [
-      {
-        'infoHash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        'fileIdx': 3,
-        'name': 'Torrentio\n1080p',
-        'description': 'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB',
-        'behaviorHints': {'filename': 'Breaking.Bad.S01E01.1080p.mkv'},
-      },
-    ],
-  },
-};
-
 /// The series episode fixture (S1E1 selected and watched) with a playable
 /// torrent for the pilot.
 Map<String, dynamic> seriesWithTorrent() {
   final fixture = loadSeriesEpisodeMetaDetailsFixture();
-  (fixture['streams'] as List<dynamic>).add(torrentGroup(pilotId));
+  (fixture['streams'] as List<dynamic>).add(torrentioEpisodeGroup(pilotId));
   return fixture;
 }
 

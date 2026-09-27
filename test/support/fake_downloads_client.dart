@@ -52,6 +52,14 @@ class FakeDownloadsClient implements DownloadsClient {
   /// round trip, and what the feed says during it is the test.
   Future<void>? listPending;
 
+  /// Awaited before [add], [open] or [list] does anything at all -- before
+  /// the call is even recorded -- so a test can hold a call back and let it
+  /// through when it wants the answer to land: the tile tapped again while
+  /// an `open` is out, the row looked at while an `add` is on its way.
+  Future<void>? addGate;
+  Future<void>? openGate;
+  Future<void>? listGate;
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
   Object? openError;
@@ -94,6 +102,7 @@ class FakeDownloadsClient implements DownloadsClient {
 
   @override
   Future<DownloadAddResult> add(DownloadRequest request) async {
+    if (addGate case final gate?) await gate;
     added.add(request);
     callLog?.add('downloads.add');
     if (pending != null) await pending;
@@ -139,6 +148,7 @@ class FakeDownloadsClient implements DownloadsClient {
 
   @override
   Future<DownloadsRegistry> list() async {
+    if (listGate case final gate?) await gate;
     callLog?.add('downloads.list');
     final error = listError;
     if (error != null) throw error;
@@ -147,21 +157,18 @@ class FakeDownloadsClient implements DownloadsClient {
     return snapshot;
   }
 
-  /// What [startFreshRegistry] does here: records the call, and throws
-  /// `startFreshError` when a test wants the refusal.
-  Object? startFreshError;
+  /// What [startFreshRegistry] does here: records the call.
   int startFreshCalls = 0;
 
   @override
   Future<void> startFreshRegistry() async {
     callLog?.add('downloads.startFresh');
     startFreshCalls++;
-    final error = startFreshError;
-    if (error != null) throw error;
   }
 
   @override
   Future<DownloadOpenResult> open(String key) async {
+    if (openGate case final gate?) await gate;
     opens.add(key);
     callLog?.add('downloads.open');
     if (pending != null) await pending;

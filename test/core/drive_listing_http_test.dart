@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
+import '../support/real_http.dart';
+
 /// The two calls a reload makes, answered by a server on the loopback
 /// rather than by a stub of the parsing.
 ///
@@ -23,7 +25,6 @@ const String _accessToken = 'fake-access-token-for-tests-only';
 void main() {
   group('a listing over the wire', () {
     late HttpServer server;
-    HttpOverrides? overrides;
 
     /// Every request the server saw, as `METHOD <request-target>`.
     late List<String> seen;
@@ -45,10 +46,7 @@ void main() {
     late XtremioDriveFileLister lister;
 
     setUp(() async {
-      // The test binding answers every request with a 400 of its own; this
-      // talks to a real server on the loopback.
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       seen = [];
       authorised = [];
       redirectTo = null;
@@ -99,7 +97,6 @@ void main() {
 
     tearDown(() async {
       await server.close(force: true);
-      HttpOverrides.global = overrides;
     });
 
     test(

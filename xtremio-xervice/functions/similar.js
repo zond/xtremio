@@ -59,7 +59,7 @@ const ANSWER_SHAPE =
   'Answer JSON only: {"titles":[{"title":"","year":0,' +
   '"kind":"film|series","why":"under 12 words"}]}.';
 
-/** The app's `askForSimilar`, word for word. */
+/** The question the app used to ask itself, kept word for word: `tool/recommendations/` measured this wording. */
 function question(subject, about) {
   if (about === 'series') {
     return `Name ${COUNT} television series or films to watch next for ` +

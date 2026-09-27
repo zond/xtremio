@@ -8,6 +8,7 @@ import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
+import '../support/empty_board.dart';
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
 
@@ -579,11 +580,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     // A profile without a single catalog: the engine plans nothing.
-    core.setState(CoreField.board, {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    });
+    core.setState(CoreField.board, emptyBoard());
     await tester.pumpAndSettle();
     expect(find.text('No catalogs'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);

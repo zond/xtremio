@@ -10,20 +10,9 @@ import 'package:xtremio/features/downloads/downloads_service.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
-import 'support/fake_core_client.dart';
+import 'support/empty_board.dart';
 import 'support/fake_downloads_client.dart';
 import 'support/fake_sharing.dart';
-
-/// A core whose board plans no catalogs, so the shell settles.
-FakeCoreClient emptyBoardCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
 
 /// The client every screen under the shell would reach for.
 DownloadsClient downloadsOf(WidgetTester tester) =>

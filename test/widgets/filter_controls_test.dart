@@ -6,7 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/filter_controls.dart';
 
-import '../support/tv.dart' show FocusMark, focusIn, focusMarks;
+import '../support/tv.dart' show FocusMark, focusIn, focusMarks, press, tv;
 
 void main() {
   const options = [
@@ -69,7 +69,7 @@ void main() {
     // the moment the theme animates. Hence the ring, by hand.
     await tester.pumpWidget(
       DeviceScope(
-        profile: const DeviceProfile(isTv: true, hasTouch: false),
+        profile: tv,
         child: MaterialApp(
           theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
           home: Scaffold(
@@ -119,8 +119,6 @@ void main() {
   });
 
   group('on a TV the menu is a button', () {
-    const tv = DeviceProfile(isTv: true, hasTouch: false);
-
     Widget tvHarness(Widget child) =>
         DeviceScope(profile: tv, child: harness(child));
 
@@ -135,11 +133,6 @@ void main() {
       return texts.evaluate().isEmpty
           ? null
           : tester.widget<Text>(texts.first).data;
-    }
-
-    Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
-      await tester.sendKeyEvent(key);
-      await tester.pumpAndSettle();
     }
 
     testWidgets('reads the label and the selection, and is no dropdown', (

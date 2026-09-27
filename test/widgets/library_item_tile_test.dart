@@ -6,7 +6,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
 
-const tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../support/tv.dart';
 
 /// A series with an episode in progress, so the tile has a second line.
 final lanterns = LibraryItemView({

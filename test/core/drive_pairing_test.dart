@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/deep_link.dart';
 
 import '../support/fake_drive_pairing_service.dart';
+import '../support/real_http.dart';
 
 /// The television's two calls against the pairing service, answered by a
 /// server on the loopback rather than by a stub of the parsing.
@@ -20,7 +21,6 @@ import '../support/fake_drive_pairing_service.dart';
 void main() {
   group('the pairing service', () {
     late HttpServer server;
-    HttpOverrides? overrides;
 
     /// Every request the server saw, as `METHOD <request-target>`.
     late List<String> seen;
@@ -37,10 +37,7 @@ void main() {
     late Object? collectBody;
 
     setUp(() async {
-      // The test binding answers every request with a 400 of its own; this
-      // talks to a real server on the loopback.
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       seen = [];
       sent = [];
       sessionStatus = HttpStatus.ok;
@@ -75,7 +72,6 @@ void main() {
     });
 
     tearDown(() async {
-      HttpOverrides.global = overrides;
       await server.close(force: true);
     });
 

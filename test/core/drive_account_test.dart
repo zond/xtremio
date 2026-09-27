@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_report.dart';
 
 import '../support/diagnostics_capture.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_secret_store.dart';
 
@@ -23,17 +24,7 @@ final DateTime _at = DateTime.utc(2026, 9, 25, 12);
 Future<DriveAccount> _account({
   required FakePrefsClient prefsClient,
   required FakeSecretStore secrets,
-}) async {
-  final prefs = AppPrefs(client: prefsClient);
-  await prefs.load();
-  final account = DriveAccount(prefs: prefs, secrets: secrets, now: () => _at);
-  await account.load();
-  addTearDown(() {
-    account.dispose();
-    prefs.dispose();
-  });
-  return account;
-}
+}) => driveAccount(prefsClient: prefsClient, secrets: secrets, now: () => _at);
 
 void main() {
   group('a pairing', () {

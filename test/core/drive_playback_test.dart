@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
 import '../support/fake_drive_file_opener.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 
 /// Not a token. A marker a test can search a URL, a stream JSON and the log
 /// for; a real refresh token must never be written into a fixture, a test
@@ -26,18 +26,10 @@ Future<DriveAccount> _account({
   FakePrefsClient? prefsClient,
   bool linked = true,
 }) async {
-  final prefs = AppPrefs(client: prefsClient ?? FakePrefsClient());
-  await prefs.load();
-  final account = DriveAccount(
-    prefs: prefs,
-    secrets: FakeSecretStore(),
+  final account = await driveAccount(
+    prefsClient: prefsClient ?? FakePrefsClient(),
     now: () => _at,
   );
-  await account.load();
-  addTearDown(() {
-    account.dispose();
-    prefs.dispose();
-  });
   if (linked) {
     await account.linkFile(
       refreshToken: _token,

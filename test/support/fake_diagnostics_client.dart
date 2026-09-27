@@ -7,7 +7,6 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
     DiagnosticsSnapshot? snapshot,
     this.platform = 'android',
     this.os = 'Android 14 (API 34)',
-    this.storageReport,
     this.dht = const DhtStatus(
       enabled: false,
       nodes: 0,
@@ -27,15 +26,11 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
 
   final DiagnosticsSnapshot _snapshot;
 
-  /// What [storage] answers, or null for a server that is not running --
-  /// which the report must survive with an `unknown` line.
-  ServerStorage? storageReport;
-
+  /// A server that is not running, which the report must survive with an
+  /// `unknown` line.
   @override
   Future<ServerStorage> storage() async {
-    final report = storageReport;
-    if (report == null) throw StateError('embedded server is not running');
-    return report;
+    throw StateError('embedded server is not running');
   }
 
   /// What [dhtStatus] answers. Disabled by default, matching "the server is

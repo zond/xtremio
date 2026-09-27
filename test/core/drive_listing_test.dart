@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
 import '../support/fake_drive_file_lister.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 
 /// Nothing in this repository is a token. This string is a marker a test
 /// can search for -- it is not a credential and not the shape of one
@@ -21,18 +21,10 @@ const LinkedDriveMatch _arrival = LinkedDriveMatch(
 
 /// A linked account holding [files], most recently linked first.
 Future<DriveAccount> _account(List<LinkedDriveFile> files) async {
-  final prefs = AppPrefs(client: FakePrefsClient());
-  await prefs.load();
-  final account = DriveAccount(
-    prefs: prefs,
-    secrets: FakeSecretStore(),
+  final account = await driveAccount(
+    prefsClient: FakePrefsClient(),
     now: () => _at,
   );
-  await account.load();
-  addTearDown(() {
-    account.dispose();
-    prefs.dispose();
-  });
   await account.link(refreshToken: _token, files: files);
   return account;
 }
@@ -334,14 +326,7 @@ void main() {
     test(
       'nothing is asked for at all with no credential to ask with',
       () async {
-        final prefs = AppPrefs(client: FakePrefsClient());
-        await prefs.load();
-        final account = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-        await account.load();
-        addTearDown(() {
-          account.dispose();
-          prefs.dispose();
-        });
+        final account = await driveAccount(prefsClient: FakePrefsClient());
         final lister = FakeDriveFileLister();
 
         final outcome = await reloadLinkedDriveFiles(

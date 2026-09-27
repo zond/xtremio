@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
+import '../../support/tv.dart';
+
 /// The card the player offers when an episode ends. Its layout, which is
 /// the whole of it: what it says is a countdown and two buttons.
 void main() {
-  const tv = DeviceProfile(isTv: true, hasTouch: false);
-
   /// A title long enough to take the card out to its full width, so that
   /// where the buttons sit inside it is a question with an answer.
   const title = 'The One With All The Rest Of The Words In The Episode Name';

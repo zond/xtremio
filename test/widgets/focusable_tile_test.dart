@@ -8,9 +8,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
-import '../support/tv.dart' show FocusMark, focusMarks;
-
-const tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../support/tv.dart' show FocusMark, focusMarks, tv;
 
 /// [child] in a Material app, on a TV unless [device] says otherwise and
 /// under [prefs] when the emphasis matters.

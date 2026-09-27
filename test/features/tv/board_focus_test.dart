@@ -9,8 +9,7 @@ import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fixtures.dart';
-
-const tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../../support/tv.dart';
 
 FakeCoreClient fakeCore() => FakeCoreClient(
   state: {
@@ -53,17 +52,6 @@ bool ringOf(WidgetTester tester, String name) => tester
       find.ancestor(of: find.text(name), matching: find.byType(FocusRing)),
     )
     .focused;
-
-void useScreen(WidgetTester tester, Size size) {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-}
-
-Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
-  await tester.sendKeyEvent(key);
-  await tester.pumpAndSettle();
-}
 
 void main() {
   testWidgets('the focused poster shows the ring, and only that one', (

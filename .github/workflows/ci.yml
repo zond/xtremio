@@ -105,10 +105,11 @@ jobs:
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
       - run: flutter pub get
 
-      - run: dart format --set-exit-if-changed .
+      - run: dart format --output=none --set-exit-if-changed lib test
 
       - run: flutter analyze
 
@@ -135,6 +136,7 @@ jobs:
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
       # A release tag, not `main`: the action runs with this job's token and
       # installs binaries the next steps execute, so what it is has to be
@@ -152,6 +154,6 @@ jobs:
       - name: Generated bindings must be committed
         run: git diff --exit-code -- lib/src/rust rust/src/frb_generated.rs
 
-  # Native platform builds (flutter build linux / apk, Rust cross-compiled
-  # through cargokit + the NDK) are not gated yet; add them once the core
-  # vertical slice is stable.
+  # Native platform builds (flutter build for every platform, Rust
+  # cross-compiled through cargokit + the NDK) live in build.yml: on tags,
+  # weekly and on request, not on every push.

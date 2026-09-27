@@ -7,8 +7,8 @@ import 'package:xtremio/features/drive/drive_match.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
 
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 
 /// What a Drive filename is read as, and which catalogue answers are
 /// accepted as being it.
@@ -309,14 +309,7 @@ void main() {
 
   group('a pass over the linked files', () {
     Future<DriveAccount> account({List<String> names = const []}) async {
-      final prefs = AppPrefs(client: FakePrefsClient());
-      await prefs.load();
-      final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-      await drive.load();
-      addTearDown(() {
-        drive.dispose();
-        prefs.dispose();
-      });
+      final drive = await driveAccount(prefsClient: FakePrefsClient());
       for (final (index, name) in names.indexed) {
         await drive.linkFile(
           refreshToken: 'token',

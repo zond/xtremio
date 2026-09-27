@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
+import 'support/empty_board.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_playback_engine.dart';
 import 'support/fake_sharing.dart';
@@ -21,16 +22,8 @@ Map<String, dynamic> ctxDecoding({required bool hardware}) {
 
 /// A core with the given `ctx` and a board that plans no catalogs (so the
 /// Board section settles instead of spinning).
-FakeCoreClient coreWith(Map<String, dynamic> ctx) => FakeCoreClient(
-  state: {
-    CoreField.ctx: ctx,
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
+FakeCoreClient coreWith(Map<String, dynamic> ctx) =>
+    FakeCoreClient(state: {CoreField.ctx: ctx, CoreField.board: emptyBoard()});
 
 void main() {
   /// Every `hardwareDecoding` the app asked an engine to be built with.

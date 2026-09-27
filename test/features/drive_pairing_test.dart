@@ -10,11 +10,12 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/external_link.dart';
 
 import '../support/diagnostics_capture.dart';
+import '../support/fake_drive_native_picker.dart';
 import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_link_opener.dart';
 import '../support/fake_secret_store.dart';
+import '../support/tv.dart';
 
-const DeviceProfile _tv = DeviceProfile(isTv: true, hasTouch: false);
 const DeviceProfile _phone = DeviceProfile(isTv: false, hasTouch: true);
 const DeviceProfile _desktop = DeviceProfile(isTv: false, hasTouch: false);
 
@@ -26,22 +27,11 @@ const DeviceProfile _desktop = DeviceProfile(isTv: false, hasTouch: false);
 Future<DriveAccount> _account({
   FakeSecretStore? secrets,
   DrivePairingService? service,
-}) async {
-  final prefs = AppPrefs.inMemory();
-  await prefs.load();
-  final account = DriveAccount(
-    prefs: prefs,
-    secrets: secrets ?? FakeSecretStore(),
-    now: () => pairingNow,
-    pairingService: service ?? FakeDrivePairingService(),
-  );
-  await account.load();
-  addTearDown(() {
-    account.dispose();
-    prefs.dispose();
-  });
-  return account;
-}
+}) => driveAccount(
+  secrets: secrets,
+  now: () => pairingNow,
+  pairingService: service ?? FakeDrivePairingService(),
+);
 
 Widget _harness({
   required bool isTv,
@@ -50,7 +40,7 @@ Widget _harness({
   ExternalLinkOpener? opener,
   DriveNativePicker? picker,
 }) => DeviceScope(
-  profile: isTv ? _tv : _phone,
+  profile: isTv ? tv : _phone,
   child: ExternalLinkScope(
     opener: opener ?? FakeLinkOpener(),
     child: DriveAccountScope(
@@ -59,47 +49,12 @@ Widget _harness({
         home: DrivePairingScreen(
           service: service,
           now: () => pairingNow,
-          picker: picker ?? const _NoNativePicker(),
+          picker: picker ?? const NoNativePicker(),
         ),
       ),
     ),
   ),
 );
-
-/// A device with no native picker: what every desktop is, and what a phone
-/// without Play services is. The browser is the answer there, which is what
-/// this app did everywhere before the native path existed.
-class _NoNativePicker implements DriveNativePicker {
-  const _NoNativePicker();
-
-  @override
-  Future<bool> available() async => false;
-
-  @override
-  Future<DriveNativePickResult> pick() async =>
-      const DriveNativePickUnavailable();
-}
-
-/// A device that picks natively, answering what a test tells it to.
-class _FakeNativePicker implements DriveNativePicker {
-  _FakeNativePicker(this.answer, {this.gate});
-
-  final DriveNativePickResult answer;
-
-  /// Held open, so a test can look at the screen *while* the picker is up.
-  final Completer<void>? gate;
-  int picks = 0;
-
-  @override
-  Future<bool> available() async => true;
-
-  @override
-  Future<DriveNativePickResult> pick() async {
-    picks++;
-    if (gate != null) await gate!.future;
-    return answer;
-  }
-}
 
 const _picked = DriveNativePicked(
   serverAuthCode: 'fake-server-auth-code-for-tests-only',
@@ -173,7 +128,7 @@ void main() {
       // screen in front of it and gone to their library, so nothing was
       // polling and the session sat at `ready` until it expired. Measured on
       // a real phone, three times, with every other part working.
-      final picker = _FakeNativePicker(_picked);
+      final picker = FakeNativePicker([_picked]);
       final opener = FakeLinkOpener();
       final service = FakeDrivePairingService(
         answers: [
@@ -249,7 +204,7 @@ void main() {
           isTv: false,
           service: service,
           account: account,
-          picker: _FakeNativePicker(_picked, gate: gate),
+          picker: FakeNativePicker([_picked], gate: gate),
         ),
       );
       await tester.pump();
@@ -286,7 +241,7 @@ void main() {
           isTv: false,
           service: service,
           account: account,
-          picker: _FakeNativePicker(_picked, gate: gate),
+          picker: FakeNativePicker([_picked], gate: gate),
         ),
       );
       await tester.pump();
@@ -336,7 +291,7 @@ void main() {
                         builder: (_) => DrivePairingScreen(
                           service: service,
                           now: () => pairingNow,
-                          picker: _FakeNativePicker(_picked),
+                          picker: FakeNativePicker([_picked]),
                         ),
                       ),
                     ),
@@ -387,7 +342,7 @@ void main() {
           isTv: false,
           service: service,
           account: account,
-          picker: _FakeNativePicker(_picked),
+          picker: FakeNativePicker([_picked]),
         ),
       );
       await tester.pumpAndSettle();
@@ -418,7 +373,7 @@ void main() {
           service: FakeDrivePairingService(),
           account: await _account(),
           opener: opener,
-          picker: _FakeNativePicker(_picked, gate: gate),
+          picker: FakeNativePicker([_picked], gate: gate),
         ),
       );
       await tester.pump();
@@ -441,7 +396,7 @@ void main() {
       // No QR, no page, and a session that is still perfectly good. Before
       // this the screen said it was "waiting for your phone" -- no phone was
       // ever involved -- and offered nothing to press.
-      final picker = _FakeNativePicker(const DriveNativePickCancelled());
+      final picker = FakeNativePicker([const DriveNativePickCancelled()]);
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
         _harness(
@@ -476,7 +431,7 @@ void main() {
           isTv: false,
           service: FakeDrivePairingService(),
           account: await _account(),
-          picker: _FakeNativePicker(const DriveNativePickCancelled()),
+          picker: FakeNativePicker([const DriveNativePickCancelled()]),
         ),
       );
       await tester.pumpAndSettle();
@@ -520,7 +475,7 @@ void main() {
       // Even with a picker that says it is available -- a television running
       // Play services is not a lie -- the QR is the point, because the
       // Picker is a thing you touch and a remote is not.
-      final picker = _FakeNativePicker(_picked);
+      final picker = FakeNativePicker([_picked]);
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
         _harness(
@@ -565,7 +520,7 @@ void main() {
                   now: () => pairingNow,
                   // A desktop has no native picker; said out loud so the
                   // test is not at the mercy of a platform channel.
-                  picker: const _NoNativePicker(),
+                  picker: const NoNativePicker(),
                 ),
               ),
             ),
@@ -958,7 +913,7 @@ void main() {
           isTv: false,
           service: service,
           account: account,
-          picker: _FakeNativePicker(_picked, gate: gate),
+          picker: FakeNativePicker([_picked], gate: gate),
         ),
       );
       await tester.pump();

@@ -3,18 +3,16 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_trace.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
-import 'package:xtremio/shell/device_profile.dart';
 
-import '../support/fake_core_client.dart';
+import '../support/empty_board.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_sharing.dart';
+import '../support/tv.dart';
 
 /// Whether the embedded server goes on uploading to other people when
 /// nothing is playing: the default a device gets, and the choice reaching
 /// the server.
 void main() {
-  const tv = DeviceProfile(isTv: true, hasTouch: false);
-
   /// Lets the policy's writes land.
   Future<void> settle(IdleSharingPolicy policy) async {
     await Future<void>.delayed(Duration.zero);
@@ -307,15 +305,7 @@ void main() {
       final server = RecordingServerSettings();
       await tester.pumpWidget(
         XtremioApp(
-          core: FakeCoreClient(
-            state: {
-              CoreField.board: {
-                'selected': {'type': null, 'extra': <Object>[]},
-                'catalogs': <Object>[],
-                'catalogLabels': <Object>[],
-              },
-            },
-          ),
+          core: emptyBoardCore(),
           device: tv,
           prefs: AppPrefs(
             client: FakePrefsClient({AppPrefs.shareWhileIdleKey: false}),

@@ -16,44 +16,10 @@ import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/stream_groups.dart';
 import '../../support/tv.dart';
 
 const movieId = 'tt0063350';
-
-/// One addon's stream group for the movie.
-Map<String, dynamic> group(String host, List<Map<String, dynamic>> streams) => {
-  'request': {
-    'base': 'https://$host/manifest.json',
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {'type': 'Ready', 'content': streams},
-};
-
-/// An addon that answered with an error the engine calls "nothing here".
-Map<String, dynamic> emptyGroup(String host) => {
-  ...group(host, const []),
-  'content': {
-    'type': 'Err',
-    'content': {'type': 'EmptyContent'},
-  },
-};
-
-/// An addon that could not answer at all.
-Map<String, dynamic> failedGroup(String host) => {
-  ...group(host, const []),
-  'content': {
-    'type': 'Err',
-    'content': {
-      'type': 'Env',
-      'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
-    },
-  },
-};
 
 /// A torrent stream, named and described the way an addon writes them.
 Map<String, dynamic> torrent(String hash, String name, String description) => {
@@ -266,10 +232,10 @@ Map<String, dynamic> externalStream(String name) => {
 /// very same file.
 const sharedRelease = 'Alpha.2001.1080p.WEB-DL.x265.HDR.Atmos-GRP';
 Map<String, dynamic> sharedByTwoAddons() => movieWith([
-  group('alpha.example', [
+  readyGroup('alpha.example', [
     torrent(hash(1), 'Alpha\n1080p', '$sharedRelease\n👤 42 💾 1.5 GB'),
   ]),
-  group('beta.example', [
+  readyGroup('beta.example', [
     torrent(hash(1), 'Beta\n1080p', '$sharedRelease\n👤 42 💾 1.5 GB'),
   ]),
 ]);
@@ -280,11 +246,11 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
           torrent(hash(2), 'Alpha 720p', '👤 30 💾 900 MB'),
         ]),
-        group('beta.example', [
+        readyGroup('beta.example', [
           torrent(hash(3), 'Beta 1080p', '👤 90 💾 2 GB'),
         ]),
       ]),
@@ -308,11 +274,11 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
           torrent(hash(2), 'Alpha 720p', '👤 30 💾 900 MB'),
         ]),
-        group('beta.example', [
+        readyGroup('beta.example', [
           torrent(hash(3), 'Beta 1080p', '👤 90 💾 2 GB'),
         ]),
       ]),
@@ -344,10 +310,10 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha\n1080p', '$release\n👤 42 💾 1.5 GB'),
         ]),
-        group('beta.example', [
+        readyGroup('beta.example', [
           torrent(hash(1), 'Beta\n1080p', '$release\n👤 42 💾 1.5 GB'),
         ]),
       ]),
@@ -419,7 +385,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '👤 90 💾 2 GB'),
           torrent(hash(2), 'Beta 1080p WEB-DL x265', '👤 20 💾 2 GB'),
         ]),
@@ -446,7 +412,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [torrent(hash(1), 'Alpha 1080p', '👤 20')]),
+        readyGroup('alpha.example', [torrent(hash(1), 'Alpha 1080p', '👤 20')]),
       ]),
       sectioned: true,
     );
@@ -483,10 +449,10 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
         ]),
-        {...group('slow.example', const []), 'content': null},
+        streamGroup('slow.example', null),
       ]),
       settle: false,
     );
@@ -506,7 +472,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
         ]),
         emptyGroup('quiet.example'),
@@ -533,7 +499,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           // Nothing says how many peers any of these have, so the order
           // is the one they arrive in and the external stays at the head
           // of its own rung.
@@ -573,7 +539,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p a', '👤 90 💾 2 GB'),
           torrent(hash(2), 'Alpha 1080p b', '👤 20 💾 2 GB'),
         ]),
@@ -632,7 +598,7 @@ void main() {
       tester,
       withLastUsed(
         movieWith([
-          group('alpha.example', [
+          readyGroup('alpha.example', [
             torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
           ]),
         ]),
@@ -677,7 +643,7 @@ void main() {
       tester,
       withLastUsed(
         movieWith([
-          group('alpha.example', [
+          readyGroup('alpha.example', [
             torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
           ]),
         ]),
@@ -713,7 +679,7 @@ void main() {
     // built after the row that stands in for it. Nobody has touched the
     // D-pad, so the start of the screen is still the screen's to choose.
     List<Map<String, dynamic>> streams() => [
-      group('alpha.example', [
+      readyGroup('alpha.example', [
         torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
       ]),
     ];
@@ -734,7 +700,7 @@ void main() {
     // on has to still be the card the D-pad answers, or coming out of the
     // player moves the remote for no reason the viewer can see.
     List<Map<String, dynamic>> streams() => [
-      group('alpha.example', [
+      readyGroup('alpha.example', [
         torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
         torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
       ]),
@@ -764,7 +730,7 @@ void main() {
       tester,
       movieWith([
         for (var i = 0; i < 12; i++)
-          group('addon$i.example', [
+          readyGroup('addon$i.example', [
             torrent(hash(i + 1), 'Release $i', '👤 5 💾 1 GB'),
           ]),
       ]),
@@ -787,7 +753,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           for (var i = 0; i < 20; i++)
             torrent(hash(i + 1), 'Release $i', '👤 5 💾 1 GB'),
         ]),
@@ -813,7 +779,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p a', '\u{1f464} 5 \u{1f4be} 1 GB'),
           torrent(hash(2), 'Alpha 1080p b', '\u{1f464} 5 \u{1f4be} 1 GB'),
           torrent(hash(3), 'Alpha 720p', '\u{1f464} 5 \u{1f4be} 1 GB'),
@@ -862,7 +828,7 @@ void main() {
     final core = await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
           torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
         ]),
@@ -877,7 +843,7 @@ void main() {
     core.setState(
       CoreField.metaDetails,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
         ]),
       ]),
@@ -894,7 +860,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
         ]),
         emptyGroup('quiet.example'),
@@ -947,7 +913,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
         ]),
         for (final host in ['one', 'two', 'three', 'four', 'five'])
@@ -1016,7 +982,7 @@ void main() {
         FakeCoreClient(
           state: {
             CoreField.metaDetails: movieWith([
-              group('alpha.example', [
+              readyGroup('alpha.example', [
                 torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
               ]),
             ]),
@@ -1045,7 +1011,7 @@ void main() {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
+        readyGroup('alpha.example', [
           torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
           torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
         ]),

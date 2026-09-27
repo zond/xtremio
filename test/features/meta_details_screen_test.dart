@@ -16,6 +16,7 @@ import '../support/fake_link_opener.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
+import '../support/stream_groups.dart';
 
 const seriesId = 'tt0903747';
 const pilotId = '$seriesId:1:1';
@@ -37,35 +38,26 @@ const everyAddon = {
 
 /// A Torrentio-style stream group for the selected episode, to graft onto
 /// the series fixture (the default addons have no torrents for it).
-Map<String, dynamic> torrentGroup(String videoId) => {
-  'request': {
-    'base': 'https://torrentio.example/manifest.json',
-    'path': {
-      'resource': 'stream',
-      'type': 'series',
-      'id': videoId,
-      'extra': <Object>[],
+Map<String, dynamic> torrentGroup(String videoId) => readyGroup(
+  'https://torrentio.example/manifest.json',
+  [
+    {
+      'infoHash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'fileIdx': 3,
+      'name': 'Torrentio\n1080p',
+      // The tracker on the end is not decoration: `StreamHints.strip`
+      // knows the seeders and the size and takes them out, and does not
+      // know the tracker, so what it leaves is two lines. A fixture
+      // without one leaves exactly one line and hides the bug that drew
+      // the release twice on a phone.
+      'description':
+          'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB ⚙️ ThePirateBay',
+      'behaviorHints': {'filename': 'Breaking.Bad.S01E01.1080p.mkv'},
     },
-  },
-  'content': {
-    'type': 'Ready',
-    'content': [
-      {
-        'infoHash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        'fileIdx': 3,
-        'name': 'Torrentio\n1080p',
-        // The tracker on the end is not decoration: `StreamHints.strip`
-        // knows the seeders and the size and takes them out, and does not
-        // know the tracker, so what it leaves is two lines. A fixture
-        // without one leaves exactly one line and hides the bug that drew
-        // the release twice on a phone.
-        'description':
-            'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB ⚙️ ThePirateBay',
-        'behaviorHints': {'filename': 'Breaking.Bad.S01E01.1080p.mkv'},
-      },
-    ],
-  },
-};
+  ],
+  type: 'series',
+  id: videoId,
+);
 
 /// What the row is headed with: the release, derived from the fixture's
 /// `behaviorHints.filename` without its extension. It was the addon and
@@ -1347,28 +1339,8 @@ void main() {
     const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
     const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
     const strangerUrl = 'https://mirror.example/stremio/manifest.json';
+    // The fetch error [failedGroup] records.
     const failure = 'Failed to fetch: 404 Not Found';
-
-    /// A stream group for the movie that came back `Err Env`, as the
-    /// engine records an addon whose host is gone.
-    Map<String, dynamic> failedGroup(String base) => {
-      'request': {
-        'base': base,
-        'path': {
-          'resource': 'stream',
-          'type': 'movie',
-          'id': 'tt0063350',
-          'extra': <Object>[],
-        },
-      },
-      'content': {
-        'type': 'Err',
-        'content': {
-          'type': 'Env',
-          'content': {'code': 1, 'message': failure},
-        },
-      },
-    };
 
     /// The movie fixture with [streams] in place of its own, and the
     /// default profile as `ctx` so the failing addons can be named.
@@ -1518,38 +1490,6 @@ void main() {
     const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
     const strangerUrl = 'https://mirror.example/stremio/manifest.json';
     const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
-
-    Map<String, dynamic> group(String base, Map<String, dynamic> content) => {
-      'request': {
-        'base': base,
-        'path': {
-          'resource': 'stream',
-          'type': 'movie',
-          'id': 'tt0063350',
-          'extra': <Object>[],
-        },
-      },
-      'content': content,
-    };
-
-    /// An addon that answered and had nothing, as the engine records it.
-    Map<String, dynamic> emptyGroup(String base) => group(base, {
-      'type': 'Err',
-      'content': {'type': 'EmptyContent'},
-    });
-
-    /// One still being waited on.
-    Map<String, dynamic> loadingGroup(String base) =>
-        group(base, {'type': 'Loading'});
-
-    /// One whose host is gone.
-    Map<String, dynamic> failedGroup(String base) => group(base, {
-      'type': 'Err',
-      'content': {
-        'type': 'Env',
-        'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
-      },
-    });
 
     /// The movie's own groups that answered with streams.
     List<Map<String, dynamic>> playableGroups() => [

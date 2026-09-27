@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
 
+import '../../support/real_http.dart';
+
 /// The guard: what a model said, checked against a catalogue before any of
 /// it reaches a poster.
 ///
@@ -342,14 +344,12 @@ void main() {
 
   group('cinemetaSearch', () {
     late HttpServer server;
-    HttpOverrides? overrides;
     late List<String> seen;
     late int status;
     late String body;
 
     setUp(() async {
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       seen = [];
       status = HttpStatus.ok;
       body = jsonEncode({
@@ -368,7 +368,6 @@ void main() {
 
     tearDown(() async {
       await server.close(force: true);
-      HttpOverrides.global = overrides;
     });
 
     Uri base() => Uri.parse('http://${server.address.address}:${server.port}');

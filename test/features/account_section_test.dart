@@ -9,6 +9,7 @@ import 'package:xtremio/widgets/tv_text_field.dart';
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
 import '../support/text_entry.dart';
+import '../support/tv.dart';
 
 /// The Settings screen (the Account section sits at its top) on a tall
 /// viewport, so the whole registration form stays tappable.
@@ -566,8 +567,6 @@ void main() {
   // move its own selection and neither field can be typed into; the fields
   // here host no IME at all and hand the string to the platform's screen.
   group('on a television', () {
-    const tv = DeviceProfile(isTv: true, hasTouch: false);
-
     testWidgets('the remote types both credentials and signs in', (
       tester,
     ) async {

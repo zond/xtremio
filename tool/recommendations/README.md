@@ -229,7 +229,8 @@ worse than useless:
 
 * The **series question** has never been measured. Every target is a film,
   and rating a key for a series target is the work that would fix it.
-* The pool is empty as of the last fold; a new run will refill it.
+* 8 suggestions are left in the unrated pool (`pool_unrated.json`, which
+  is not committed) after the second fold; a new run adds to it.
 * The table above is **one run per column**. A claim that one question or
   one model beats another needs the repeats and the paired sign test that
   `model_bench.py` does, not this.

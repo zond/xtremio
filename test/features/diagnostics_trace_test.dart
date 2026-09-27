@@ -4,7 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_trace.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 
-import '../support/fake_core_client.dart';
+import '../support/empty_board.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_sharing.dart';
 
@@ -115,15 +115,7 @@ void main() {
     final server = RecordingServerSettings();
     await tester.pumpWidget(
       XtremioApp(
-        core: FakeCoreClient(
-          state: {
-            CoreField.board: {
-              'selected': {'type': null, 'extra': <Object>[]},
-              'catalogs': <Object>[],
-              'catalogLabels': <Object>[],
-            },
-          },
-        ),
+        core: emptyBoardCore(),
         prefs: AppPrefs(
           client: FakePrefsClient({AppPrefs.verboseDiagnosticsKey: true}),
         ),

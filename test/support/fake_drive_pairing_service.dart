@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+
+import 'fake_prefs_client.dart';
+import 'fake_secret_store.dart';
 
 /// The moment every pairing test is pinned to, so a session's window is a
 /// number a test can reason about rather than whatever the machine's clock
@@ -12,6 +16,45 @@ final DateTime pairingNow = DateTime.utc(2026, 9, 25, 20);
 /// the shape of one, and a real refresh token must never be written into a
 /// fixture, a test or a comment (`AGENTS.md`, "Never log auth material").
 const String fakeRefreshToken = 'fake-refresh-token-for-tests-only';
+
+/// A [DriveAccount] over fakes, loaded the way the app loads it --
+/// preferences first -- and disposed with its preferences when the test
+/// ends.
+///
+/// [prefs] are preferences the test has already loaded and arranged.
+/// Without them the account gets fresh ones over [prefsClient], or with no
+/// file behind them at all ([AppPrefs.inMemory]) when that is null too.
+/// Everything else defaults to what [DriveAccount] itself defaults to,
+/// except [secrets], which is a [FakeSecretStore].
+Future<DriveAccount> driveAccount({
+  AppPrefs? prefs,
+  FakePrefsClient? prefsClient,
+  FakeSecretStore? secrets,
+  DateTime Function() now = DateTime.now,
+  DrivePairingService pairingService = const XtremioDrivePairingService(),
+}) async {
+  final AppPrefs held;
+  if (prefs != null) {
+    held = prefs;
+  } else {
+    held = prefsClient == null
+        ? AppPrefs.inMemory()
+        : AppPrefs(client: prefsClient);
+    await held.load();
+  }
+  final account = DriveAccount(
+    prefs: held,
+    secrets: secrets ?? FakeSecretStore(),
+    now: now,
+    pairingService: pairingService,
+  );
+  await account.load();
+  addTearDown(() {
+    account.dispose();
+    held.dispose();
+  });
+  return account;
+}
 
 /// A [DrivePairingService] a test drives by hand.
 ///

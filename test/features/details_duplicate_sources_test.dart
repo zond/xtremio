@@ -14,6 +14,7 @@ import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
+import '../support/stream_groups.dart';
 
 const movieId = 'tt0063350';
 const alphaUrl = 'https://alpha.example/manifest.json';
@@ -25,35 +26,6 @@ const strangerUrl = 'https://mirror.example/stremio/manifest.json';
 /// hash, one file index, the same name and the same numbers. Only the
 /// trackers differ, which is the half of a duplicate worth keeping.
 const sharedHash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-
-Map<String, dynamic> streamGroup(String base, Map<String, dynamic> content) => {
-  'request': {
-    'base': base,
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': content,
-};
-
-Map<String, dynamic> ready(String base, List<Map<String, dynamic>> streams) =>
-    streamGroup(base, {'type': 'Ready', 'content': streams});
-
-Map<String, dynamic> emptyGroup(String base) => streamGroup(base, {
-  'type': 'Err',
-  'content': {'type': 'EmptyContent'},
-});
-
-Map<String, dynamic> failedGroup(String base) => streamGroup(base, {
-  'type': 'Err',
-  'content': {
-    'type': 'Env',
-    'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
-  },
-});
 
 Map<String, dynamic> torrent(
   String infoHash, {
@@ -72,7 +44,7 @@ Map<String, dynamic> torrent(
 /// The duplicate the owner reported: one release, two addons, everything
 /// on screen identical. Their tracker lists overlap without matching.
 List<Map<String, dynamic>> theSameReleaseTwice() => [
-  ready(alphaUrl, [
+  readyGroup(alphaUrl, [
     torrent(
       sharedHash,
       name: 'The Same Release 1080p',
@@ -80,7 +52,7 @@ List<Map<String, dynamic>> theSameReleaseTwice() => [
       announce: const ['udp://one.example:1337', 'udp://shared.example:1337'],
     ),
   ]),
-  ready(betaUrl, [
+  readyGroup(betaUrl, [
     torrent(
       sharedHash,
       name: 'The Same Release 1080p',
@@ -226,7 +198,7 @@ void main() {
     ) async {
       useWideViewport(tester);
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           torrent(sharedHash, name: 'The Same Release 1080p', fileIdx: 0),
           torrent(sharedHash, name: 'The Same Release 1080p', fileIdx: 0),
         ]),
@@ -245,7 +217,7 @@ void main() {
       // two different torrents. Collapsing on what a row *looks* like
       // would lose one of them.
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           torrent('b' * 40, name: 'Release A 1080p'),
           torrent('c' * 40, name: 'Release B 1080p'),
         ]),
@@ -286,7 +258,7 @@ void main() {
     ) async {
       useWideViewport(tester);
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           torrent(sharedHash, name: 'Episode 1', fileIdx: 0),
           torrent(sharedHash, name: 'Episode 2', fileIdx: 1),
         ]),
@@ -300,10 +272,10 @@ void main() {
     testWidgets('a direct URL is identified by its URL', (tester) async {
       useWideViewport(tester);
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           {'url': 'https://cdn.example/film.mp4', 'name': 'Direct 1080p'},
         ]),
-        ready(betaUrl, [
+        readyGroup(betaUrl, [
           {'url': 'https://cdn.example/film.mp4', 'name': 'Direct 1080p'},
           {'url': 'https://cdn.example/other.mp4', 'name': 'Another 1080p'},
         ]),
@@ -394,7 +366,7 @@ void main() {
       useWideViewport(tester);
       final core = coreWith(
         [
-          ready(alphaUrl, [
+          readyGroup(alphaUrl, [
             torrent(
               'b' * 40,
               name: 'Only Release 1080p',
@@ -449,7 +421,7 @@ void main() {
     ) async {
       useWideViewport(tester);
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           torrent(sharedHash, name: 'The Same Release 1080p', fileIdx: 0),
           torrent(sharedHash, name: 'The Same Release 1080p', fileIdx: 0),
           torrent('b' * 40, name: 'Another Release 720p'),

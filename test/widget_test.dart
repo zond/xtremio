@@ -5,22 +5,10 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
+import 'support/empty_board.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
-
-/// A core whose board is loaded but plans no catalogs, so the Board section
-/// renders its static empty state (a still-loading board spins forever,
-/// which `pumpAndSettle` cannot wait out).
-FakeCoreClient emptyBoardCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
 
 void main() {
   testWidgets('app boots into the Board section with navigation', (

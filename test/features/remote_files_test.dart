@@ -9,25 +9,14 @@ import 'package:xtremio/shell/device_profile.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
-import '../support/fake_secret_store.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fixtures.dart';
+import '../support/tv.dart';
 
 /// Where the link button is, and whether the dialog it opens looks like
 /// something to press.
 void main() {
-  const tv = DeviceProfile(isTv: true, hasTouch: false);
-
-  Future<DriveAccount> account() async {
-    final prefs = AppPrefs.inMemory();
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
-    return drive;
-  }
+  Future<DriveAccount> account() => driveAccount();
 
   FakeCoreClient libraryCore() => FakeCoreClient(
     state: {

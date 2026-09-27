@@ -12,9 +12,9 @@ import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_drive_file_lister.dart';
 import '../support/fake_drive_file_opener.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 import '../support/fixtures.dart';
 
 /// A matched linked Drive file under the library's **ordinary** options.
@@ -34,14 +34,7 @@ void main() {
   Future<DriveAccount> account({
     List<({String id, String name, LinkedDriveMatch? match})> files = const [],
   }) async {
-    final prefs = AppPrefs(client: FakePrefsClient());
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefsClient: FakePrefsClient());
     for (final file in files) {
       await drive.link(
         refreshToken: 'a-refresh-token',

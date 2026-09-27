@@ -8,23 +8,11 @@ import 'package:xtremio/main.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
-import '../support/fake_core_client.dart';
+import '../support/empty_board.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_sharing.dart';
-
-const tv = DeviceProfile(isTv: true, hasTouch: false);
-
-/// A core whose board plans no catalogs, so the shell settles.
-FakeCoreClient emptyBoardCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
+import '../support/tv.dart';
 
 /// Routes the `xtremio/device` channel to [handler] for one test; a null
 /// handler leaves the channel unanswered, as on a platform without the

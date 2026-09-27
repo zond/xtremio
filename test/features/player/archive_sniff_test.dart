@@ -12,6 +12,7 @@ import 'package:xtremio/features/player/torrent_stats.dart';
 
 import '../../support/diagnostics_capture.dart';
 import '../../support/player_harness.dart';
+import '../../support/real_http.dart';
 
 /// A source that serves an archive instead of a film.
 ///
@@ -80,13 +81,9 @@ void main() {
     late int status;
     late bool honourRange;
     late Uint8List body;
-    HttpOverrides? overrides;
 
     setUp(() async {
-      // The test binding answers every request with a 400 of its own; these
-      // talk to a real server on the loopback.
-      overrides = HttpOverrides.current;
-      HttpOverrides.global = null;
+      useRealHttp();
       ranges = [];
       status = HttpStatus.ok;
       honourRange = true;
@@ -109,7 +106,6 @@ void main() {
       });
     });
     tearDown(() async {
-      HttpOverrides.global = overrides;
       await server.close(force: true);
     });
 

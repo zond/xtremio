@@ -11,11 +11,12 @@ import 'package:xtremio/shell/device_profile.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_drive_file_opener.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
+import '../support/stream_groups.dart';
 import '../support/tv.dart';
 
 /// A linked Google Drive file that Cinemeta matched to a title is **one more
@@ -49,39 +50,10 @@ const driveFileName = '$driveRelease.mkv';
 const nextEpisodeRelease = 'Breaking.Bad.S01E02.1080p.WEB-DL.x264-GROUP';
 const nextEpisodeFileName = '$nextEpisodeRelease.mkv';
 
-Map<String, dynamic> ready(String base, List<Map<String, dynamic>> streams) => {
-  'request': {
-    'base': base,
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {'type': 'Ready', 'content': streams},
-};
-
-Map<String, dynamic> emptyGroup(String base) => {
-  'request': {
-    'base': base,
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {
-    'type': 'Err',
-    'content': {'type': 'EmptyContent'},
-  },
-};
-
 /// One addon, one 1080p release, so the Drive file lands in a section that
 /// already has something in it.
 List<Map<String, dynamic>> oneAddon() => [
-  ready(alphaUrl, [
+  readyGroup(alphaUrl, [
     {
       'infoHash': 'a' * 40,
       'name': 'Alpha 1080p',
@@ -128,14 +100,7 @@ void main() {
   /// and stays in the [FakeSecretStore]: nothing in these tests asserts on
   /// it beyond that the opener was the only thing handed it.
   Future<DriveAccount> pairedWith(List<LinkedDriveFile> files) async {
-    final prefs = AppPrefs(client: FakePrefsClient());
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefsClient: FakePrefsClient());
     if (files.isNotEmpty) {
       await drive.link(refreshToken: 'a-refresh-token', files: files);
     }

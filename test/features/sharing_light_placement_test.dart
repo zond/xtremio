@@ -11,6 +11,7 @@ import 'package:xtremio/shell/tv_density.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_sharing.dart';
 import '../support/fixtures.dart';
+import '../support/tv.dart';
 
 /// What the status light in the shell's corner is allowed to cover.
 ///
@@ -38,7 +39,6 @@ import '../support/fixtures.dart';
 /// clipped; the other four screens draw nothing there on either layout.
 void main() {
   const lightKey = Key('sharing-light');
-  const tv = DeviceProfile(isTv: true, hasTouch: false);
 
   /// The five tabs, in the order the shell lists them.
   const tabs = ['Board', 'Discover', 'Search', 'Library', 'Settings'];

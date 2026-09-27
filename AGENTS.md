@@ -51,8 +51,8 @@ flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/s
 ```
 
 CI (`.github/workflows/ci.yml`) runs four jobs: the Rust checks above, a
-`cargo check --target armv7-linux-androideabi`, the Flutter checks (it
-formats `.` rather than `lib test`), and the codegen drift check.
+`cargo check --target armv7-linux-androideabi`, the Flutter checks, and
+the codegen drift check.
 `build.yml` builds every platform weekly and on tags.
 
 New behaviour needs a test that fails without it. Prove at least one by

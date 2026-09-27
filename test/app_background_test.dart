@@ -5,32 +5,11 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/main.dart';
 
-import 'support/fake_core_client.dart';
+import 'support/empty_board.dart';
 import 'support/fake_deep_links.dart';
 import 'support/fake_downloads_client.dart';
 import 'support/fake_prefs_client.dart';
 import 'support/fake_sharing.dart';
-
-/// What the app holds in decoded images, and what it lets go of when it is
-/// put in the background.
-///
-/// Both numbers come from the owner's Chromecast with Google TV: 2 GB of RAM
-/// for the whole system, and Android's low-memory killer taking the app
-/// twice in one day at 311-379 MB resident the moment it was backgrounded.
-/// Flutter's own image cache stops at 100 MiB and nothing in the app used
-/// to lower it, and a backgrounded app used to hold exactly what it held in
-/// the foreground.
-///
-/// A core whose board plans no catalogs, so the shell settles.
-FakeCoreClient emptyBoardCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
 
 /// Puts one decoded picture nobody is showing into the framework's image
 /// cache, the state a poster is in once its row has scrolled away. The
@@ -47,6 +26,15 @@ Future<void> cacheOneImage(WidgetTester tester) async {
   );
 }
 
+/// What the app holds in decoded images, and what it lets go of when it is
+/// put in the background.
+///
+/// Both numbers come from the owner's Chromecast with Google TV: 2 GB of RAM
+/// for the whole system, and Android's low-memory killer taking the app
+/// twice in one day at 311-379 MB resident the moment it was backgrounded.
+/// Flutter's own image cache stops at 100 MiB and nothing in the app used
+/// to lower it, and a backgrounded app used to hold exactly what it held in
+/// the foreground.
 void main() {
   setUp(() {
     final ceiling = imageCache.maximumSizeBytes;

@@ -21,7 +21,6 @@ import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_drive_file_opener.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
-import '../support/fake_secret_store.dart';
 import '../support/fixtures.dart';
 
 /// The **Remote** option on the library's filter row: an option of the app's
@@ -44,14 +43,7 @@ void main() {
   Future<DriveAccount> account({
     List<({String id, String name, LinkedDriveMatch? match})> files = const [],
   }) async {
-    final prefs = AppPrefs(client: FakePrefsClient());
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefsClient: FakePrefsClient());
     for (final file in files) {
       await drive.link(
         refreshToken: 'a-refresh-token',
@@ -1664,16 +1656,7 @@ void main() {
     final prefs = AppPrefs(client: FakePrefsClient());
     await prefs.load();
     await prefs.setDrivePendingSession('a-session-nobody-collected');
-    final drive = DriveAccount(
-      prefs: prefs,
-      secrets: FakeSecretStore(),
-      pairingService: service,
-    );
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefs: prefs, pairingService: service);
     expect(drive.files.entries, isEmpty);
 
     await tester.pumpWidget(harness(fakeCore(), drive: drive));
@@ -1705,16 +1688,7 @@ void main() {
     final prefs = AppPrefs(client: FakePrefsClient());
     await prefs.load();
     await prefs.setDrivePendingSession('left-behind');
-    final drive = DriveAccount(
-      prefs: prefs,
-      secrets: FakeSecretStore(),
-      pairingService: service,
-    );
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount(prefs: prefs, pairingService: service);
 
     await tester.pumpWidget(harness(fakeCore(), drive: drive));
     await tester.pumpAndSettle();

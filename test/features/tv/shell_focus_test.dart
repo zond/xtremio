@@ -14,8 +14,7 @@ import 'package:xtremio/widgets/tv_text_field.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/text_entry.dart';
-
-const tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../../support/tv.dart';
 
 /// A core with the Board, Library and Search tabs all able to settle.
 FakeCoreClient fakeCore({Map<String, dynamic>? continueWatching}) =>
@@ -100,17 +99,6 @@ Future<void> focusSearchDestination(WidgetTester tester) async {
   await press(tester, LogicalKeyboardKey.arrowDown);
   await press(tester, LogicalKeyboardKey.arrowDown);
   expect(focusedRailLabel(tester), 'Search');
-}
-
-void useScreen(WidgetTester tester, Size size) {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-}
-
-Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
-  await tester.sendKeyEvent(key);
-  await tester.pumpAndSettle();
 }
 
 void main() {

@@ -13,41 +13,13 @@ import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
+import '../support/stream_groups.dart';
 
 const movieId = 'tt0063350';
 const alphaUrl = 'https://alpha.example/manifest.json';
 const betaUrl = 'https://beta.example/manifest.json';
 const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
 const strangerUrl = 'https://mirror.example/stremio/manifest.json';
-
-Map<String, dynamic> streamGroup(String base, Map<String, dynamic> content) => {
-  'request': {
-    'base': base,
-    'path': {
-      'resource': 'stream',
-      'type': 'movie',
-      'id': movieId,
-      'extra': <Object>[],
-    },
-  },
-  'content': content,
-};
-
-Map<String, dynamic> ready(String base, List<Map<String, dynamic>> streams) =>
-    streamGroup(base, {'type': 'Ready', 'content': streams});
-
-Map<String, dynamic> emptyGroup(String base) => streamGroup(base, {
-  'type': 'Err',
-  'content': {'type': 'EmptyContent'},
-});
-
-Map<String, dynamic> failedGroup(String base) => streamGroup(base, {
-  'type': 'Err',
-  'content': {
-    'type': 'Env',
-    'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
-  },
-});
 
 /// Two addons, four streams, deliberately out of order within and across
 /// the addons: alpha answers with its worst release first, beta answers
@@ -58,7 +30,7 @@ Map<String, dynamic> failedGroup(String base) => streamGroup(base, {
 /// an unreadable resolution is a bucket of its own, not because it is
 /// worst.
 List<Map<String, dynamic>> twoAddons() => [
-  ready(alphaUrl, [
+  readyGroup(alphaUrl, [
     {
       'infoHash': 'a' * 40,
       'name': 'Alpha 720p',
@@ -70,7 +42,7 @@ List<Map<String, dynamic>> twoAddons() => [
       'description': '👤 3 💾 20 GB',
     },
   ]),
-  ready(betaUrl, [
+  readyGroup(betaUrl, [
     {
       'infoHash': 'c' * 40,
       'name': 'Beta 1080p',
@@ -86,7 +58,7 @@ List<Map<String, dynamic>> twoAddons() => [
 /// the smallest, so peers per megabyte, largest first and most peers each
 /// give a different answer.
 List<Map<String, dynamic>> oneResolution() => [
-  ready(alphaUrl, [
+  readyGroup(alphaUrl, [
     {
       'infoHash': 'a' * 40,
       'name': 'Middle 1080p',
@@ -358,7 +330,7 @@ void main() {
     ) async {
       useWideViewport(tester);
       final streams = [
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           {'infoHash': 'a' * 40, 'name': '2160p one', 'description': '👤 2'},
           {'infoHash': 'b' * 40, 'name': '2160p two', 'description': '👤 137'},
           {'infoHash': 'c' * 40, 'name': '2160p three'},
@@ -666,7 +638,7 @@ void main() {
       await prefs.load();
       // Streams with no 2160p in them at all.
       final core = coreWith([
-        ready(alphaUrl, [
+        readyGroup(alphaUrl, [
           {'infoHash': 'f' * 40, 'name': 'Only 1080p', 'description': '👤 4'},
         ]),
       ]);
@@ -722,7 +694,7 @@ void main() {
     /// and a description that leads with that same filename and carries
     /// the seeders, the size and the tracker after it.
     List<Map<String, dynamic>> oneRealisticStream() => [
-      ready(alphaUrl, [
+      readyGroup(alphaUrl, [
         {
           'infoHash': 'a' * 40,
           'name': 'Torrentio\n1080p',
@@ -978,7 +950,7 @@ void main() {
         harness(
           coreWith(
             [
-              ready(alphaUrl, [
+              readyGroup(alphaUrl, [
                 {
                   'infoHash': 'a' * 40,
                   'name': 'Alpha 720p',
@@ -989,7 +961,7 @@ void main() {
             // The same addon, answering as the meta addon too: one
             // transport URL, two groups, two headings.
             metaStreams: [
-              ready(alphaUrl, [
+              readyGroup(alphaUrl, [
                 {'url': 'https://alpha.example/trailer.mp4', 'name': 'Trailer'},
               ]),
             ],

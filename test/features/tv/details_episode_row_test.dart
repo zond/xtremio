@@ -18,42 +18,17 @@ import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/stream_groups.dart';
 import '../../support/tv.dart';
 
 const seriesId = 'tt0903747';
 const pilotId = '$seriesId:1:1';
 const movieId = 'tt0063350';
 
-/// A Torrentio-style group for [videoId], so the pane has something the
-/// remote can start on and the player can open.
-Map<String, dynamic> torrentGroup(String videoId) => {
-  'request': {
-    'base': 'https://torrentio.example/manifest.json',
-    'path': {
-      'resource': 'stream',
-      'type': 'series',
-      'id': videoId,
-      'extra': <Object>[],
-    },
-  },
-  'content': {
-    'type': 'Ready',
-    'content': [
-      {
-        'infoHash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        'fileIdx': 3,
-        'name': 'Torrentio\n1080p',
-        'description': 'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB',
-        'behaviorHints': {'filename': 'Breaking.Bad.S01E01.1080p.mkv'},
-      },
-    ],
-  },
-};
-
 /// Breaking Bad at the pilot, with a playable torrent for it.
 Map<String, dynamic> series() {
   final fixture = loadSeriesEpisodeMetaDetailsFixture();
-  (fixture['streams'] as List<dynamic>).add(torrentGroup(pilotId));
+  (fixture['streams'] as List<dynamic>).add(torrentioEpisodeGroup(pilotId));
   return fixture;
 }
 

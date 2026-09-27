@@ -48,21 +48,6 @@ Map<String, dynamic> episodeTorrentGroup(String videoId) => {
   },
 };
 
-/// A client whose `open` waits, so the tile can be tapped again while the
-/// registry round trip that stands between the tap and the player is still
-/// out.
-class GatedOpenClient extends FakeDownloadsClient {
-  GatedOpenClient({super.registry});
-
-  final Completer<void> gate = Completer<void>();
-
-  @override
-  Future<DownloadOpenResult> open(String key) async {
-    await gate.future;
-    return super.open(key);
-  }
-}
-
 /// A registry entry for [stream] of [videoId], as `downloads_list` writes
 /// one. Only the fields the tile reads are filled in.
 Map<String, dynamic> entry({
@@ -100,18 +85,6 @@ DownloadsRegistry registryOf(List<Map<String, dynamic>> entries) =>
         for (final item in entries) DownloadView(item).key: DownloadView(item),
       },
     );
-
-/// A client whose `add` waits, so the tile can be looked at while the pin
-/// is being taken (which for a magnet means waiting on its metadata).
-class GatedDownloadsClient extends FakeDownloadsClient {
-  final Completer<void> gate = Completer<void>();
-
-  @override
-  Future<DownloadAddResult> add(DownloadRequest request) async {
-    await gate.future;
-    return super.add(request);
-  }
-}
 
 /// A client whose *listing* waits, once a pin has been taken, so the tile
 /// can be looked at in the window between the pin landing and the registry
@@ -380,7 +353,10 @@ void main() {
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
       );
-      final downloads = GatedDownloadsClient();
+      // `add` waits, so the tile can be looked at while the pin is being
+      // taken (which for a magnet means waiting on its metadata).
+      final gate = Completer<void>();
+      final downloads = FakeDownloadsClient()..addGate = gate.future;
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
@@ -391,7 +367,7 @@ void main() {
       expect(find.byTooltip(kDownloadStartingTooltip), findsOneWidget);
       expect(find.byTooltip(kDownloadTooltip), findsNothing);
 
-      downloads.gate.complete();
+      gate.complete();
       await tester.pumpAndSettle();
       expect(downloads.added, hasLength(1));
     });
@@ -1266,7 +1242,10 @@ void main() {
           CoreField.player: loadPlayerFixture(),
         },
       );
-      final downloads = GatedOpenClient(
+      // `open` waits, so the tile can be tapped again while the registry
+      // round trip that stands between the tap and the player is still out.
+      final gate = Completer<void>();
+      final downloads = FakeDownloadsClient(
         registry: registryOf([
           entry(
             metaId: movieId,
@@ -1278,7 +1257,7 @@ void main() {
             path: path,
           ),
         ]),
-      );
+      )..openGate = gate.future;
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
@@ -1287,7 +1266,7 @@ void main() {
       await tester.pump();
       await tester.tap(tile);
       await tester.pump();
-      downloads.gate.complete();
+      gate.complete();
       await tester.pumpAndSettle();
 
       expect(downloads.opens, ['$movieId:$movieId'], reason: 'one lookup');

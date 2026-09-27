@@ -12,8 +12,7 @@
 /// identifies it. These are films they have not seen, which is the whole
 /// point of the row, so a poster with no name under it is a picture of a
 /// stranger. That is what the 120x180 poster buys: room for two lines of
-/// text under it and seven of them across a 720p panel
-/// (`test/prototypes/details_density.dart`, `details_3_recommendations.png`).
+/// text under it and seven of them across a 720p panel.
 ///
 /// **The model's reason is not drawn.** A [SimilarTitle] carries one -- a
 /// dozen words about why this film is here -- and a 120 px column has

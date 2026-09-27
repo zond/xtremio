@@ -3,32 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 import 'package:xtremio/features/player/player_screen.dart';
-import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/external_link.dart';
 
 import '../support/fake_drive_file_opener.dart';
 import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_link_opener.dart';
-import '../support/fake_secret_store.dart';
 import '../support/player_harness.dart';
-
-const DeviceProfile _tv = DeviceProfile(isTv: true, hasTouch: false);
+import '../support/tv.dart';
 
 /// A [DriveAccount] over fakes, optionally already linked -- which is the
 /// state a viewer who paired last week comes back in.
 Future<DriveAccount> _account({bool linked = false}) async {
-  final prefs = AppPrefs.inMemory();
-  await prefs.load();
-  final account = DriveAccount(
-    prefs: prefs,
-    secrets: FakeSecretStore(),
-    now: () => pairingNow,
-  );
-  await account.load();
-  addTearDown(() {
-    account.dispose();
-    prefs.dispose();
-  });
+  final account = await driveAccount(now: () => pairingNow);
   if (linked) {
     await account.linkFile(
       refreshToken: fakeRefreshToken,
@@ -52,7 +38,7 @@ Widget _harness({
   required DriveFileOpener opener,
   DrivePairingService? service,
   PlayerHarness? player,
-}) => (player ?? PlayerHarness(device: _tv)).build(
+}) => (player ?? PlayerHarness(device: tv)).build(
   home: ExternalLinkScope(
     opener: FakeLinkOpener(),
     child: DriveAccountScope(
@@ -196,7 +182,7 @@ void main() {
       final account = await _account();
       final service = FakeDrivePairingService(answers: [fakeCollected()]);
       final opener = FakeDriveFileOpener();
-      final player = PlayerHarness(device: _tv);
+      final player = PlayerHarness(device: tv);
       await tester.pumpWidget(
         _harness(
           account: account,
@@ -227,7 +213,7 @@ void main() {
       final account = await _account();
       final service = FakeDrivePairingService(answers: [fakeCollected()]);
       final opener = FakeDriveFileOpener();
-      final player = PlayerHarness(device: _tv);
+      final player = PlayerHarness(device: tv);
       await tester.pumpWidget(
         _harness(
           account: account,

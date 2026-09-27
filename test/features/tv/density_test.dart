@@ -12,6 +12,7 @@ import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
+import '../../support/empty_board.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_sharing.dart';
 import '../../support/fixtures.dart';
@@ -20,15 +21,8 @@ import '../../support/tv.dart';
 
 /// A core whose board plans no catalogs, so the shell settles instead of
 /// spinning forever.
-FakeCoreClient fakeCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
+FakeCoreClient fakeCore() =>
+    FakeCoreClient(state: {CoreField.board: emptyBoard()});
 
 /// The app on [device], mounted and settled.
 Future<BuildContext> pumpApp(

@@ -14,7 +14,7 @@ import '../../support/fake_core_client.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fake_drive_file_lister.dart';
 import '../../support/fake_drive_file_opener.dart';
-import '../../support/fake_secret_store.dart';
+import '../../support/fake_drive_pairing_service.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
@@ -68,14 +68,7 @@ DownloadsRegistry someDownloads() =>
 /// A device with one linked file: what makes the Remote pill exist, the way
 /// [someDownloads] makes the download controls exist.
 Future<DriveAccount> driveWithOneFile(WidgetTester tester) async {
-  final prefs = AppPrefs.inMemory();
-  await prefs.load();
-  final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-  await drive.load();
-  addTearDown(() {
-    drive.dispose();
-    prefs.dispose();
-  });
+  final drive = await driveAccount();
   await drive.link(
     refreshToken: 'a-refresh-token',
     files: [
@@ -328,14 +321,7 @@ void main() {
     // row, select turns it on, and what it puts in the body is reachable
     // from there without anything in between being stepped over.
     useScreen(tester, tvSize);
-    final prefs = AppPrefs.inMemory();
-    await prefs.load();
-    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
-    await drive.load();
-    addTearDown(() {
-      drive.dispose();
-      prefs.dispose();
-    });
+    final drive = await driveAccount();
     await drive.link(
       refreshToken: 'a-refresh-token',
       files: [

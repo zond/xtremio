@@ -4,24 +4,8 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/drive/drive_native_pair_screen.dart';
 import 'package:xtremio/shell/deep_link.dart';
 
+import '../support/fake_drive_native_picker.dart';
 import '../support/fake_drive_pairing_service.dart';
-
-/// A picker that answers what a test tells it to, and counts being asked.
-class FakeNativePicker implements DriveNativePicker {
-  FakeNativePicker(this.answers);
-
-  final List<DriveNativePickResult> answers;
-  int picks = 0;
-
-  @override
-  Future<bool> available() async => true;
-
-  @override
-  Future<DriveNativePickResult> pick() async {
-    picks++;
-    return answers.length > 1 ? answers.removeAt(0) : answers.first;
-  }
-}
 
 const picked = DriveNativePicked(
   // Not a real code and could not be: nothing in this suite holds one.

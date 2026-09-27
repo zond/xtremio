@@ -6,6 +6,7 @@ import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/drive/drive_native_pair_screen.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 
+import 'support/empty_board.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_deep_links.dart';
 import 'support/fake_downloads_client.dart';
@@ -31,11 +32,7 @@ void main() {
     state: {
       CoreField.ctx: loadCtxLoggedOutFixture(),
       CoreField.addonDetails: notInstalled(),
-      CoreField.board: {
-        'selected': {'type': null, 'extra': <Object>[]},
-        'catalogs': <Object>[],
-        'catalogLabels': <Object>[],
-      },
+      CoreField.board: emptyBoard(),
     },
   );
 

@@ -12,6 +12,7 @@ import 'package:xtremio/shell/root_shell.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_sharing.dart';
 import '../../support/fixtures.dart';
+import '../../support/tv.dart';
 
 /// How a remote reaches the status light, and what it costs the walk that
 /// was there before.
@@ -21,17 +22,10 @@ import '../../support/fixtures.dart';
 /// directional traversal cannot land on it by accident, and that one
 /// deliberate key can.
 void main() {
-  const tv = DeviceProfile(isTv: true, hasTouch: false);
-
   bool focusIn<T extends Widget>() =>
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<T>() !=
       null;
-
-  Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
-    await tester.sendKeyEvent(key);
-    await tester.pumpAndSettle();
-  }
 
   /// The shell on a television, with [uploading] deciding whether the
   /// server is giving anything to the swarm.

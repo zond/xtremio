@@ -25,11 +25,10 @@ void main() {
     ];
 
     test('every one of them exists', () {
-      for (final doc in docs) {
-        expect(doc.existsSync(), isTrue, reason: '${doc.path} is missing');
-      }
       // The map names these; a rename that forgets one is the failure mode.
       for (final named in const [
+        'README.md',
+        'AGENTS.md',
         'docs/STATUS.md',
         'docs/ARCHITECTURE.md',
         'docs/OPERATIONS.md',

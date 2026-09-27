@@ -53,49 +53,6 @@ DownloadsRegistry withStoppedPilot() {
   return DownloadsRegistry.fromJson(json);
 }
 
-/// A client whose `add` waits, so the row can be looked at while a retry
-/// is on its way.
-class GatedAddClient extends FakeDownloadsClient {
-  GatedAddClient({super.registry});
-
-  final Completer<void> gate = Completer<void>();
-
-  @override
-  Future<DownloadAddResult> add(DownloadRequest request) async {
-    await gate.future;
-    return super.add(request);
-  }
-}
-
-/// A client whose listing waits, so the screen can be looked at before the
-/// first one has landed.
-class GatedListingClient extends FakeDownloadsClient {
-  GatedListingClient({super.registry});
-
-  final Completer<void> gate = Completer<void>();
-
-  @override
-  Future<DownloadsRegistry> list() async {
-    await gate.future;
-    return super.list();
-  }
-}
-
-/// A client whose `open` waits, so a row can be tapped again while the
-/// registry round trip that stands between the tap and the player is still
-/// out.
-class GatedOpenClient extends FakeDownloadsClient {
-  GatedOpenClient({super.registry});
-
-  final Completer<void> gate = Completer<void>();
-
-  @override
-  Future<DownloadOpenResult> open(String key) async {
-    await gate.future;
-    return super.open(key);
-  }
-}
-
 void main() {
   /// Everything the screen and a pushed player need above them.
   Widget harness(
@@ -280,7 +237,11 @@ void main() {
       tester,
     ) async {
       useTallViewport(tester);
-      final downloads = GatedListingClient(registry: recorded());
+      // The listing waits, so the screen can be looked at before the first
+      // one has landed.
+      final gate = Completer<void>();
+      final downloads = FakeDownloadsClient(registry: recorded())
+        ..listGate = gate.future;
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(coreWithPlayer(), downloads));
       await tester.pump();
@@ -288,7 +249,7 @@ void main() {
       expect(find.text('0 downloads · 0 B on this device'), findsNothing);
       expect(find.text('…'), findsOneWidget);
 
-      downloads.gate.complete();
+      gate.complete();
       await tester.pumpAndSettle();
 
       expect(find.text('3 downloads · 65.5 kB on this device'), findsOneWidget);
@@ -386,7 +347,9 @@ void main() {
       // `player` field and start an engine of their own, and the one left
       // underneath would keep playing behind the one on top.
       useTallViewport(tester);
-      final downloads = GatedOpenClient(registry: recorded());
+      final gate = Completer<void>();
+      final downloads = FakeDownloadsClient(registry: recorded())
+        ..openGate = gate.future;
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(coreWithPlayer(), downloads));
       await tester.pumpAndSettle();
@@ -395,7 +358,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Night of the Living Dead'));
       await tester.pump();
-      downloads.gate.complete();
+      gate.complete();
       await tester.pumpAndSettle();
 
       expect(downloads.opens, [movieKey], reason: 'one lookup');
@@ -527,7 +490,9 @@ void main() {
       // Re-pinning a magnet blocks on its metadata, and the row still
       // reads "Stopped" until the listing lands: a second press would burn
       // another worker on the same file.
-      final downloads = GatedAddClient(registry: withStoppedPilot());
+      final gate = Completer<void>();
+      final downloads = FakeDownloadsClient(registry: withStoppedPilot())
+        ..addGate = gate.future;
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(coreWithPlayer(), downloads));
       await tester.pumpAndSettle();
@@ -554,7 +519,7 @@ void main() {
       await tester.tapAt(const Offset(5, 5));
       await tester.pump();
 
-      downloads.gate.complete();
+      gate.complete();
       await tester.pumpAndSettle();
       expect(downloads.added, hasLength(1));
     });

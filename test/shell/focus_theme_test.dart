@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/focus_theme.dart';
 import 'package:xtremio/shell/tv_density.dart';
 
-import '../support/fake_core_client.dart';
+import '../support/empty_board.dart';
 import '../support/fake_sharing.dart';
+import '../support/tv.dart';
 
 /// The dark theme the app builds, before any floor is on it.
 ThemeData bare() => ThemeData(
@@ -16,17 +16,6 @@ ThemeData bare() => ThemeData(
     seedColor: const Color(0xFF7B5BF5),
     brightness: Brightness.dark,
   ),
-);
-
-/// A core whose board is loaded but plans no catalogs, so the shell settles.
-FakeCoreClient emptyBoardCore() => FakeCoreClient(
-  state: {
-    CoreField.board: {
-      'selected': {'type': null, 'extra': <Object>[]},
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
 );
 
 void main() {
@@ -146,7 +135,7 @@ void main() {
         XtremioApp(
           core: emptyBoardCore(),
           prefs: prefs,
-          device: const DeviceProfile(isTv: true, hasTouch: false),
+          device: tv,
           sharingActivity: FakeSharingActivity(),
         ),
       );
@@ -173,7 +162,7 @@ void main() {
         XtremioApp(
           core: emptyBoardCore(),
           prefs: AppPrefs.inMemory(),
-          device: const DeviceProfile(isTv: true, hasTouch: false),
+          device: tv,
           sharingActivity: FakeSharingActivity(),
         ),
       );

@@ -40,10 +40,10 @@ ASK_FOR_FEEL = os.environ.get("ASK_FOR_FEEL", "1") == "1"
 # television series. 0 asks the film-only question the README's
 # numbers were taken with.
 ASK_FOR_ALSO_SERIES = os.environ.get("ASK_FOR_ALSO_SERIES", "1") == "1"
-# `similarSystemInstruction` in similar_titles.dart, word for word. The
-# app sends one to every provider including Google; this script used to
-# send none to Google and a films-only one to the others, so three of the
-# four were measured on an instruction the app does not give.
+# `SYSTEM` in xtremio-xervice/functions/similar.js, word for word. The
+# service sends it with every question; this script used to send none to
+# Google and a films-only one to the others, so three of the four were
+# measured on an instruction the app does not give.
 SYSTEM = ("You recommend films and television. Real, released titles only. "
           "JSON only.")
 
@@ -54,7 +54,7 @@ def norm(text):
     `Cache` into "cache" and `Cach\u00e9` into "cach", so a model naming
     Haneke's film the way Haneke spells it did not match the key entry for
     it -- it was scored as a title nobody had rated and sent to the pool.
-    Ten of the 528 entries are spelled with an accent.
+    Ten of the 568 entries are spelled with an accent.
     """
     text = unicodedata.normalize("NFKD", str(text))
     text = "".join(c for c in text if not unicodedata.combining(c))
@@ -128,11 +128,10 @@ def load_keys():
 def prompt_for(target):
     """The app's own film question, word for word.
 
-    Kept in step with `askForSimilar` in lib/features/similar/
-    similar_titles.dart deliberately: measuring one question and shipping
-    another is how a table of numbers stops describing the app. When that
-    Dart changes, change this, re-measure, and say in the README what
-    moved.
+    Kept in step with `question` in xtremio-xervice/functions/similar.js
+    deliberately: measuring one question and shipping another is how a
+    table of numbers stops describing the app. When that function
+    changes, change this, re-measure, and say in the README what moved.
 
     ASK_FOR_ALSO_SERIES=0 asks the old film-only question instead -- the
     one every number in the README was originally taken with -- so the
