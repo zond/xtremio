@@ -27,11 +27,13 @@ import '../support/tv.dart';
 /// this screen and the file was nowhere on it, so matching a file made it
 /// *harder* to play than leaving it unmatched.
 ///
-/// **What it is not** is an addon. It has no manifest, no transport URL and
-/// no health; it is not counted among the addons that answered with nothing,
-/// it is not a torrent the server can pin, and nothing about it is written
-/// anywhere the engine reads addons. The tests below hold both halves: the
-/// row is an ordinary row, and the accounting around it never mentions it.
+/// **What it is not** is an addon. It is not counted among the addons that
+/// answered with nothing and it is not a torrent the server can pin. Its
+/// play does carry a stream request -- the engine keeps progress for no
+/// other kind -- but one naming this app's own service
+/// (`driveStreamRequest`), never an installed addon's. The tests below hold
+/// both halves: the row is an ordinary row, and the accounting around it
+/// never mentions it.
 const movieId = 'tt0063350';
 const seriesId = 'tt0903747';
 const episodeId = 'tt0903747:1:1';
@@ -452,7 +454,7 @@ void main() {
 
   group('pressing it plays it', () {
     testWidgets('through the same open the Remote list uses, with this '
-        'title\'s meta and no addon request', (tester) async {
+        'title\'s meta and our own stream request', (tester) async {
       useWideViewport(tester);
       final opener = FakeDriveFileOpener();
       final core = coreWith(
@@ -497,14 +499,54 @@ void main() {
       expect(args['stream']['name'], driveFileName);
       expect(
         args['streamRequest'],
-        isNull,
-        reason: 'there is no addon this came from to record',
+        driveStreamRequest(type: 'movie', videoId: movieId).toJson(),
+        reason:
+            'the engine keeps progress only for a play with a stream '
+            'request, and this one names our service rather than an addon',
       );
       expect(
         args['metaRequest'],
         isNotNull,
         reason: 'it is still this title being watched',
       );
+    });
+
+    testWidgets('an episode is tracked under its own episode id', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = coreWith(
+        const [],
+        details: loadSeriesEpisodeMetaDetailsFixture(),
+        also: {CoreField.player: loadPlayerFixture()},
+      );
+      await tester.pumpWidget(
+        harness(
+          core,
+          drive: await pairedWith([file(match: episodeMatch)]),
+          type: 'series',
+          id: seriesId,
+          videoId: episodeId,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await toggleSection(tester, StreamResolution.fhd1080);
+
+      await tester.tap(find.text(driveRelease));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      final load = core.dispatched.firstWhere(
+        (a) => a.field == CoreField.player,
+      );
+      final args =
+          (load.action['args'] as Map<String, dynamic>)['args']
+              as Map<String, dynamic>;
+      expect(
+        args['streamRequest'],
+        driveStreamRequest(type: 'series', videoId: episodeId).toJson(),
+      );
+      expect(args['subtitlesPath']['id'], episodeId);
     });
 
     testWidgets('a refusal is one sentence and nothing else', (tester) async {
@@ -561,7 +603,7 @@ void main() {
 
   group('it is a source and not an addon', () {
     testWidgets('it is offered a download like any link, and the pin is '
-        'recorded with no addon request', (tester) async {
+        'recorded under our own stream request', (tester) async {
       useWideViewport(tester);
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
@@ -599,15 +641,19 @@ void main() {
 
       // What was asked for: the Drive source itself -- its
       // `xtremio-drive:` URL, which the Rust side keys through the server
-      // as `ProxyPinKey::Drive` -- under this title, and with no addon
-      // request, because there is no addon. The grant is not in the
-      // request either: Rust holds it (`DriveAccount.grantSink`).
+      // as `ProxyPinKey::Drive` -- under this title, and with the request
+      // a Drive play is tracked under rather than any addon's, so playing
+      // the download keeps progress. The grant is not in the request
+      // either: Rust holds it (`DriveAccount.grantSink`).
       final request = downloads.added.single;
       expect(request.metaId, movieId);
       expect(request.videoId, movieId);
       expect(request.stream.url, driveSourceUrl(file(match: movieMatch)));
       expect(request.stream.infoHash, isNull);
-      expect(request.streamRequest, isNull);
+      expect(
+        request.streamRequest,
+        driveStreamRequest(type: 'movie', videoId: movieId).toJson(),
+      );
       expect(request.name, isNotEmpty);
       expect(request.toJson().toString(), isNot(contains('a-refresh-token')));
 

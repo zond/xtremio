@@ -743,4 +743,54 @@ void main() {
       expect(find.text('This download could not be removed.'), findsOneWidget);
     });
   });
+
+  group('the stream request a download plays under', () {
+    DownloadView row({
+      required Map<String, dynamic> stream,
+      Map<String, dynamic>? streamRequest,
+    }) => DownloadView({
+      'metaId': 'tt0903747',
+      'videoId': 'tt0903747:1:2',
+      'type': 'series',
+      'name': 'S1E2',
+      'stream': stream,
+      'streamRequest': ?streamRequest,
+      'state': 'complete',
+    });
+
+    test('a Drive download from before tracking gets ours for its video', () {
+      expect(
+        DownloadsScreen.streamRequestOf(
+          row(stream: {'url': '$driveSourceScheme:file-1', 'name': 'e2.mkv'}),
+        ),
+        driveStreamRequest(type: 'series', videoId: 'tt0903747:1:2'),
+      );
+    });
+
+    test('a stored request is the one used, Drive or not', () {
+      final stored = driveStreamRequest(
+        type: 'series',
+        videoId: 'tt0903747:1:2',
+      );
+      expect(
+        DownloadsScreen.streamRequestOf(
+          row(
+            stream: {'url': '$driveSourceScheme:file-1'},
+            streamRequest: stored.toJson(),
+          ),
+        ),
+        stored,
+      );
+    });
+
+    test('anything else with none stays without one', () {
+      expect(
+        DownloadsScreen.streamRequestOf(
+          row(stream: {'infoHash': 'a' * 40, 'fileIdx': 0}),
+        ),
+        isNull,
+        reason: 'no addon is invented for a torrent that lost its request',
+      );
+    });
+  });
 }

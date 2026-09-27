@@ -51,7 +51,8 @@ Widget _harness({
   required DriveAccount account,
   required DriveFileOpener opener,
   DrivePairingService? service,
-}) => PlayerHarness(device: _tv).build(
+  PlayerHarness? player,
+}) => (player ?? PlayerHarness(device: _tv)).build(
   home: ExternalLinkScope(
     opener: FakeLinkOpener(),
     child: DriveAccountScope(
@@ -74,6 +75,16 @@ Future<void> _untilLinked(WidgetTester tester) async {
   await tester.pump();
   await tester.pump();
 }
+
+/// The `Load Player` arguments of the last player load [player] saw.
+Map<String, dynamic> _lastLoad(PlayerHarness player) =>
+    player.core.dispatched
+            .lastWhere(
+              (a) =>
+                  a.field == CoreField.player && a.action['action'] == 'Load',
+            )
+            .action['args']['args']
+        as Map<String, dynamic>;
 
 void main() {
   group('what the cloud button opens on', () {
@@ -185,8 +196,14 @@ void main() {
       final account = await _account();
       final service = FakeDrivePairingService(answers: [fakeCollected()]);
       final opener = FakeDriveFileOpener();
+      final player = PlayerHarness(device: _tv);
       await tester.pumpWidget(
-        _harness(account: account, opener: opener, service: service),
+        _harness(
+          account: account,
+          opener: opener,
+          service: service,
+          player: player,
+        ),
       );
       await _untilLinked(tester);
 
@@ -199,6 +216,57 @@ void main() {
       expect(opener.asked.single.fileId, 'drive-file-1');
       expect(opener.asked.single.refreshToken, fakeRefreshToken);
       expect(find.byType(PlayerScreen), findsOneWidget);
+      // Nothing has matched it yet, so there is no title to keep progress
+      // on and nothing is claimed.
+      final load = _lastLoad(player);
+      expect(load['streamRequest'], isNull);
+      expect(load['metaRequest'], isNull);
+    });
+
+    testWidgets('a file already matched plays under its title', (tester) async {
+      final account = await _account();
+      final service = FakeDrivePairingService(answers: [fakeCollected()]);
+      final opener = FakeDriveFileOpener();
+      final player = PlayerHarness(device: _tv);
+      await tester.pumpWidget(
+        _harness(
+          account: account,
+          opener: opener,
+          service: service,
+          player: player,
+        ),
+      );
+      await _untilLinked(tester);
+      await account.noteMatch(
+        fileId: 'drive-file-1',
+        match: const LinkedDriveMatch(
+          cinemetaId: 'tt2543164',
+          type: 'movie',
+          name: 'Arrival',
+          year: 2016,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text(DrivePairingScreen.playLabel));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      final load = _lastLoad(player);
+      expect(
+        load['streamRequest'],
+        driveStreamRequest(type: 'movie', videoId: 'tt2543164').toJson(),
+      );
+      expect(load['metaRequest'], {
+        'base': kCinemetaManifestUrl,
+        'path': {
+          'resource': 'meta',
+          'type': 'movie',
+          'id': 'tt2543164',
+          'extra': <Object>[],
+        },
+      });
     });
   });
 }

@@ -762,9 +762,14 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// what is left here is a sentence and a code to scan -- the account's
   /// state is already [DriveLinkState.pairAgain] by the time this draws,
   /// and the rows the confirmation was offering are no longer any use.
+  ///
+  /// A file the match pass has already named plays under its title
+  /// ([driveMatchRequests]), so the engine keeps its progress and finds its
+  /// next episode; one it has not plays as the bare file it is.
   Future<void> _play(LinkedDriveFile file) async {
     final account = _account;
     if (account == null || _playing) return;
+    final requests = driveMatchRequests(file);
     setState(() {
       _playing = true;
       _refusal = '';
@@ -783,6 +788,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             settings: const RouteSettings(name: PlayerScreen.routeName),
             builder: (_) => PlayerScreen(
               stream: driveStreamJson(file: file, playable: opened),
+              streamRequest: requests?.stream,
+              metaRequest: requests?.meta,
+              driveOpener: widget.opener,
             ),
           ),
         );

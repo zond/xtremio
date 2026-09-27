@@ -991,10 +991,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// title's meta and subtitles attached -- which is the whole of what
   /// being on a details page adds.
   ///
-  /// **No `streamRequest`.** That is the addon request a stream came from,
-  /// and there is no addon here; handing the engine an invented one would
-  /// be an addon that does not exist, written down where the engine reads
-  /// addons.
+  /// **With [driveStreamRequest] for the video on screen**, because the
+  /// engine keeps a resume position, a watched mark and an up-next only for
+  /// a play that has a stream request. It names this app's own service
+  /// rather than any installed addon, so no addon is credited with a file
+  /// it never offered; see [driveStreamRequest] for what that address
+  /// answers.
   ///
   /// What this knows about the credential is that it does not have it:
   /// [openLinkedDriveFile] asks the account, which is the only thing that
@@ -1019,7 +1021,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               settings: const RouteSettings(name: PlayerScreen.routeName),
               builder: (_) => PlayerScreen(
                 stream: driveStreamJson(file: file, playable: opened),
+                streamRequest: driveStreamRequest(
+                  type: widget.type,
+                  videoId: videoId,
+                ),
                 metaRequest: state.metaRequest,
+                driveOpener: widget.driveOpener,
                 subtitlesPath: ResourcePath(
                   resource: 'subtitles',
                   type: widget.type,
@@ -1074,6 +1081,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           stream: playback ?? stream.json,
           streamRequest: group.request,
           metaRequest: state.metaRequest,
+          driveOpener: widget.driveOpener,
           subtitlesPath: ResourcePath(
             resource: 'subtitles',
             type: widget.type,
@@ -1118,8 +1126,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// what it had. Nothing undoes that, so it is not something a stray tap
   /// gets to do -- and the button itself is an ordinary download button,
   /// so this question is the only place the replacement is said.
-  /// [group] is null for a linked Drive file: there is no addon request to
-  /// record the pin against, and the registry row says so by carrying none.
+  /// [group] is null for a linked Drive file, which has no addon request to
+  /// record the pin against: the row carries [driveStreamRequest] instead,
+  /// so a play of the download keeps progress the way a streamed Drive play
+  /// does.
   Future<void> _download(
     MetaDetailsState state,
     MetaItem meta,
@@ -1152,7 +1162,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       poster: meta.poster,
       stream: stream,
       meta: meta.json,
-      streamRequest: group?.request.toJson(),
+      streamRequest:
+          (group?.request ??
+                  (isDriveStream(stream)
+                      ? driveStreamRequest(type: widget.type, videoId: videoId)
+                      : null))
+              ?.toJson(),
       metaRequest: state.metaRequest?.toJson(),
     );
 
@@ -3955,7 +3970,7 @@ final class _StreamDownloads {
       (stream.kind == StreamKind.url &&
           (stream.url?.startsWith('http://') == true ||
               stream.url?.startsWith('https://') == true ||
-              stream.url?.startsWith('$driveSourceScheme:') == true));
+              isDriveStream(stream)));
 
   /// What a hold on the source [stream] is drawn on does about the copy on
   /// the device, for a remote that cannot press the button.

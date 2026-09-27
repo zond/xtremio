@@ -39,6 +39,8 @@ class PlayerHarness {
     this.cast,
     this.lanMedia,
     this.prefs,
+    this.drive,
+    this.driveOpener,
     this.navigatorObservers = const [],
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
@@ -193,6 +195,15 @@ class PlayerHarness {
   /// without.
   final AppPrefs? prefs;
 
+  /// The linked Drive account above the screen, or null for no
+  /// [DriveAccountScope] -- which is what most players run under.
+  final DriveAccount? drive;
+
+  /// What the screen opens a linked Drive file with (up-next into the next
+  /// episode's file); null leaves the screen's own default, which reaches
+  /// FFI.
+  final DriveFileOpener? driveOpener;
+
   /// Observers on the screen's own navigator: how a test watches what the
   /// player pushes over itself.
   final List<NavigatorObserver> navigatorObservers;
@@ -257,9 +268,13 @@ class PlayerHarness {
         ? casted
         : DownloadsScope(client: downloads, child: casted);
     final prefs = this.prefs;
-    final withPrefs = prefs == null
+    final drive = this.drive;
+    final withDrive = drive == null
         ? scoped
-        : PrefsScope(prefs: prefs, child: scoped);
+        : DriveAccountScope(account: drive, child: scoped);
+    final withPrefs = prefs == null
+        ? withDrive
+        : PrefsScope(prefs: prefs, child: withDrive);
     return KeyedSubtree(
       key: ObjectKey(this),
       child: device == null
@@ -273,6 +288,7 @@ class PlayerHarness {
     streamRequest: streamRequest,
     metaRequest: metaRequest,
     subtitlesPath: subtitlesPath,
+    driveOpener: driveOpener ?? const ServerDriveFileOpener(),
   );
 
   /// Mounts the screen and lets it open the stream.

@@ -66,7 +66,7 @@ class DownloadsScreen extends StatefulWidget {
         settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
           stream: playback ?? view.stream.json,
-          streamRequest: _requestOf(view.streamRequest),
+          streamRequest: streamRequestOf(view),
           metaRequest: _requestOf(view.metaRequest),
           subtitlesPath: ResourcePath(
             resource: 'subtitles',
@@ -76,6 +76,22 @@ class DownloadsScreen extends StatefulWidget {
         ),
       ),
     );
+  }
+
+  /// The stream request [view] plays under: the stored one, or -- for a
+  /// Drive download with none -- [driveStreamRequest] for its video.
+  ///
+  /// Builds before Drive plays were tracked stored Drive downloads with no
+  /// request at all, and without one the engine keeps no progress for the
+  /// play. The request is a function of the row's own type and video, so it
+  /// is made here on the way into the player rather than written back into
+  /// every old row.
+  @visibleForTesting
+  static ResourceRequest? streamRequestOf(DownloadView view) {
+    final stored = _requestOf(view.streamRequest);
+    if (stored != null || !isDriveStream(view.stream)) return stored;
+    if (view.type.isEmpty || view.videoId.isEmpty) return null;
+    return driveStreamRequest(type: view.type, videoId: view.videoId);
   }
 
   /// A stored addon request, or null when it was not stored (or was stored

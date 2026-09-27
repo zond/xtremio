@@ -30,6 +30,8 @@ import 'dart:convert';
 import '../src/rust/api/server.dart' as rust;
 import 'drive_account.dart';
 import 'drive_link.dart';
+import 'drive_pairing.dart';
+import 'resource.dart';
 
 /// Why a linked file could not be played. Each is drawn differently, which
 /// is why they are separate and why none of them is a sentence from
@@ -275,6 +277,70 @@ Map<String, dynamic> driveStreamJson({
 
 /// What a Drive stream says it came from, on the player and in a list.
 const String driveSourceLabel = 'Google Drive';
+
+/// The address a Drive play is recorded under: the pairing service's own
+/// manifest (`xtremio-xervice/public/manifest.json`).
+const String driveTrackingManifestUrl =
+    '${XtremioDrivePairingService.defaultOrigin}/manifest.json';
+
+/// The stream request a Drive play of [videoId] is loaded with.
+///
+/// **stremio-core only keeps progress for a play that has one.** Its player
+/// writes the resume position, the watched mark and Continue Watching from
+/// `TimeChanged` only while the selection carries a stream request, and it
+/// finds the next episode by that request's id -- so a Drive play loaded
+/// without one was watched and forgotten, with no up-next after it.
+///
+/// **It is our own address and not a borrowed one.** The request names the
+/// addon a stream came from, and the core writes that down (the last-used
+/// stream's transport URL) and asks it for the next episode's streams.
+/// Naming an installed addon would put a file it never offered on its
+/// record; naming this service names the thing that did put the file here.
+/// The manifest is a truthful one that offers no streams, and every
+/// `stream/...` under it is one static `{"streams":[]}` served from the
+/// CDN, so the next-episode fetch the core makes costs a cached empty
+/// answer and finds nothing to binge into -- the Drive file for the next
+/// episode is found by the player itself (`_playNext`), which is the only
+/// thing that can open one. Addon health leaves this address out, the way
+/// it leaves out the app's own loopback stubs, so those empty answers are
+/// no addon's record either.
+///
+/// [videoId] is the video the file is: the Cinemeta id for a film, the
+/// episode's `tt…:season:episode` for an episode.
+ResourceRequest driveStreamRequest({
+  required String type,
+  required String videoId,
+}) => ResourceRequest(
+  base: driveTrackingManifestUrl,
+  path: ResourcePath(resource: 'stream', type: type, id: videoId),
+);
+
+/// The meta and stream requests a matched [file] is played under, or null
+/// for a file nothing matched -- which has no title to keep progress on.
+///
+/// The meta comes from Cinemeta, which is what the match was made against,
+/// so the id is one it answers for. The video is the episode when the name
+/// gave one and the title otherwise ([LinkedDriveMatch.isFor]'s reading).
+({ResourceRequest meta, ResourceRequest stream})? driveMatchRequests(
+  LinkedDriveFile file,
+) {
+  final match = file.match;
+  if (match == null) return null;
+  return (
+    meta: ResourceRequest(
+      base: kCinemetaManifestUrl,
+      path: ResourcePath(
+        resource: 'meta',
+        type: match.type,
+        id: match.cinemetaId,
+      ),
+    ),
+    stream: driveStreamRequest(
+      type: match.type,
+      videoId: match.videoId ?? match.cinemetaId,
+    ),
+  );
+}
 
 /// What a viewer is told about [reason]. One sentence each, written here so
 /// that nothing downstream has to invent one and nothing echoes an error.

@@ -87,6 +87,7 @@ class PlayerScreen extends StatefulWidget {
     this.streamRequest,
     this.metaRequest,
     this.subtitlesPath,
+    this.driveOpener = const ServerDriveFileOpener(),
   });
 
   /// Raw stream JSON as it came out of `meta_details.streams` (or a
@@ -102,6 +103,11 @@ class PlayerScreen extends StatefulWidget {
   /// `subtitles/<type>/<video id>`: the resource the engine asks subtitle
   /// addons for once the video parameters are known.
   final ResourcePath? subtitlesPath;
+
+  /// What opens the next episode's linked Drive file when up-next moves on
+  /// to one ([_PlayerScreenState._playNext]). A parameter for the reason
+  /// `MetaDetailsScreen.driveOpener` is: a test plays a file without FFI.
+  final DriveFileOpener driveOpener;
 
   /// The name every route that mounts this screen is pushed under, so
   /// whoever is about to open something over the player can tell there is
@@ -4141,8 +4147,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// A finished download of that episode is what the new player gets,
   /// connection or not: a whole file on this disk is the better source,
   /// and it is the *only* one offline, where the next episode's streams
-  /// never load and the engine finds nothing to binge into. Otherwise it
-  /// is the stream the engine found (same addon, same binge group).
+  /// never load and the engine finds nothing to binge into. Next is a
+  /// linked Drive file of that episode: the engine cannot find one -- its
+  /// next-streams fetch asks addons, and a Drive play's request names a
+  /// service that answers none ([driveStreamRequest]) -- so this asks the
+  /// account, and a file that will not open is passed over like a missing
+  /// download. Otherwise it is the stream the engine found (same addon,
+  /// same binge group).
   ///
   /// Asking the registry is a round trip, so [_advancing] holds the second
   /// press: the countdown running out under a finger on Next would
@@ -4165,41 +4176,90 @@ class _PlayerScreenState extends State<PlayerScreen> {
       navigator.popUntil((candidate) => candidate == route);
     }
     final downloads = DownloadsScope.maybeOf(context);
-    final metaId = (state.metaRequest ?? widget.metaRequest)?.path.id;
-    if (downloads == null || metaId == null) {
+    final drive = DriveAccountScope.maybeOf(context);
+    final metaRequest = state.metaRequest ?? widget.metaRequest;
+    if (metaRequest == null || (downloads == null && drive == null)) {
       _handOver(navigator, state, next, state.nextStream?.json);
       return;
     }
-    unawaited(_handOverFromDisk(navigator, downloads, metaId, state, next));
+    unawaited(
+      _handOverFromOwnCopy(
+        navigator,
+        downloads,
+        drive,
+        metaRequest,
+        state,
+        next,
+      ),
+    );
   }
 
   /// Hands over to the next episode's own file when the registry has a
-  /// finished download of it, and to whatever the engine found otherwise.
-  Future<void> _handOverFromDisk(
+  /// finished download of it, to its linked Drive file when there is one
+  /// that opens, and to whatever the engine found otherwise.
+  Future<void> _handOverFromOwnCopy(
     NavigatorState navigator,
-    DownloadsClient downloads,
-    String metaId,
+    DownloadsClient? downloads,
+    DriveAccount? drive,
+    ResourceRequest metaRequest,
     PlayerState state,
     VideoInfo next,
   ) async {
-    final playback = await offlinePlaybackOf(downloads, metaId, next.id);
-    // Gone, or leaving, while the registry was answering: there is no
-    // route left to replace, and a screen waiting for its own teardown
-    // must not put a second player over itself -- a second engine and a
-    // fresh open, from a press that asked to stop watching.
-    if (!_stillOurs) return;
-    _handOver(navigator, state, next, playback ?? state.nextStream?.json);
+    final metaId = metaRequest.path.id;
+    if (downloads != null) {
+      final playback = await offlinePlaybackOf(downloads, metaId, next.id);
+      // Gone, or leaving, while the registry was answering: there is no
+      // route left to replace, and a screen waiting for its own teardown
+      // must not put a second player over itself -- a second engine and a
+      // fresh open, from a press that asked to stop watching.
+      if (!_stillOurs) return;
+      if (playback != null) {
+        _handOver(navigator, state, next, playback);
+        return;
+      }
+    }
+    final linked = drive?.files.matching(metaId, videoId: next.id);
+    if (drive != null && linked != null && linked.isNotEmpty) {
+      final file = linked.first;
+      final opened = await openLinkedDriveFile(
+        account: drive,
+        file: file,
+        opener: widget.driveOpener,
+      );
+      // The same two reasons as the registry's round trip above.
+      if (!_stillOurs) return;
+      if (opened is DriveFilePlayable) {
+        _handOver(
+          navigator,
+          state,
+          next,
+          driveStreamJson(file: file, playable: opened),
+          streamRequest: driveStreamRequest(
+            type: metaRequest.path.type,
+            videoId: next.id,
+          ),
+        );
+        return;
+      }
+    }
+    _handOver(navigator, state, next, state.nextStream?.json);
   }
 
   /// Puts a player for [next] in this screen's place, or -- with no
   /// [stream] anywhere for it -- goes back to the caller pointing at the
   /// episode so its streams can be picked.
+  ///
+  /// The new player's stream request is this one's with the id moved on,
+  /// unless [streamRequest] names the one [stream] really came from: a
+  /// Drive file found for the next episode is not the addon this episode
+  /// played from.
   void _handOver(
     NavigatorState navigator,
     PlayerState state,
     VideoInfo next,
-    Map<String, dynamic>? stream,
-  ) {
+    Map<String, dynamic>? stream, {
+    ResourceRequest? streamRequest,
+  }) {
     if (stream == null) {
       // A leave like any other, and it takes the same road out: this
       // player is over, and the screen it goes back to would rather have
@@ -4217,18 +4277,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // would clear the ask the successor had just made. Nothing is left
     // holding a rate either way, because the release comes first.
     _releaseDisplayFrameRate();
-    final streamRequest = state.streamRequest ?? widget.streamRequest;
+    final current = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(
       MaterialPageRoute<PlayerScreenResult>(
         settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
           stream: stream,
-          streamRequest: streamRequest?.copyWith(
-            path: streamRequest.path.copyWith(id: next.id),
-          ),
+          streamRequest:
+              streamRequest ??
+              current?.copyWith(path: current.path.copyWith(id: next.id)),
           metaRequest: state.metaRequest ?? widget.metaRequest,
           subtitlesPath: subtitlesPath?.copyWith(id: next.id),
+          driveOpener: widget.driveOpener,
         ),
       ),
     );

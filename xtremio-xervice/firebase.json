@@ -31,6 +31,10 @@
       {
         "source": "/similar/**",
         "function": "similar"
+      },
+      {
+        "source": "/stream/**",
+        "destination": "/no-streams.json"
       }
     ],
     "cleanUrls": true,
@@ -45,6 +49,45 @@
           {
             "key": "Cache-Control",
             "value": "public, max-age=300"
+          }
+        ]
+      },
+      {
+        "source": "/manifest.json",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
+          }
+        ]
+      },
+      {
+        "source": "/stream/**",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
+          }
+        ]
+      },
+      {
+        "source": "/no-streams.json",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
           }
         ]
       },

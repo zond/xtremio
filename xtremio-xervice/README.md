@@ -88,6 +88,24 @@ before the navigation is attempted, so a browser that refuses to follow a
 custom scheme without a tap leaves a page that says what happened and offers
 the tap.
 
+## The addon manifest, which offers nothing
+
+`/manifest.json` is a Stremio addon manifest (`public/manifest.json`)
+declaring `stream` for `movie` and `series` ids, and every `/stream/**` is
+rewritten to one static `public/no-streams.json`, `{"streams":[]}`, cached
+for a day. No function runs for either.
+
+It exists for the app's Drive plays. stremio-core keeps a play's progress --
+the resume position, the watched mark, Continue Watching, the up-next --
+only when the player was loaded with a stream request, which names the addon
+the stream came from. A Drive file came from this service, so the app names
+this manifest (`driveStreamRequest` in `lib/core/drive_playback.dart`)
+rather than borrowing an installed addon that never offered the file. The
+core then asks it for the next episode's streams like any addon; the static
+empty answer is what it gets, and the app finds the next episode's Drive
+file itself. It is not meant to be installed, and installing it adds
+nothing.
+
 ## Why there is no App Check
 
 App Check attests that a request came from a build Google Play

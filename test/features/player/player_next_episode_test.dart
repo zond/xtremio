@@ -9,6 +9,9 @@ import 'package:xtremio/features/player/up_next_card.dart';
 
 import '../../support/fake_cast_client.dart';
 import '../../support/fake_downloads_client.dart';
+import '../../support/fake_drive_file_opener.dart';
+import '../../support/fake_prefs_client.dart';
+import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -35,6 +38,8 @@ void main() {
     bool withStream = true,
     DownloadsClient? downloads,
     FakeCastClient? cast,
+    DriveAccount? drive,
+    DriveFileOpener? driveOpener,
   }) {
     final harness = PlayerHarness(
       cast: cast,
@@ -46,6 +51,8 @@ void main() {
         id: 'tt0063350:1:1',
       ),
       downloads: downloads,
+      drive: drive,
+      driveOpener: driveOpener,
     );
     harness.fixture['nextVideo'] = nextVideo;
     harness.fixture['nextStream'] = withStream ? nextStream : null;
@@ -285,6 +292,121 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(lastLoadedStream(harness), nextStream);
+  });
+
+  /// A paired device with the next episode's file linked and matched to it.
+  Future<DriveAccount> withNextEpisodeOnDrive() async {
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await prefs.load();
+    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
+    await drive.load();
+    addTearDown(() {
+      drive.dispose();
+      prefs.dispose();
+    });
+    await drive.link(
+      refreshToken: 'a-refresh-token',
+      files: [
+        LinkedDriveFile(
+          fileId: 'drive-e2',
+          name: 'S01E02.mkv',
+          mimeType: 'video/x-matroska',
+          linkedAt: DateTime.utc(2026, 9, 20),
+          match: const LinkedDriveMatch(
+            cinemetaId: 'tt0063350',
+            type: 'series',
+            name: 'The Show',
+            season: 1,
+            episode: 2,
+          ),
+        ),
+      ],
+    );
+    return drive;
+  }
+
+  group('a linked Drive file of the next episode', () {
+    testWidgets('is what the next player opens, under our own request', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final opener = FakeDriveFileOpener();
+      final harness = harnessWithNext(
+        drive: await withNextEpisodeOnDrive(),
+        driveOpener: opener,
+      );
+      await harness.pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+
+      expect(opener.asked.single.fileId, 'drive-e2');
+      expect(harness.engines, hasLength(2));
+      final next = loadArgs(
+        harness.core.dispatched.lastWhere((a) => a.action['action'] == 'Load'),
+      );
+      expect(next['stream']['url'], startsWith('http://127.0.0.1:'));
+      expect(next['stream']['name'], 'S01E02.mkv');
+      expect(
+        next['streamRequest'],
+        driveStreamRequest(
+          type: harness.selected['metaRequest']['path']['type'] as String,
+          videoId: nextId,
+        ).toJson(),
+        reason: 'not the addon this episode came from: it offered no file',
+      );
+      expect(next['metaRequest'], harness.selected['metaRequest']);
+    });
+
+    testWidgets('comes after a download of it', (tester) async {
+      useWideViewport(tester);
+      final downloads = withNextEpisodeOnDisk();
+      addTearDown(downloads.dispose);
+      final opener = FakeDriveFileOpener();
+      final harness = harnessWithNext(
+        downloads: downloads,
+        drive: await withNextEpisodeOnDrive(),
+        driveOpener: opener,
+      );
+      await harness.pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+
+      expect(opener.asked, isEmpty);
+      expect(lastLoadedStream(harness)['url'], nextUrl);
+    });
+
+    testWidgets('that will not open is passed over for the engine\'s stream', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      final opener = FakeDriveFileOpener(
+        answers: const [DriveFileRefused(DriveOpenFailure.unreachable)],
+      );
+      final harness = harnessWithNext(
+        downloads: downloads,
+        drive: await withNextEpisodeOnDrive(),
+        driveOpener: opener,
+      );
+      await harness.pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+
+      expect(opener.asked, hasLength(1));
+      expect(lastLoadedStream(harness), nextStream);
+      expect(
+        loadArgs(
+          harness.core.dispatched.lastWhere(
+            (a) => a.action['action'] == 'Load',
+          ),
+        )['streamRequest']['base'],
+        harness.selected['streamRequest']['base'],
+      );
+    });
   });
 
   testWidgets('holds the countdown while a sheet is open', (tester) async {

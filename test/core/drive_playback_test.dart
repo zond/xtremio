@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -271,6 +272,110 @@ void main() {
         isFalse,
         reason: 'an empty filename is worse than none: it claims a container',
       );
+    });
+  });
+
+  group('the request a Drive play is tracked under', () {
+    /// The URL stremio-core's HTTP transport fetches for [request]: the
+    /// manifest's `/manifest.json` swapped for `/{resource}/{type}/{id}.json`,
+    /// the id percent-encoded as a URI component.
+    String fetchedUrl(ResourceRequest request) => request.base.replaceFirst(
+      RegExp(r'/manifest\.json$'),
+      '/${request.path.resource}/${request.path.type}/'
+      '${Uri.encodeComponent(request.path.id)}.json',
+    );
+
+    test('an episode lands on the service, under its own id', () {
+      final request = driveStreamRequest(
+        type: 'series',
+        videoId: 'tt0903747:1:2',
+      );
+      expect(request.toJson(), {
+        'base': 'https://xtremio-xervice.web.app/manifest.json',
+        'path': {
+          'resource': 'stream',
+          'type': 'series',
+          'id': 'tt0903747:1:2',
+          'extra': <Object>[],
+        },
+      });
+      expect(
+        fetchedUrl(request),
+        'https://xtremio-xervice.web.app/stream/series/tt0903747%3A1%3A2.json',
+        reason: 'what the Hosting rewrite of /stream/** answers',
+      );
+      expect(
+        fetchedUrl(driveStreamRequest(type: 'movie', videoId: 'tt0063350')),
+        'https://xtremio-xervice.web.app/stream/movie/tt0063350.json',
+      );
+    });
+
+    test('the manifest it names is the one the service publishes', () {
+      final manifest = jsonDecode(
+        File('xtremio-xervice/public/manifest.json').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      expect(manifest['resources'], ['stream']);
+      expect(manifest['types'], containsAll(['movie', 'series']));
+      expect(manifest['idPrefixes'], ['tt']);
+      expect(manifest['catalogs'], isEmpty);
+      expect(
+        jsonDecode(
+          File('xtremio-xervice/public/no-streams.json').readAsStringSync(),
+        ),
+        {'streams': <Object>[]},
+      );
+    });
+
+    test('a matched file plays under its title, an unmatched one under '
+        'nothing', () {
+      LinkedDriveFile linked(LinkedDriveMatch? match) => LinkedDriveFile(
+        fileId: 'f',
+        name: 'f.mkv',
+        mimeType: 'video/x-matroska',
+        linkedAt: _at,
+        match: match,
+      );
+
+      final film = driveMatchRequests(
+        linked(
+          const LinkedDriveMatch(
+            cinemetaId: 'tt2543164',
+            type: 'movie',
+            name: 'Arrival',
+          ),
+        ),
+      )!;
+      expect(film.meta.base, kCinemetaManifestUrl);
+      expect(
+        film.meta.path,
+        const ResourcePath(resource: 'meta', type: 'movie', id: 'tt2543164'),
+      );
+      expect(
+        film.stream,
+        driveStreamRequest(type: 'movie', videoId: 'tt2543164'),
+      );
+
+      final episode = driveMatchRequests(
+        linked(
+          const LinkedDriveMatch(
+            cinemetaId: 'tt0903747',
+            type: 'series',
+            name: 'Breaking Bad',
+            season: 2,
+            episode: 11,
+          ),
+        ),
+      )!;
+      expect(
+        episode.meta.path,
+        const ResourcePath(resource: 'meta', type: 'series', id: 'tt0903747'),
+      );
+      expect(
+        episode.stream,
+        driveStreamRequest(type: 'series', videoId: 'tt0903747:2:11'),
+      );
+
+      expect(driveMatchRequests(linked(null)), isNull);
     });
   });
 

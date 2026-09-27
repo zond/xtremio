@@ -42,9 +42,10 @@
 //! Observations are buffered per [`Sweep`] -- one field's load, all the
 //! addons asked at once -- and committed only if at least one of them did
 //! not fail. When DNS is down every addon fails together, and that is
-//! evidence about the connection, not about the addons. What is on
-//! loopback is left out of the sweep entirely ([`is_own_stub`]): this app's
-//! own stub answering says nothing about whether the network is up, and
+//! evidence about the connection, not about the addons. This app's own
+//! stubs -- what is on loopback, and the address Drive plays are recorded
+//! under -- are left out of the sweep entirely ([`is_own_stub`]): one of
+//! them answering says nothing about whether the network is up, and
 //! nothing about an addon it was never asked to stand for.
 //!
 //! ## Where it lives
@@ -137,6 +138,12 @@ const DEFAULT_SERVER_PORT: u16 = 11470;
 /// The path the streaming server serves the profile's built-in local addon
 /// under (`stremio-official-addons`, `protected: true`).
 const LOCAL_ADDON_PATH: &str = "/local-addon/";
+
+/// The address a Google Drive play is recorded under
+/// (`driveTrackingManifestUrl` in `lib/core/drive_playback.dart`): the
+/// pairing service's own manifest, which offers no streams and answers
+/// every `stream/...` with one static empty list.
+const DRIVE_TRACKING_MANIFEST: &str = "https://xtremio-xervice.web.app/manifest.json";
 
 /// How an addon's answer settled.
 ///
@@ -451,9 +458,17 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
 ///
 /// An addon genuinely self-hosted on loopback, on some port that is not the
 /// streaming server's, is still recorded: what is skipped is this app's own
-/// two endpoints, not everything on this machine.
+/// endpoints, not everything on this machine.
+///
+/// The third of those is not on loopback: [`DRIVE_TRACKING_MANIFEST`], the
+/// stream request a Drive play is loaded with so the engine keeps its
+/// progress. The engine asks it for the next episode's streams like any
+/// addon, and its static empty answer is no more an addon's health, or
+/// evidence about the network the addons are on, than the local addon's.
+/// Matched exactly: it is one address, and nothing else on that host is a
+/// stream request.
 fn is_own_stub(base: &Url, is_embedded: impl FnOnce(&Url) -> bool) -> bool {
-    is_local_addon(base) || is_embedded(base)
+    is_local_addon(base) || base.as_str() == DRIVE_TRACKING_MANIFEST || is_embedded(base)
 }
 
 /// Whether `base` is the streaming server's local addon: on this machine,
@@ -1138,6 +1153,29 @@ mod tests {
             );
             assert!(sweep.is_empty(), "{base} was recorded against");
         }
+    }
+
+    #[test]
+    fn the_drive_tracking_address_is_skipped() {
+        // A Drive play's next-episode fetch lands on the service's static
+        // empty answer, which says nothing about any addon.
+        let mut sweep = Sweep::new();
+        sweep.observe_with(
+            &url(DRIVE_TRACKING_MANIFEST),
+            ResourceKind::Stream,
+            Outcome::Empty,
+            |_| false,
+        );
+        assert!(sweep.is_empty());
+
+        // The rest of that host is not the stream request, and is measured.
+        sweep.observe_with(
+            &url("https://xtremio-xervice.web.app/other/manifest.json"),
+            ResourceKind::Stream,
+            Outcome::Empty,
+            |_| false,
+        );
+        assert!(!sweep.is_empty());
     }
 
     #[test]

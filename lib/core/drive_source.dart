@@ -45,6 +45,11 @@ const String driveSourceScheme = 'xtremio-drive';
 String driveSourceUrl(LinkedDriveFile file) =>
     '$driveSourceScheme:${file.fileId}';
 
+/// Whether [stream] is a linked Drive file's row ([driveSourceUrl]), which
+/// is also what a Drive download's registry row stores as its stream.
+bool isDriveStream(StreamInfo stream) =>
+    stream.url?.startsWith('$driveSourceScheme:') == true;
+
 /// [file] as the stream JSON a sources row is drawn from.
 ///
 /// `name` is the file's own name, which is what the lead line falls back

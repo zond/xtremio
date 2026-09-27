@@ -227,6 +227,25 @@ what every model field means. The shape of the thing is in the
   a container off a `/drive/stream/<key>` URL from. Until a Drive file has
   a board row of its own, the list on the pairing screen
   (`DrivePairingScreen`) is where one is played from.
+- **A Drive play of a known title is tracked like any other**, because it
+  is loaded with a stream request: stremio-core's player writes the resume
+  position, the watched mark and Continue Watching from `TimeChanged`
+  only when the selection has one, and finds the next episode by its id.
+  The request is `driveStreamRequest` (`lib/core/drive_playback.dart`),
+  and it names this app's own service --
+  `https://xtremio-xervice.web.app/manifest.json`, a truthful manifest
+  offering no streams -- rather than any installed addon, which would be
+  crediting an addon with a file it never offered. Every `stream/...`
+  under it is one static `{"streams":[]}` (a Hosting rewrite, cached a
+  day), so the core's next-episode fetch costs a CDN hit and finds
+  nothing; `_playNext` in the player finds a linked Drive file of the next
+  episode itself, after a finished download and before the core's own
+  next stream. Addon health skips that address like the loopback stubs
+  (`is_own_stub`). Details passes it for the video on screen, the pairing
+  screen for a file already matched (with a Cinemeta meta request), and a
+  Drive download stores it -- a row an older build stored without one gets
+  it at play time (`DownloadsScreen.streamRequestOf`). An unmatched file
+  plays with none: it has no title to keep progress on.
 - **Whether the server shares between sessions is the app's decision, and
   it is one settings key.** The server keeps uploading after playback ends
   when its `seedingEnabled` setting is true (its own default); when it is

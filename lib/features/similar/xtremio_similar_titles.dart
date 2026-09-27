@@ -22,7 +22,7 @@ import 'similar_titles.dart';
 
 /// Where the xtremio-xervice server lives: the Firebase Hosting site that
 /// also serves Drive pairing, which rewrites `/similar/**` to the function.
-const String xtremioDriveBase = 'https://xtremio-xervice.web.app';
+const String xtremioDriveBase = XtremioDrivePairingService.defaultOrigin;
 
 final class XtremioSimilarTitles implements SimilarTitlesProvider {
   XtremioSimilarTitles({Uri? base, this.budget = similarBudget})

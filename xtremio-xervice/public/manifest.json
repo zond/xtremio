@@ -1,0 +1,10 @@
+{
+  "id": "com.zond.xtremio.drive",
+  "version": "1.0.0",
+  "name": "Google Drive (xtremio)",
+  "description": "Where xtremio records what was watched from a linked Google Drive file, so it keeps its place and its watched mark. It offers no streams: the files are opened by the app itself, from the viewer's own Drive.",
+  "resources": ["stream"],
+  "types": ["movie", "series"],
+  "idPrefixes": ["tt"],
+  "catalogs": []
+}
