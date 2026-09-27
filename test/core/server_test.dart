@@ -183,16 +183,26 @@ void main() {
       // whole of the question -- the query on it is the target's own, so it
       // is part of the stream's name, and the path alone names no stream at
       // all.
-      final numbers = await server.streamNumbers(proxied);
+      //
+      // What is on the disk is some of the film and never more than it.
+      // Some of it, and not none: the whole film was read through this
+      // route, so a pair of zeroes that never moves would be a decode of an
+      // empty answer passing as a reading of a store that is holding
+      // something. The proxy cache writes behind the relayed body, so the
+      // first chunk can land just after the body ends: asked again until it
+      // shows, within a bound. Which chunks are down is the cleaner's
+      // business and not this call's, so nothing here counts them.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      var numbers = await server.streamNumbers(proxied);
+      while (DateTime.now().isBefore(deadline) &&
+          (numbers?.window == null ||
+              numbers!.window!.behindBytes + numbers.window!.aheadBytes == 0)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        numbers = await server.streamNumbers(proxied);
+      }
       expect(numbers, isNotNull);
       final window = numbers!.window;
       expect(window, isNotNull);
-      // What is on the disk is some of the film and never more than it.
-      // Some of it, and not none: the whole film was read through this
-      // route a moment ago, so a pair of zeroes here would be a decode of
-      // an empty answer passing as a reading of a store that is holding
-      // something. Which chunks are down at this instant is the cleaner's
-      // business and not this call's, so nothing here counts them.
       expect(window!.behindBytes + window.aheadBytes, greaterThan(0));
       expect(
         window.behindBytes + window.aheadBytes,
