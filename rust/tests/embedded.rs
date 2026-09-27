@@ -45,7 +45,7 @@ fn config(root: &std::path::Path) -> ServerConfig {
 /// questions go over FFI -- require the per-launch bearer token, so a plain
 /// request is refused (401); the media routes players fetch stay open.
 async fn control_status(base_url: &str) -> anyhow::Result<StatusCode> {
-    let client = reqwest::Client::builder()
+    let client = xtremio_core::env::http_client_builder()
         // Loopback: an ambient `HTTP_PROXY` would send a request meant for
         // the server this test started off the machine, and reqwest does
         // not exempt 127.0.0.1 from one.
@@ -302,7 +302,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
             origin.port()
         )
     };
-    let client = reqwest::Client::builder()
+    let client = xtremio_core::env::http_client_builder()
         // Loopback: an ambient `HTTP_PROXY` would send a request meant for
         // the server this test started off the machine, and reqwest does
         // not exempt 127.0.0.1 from one.

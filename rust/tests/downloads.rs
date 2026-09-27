@@ -179,7 +179,7 @@ fn create_torrent_on_server(base_url: &url::Url, torrent: &[u8]) -> serde_json::
         // for as long as a filtering proxy takes to not answer -- and the bound
         // below is the second half of the same lesson: a local call that has
         // not answered in ten seconds is not going to.
-        let client = reqwest::Client::builder()
+        let client = xtremio_core::env::http_client_builder()
             .no_proxy()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -205,7 +205,7 @@ fn create_torrent_on_server(base_url: &url::Url, torrent: &[u8]) -> serde_json::
 /// of hanging on a magnet nobody can answer.
 fn fetch(url: &url::Url) -> (u16, Vec<u8>) {
     runtime().block_on(async {
-        let client = reqwest::Client::builder()
+        let client = xtremio_core::env::http_client_builder()
             .no_proxy()
             .timeout(std::time::Duration::from_secs(10))
             .build()

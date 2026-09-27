@@ -19,7 +19,6 @@
 //! - `subtitles`: when each subtitle file has text on screen, and the
 //!   line that maps one file's clock onto another's
 //! - `diagnostics`: what this binary was built from (the pinned revisions)
-//! - `android`: JNI hooks the Kotlin side calls before Dart starts (Android only)
 //!
 //! The crate also owns the process's allocator, below.
 
@@ -53,8 +52,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub mod addon_health;
 pub mod addon_observer;
-#[cfg(target_os = "android")]
-pub mod android;
 pub mod api;
 pub mod core;
 pub mod diagnostics;

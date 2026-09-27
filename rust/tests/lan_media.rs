@@ -37,7 +37,7 @@ fn loopback(addr: &str) -> anyhow::Result<SocketAddr> {
 }
 
 async fn status_of(addr: SocketAddr, path: &str) -> anyhow::Result<StatusCode> {
-    let client = reqwest::Client::builder()
+    let client = xtremio_core::env::http_client_builder()
         // Loopback: an ambient `HTTP_PROXY` would send a request meant for
         // the server this test started off the machine, and reqwest does
         // not exempt 127.0.0.1 from one.
@@ -116,7 +116,9 @@ async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::R
     // The create routes are control routes and are not mounted at all: a
     // 404 (or the stream route's 405 for a POST on a path it also matches),
     // never a 401 that would say the route exists behind a token.
-    let client = reqwest::Client::builder().no_proxy().build()?;
+    let client = xtremio_core::env::http_client_builder()
+        .no_proxy()
+        .build()?;
     for path in [
         "/create".to_owned(),
         format!("/{unknown}/create"),

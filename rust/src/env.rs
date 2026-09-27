@@ -181,6 +181,7 @@ static STORAGE_ORDER: LazyLock<StorageOrder> = LazyLock::new(|| StorageOrder {
 /// exposes nothing to inspect a built client's verifier, so
 /// [`tests::our_client_builds_where_the_platform_verifier_cannot`] proves it
 /// behaviourally where the desktop allows.
+#[allow(clippy::disallowed_methods)] // the one door clippy.toml points everyone to
 pub fn http_client_builder() -> reqwest::ClientBuilder {
     Client::builder().tls_certs_only(mozilla_roots())
 }
@@ -1149,6 +1150,7 @@ mod tests {
         let saved = ["SSL_CERT_FILE", "SSL_CERT_DIR"].map(|name| (name, std::env::var_os(name)));
         std::env::set_var("SSL_CERT_FILE", empty_file.path());
         std::env::set_var("SSL_CERT_DIR", empty_dir.path());
+        #[allow(clippy::disallowed_methods)] // the platform verifier, on purpose
         let platform = Client::builder().build();
         let ours = http_client_builder().build();
         for (name, value) in saved {

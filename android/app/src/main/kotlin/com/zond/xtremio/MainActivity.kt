@@ -53,13 +53,6 @@ class MainActivity : FlutterActivity() {
      */
     private var drivePicker: DrivePicker? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        // Must run before the Flutter engine starts Dart: RustLib.init() may
-        // issue HTTPS requests right away.
-        NativeInit.initTlsVerifier(applicationContext)
-        super.onCreate(savedInstanceState)
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Answers `DeviceProfile.detect()` (lib/shell/device_profile.dart),

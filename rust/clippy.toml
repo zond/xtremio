@@ -1,0 +1,10 @@
+# Every HTTPS client starts at `env::http_client_builder`, which brings
+# Mozilla's roots. A client built any other way makes reqwest construct
+# rustls-platform-verifier, which the Android app does not initialise (it
+# would panic) and whose Kotlin half it does not ship. See docs/ANDROID.md.
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "start at env::http_client_builder" },
+    { path = "reqwest::Client::builder", reason = "start at env::http_client_builder" },
+    { path = "reqwest::ClientBuilder::new", reason = "start at env::http_client_builder" },
+    { path = "reqwest::get", reason = "start at env::http_client_builder" },
+]

@@ -525,7 +525,7 @@ fn quantile(sorted: &[f64], at: f64) -> f64 {
 #[ignore = "needs internet access to opensubtitles-v3.strem.io, and downloads the corpus"]
 fn record_the_calibration() -> anyhow::Result<()> {
     let runtime = runtime();
-    let client = reqwest::Client::builder()
+    let client = xtremio_core::env::http_client_builder()
         .user_agent("xtremio-subtitle-calibration")
         .build()?;
     let dir = corpus_dir();

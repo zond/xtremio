@@ -18,9 +18,6 @@ decisions behind it. How the app works is in
   rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi
   ```
 
-- **`cargo` on the PATH** of whoever runs Gradle: `build.gradle.kts` runs
-  `cargo metadata` to find the Kotlin half of `rustls-platform-verifier` (an
-  AAR shipped inside the Rust crate).
 - **libclang**, for **x86_64 or armv7** builds only. `aws-lc-sys` ships
   pregenerated bindings for aarch64-linux-android only, so the other two
   enable its `bindgen` feature (`rust/Cargo.toml`); `rust/cargokit.yaml`
@@ -87,14 +84,13 @@ renderer for them.
 - **`android:usesCleartextTraffic="true"`** governs only Android's own
   network stack (`dart:io`: posters from plain-http addons). reqwest/rustls
   and libmpv ignore it.
-- **The `rustls-platform-verifier` JNI hook.** `MainActivity.onCreate` calls
-  `NativeInit.initTlsVerifier(applicationContext)` (implemented in
-  `rust/src/android.rs`) before the Flutter engine starts, because the
-  embedded server's clients (tracker announces, torrent-file fetches) verify
-  through the platform. The app's own client trusts Mozilla's compiled-in
-  roots instead: the platform path parses CRLs in Java on every handshake,
-  measured at 400 MB of heap per tracker announce on a Chromecast.
-  `android/app/proguard-rules.pro` keeps the Kotlin component from R8.
+- **No platform certificate verifier.** Every HTTPS client in the process
+  (the app's, stream-server's, rqbit's) brings its own roots, so reqwest
+  never constructs `rustls-platform-verifier`, and the app ships neither its
+  Kotlin half nor the JNI init it needs. That verifier parsed CRLs in Java on
+  every handshake, measured at 400 MB of heap per tracker announce on a
+  Chromecast. `clippy.toml` in each repo refuses the reqwest constructors
+  that would reach it; uninitialised, it would panic.
 - **No `HOME` is needed**: every path the server uses comes from the
   directories the app passes it.
 - **Leanback.** One build runs on Android TV, Chromecast with Google TV and
@@ -355,8 +351,7 @@ logging through `log` keep their own module tags.
 ```bash
 adb logcat -s xtremio
 adb logcat -d | grep -E "flutter|xtremio|stream_server|rustls|FATAL"
-# The embedded server starting, and no
-# "Expect rustls-platform-verifier to be initialized".
+# The embedded server starting.
 
 # The port is the OS's; read it from logcat:
 #   adb logcat -d | grep "embedded stream-server started"   ... url=http://127.0.0.1:<port>/
