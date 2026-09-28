@@ -51,11 +51,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// it holds nothing of it (an addon's direct link, a debrid URL, a file
   /// on the device) and while the panel's first ask has not answered.
   ///
-  /// Its two halves are two different rows: the retention window goes on
-  /// the cache row, beside mpv's own buffer, and the sharing numbers are a
-  /// row of their own that a stream with no swarm does not have. Every
-  /// absence in it takes its row or its half of one away rather than
-  /// drawing a dash -- see [describe] and [describeSharing].
+  /// Its two halves are two different rows: the bytes held unbroken round
+  /// the playhead go on the cache row, beside mpv's own buffer, and the
+  /// sharing numbers are a row of their own that a stream with no swarm
+  /// does not have. Every absence in it takes its row or its half of one
+  /// away rather than drawing a dash -- see [describe] and
+  /// [describeSharing].
   final StreamNumbers? held;
 
   static const TextStyle _style = TextStyle(
@@ -196,9 +197,9 @@ class PlaybackStatsOverlay extends StatelessWidget {
     // window, or -- while mpv is still collecting under an open panel --
     // the window on its own.
     if (_cache(s, held?.window) case final cache?) 'cache    $cache',
-    // The other half of what the retention policy says, and the row
-    // directly under the window it committed for: both are read off the
-    // same policy and are meant to be read against each other.
+    // What the retention policy has committed, directly under the cache
+    // row: the disk round the playhead and what of the disk is promised
+    // to the swarm are meant to be read against each other.
     ...describeSharing(held),
     ...describeUnverified(held),
     // Only when mpv answered: on a backend that has no such properties
@@ -325,7 +326,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// only duration format, and both its uses want the same coarseness --
   /// how old a tracker scrape is (the panel has to say whether the numbers
   /// are current, and the server drops anything past an hour anyway), and
-  /// how much watching a half of the retention window is.
+  /// how much watching a half of the cache row's server run is.
   static String formatAge(Duration age) {
     if (age.inMinutes < 1) return '${age.inSeconds} s';
     if (age.inHours < 1) return '${age.inMinutes} min';
@@ -381,14 +382,16 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// **Two different caches, and the row says which is which.** The first
   /// number is `demuxer-cache-duration`, a few seconds of memory mpv has
   /// read ahead, labelled `mpv` so it does not read as the server's. What
-  /// follows is the retention window: the bytes on this device around the
-  /// playhead, the half a scan back is served from and the half playback
-  /// has in hand.
+  /// follows is the bytes on this device held unbroken behind and ahead of
+  /// the playhead: the run a scan back is served from and the run playback
+  /// has in hand, each ended by the first byte not held. Not the retention
+  /// policy's window, and there under every cache budget -- one that
+  /// covers the whole file included.
   ///
-  /// The window is absent for a stream nothing is bounding -- a torrent
-  /// small enough that the budget covers it, a stream this server is not
-  /// holding at all -- and then the row is mpv's number alone rather than
-  /// two dashes claiming a cache of nothing was measured.
+  /// The server's half is absent only where the server has no playhead for
+  /// the stream -- one it is not holding at all, or one no reader has been
+  /// inside yet -- and then the row is mpv's number alone rather than two
+  /// dashes claiming a cache of nothing was measured.
   ///
   /// Each half stands without the other, so the row is null when neither
   /// was measured. mpv's is missing before its first sample, which is when

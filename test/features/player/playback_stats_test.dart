@@ -472,7 +472,7 @@ void main() {
     });
   });
 
-  group('the cache row carries mpv\'s buffer and the retention window', () {
+  group('the cache row carries mpv\'s buffer and the run round the playhead', () {
     const bitrate = 8000000; // 1 MB of video a second, so bytes read as time.
 
     List<String> rows({
@@ -602,10 +602,38 @@ void main() {
       );
     });
 
-    test('nothing bounding the stream leaves the row mpv\'s alone', () {
-      // A torrent the budget covers has no policy and so no window, and a
-      // stream this server does not hold has neither. Dashes there would
-      // say a cache of nothing was measured.
+    test('a stream the budget covers still shows its run', () {
+      // What the server answers for a torrent nothing is bounding -- the
+      // budget covers the whole file: the run round the playhead as for
+      // any other stream, and a sharing row with no committed set, since
+      // no policy has promised anything.
+      final lines = rows(
+        window: const CacheWindow(
+          behindBytes: 734003200,
+          aheadBytes: 1288490188,
+          behindSeconds: 720,
+          aheadSeconds: 1229,
+        ),
+        sharing: const SharingNumbers(
+          transfer: LiveTransfer(
+            downloadedBytes: 2022493388,
+            unverifiedBytes: 0,
+            uploadedBytes: 0,
+          ),
+          refusedReclaims: 0,
+        ),
+      );
+      expect(
+        cacheRow(lines),
+        'cache    294.6s mpv · behind 734 MB (12 min) · ahead 1.3 GB (20 min)',
+      );
+      expect(lines, isNot(contains(contains('committed'))));
+    });
+
+    test('no playhead on the server leaves the row mpv\'s alone', () {
+      // A stream this server does not hold, or one no reader has been
+      // inside yet, has no run to report. Dashes there would say a cache
+      // of nothing was measured.
       expect(rows(), isNot(contains(contains('behind'))));
       expect(rows(window: null, sharing: null), isNot(contains(contains('·'))));
     });

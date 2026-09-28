@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/server_client.dart';
+import 'package:xtremio/core/state/stream_numbers.dart';
 
 import '../support/rust_lib.dart';
 
@@ -211,6 +212,92 @@ void main() {
       // And no sharing row: a proxied response is relayed, never seeded,
       // so there is no committed set and no ratio to draw.
       expect(numbers.sharing, isNull);
+    },
+  );
+
+  test(
+    'a proxied stream the cache budget covers still reports its unbroken run',
+    () async {
+      // The cache row is the bytes on the disk unbroken behind and ahead of
+      // the playhead, and a budget big enough for the whole film changes
+      // how far that run can grow, not whether there is one. Nothing is
+      // reclaimed under it, so once the film has been read through the
+      // route the run is all of it.
+      final tmp = await Directory.systemTemp.createTemp('xtremio-proxy-test-');
+      const server = ServerClient();
+      addTearDown(() async {
+        await stopServerForTests();
+        await tmp.delete(recursive: true);
+      });
+
+      final film = Uint8List(4 * 1024 * 1024);
+      final origin = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => origin.close(force: true));
+      origin.listen((request) async {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.set(HttpHeaders.contentTypeHeader, 'video/mp4')
+          ..headers.set(HttpHeaders.acceptRangesHeader, 'bytes')
+          ..headers.set(HttpHeaders.etagHeader, '"film"')
+          ..headers.contentLength = film.length
+          ..add(film);
+        await request.response.close();
+      });
+
+      final url = await startServerForTests(
+        configDir: Directory('${tmp.path}/server'),
+        cacheDir: Directory('${tmp.path}/cache/server'),
+      );
+      // Sixteen times the film: the budget covers it, so no retention
+      // policy is installed over it. Published by the cleaner's pass, run
+      // and awaited here.
+      await server.updateSettings({'cacheSize': 64 * 1024 * 1024});
+      await server.cleanCacheNow();
+
+      final proxied = Uri.parse(
+        '${url.origin}/proxy/'
+        'd=${Uri.encodeComponent('http://127.0.0.1:${origin.port}')}'
+        '&p=player-1/film.mp4',
+      );
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final response = await (await client.getUrl(proxied)).close();
+      expect(response.statusCode, 200);
+      var received = 0;
+      await for (final bytes in response) {
+        received += bytes.length;
+      }
+      expect(received, film.length);
+
+      // The proxy cache writes behind the relayed body, so the last chunks
+      // can land just after it ends: asked again until the run is the
+      // whole film, within a bound.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      int held(StreamNumbers? numbers) => switch (numbers?.window) {
+        final window? => window.behindBytes + window.aheadBytes,
+        null => -1,
+      };
+      var numbers = await server.streamNumbers(proxied);
+      while (DateTime.now().isBefore(deadline) &&
+          held(numbers) != film.length) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        numbers = await server.streamNumbers(proxied);
+      }
+      expect(
+        numbers?.window,
+        isNotNull,
+        reason: 'a budget that covers the stream is not an absence of a run',
+      );
+      expect(
+        held(numbers),
+        film.length,
+        reason: 'the whole film is on the disk, unbroken: ${numbers?.window}',
+      );
+      expect(
+        numbers!.window!.behindBytes,
+        greaterThan(0),
+        reason: 'the playhead is past the start of what was read',
+      );
     },
   );
 }

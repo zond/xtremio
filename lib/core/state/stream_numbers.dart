@@ -26,14 +26,14 @@
 final class StreamNumbers {
   const StreamNumbers({this.window, this.sharing});
 
-  /// What is on the disk for this stream, split at the playhead, or null
-  /// where nothing is bounding the stream: no retention policy (the
-  /// budget covers the whole file, or none has been published yet) and no
-  /// reader that has been anywhere inside it in this process. What is on
-  /// the disk without a policy is not a window -- it is whatever of the
-  /// file has been fetched, with nothing holding it to the play head, a
-  /// different quantity -- so the row is absent rather than carrying both
-  /// meanings.
+  /// The bytes on the disk unbroken behind and ahead of the playhead, or
+  /// null where no reader has been anywhere inside the stream in this
+  /// process (and, for a proxied stream, where it is not the one being
+  /// played), so there is no playhead to measure from.
+  ///
+  /// **Under every cache budget.** A budget that covers the whole file, one
+  /// never published, no cap, or a pin changes how long the run can grow,
+  /// not whether there is one: the row is there for all of them.
   final CacheWindow? window;
 
   /// The sharing numbers: torrents only. Null for a proxied response,
@@ -72,11 +72,14 @@ final class StreamNumbers {
 }
 
 /// What one stream's cache holds around the playhead, in bytes: the
-/// retention window's two halves.
+/// **unbroken** run of the stream on the disk that the playhead stands in,
+/// split at the playhead.
 ///
 /// A live reading of a store and nothing else -- the piece store counting
-/// pieces of the file, the proxy cache counting chunks of the entity. It is
-/// **not the extent the policy intends to fill**: [aheadBytes] is
+/// complete pieces of the file, the proxy cache counting chunks of the
+/// entity -- and the first one missing on either side ends that half: bytes
+/// past a hole are not in hand. It is **not the retention policy's window**
+/// and not the extent the policy intends to fill: [aheadBytes] is
 /// read-ahead that has arrived, and a stream that has fetched nothing yet
 /// reads zero rather than the size of the window it is going to have.
 final class CacheWindow {
@@ -87,12 +90,12 @@ final class CacheWindow {
     this.aheadSeconds,
   });
 
-  /// Bytes held behind the playhead: what a scan back is served from.
+  /// Bytes held unbroken behind the playhead: what a scan back is served
+  /// from without a fetch.
   final int behindBytes;
 
-  /// Bytes held from the playhead on: what playback has in hand. The piece
-  /// under the playhead counts here -- it is the one a player is about to
-  /// read, not one it has passed.
+  /// Bytes held unbroken from the playhead on: what playback has in hand.
+  /// The byte at the playhead counts here.
   final int aheadBytes;
 
   /// How long the run behind lasts the stream that owns it, as the server
@@ -110,7 +113,7 @@ final class CacheWindow {
   final double? aheadSeconds;
 
   /// The window in a `window` value, or null for the null the server sends
-  /// where nothing is bounding the stream. A half the server did not send
+  /// where it has no playhead for the stream. A half the server did not send
   /// is not half a window: the whole reading is dropped, because a zero
   /// there would say the cache holds nothing on that side.
   static CacheWindow? fromJson(Object? value) {

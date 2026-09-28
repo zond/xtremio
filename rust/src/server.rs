@@ -847,9 +847,9 @@ pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
 
 /// What this server holds of the stream a player is playing right now
 /// (`ServerHandle::stream_numbers`), asked with the URL that player was
-/// handed: what is on the disk around the playhead, and -- for a torrent --
-/// what has been committed for sharing and what it has moved since it went
-/// live.
+/// handed: the bytes on the disk unbroken behind and ahead of the playhead,
+/// under any cache budget, and -- for a torrent -- what has been committed
+/// for sharing and what it has moved since it went live.
 ///
 /// `url` is the whole of the question: its shape decides which store
 /// answers, the piece store for `/{infoHash}/{fileIdx}` (`-1` included, the
@@ -870,9 +870,9 @@ pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
 /// A peek, like [`background_traffic`]: it creates no engine, starts no
 /// magnet add and touches no idle clock, so a panel asking every few
 /// seconds cannot hold a torrent out of the idle sweep by looking at it.
-/// It is not free, though -- the window is counted from a listing of the
-/// stream's own directories -- so ask it while a panel is open and not for
-/// the life of the process. Errors when the server is not running.
+/// It is not free, though -- the first ask about a proxied stream lists
+/// its own directories -- so ask it while a panel is open and not for the
+/// life of the process. Errors when the server is not running.
 pub fn stream_numbers(
     url: &str,
 ) -> anyhow::Result<Option<stream_server::stream_numbers::StreamNumbers>> {

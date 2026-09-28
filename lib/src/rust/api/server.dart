@@ -261,10 +261,11 @@ Future<String> serverBackgroundTraffic() =>
     RustLib.instance.api.crateApiServerServerBackgroundTraffic();
 
 /// What this server holds of the stream `url` is playing, as JSON
-/// (`StreamNumbers`: `window` -- `behindBytes`/`aheadBytes` -- and, for a
-/// torrent, `sharing` -- `committedBytes` and a `transfer` group of
-/// `downloadedBytes`/`uploadedBytes`/`ratio`), or null when this server
-/// holds nothing of that stream.
+/// (`StreamNumbers`: `window` -- `behindBytes`/`aheadBytes`, the bytes on
+/// the disk unbroken behind and ahead of the playhead, under any cache
+/// budget -- and, for a torrent, `sharing` -- `committedBytes` and a
+/// `transfer` group of `downloadedBytes`/`uploadedBytes`/`ratio`), or null
+/// when this server holds nothing of that stream.
 ///
 /// `url` is the URL handed to the player, and its shape is the whole
 /// question: `/{infoHash}/{fileIdx}` (including `-1`, resolved through the
@@ -276,8 +277,8 @@ Future<String> serverBackgroundTraffic() =>
 ///
 /// Every `null` inside is "there is no such number", never zero, and a
 /// caller must draw an absent row rather than a dash: no `window` where no
-/// retention policy is bounding the stream (a torrent the budget covers,
-/// or nothing read yet), no `sharing` for a proxied response (it is not
+/// reader has been inside the stream in this process, so there is no
+/// playhead to measure from, no `sharing` for a proxied response (it is not
 /// seeded, so it has no committed set and no ratio), no `committedBytes`
 /// for a torrent with no policy, and no `transfer` for a torrent whose
 /// counters cannot be read -- paused, checking, stopped for space, in
@@ -293,10 +294,10 @@ Future<String> serverBackgroundTraffic() =>
 /// process never saw.
 ///
 /// A peek: it creates no engine and touches no idle clock, so polling it
-/// cannot keep a torrent seeding to report on. It does list the stream's
-/// own directories, so it blocks the FRB worker -- never call it from the
-/// UI thread, and ask it only while a panel wants it. Errors when the
-/// server is not running.
+/// cannot keep a torrent seeding to report on. The first ask about a
+/// proxied stream lists its own directories, so it blocks the FRB worker
+/// -- never call it from the UI thread, and ask it only while a panel
+/// wants it. Errors when the server is not running.
 Future<String?> serverStreamNumbers({required String url}) =>
     RustLib.instance.api.crateApiServerServerStreamNumbers(url: url);
 

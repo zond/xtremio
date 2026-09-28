@@ -56,7 +56,7 @@ void main() {
     expect(numbers?.sharing, isNull);
   });
 
-  test('a stream nothing is bounding has no window', () {
+  test('a stream the server has no playhead for has no window', () {
     final numbers = StreamNumbers.fromJson(const {
       'window': null,
       'sharing': {'committedBytes': null, 'transfer': null},
