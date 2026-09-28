@@ -294,7 +294,11 @@ class _XtremioAppState extends State<XtremioApp> {
           secrets: const SecureStorageSecretStore(),
           grantSink: rustDriveGrantSink,
         );
-    _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
+    _sharing = IdleSharingPolicy(
+      prefs: _prefs,
+      server: widget.serverSettings,
+      pausesInBackground: widget.device.isHandheld,
+    );
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);
     _footprint = ServerFootprint(
@@ -501,15 +505,19 @@ class _XtremioAppState extends State<XtremioApp> {
   /// foreground is `XtremioBootstrap.imageCacheCeilingBytes`.
   ///
   /// The server's part is its lean footprint ([ServerFootprint]), which
-  /// decides for itself whether anything still needs the full one.
+  /// decides for itself whether anything still needs the full one. And on a
+  /// phone or a tablet the idle sharing stops ([IdleSharingPolicy]) until
+  /// the app is back.
   void _onHidden() {
     _away = true;
     PaintingBinding.instance.imageCache.clear();
     _footprint.appHidden();
+    _sharing.appHidden();
   }
 
   Future<void> _onResume() async {
     _footprint.appResumed();
+    _sharing.appResumed();
     if (!_away) return;
     _away = false;
     if (await _isLoggedIn()) await _pullAccount();

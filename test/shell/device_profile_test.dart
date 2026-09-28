@@ -210,5 +210,30 @@ void main() {
       expect((await DeviceProfile.detect()).isTv, isFalse);
       expect(calls, isEmpty);
     });
+
+    test('says which devices are handheld: phones and tablets, on Android '
+        'and iOS, and nothing else', () async {
+      // What stops the idle sharing while the app is in the background, so
+      // the answer is read off what detection really returns per platform.
+      Future<bool> handheld(TargetPlatform platform) async =>
+          (await DeviceProfile.detect(platform: platform)).isHandheld;
+
+      // A phone and a tablet answer the channel the same way.
+      mockDeviceChannel((call) async => {'isTv': false, 'hasTouch': true});
+      expect(await handheld(TargetPlatform.android), isTrue);
+      mockDeviceChannel((call) async => {'isTv': true, 'hasTouch': false});
+      expect(await handheld(TargetPlatform.android), isFalse);
+      // A channel that failed: the cautious answer.
+      mockDeviceChannel(null);
+      expect(await handheld(TargetPlatform.android), isTrue);
+      expect(await handheld(TargetPlatform.iOS), isTrue);
+      for (final platform in [
+        TargetPlatform.linux,
+        TargetPlatform.macOS,
+        TargetPlatform.windows,
+      ]) {
+        expect(await handheld(platform), isFalse, reason: '$platform');
+      }
+    });
   });
 }

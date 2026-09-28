@@ -28,6 +28,21 @@ class DeviceProfile {
   /// The device has a touchscreen. False on a TV box and on desktops.
   final bool hasTouch;
 
+  /// A phone or a tablet: something carried around, whose owner expects an
+  /// app they have left to stop spending their data and battery.
+  ///
+  /// Read off the two answers above rather than asked again, and they
+  /// settle it on every platform [detect] knows: an Android device that is
+  /// not a television and has a touchscreen (phones and tablets alike), and
+  /// every iOS device. A television is not one, and neither is a desktop --
+  /// Linux, macOS and Windows resolve to "no touchscreen" whatever the
+  /// hardware, and are what a torrent client is left running on. An
+  /// Android device with no touchscreen that is not a television (a
+  /// Chromebook without one) is taken for the desktop it is used as. The
+  /// [fallback] is one, so a device whose channel failed is treated as the
+  /// more cautious of the two.
+  bool get isHandheld => !isTv && hasTouch;
+
   /// The platform channel the Android side answers on (`MainActivity.kt`).
   static const MethodChannel channel = MethodChannel('xtremio/device');
 

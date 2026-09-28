@@ -266,10 +266,15 @@ paused, no peer dropped, downloads untouched). Since an unpinned engine
 nothing streams is removed five minutes after going idle whatever the
 setting says, what the switch really decides is whether those minutes
 upload. `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`)
-decides the value from the viewer's `shareWhileIdle` alone -- on by
-default everywhere; nothing asks what the connection costs -- pushes only
-changes, serialized, and holds it false for the run after "Not now"
-(`pauseUntilRestart`, which only a switch that is on can take).
+decides the value from the viewer's `shareWhileIdle` -- on by default
+everywhere; nothing asks what the connection costs -- pushes only changes,
+serialized, and holds it false for the run after "Not now"
+(`pauseUntilRestart`, which only a switch that is on can take). On a phone
+or a tablet (`DeviceProfile.isHandheld`: not a television, and a
+touchscreen) it also holds it false while the app is in the background,
+fed by the same lifecycle listener as `ServerFootprint`, and gives the
+setting back on resume; a television and a desktop go on sharing. The
+settings tile says so on the devices it applies to.
 
 **The status light says what is happening, never what is configured.**
 `SharingLight` (`lib/features/sharing/sharing_light.dart`) is drawn in the

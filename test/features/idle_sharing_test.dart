@@ -1,8 +1,10 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_trace.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
+import 'package:xtremio/shell/device_profile.dart';
 
 import '../support/empty_board.dart';
 import '../support/fake_prefs_client.dart';
@@ -23,8 +25,13 @@ void main() {
   IdleSharingPolicy started({
     required AppPrefs prefs,
     required RecordingServerSettings server,
+    bool pausesInBackground = false,
   }) {
-    final policy = IdleSharingPolicy(prefs: prefs, server: server);
+    final policy = IdleSharingPolicy(
+      prefs: prefs,
+      server: server,
+      pausesInBackground: pausesInBackground,
+    );
     addTearDown(policy.dispose);
     policy.start();
     return policy;
@@ -256,6 +263,130 @@ void main() {
     });
   });
 
+  group('the app in the background', () {
+    test('stops the sharing on a phone or a tablet, and gives it back on '
+        'the way in', () async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      await prefs.load();
+      final server = RecordingServerSettings();
+      final policy = started(
+        prefs: prefs,
+        server: server,
+        pausesInBackground: true,
+      );
+      final announced = <bool>[];
+      policy.addListener(() => announced.add(policy.pausedForRun));
+      await settle(policy);
+
+      policy.appHidden();
+      await settle(policy);
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+        {IdleSharing.seedingEnabledKey: false},
+      ]);
+      // The choice is untouched and nothing is written down, and it is not
+      // a "Not now": the tile has nothing new to draw.
+      expect(prefs.shareWhileIdle, isTrue);
+      expect(stored.stored, isEmpty, reason: '${stored.stored}');
+      expect(policy.pausedForRun, isFalse);
+      expect(announced, isEmpty);
+
+      policy.appResumed();
+      await settle(policy);
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+        {IdleSharing.seedingEnabledKey: false},
+        {IdleSharing.seedingEnabledKey: true},
+      ]);
+    });
+
+    test('changes nothing on a television or a desktop', () async {
+      final server = RecordingServerSettings();
+      final policy = started(prefs: AppPrefs.inMemory(), server: server);
+      await settle(policy);
+
+      policy.appHidden();
+      await settle(policy);
+      policy.appResumed();
+      await settle(policy);
+
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+      ]);
+    });
+
+    test('leaves a switch that is off, off', () async {
+      final prefs = AppPrefs(
+        client: FakePrefsClient({AppPrefs.shareWhileIdleKey: false}),
+      );
+      await prefs.load();
+      final server = RecordingServerSettings();
+      final policy = started(
+        prefs: prefs,
+        server: server,
+        pausesInBackground: true,
+      );
+      await settle(policy);
+
+      policy.appHidden();
+      await settle(policy);
+      policy.appResumed();
+      await settle(policy);
+
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: false},
+      ]);
+    });
+
+    test('does not lift a "Not now" on the way back in', () async {
+      // The pause is for the run, and a run has many resumes in it.
+      final prefs = AppPrefs.inMemory();
+      final server = RecordingServerSettings();
+      final policy = started(
+        prefs: prefs,
+        server: server,
+        pausesInBackground: true,
+      );
+      policy.pauseUntilRestart();
+      await settle(policy);
+
+      policy.appHidden();
+      await settle(policy);
+      policy.appResumed();
+      await settle(policy);
+
+      // The start's answer and the pause's, and nothing from the trip out
+      // and back.
+      expect(policy.pausedForRun, isTrue);
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+        {IdleSharing.seedingEnabledKey: false},
+      ]);
+    });
+
+    test('is not told to the server ahead of the preferences', () async {
+      // Hidden before the preferences are in: the first thing the server
+      // hears is still an answer made from the viewer's choice.
+      final server = RecordingServerSettings();
+      final policy = IdleSharingPolicy(
+        prefs: AppPrefs.inMemory(),
+        server: server,
+        pausesInBackground: true,
+      );
+      addTearDown(policy.dispose);
+      policy.appHidden();
+      await settle(policy);
+      expect(server.patches, isEmpty);
+
+      policy.start();
+      await settle(policy);
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: false},
+      ]);
+    });
+  });
+
   group('the policy watches', () {
     test('only while the app is up', () async {
       final prefs = AppPrefs.inMemory();
@@ -323,6 +454,82 @@ void main() {
           {DiagnosticsTraceSync.serverKey: false},
         ]),
       );
+    });
+
+    /// The app on [device], started and settled with the sharing on; the
+    /// function returned reads back every `seedingEnabled` it has written.
+    Future<List<Object?> Function()> pumpApp(
+      WidgetTester tester,
+      DeviceProfile device,
+    ) async {
+      final server = RecordingServerSettings();
+      await tester.pumpWidget(
+        XtremioApp(
+          // A new app each time, never the last one handed a new device.
+          key: UniqueKey(),
+          core: emptyBoardCore(),
+          device: device,
+          prefs: AppPrefs(client: FakePrefsClient()),
+          serverSettings: server,
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return () => [
+        for (final patch in server.patches)
+          if (patch.containsKey(IdleSharing.seedingEnabledKey))
+            patch[IdleSharing.seedingEnabledKey],
+      ];
+    }
+
+    /// Away the way Android goes, hidden and then paused, and back.
+    Future<void> leave(WidgetTester tester) async {
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> comeBack(WidgetTester tester) async {
+      for (final state in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('stops the sharing on a phone while it is away', (
+      tester,
+    ) async {
+      final sharing = await pumpApp(tester, DeviceProfile.fallback);
+      expect(sharing(), [true]);
+
+      await leave(tester);
+      expect(sharing(), [true, false]);
+
+      await comeBack(tester);
+      expect(sharing(), [true, false, true]);
+    });
+
+    testWidgets('goes on sharing on a television and a desktop', (
+      tester,
+    ) async {
+      for (final device in [
+        tv,
+        const DeviceProfile(isTv: false, hasTouch: false),
+      ]) {
+        final sharing = await pumpApp(tester, device);
+        await leave(tester);
+        await comeBack(tester);
+        expect(sharing(), [true], reason: '$device');
+      }
     });
   });
 }

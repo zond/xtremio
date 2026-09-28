@@ -284,27 +284,39 @@ class IdleSharingSection extends StatelessWidget {
     // follows the policy it is replaced with; the policy itself for the
     // pause, which is what changes while this is on screen.
     final policy = SharingScope.of(context)?.policy;
-    if (policy == null) return _tile(paused: false);
+    if (policy == null) return _tile(paused: false, background: false);
     return ListenableBuilder(
       listenable: policy,
-      builder: (context, _) => _tile(paused: policy.pausedForRun),
+      builder: (context, _) => _tile(
+        paused: policy.pausedForRun,
+        background: policy.pausesInBackground,
+      ),
     );
   }
 
-  Widget _tile({required bool paused}) => SwitchListTile(
-    // The same key shape a `profile.settings` control gets, so a test
-    // finds this one the same way.
-    key: settingKey(AppPrefs.shareWhileIdleKey),
-    secondary: const Icon(Icons.upload_outlined),
-    title: const Text(IdleSharing.title),
-    subtitle: Text(
-      paused
-          ? '${IdleSharing.description}\n${IdleSharing.pausedNote}'
-          : IdleSharing.description,
-    ),
-    value: prefs.shareWhileIdle,
-    onChanged: (on) => prefs.setShareWhileIdle(on),
-  );
+  /// [background] is whether the sharing stops while the app is in the
+  /// background on this device ([IdleSharingPolicy.pausesInBackground]),
+  /// which the tile says in [IdleSharing.backgroundNote]. It is the device
+  /// and never the app's state: the tile reads the same with the app away
+  /// as with it in front.
+  Widget _tile({required bool paused, required bool background}) =>
+      SwitchListTile(
+        // The same key shape a `profile.settings` control gets, so a test
+        // finds this one the same way.
+        key: settingKey(AppPrefs.shareWhileIdleKey),
+        secondary: const Icon(Icons.upload_outlined),
+        title: const Text(IdleSharing.title),
+        subtitle: Text(
+          [
+            background
+                ? '${IdleSharing.description} ${IdleSharing.backgroundNote}'
+                : IdleSharing.description,
+            if (paused) IdleSharing.pausedNote,
+          ].join('\n'),
+        ),
+        value: prefs.shareWhileIdle,
+        onChanged: (on) => prefs.setShareWhileIdle(on),
+      );
 }
 
 /// Settings → Developer → "Verbose diagnostics": whether the Diagnostics

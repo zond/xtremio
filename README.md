@@ -76,7 +76,8 @@ screen-by-screen inventory, and a feature with a design document links it.
   rather than guesses, and the fact that no real receiver has confirmed it
   yet are in [docs/CASTING.md](docs/CASTING.md).
 - **Sharing you can see and stop.** *Share while idle* (Settings, on by
-  default) keeps uploading to other peers when nothing is playing; off, the
+  default) keeps uploading to other peers when nothing is playing, except on
+  a phone or tablet while the app is in the background; off, the
   server chokes every peer until a player reads from it again. A status light
   on the main screens is lit only while the server measures bytes moving to
   or from peers with nothing playing, never because of the setting: an arrow

@@ -798,14 +798,55 @@ void main() {
     }
 
     /// A policy over preferences that persist nothing, started.
-    IdleSharingPolicy startedPolicy(AppPrefs prefs) {
+    IdleSharingPolicy startedPolicy(
+      AppPrefs prefs, {
+      bool pausesInBackground = false,
+    }) {
       final policy = IdleSharingPolicy(
         prefs: prefs,
         server: RecordingServerSettings(),
+        pausesInBackground: pausesInBackground,
       );
       addTearDown(policy.dispose);
       return policy..start();
     }
+
+    testWidgets('says on a phone that the sharing stops in the background, '
+        'and reads the same while it is', (tester) async {
+      final prefs = AppPrefs.inMemory();
+      final policy = startedPolicy(prefs, pausesInBackground: true);
+      await pumpTile(tester, policy: policy, prefs: prefs);
+      const said =
+          'Keeps uploading to other people when nothing is playing. Off, '
+          'Xtremio shares only while you watch. The light in the corner '
+          'shows when it is happening. Sharing stops while Xtremio is in the '
+          'background.';
+      expect(find.text(said), findsOneWidget);
+
+      // Away and back: the tile says what the device does, never where the
+      // app is, and the switch stays where the viewer put it.
+      policy.appHidden();
+      await tester.pump();
+      expect(find.text(said), findsOneWidget);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(settingKey(AppPrefs.shareWhileIdleKey)),
+            )
+            .value,
+        isTrue,
+      );
+    });
+
+    testWidgets('says nothing about the background where the sharing goes '
+        'on there', (tester) async {
+      final prefs = AppPrefs.inMemory();
+      final policy = startedPolicy(prefs);
+      await pumpTile(tester, policy: policy, prefs: prefs);
+
+      expect(find.text(IdleSharing.description), findsOneWidget);
+      expect(find.textContaining(IdleSharing.backgroundNote), findsNothing);
+    });
 
     testWidgets('says so while a "Not now" is holding the sharing off', (
       tester,
