@@ -71,8 +71,8 @@ pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 /// they are taken for unrelated reasons -- a dispatch reads the Runtime
 /// while the pump is delivering an event. The one nesting is `event_sink`
 /// held while `pending` is taken -- by the sink swap, which drains it
-/// (`set_event_sink_in`), and by a sink that closed, which buffers into
-/// it (`sink_refused`); nothing takes them the other way round -- `emit`
+/// ([`set_event_sink_in`]), and by a sink that closed, which buffers into
+/// it ([`sink_refused`]); nothing takes them the other way round -- [`emit`]
 /// lets the sink guard go before it buffers for a missing sink -- so that
 /// order is the whole of the lock discipline here.
 #[derive(Default)]
@@ -381,7 +381,7 @@ fn init_lock() -> MutexGuard<'static, ()> {
 }
 
 /// Boots the engine. Idempotent: a second call returns the current outcome,
-/// and one made while the first is still booting waits for it (`INIT`).
+/// and one made while the first is still booting waits for it ([`INIT`]).
 pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     crate::logging::init();
     let _init = init_lock();

@@ -44,7 +44,7 @@
 //! not fail. When DNS is down every addon fails together, and that is
 //! evidence about the connection, not about the addons. This app's own
 //! stubs -- what is on loopback, and the address Drive plays are recorded
-//! under -- are left out of the sweep entirely (`is_own_stub`): one of
+//! under -- are left out of the sweep entirely ([`is_own_stub`]): one of
 //! them answering says nothing about whether the network is up, and
 //! nothing about an addon it was never asked to stand for.
 //!
@@ -57,7 +57,7 @@
 //! than the one that writes is a race. Observations touch memory only; the
 //! table reaches the disk through the app's generic preferences file
 //! ([`PREFS_KEY`]) when it is dirty and the last write is
-//! `FLUSH_INTERVAL` old, and whatever the throttle says when
+//! [`FLUSH_INTERVAL`] old, and whatever the throttle says when
 //! [`flush_in`] is called. The file is the only place the counts are
 //! *stored*: `crate::api::addon_health` is a window onto the live table,
 //! not a second store.
@@ -522,7 +522,7 @@ impl Sweep {
     }
 
     /// Notes one settled answer, unless it came from this app's own stub
-    /// rather than from an addon out on the network -- see `is_own_stub`.
+    /// rather than from an addon out on the network -- see [`is_own_stub`].
     /// `key` is [`key_for`] of `base`, which the caller holds already (the
     /// observer keys every request by it), so it is not hashed twice.
     pub fn observe(&mut self, base: &Url, key: String, kind: ResourceKind, outcome: Outcome) {
@@ -629,11 +629,11 @@ impl AddonHealthState {
 /// not there is an empty table; one the disk will not read is *not read*,
 /// and the table stays unloaded for the run -- so nothing this process
 /// observes is written over a record it never saw, which is the erasure
-/// `Counted::loaded` exists to prevent and which a read error dressed as
+/// [`Counted::loaded`] exists to prevent and which a read error dressed as
 /// an empty file walked straight past. It is not retried: the counts of
 /// one run are worth less than the record of every run before it.
 ///
-/// Nothing is written out before this has run -- see `Counted::loaded`.
+/// Nothing is written out before this has run -- see [`Counted::loaded`].
 pub fn load_in(app: &AppState) {
     let mut counted = app.addon_health.counted();
     match stored() {
@@ -729,11 +729,11 @@ pub fn every_answer_failed_in(app: &AppState) -> bool {
 /// copy, and the live one in this process would write the forgotten addon
 /// straight back on its next flush. Forgetting is therefore a call into the
 /// state that owns the counts, and it forces the write rather than waiting
-/// out `FLUSH_INTERVAL`, so a restart cannot resurrect the record either.
+/// out [`FLUSH_INTERVAL`], so a restart cannot resurrect the record either.
 ///
 /// A table [`load_in`] has never filled forgets nothing: an empty table is
 /// "the history has not been read", and writing it out would be exactly the
-/// erasure `Counted::loaded` exists to prevent.
+/// erasure [`Counted::loaded`] exists to prevent.
 pub fn forget_in(app: &AppState, key: &str) -> bool {
     let mut counted = app.addon_health.counted();
     if !counted.loaded || !counted.table.forget(key) {

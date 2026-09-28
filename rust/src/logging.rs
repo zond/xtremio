@@ -3,14 +3,14 @@
 //!
 //! stream-server is embedded with `init_logging: false`, so this crate owns
 //! the one subscriber -- which is why every line the server writes lands in
-//! the same place ours do. `RingLayer` sits in that subscriber and keeps
+//! the same place ours do. [`RingLayer`] sits in that subscriber and keeps
 //! the last [`RING_CAPACITY`] formatted lines in memory, so a release build
 //! on a phone can show and copy its own log without ADB.
 //!
 //! Desktop builds also print to stderr. Installing this subscriber stops
 //! `tracing`'s `log` feature from forwarding events to the `log` crate (it
 //! only forwards while no subscriber is installed), so on Android, where
-//! FRB's `setup_default_user_utils` reads from `log`, `RingLayer` re-emits
+//! FRB's `setup_default_user_utils` reads from `log`, [`RingLayer`] re-emits
 //! each line through `log` itself -- which is what routes it to logcat.
 //!
 //! That FRB setup opens the `log` crate at TRACE, and the crates that log
@@ -22,7 +22,7 @@
 //! by installing its `LogTracer` as the `log` logger and setting the `log`
 //! crate's max level to our filter's; on Android FRB's logger is already in
 //! place, so that install fails and `try_init` returns before setting the
-//! level. `cap_log_bridge` does that step regardless, and the ring's own
+//! level. [`cap_log_bridge`] does that step regardless, and the ring's own
 //! re-emission bypasses the cap (it hands the record to the logger
 //! directly), so what our filter admits is not cut a second time.
 
@@ -158,7 +158,7 @@ pub fn recent_lines() -> Vec<String> {
 }
 
 /// Installs the global subscriber once, and caps the `log` crate at the
-/// filter's level (`cap_log_bridge`). Safe to call repeatedly; a
+/// filter's level ([`cap_log_bridge`]). Safe to call repeatedly; a
 /// subscriber installed by someone else (e.g. a test harness) is left in
 /// place.
 ///

@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "e05d584eb7de69f5cad534014e257a8e4e387d6a" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "e60045373f49fa46e779db24ca97bb6c83dde90a" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "e05d584eb7de69f5cad534014e257a8e4e387d6a" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "e60045373f49fa46e779db24ca97bb6c83dde90a" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -157,6 +157,13 @@ librqbit = { git = "https://github.com/zond/rqbit", rev = "e142006b1ae1b104c6310
     "rust-tls",
     "http-api-client",
 ] }
+
+# This crate is read with its private items (`cargo doc
+# --document-private-items`); a link from a public doc to a private item is
+# how its docs are written, and it still has to resolve -- a broken one is
+# an error (`broken_intra_doc_links`, denied by `-D warnings` in the gates).
+[lints.rustdoc]
+private_intra_doc_links = "allow"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

@@ -37,8 +37,9 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
         working-directory: rust
 
-      # Doc links must resolve: a link to a private or missing item is an error.
-      - run: cargo doc --no-deps
+      # Doc links must resolve, in the public view and in the private one the
+      # crate is documented for (Cargo.toml allows linking private items).
+      - run: cargo doc --no-deps && cargo doc --no-deps --document-private-items
         working-directory: rust
         env:
           RUSTDOCFLAGS: -D warnings

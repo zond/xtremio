@@ -6,18 +6,18 @@
 //!   bodies in, JSON out (errors name the failing JSON path). A request to
 //!   the embedded server carries its bearer token
 //!   (`crate::server::token_for`); no other host gets it.
-//!   `fetch_text` is the same path for a body that is not JSON -- a
+//!   [`fetch_text`] is the same path for a body that is not JSON -- a
 //!   subtitle file -- and shares the client and the token rule rather than
 //!   standing up a second one.
 //! - **storage**: one JSON file per key under a directory Dart chooses;
 //!   writes are temp-then-fsync-then-rename so a crash can never leave a
 //!   half-written bucket, and a write never lands over a newer one
-//!   (`StorageOrder`).
+//!   ([`StorageOrder`]).
 //! - **executors**: two lib-owned tokio runtimes, `CONCURRENT` for parallel
 //!   effects and a single-worker `SEQUENTIAL` one because the engine relies
 //!   on storage/library persistence effects running in order. What is
 //!   queued on `SEQUENTIAL` is counted, so a shutdown can wait for the
-//!   last writes (`wait_for_sequential`).
+//!   last writes ([`wait_for_sequential`]).
 //! - **time**: `chrono::Utc::now()`; analytics are stubbed (built without the
 //!   `analytics` feature).
 
@@ -179,7 +179,7 @@ static STORAGE_ORDER: LazyLock<StorageOrder> = LazyLock::new(|| StorageOrder {
 /// (`jni::vm::java_vm: Attached thread xtremio-core` in logcat) and of the
 /// GC bursts that followed each of the app's own handshakes. reqwest
 /// exposes nothing to inspect a built client's verifier, so
-/// `tests::our_client_builds_where_the_platform_verifier_cannot` proves it
+/// `tests::our_client_builds_where_the_platform_verifier_cannot` (test builds only) proves it
 /// behaviourally where the desktop allows.
 #[allow(clippy::disallowed_methods)] // the one door clippy.toml points everyone to
 pub fn http_client_builder() -> reqwest::ClientBuilder {

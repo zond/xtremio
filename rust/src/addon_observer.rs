@@ -4,7 +4,7 @@
 //! ## Why the pump, and not `Env::fetch`
 //!
 //! The obvious place to watch addons answer is the HTTP layer, and it is
-//! the wrong one. `crate::env::XtremioEnv::fetch` is generic over its
+//! the wrong one. [`XtremioEnv::fetch`](stremio_core::runtime::Env::fetch) is generic over its
 //! output, so it cannot tell "the addon answered with nothing" from "the
 //! addon answered" -- and that difference is the whole point of the record.
 //! It also only has the *resource* URL, which maps back to an addon's
@@ -30,7 +30,7 @@
 //! and recorded against nobody. Every failure would be thrown away.
 //!
 //! So a sweep is a *load*, not an event: settled answers accumulate in
-//! `FieldWatch::sweep` while any of the field's loadables is still
+//! [`FieldWatch::sweep`] while any of the field's loadables is still
 //! `Loading`, and the sweep is handed to [`commit`] once the field has gone
 //! quiet. That is the batch that went out together,
 //! which is the only batch whose all-failing says something about the
@@ -50,7 +50,7 @@
 //!
 //! A `NewState` is re-emitted for a field whenever anything in it changes,
 //! and the pump reads the model as it is *now*, so the same settled answer
-//! is seen over and over. `FieldWatch::settled` is the edge detector:
+//! is seen over and over. [`FieldWatch::settled`] is the edge detector:
 //! every settled loadable of the field, by request identity, and how it
 //! settled. An answer is counted only when that map did not already hold
 //! the same outcome for it. `Loading` is never an outcome, and a loadable
@@ -174,7 +174,7 @@ struct FieldWatch {
     sweep: Sweep,
 }
 
-/// The observer half of [`crate::state::AppState`]: one `FieldWatch` per
+/// The observer half of [`crate::state::AppState`]: one [`FieldWatch`] per
 /// watched field.
 ///
 /// It belongs to the state rather than to the process because the pump
