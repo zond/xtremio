@@ -34,8 +34,9 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
     final seasons = meta.seasons;
     final season =
         _season ??
+        _resumedSeason(state, seasons) ??
         state.selectedVideo?.season ??
-        state.initialVideo(preferred: widget.videoId)?.season ??
+        state.initialVideo(preferred: _preferredVideoId(state))?.season ??
         (seasons.isEmpty ? null : seasons.first);
     final episodes = season == null ? meta.videos : meta.videosOfSeason(season);
     _shownVideoId = _selectedVideoId(state);
@@ -129,7 +130,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                       child: SeasonSelector(
                         seasons: seasons,
                         selected: season,
-                        onChanged: (season) => setState(() => _season = season),
+                        onChanged: _chooseSeason,
                       ),
                     ),
                   ),
@@ -139,6 +140,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                   child: TvEpisodeRow(
                     episodes: episodes,
                     selectedVideoId: _selectedVideoId(state),
+                    homeVideoId: _requestedVideoId,
                     now: now,
                     // The remote starts here only when this is the rung
                     // the title is for and nothing has taken it yet: a
@@ -167,7 +169,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                 child: SeasonSelector(
                   seasons: seasons,
                   selected: season,
-                  onChanged: (season) => setState(() => _season = season),
+                  onChanged: _chooseSeason,
                 ),
               ),
             ),

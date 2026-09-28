@@ -30,6 +30,8 @@ Widget _harness(
   Map<int, List<String>> rows, {
   required List<KeyEvent> loose,
   DeviceProfile profile = tv,
+  Set<String>? homes,
+  bool homeAroundLadder = false,
 }) => DeviceScope(
   profile: profile,
   child: MaterialApp(
@@ -39,15 +41,28 @@ Widget _harness(
         return KeyEventResult.ignored;
       },
       child: Scaffold(
-        body: TvLadder(
-          child: Column(
-            children: [
-              for (final row in rows.entries)
-                TvLadderRow(
-                  level: row.key,
-                  child: Row(children: [for (final l in row.value) _card(l)]),
-                ),
-            ],
+        body: TvLadderHome(
+          isHome: homeAroundLadder,
+          child: TvLadder(
+            child: Column(
+              children: [
+                for (final row in rows.entries)
+                  TvLadderRow(
+                    level: row.key,
+                    child: Row(
+                      children: [
+                        for (final l in row.value)
+                          homes == null
+                              ? _card(l)
+                              : TvLadderHome(
+                                  isHome: homes.contains(l),
+                                  child: _card(l),
+                                ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -109,6 +124,62 @@ void main() {
       'd',
       reason: 'the card the remote left, not the first of the row',
     );
+  });
+
+  testWidgets('a row with a home lands there, whatever it remembers', (
+    tester,
+  ) async {
+    // The season pills and the episodes choose on focus, so the card the
+    // remote left is the chosen one only until something else chooses:
+    // their home is what they land on.
+    useScreen(tester, tvSize);
+    final loose = <KeyEvent>[];
+    await tester.pumpWidget(
+      _harness(
+        {
+          0: ['a'],
+          10: ['b', 'c', 'd'],
+        },
+        loose: loose,
+        homes: {'c'},
+      ),
+    );
+    _nodeFor('a').requestFocus();
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(_focused(), 'c', reason: 'the home, not the first card');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(_focused(), 'd');
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(_focused(), 'c', reason: 'the home, not the card last left');
+  });
+
+  testWidgets('a row whose homes are all off, or with one only above it, '
+      'lands where it remembers', (tester) async {
+    useScreen(tester, tvSize);
+    final loose = <KeyEvent>[];
+    await tester.pumpWidget(
+      _harness(
+        {
+          0: ['a'],
+          10: ['b', 'c', 'd'],
+        },
+        loose: loose,
+        homes: const {},
+        homeAroundLadder: true,
+      ),
+    );
+    _nodeFor('a').requestFocus();
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(_focused(), 'b', reason: 'the first card, as ever');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(_focused(), 'c', reason: 'the card it left');
   });
 
   testWidgets('a press no row can answer is left for whatever else wants it', (

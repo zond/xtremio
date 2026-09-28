@@ -7,6 +7,7 @@ import '../../core/core.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/download_badge.dart';
 import '../../widgets/focusable_tile.dart';
+import '../../widgets/tv_ladder.dart';
 import 'episode_thumbnail.dart';
 
 /// A season's episodes as one row of cards, scrolled sideways: what the
@@ -51,6 +52,7 @@ class TvEpisodeRow extends StatefulWidget {
     required this.onToggleWatched,
     this.onFocus,
     this.defaultFocus = false,
+    this.homeVideoId,
   });
 
   /// The episodes of the season on screen, in order.
@@ -58,6 +60,12 @@ class TvEpisodeRow extends StatefulWidget {
 
   /// The episode whose sources are shown; null before anything is picked.
   final String? selectedVideoId;
+
+  /// The card the remote lands on whenever it arrives in this row, when
+  /// that is not [selectedVideoId]: the episode the screen has just asked
+  /// for, while the engine has not answered and [selectedVideoId] still
+  /// names the one before. Null lands on the selected episode.
+  final String? homeVideoId;
 
   /// What "has aired" is measured against.
   final DateTime now;
@@ -204,11 +212,14 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
   Widget build(BuildContext context) {
     final ids = _ids.toSet();
     _cards.removeWhere((id, _) => !ids.contains(id));
-    // Which card the remote starts on, when this row is where it starts:
-    // the selected episode, else the first one that has aired, since a
-    // card that takes no press cannot take the autofocus either.
+    // Which card the remote starts on, when this row is where it starts,
+    // and lands on whenever it arrives ([TvLadderHome]): the selected
+    // episode when it is in this season, else the first one that has
+    // aired, since a card that takes no press cannot take the focus.
+    final home = widget.homeVideoId ?? widget.selectedVideoId;
+    final selected = ids.contains(home) ? home : null;
     final landsOn =
-        widget.selectedVideoId ??
+        selected ??
         widget.episodes.where((v) => v.isReleased(widget.now)).firstOrNull?.id;
     return SizedBox(
       height: TvEpisodeRow.heightOf(context),
@@ -227,19 +238,22 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
               SizedBox(
                 key: _cards.putIfAbsent(video.id, GlobalKey.new),
                 width: TvEpisodeRow.cardWidth,
-                child: TvEpisodeCard(
-                  video: video,
-                  defaultFocus: widget.defaultFocus && video.id == landsOn,
-                  isSelected: video.id == widget.selectedVideoId,
-                  isWatched: widget.isWatched(video),
-                  isReleased: video.isReleased(widget.now),
-                  progress: widget.resumeProgress(video),
-                  download: widget.downloadOf(video),
-                  onTap: () => widget.onSelect(video),
-                  onLongPress: () => widget.onToggleWatched(video),
-                  onFocused: widget.onFocus == null
-                      ? null
-                      : () => widget.onFocus!(video),
+                child: TvLadderHome(
+                  isHome: video.id == landsOn,
+                  child: TvEpisodeCard(
+                    video: video,
+                    defaultFocus: widget.defaultFocus && video.id == landsOn,
+                    isSelected: video.id == widget.selectedVideoId,
+                    isWatched: widget.isWatched(video),
+                    isReleased: video.isReleased(widget.now),
+                    progress: widget.resumeProgress(video),
+                    download: widget.downloadOf(video),
+                    onTap: () => widget.onSelect(video),
+                    onLongPress: () => widget.onToggleWatched(video),
+                    onFocused: widget.onFocus == null
+                        ? null
+                        : () => widget.onFocus!(video),
+                  ),
                 ),
               ),
           ],

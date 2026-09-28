@@ -59,7 +59,11 @@ marked the same way. The surviving row carries the union of every listing's
 trackers, which is what playback, downloads and the stats poll are given.
 An addon that answered with an error is named and can be checked or
 uninstalled on the spot. Coming back from the player lands on the right
-episode.
+episode. A series opens on the season and episode it was left on last
+time, unless the library has watched something since (the player moving
+on to the next episode by itself), and a title in the library never opened
+here starts on the episode last watched. An episode it was sent to -- from
+Continue watching -- wins over both.
 
 **On a television** the screen is laid out for a remote:
 
@@ -70,7 +74,10 @@ episode.
   arrives or not;
 - episodes are a **row of cards** under the season pills: still, number,
   title, air date, watched check, download badge and a resume bar; an
-  unaired episode takes no focus, and the row scrolls to the selected card;
+  unaired episode takes no focus, and the row scrolls to the selected card.
+  A press down or up onto the pills lands on the season on screen, and
+  onto the row on the selected episode, rather than on the first of either
+  (`TvLadderHome`): landing on a card there chooses it;
 - sources are the last two rows: a card per group (resolution or addon, per
   the same layout preference), and under the chosen one a row of its
   sources. The last-used source is a card above them and where the remote

@@ -7,6 +7,7 @@ export 'core_client.dart';
 export 'core_events.dart';
 export 'core_field_notifier.dart';
 export 'core_scope.dart';
+export 'details_visits.dart';
 export 'diagnostics_client.dart';
 export 'diagnostics_log.dart';
 export 'downloads_client.dart';

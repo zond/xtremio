@@ -22,6 +22,13 @@ import 'remote_press.dart';
 /// its first: walking away from the third episode and coming back lands on
 /// the third episode, which is what a viewer means by going back up.
 ///
+/// **A row can name a home instead** ([TvLadderHome]): the card the remote
+/// lands on whenever it arrives, whatever the memory says. It is for the
+/// rows whose cards choose on focus -- the season pills, the episodes --
+/// where the chosen card is the one to come back to, and landing anywhere
+/// else would choose that instead: a press down onto the first season
+/// pill switches the list to season 1.
+///
 /// A row that cannot take the remote -- one with no cards, a season with no
 /// episodes -- is passed over, and a press nothing can answer is **left
 /// alone** rather than swallowed, so directional focus still gets its go.
@@ -273,7 +280,9 @@ class TvLadderRowState extends State<TvLadderRow> {
   bool focusRemembered({bool up = false}) {
     final stops = _stops;
     if (stops.isEmpty) return false;
-    final stop = stops[_remembered.clamp(0, stops.length - 1)];
+    final stop =
+        stops.where(_isHome).firstOrNull ??
+        stops[_remembered.clamp(0, stops.length - 1)];
     stop.requestFocus();
     final target = stop.context;
     if (target != null) {
@@ -287,6 +296,24 @@ class TvLadderRowState extends State<TvLadderRow> {
       );
     }
     return true;
+  }
+
+  /// Whether [stop] sits under a [TvLadderHome] that is on, inside this
+  /// row: a marker above the row is some other row's business.
+  bool _isHome(FocusNode stop) {
+    final element = stop.context;
+    if (element == null) return false;
+    var home = false;
+    element.visitAncestorElements((ancestor) {
+      if (identical(ancestor, context)) return false;
+      final widget = ancestor.widget;
+      if (widget is TvLadderHome) {
+        home = widget.isHome;
+        return false;
+      }
+      return true;
+    });
+    return home;
   }
 
   void _onFocusChange(bool hasFocus) {
@@ -360,6 +387,22 @@ class TvLadderRowState extends State<TvLadderRow> {
       ),
     );
   }
+}
+
+/// Marks the card of a [TvLadderRow] the remote lands on whenever it
+/// arrives in the row -- see [TvLadder].
+///
+/// Wrap every card of such a row and turn [isHome] on for one, rather than
+/// wrapping only the one: a marker that moved from card to card would
+/// change the tree above the cards and take their focus with it.
+class TvLadderHome extends InheritedWidget {
+  const TvLadderHome({super.key, required this.isHome, required super.child});
+
+  /// Whether this card is the row's home.
+  final bool isHome;
+
+  @override
+  bool updateShouldNotify(TvLadderHome oldWidget) => false;
 }
 
 /// The row a control is in, for [TvLadderRow.moveFrom].

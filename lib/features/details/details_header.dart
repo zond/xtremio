@@ -516,24 +516,30 @@ class _SeasonSelectorState extends State<SeasonSelector> {
                         // pill's own: a chip's built-in focus highlight is
                         // a tint, which is exactly the cue a bright room
                         // takes away.
-                        child: FocusHighlighted(
-                          borderRadius: SeasonSelector._pillRadius,
-                          focusNode: _nodeFor(season),
-                          // The remote landing on a pill is the viewer
-                          // asking to see that season: the episodes below
-                          // follow the highlight, and select is left to
-                          // mean the press that goes down into them.
-                          onFocused: () => widget.onChanged(season),
-                          builder: (context, node) => ChoiceChip(
-                            focusNode: node,
-                            label: Text(SeasonSelector.label(season)),
-                            showCheckmark: false,
-                            selected: season == widget.selected,
-                            // Selected or not, every pill takes a press and
-                            // is a focus stop: a chip with no callback is
-                            // neither, which would leave a remote unable to
-                            // rest on the season already on screen.
-                            onSelected: (_) => widget.onChanged(season),
+                        // The season on screen is where a press down
+                        // into this row lands: any other pill would
+                        // switch the season just by being landed on.
+                        child: TvLadderHome(
+                          isHome: season == widget.selected,
+                          child: FocusHighlighted(
+                            borderRadius: SeasonSelector._pillRadius,
+                            focusNode: _nodeFor(season),
+                            // The remote landing on a pill is the viewer
+                            // asking to see that season: the episodes below
+                            // follow the highlight, and select is left to
+                            // mean the press that goes down into them.
+                            onFocused: () => widget.onChanged(season),
+                            builder: (context, node) => ChoiceChip(
+                              focusNode: node,
+                              label: Text(SeasonSelector.label(season)),
+                              showCheckmark: false,
+                              selected: season == widget.selected,
+                              // Selected or not, every pill takes a press and
+                              // is a focus stop: a chip with no callback is
+                              // neither, which would leave a remote unable to
+                              // rest on the season already on screen.
+                              onSelected: (_) => widget.onChanged(season),
+                            ),
                           ),
                         ),
                       ),

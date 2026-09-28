@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
+import 'details_visits.dart';
 import 'drive_link.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
@@ -185,6 +186,10 @@ class AppPrefs extends ChangeNotifier {
   /// at different moments and forgotten independently.
   static const String subtitlePicksKey = 'subtitlePicks';
 
+  /// The `detailsVisits` key: which season and episode each title's
+  /// details screen was left on (see [DetailsVisitMemory]).
+  static const String detailsVisitsKey = 'detailsVisits';
+
   /// Keys an older build wrote and this one removes on [load]:
   /// `similarApiKey`, the Gemini key a viewer once pasted so the app could
   /// ask a model itself, and `similarModel`, which model it asked.
@@ -300,6 +305,11 @@ class AppPrefs extends ChangeNotifier {
   SubtitlePickMemory _subtitlePicks = SubtitlePickMemory.empty;
 
   SubtitlePickMemory get subtitlePicks => _subtitlePicks;
+
+  DetailsVisitMemory _detailsVisits = DetailsVisitMemory.empty;
+
+  /// Where each title's details screen was left -- see [detailsVisitsKey].
+  DetailsVisitMemory get detailsVisits => _detailsVisits;
 
   SimilarMemory _similarSuggestions = SimilarMemory.empty;
 
@@ -461,6 +471,13 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(detailsVisitsKey)) {
+      final visits = DetailsVisitMemory.fromJson(stored[detailsVisitsKey]);
+      if (visits != _detailsVisits) {
+        _detailsVisits = visits;
+        changed = true;
+      }
+    }
     if (loaded(similarSuggestionsKey)) {
       final similar = SimilarMemory.fromJson(stored[similarSuggestionsKey]);
       if (similar != _similarSuggestions) {
@@ -584,6 +601,24 @@ class AppPrefs extends ChangeNotifier {
     await _write(
       subtitlePicksKey,
       value == SubtitlePickMemory.empty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores [value], or removes the key entirely once nothing is
+  /// remembered -- for the same reason [setSubtitleSync] does.
+  ///
+  /// **Tells no listener.** Nothing is drawn from this: a details screen
+  /// reads its title's row once, when it opens. Notifying would rebuild
+  /// every screen that reads the preferences each time a viewer stopped
+  /// on a season, and would make the write impossible from a screen's
+  /// `dispose`, which is where the last one is made -- a rebuild cannot be
+  /// asked for while the tree is taking a screen down.
+  Future<void> setDetailsVisits(DetailsVisitMemory value) async {
+    if (_detailsVisits == value) return;
+    _detailsVisits = value;
+    await _write(
+      detailsVisitsKey,
+      value == DetailsVisitMemory.empty ? null : value.toJson(),
     );
   }
 

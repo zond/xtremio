@@ -284,6 +284,22 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// selected episode) chooses one.
   int? _season;
 
+  /// Where this title's screen was left last time ([DetailsVisit]), read
+  /// once when the screen first has the preferences: what this screen
+  /// writes while it is up must not move where it started.
+  DetailsVisit? _lastVisit;
+  bool _lastVisitRead = false;
+
+  /// The write of where the viewer is, waiting for them to stop moving;
+  /// see [_rememberVisit].
+  Timer? _visitWrite;
+
+  /// How long the viewer has to stay on a season or an episode before it
+  /// is written down. Walking the season pills changes the season once
+  /// per press, and each change would otherwise be a write of the
+  /// preferences file and a rebuild of everything that reads them.
+  static const Duration _visitWriteDelay = Duration(seconds: 1);
+
   /// The load a walk along the episode row is waiting to make; see
   /// [_focusVideo].
   Timer? _focusSelect;
@@ -583,6 +599,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _prefs?.removeListener(_onPrefsChanged);
       _prefs = prefs..addListener(_onPrefsChanged);
     }
+    if (!_lastVisitRead) {
+      _lastVisitRead = true;
+      _lastVisit = prefs.detailsVisits.forMeta(widget.id);
+    }
     // Read here for the reason the preferences above are: [DriveAccountScope]
     // is an `InheritedNotifier` too, so a match landing while this screen is
     // up runs this again and the Drive row appears without anything here
@@ -644,6 +664,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 
   @override
   void dispose() {
+    _flushVisit();
     releaseField();
     FocusManager.instance.removeListener(_watchTheRemote);
     _lastUsedNode.dispose();
@@ -724,6 +745,89 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (mounted) setState(() => _similar = titles);
   }
 
+  /// The last visit to resume from ([_lastVisit]), or null to start the
+  /// way a title never visited here does.
+  ///
+  /// Null when the screen was told which episode to open -- the
+  /// continue-watching row and the player's next episode know better --
+  /// and when the library has watched something since the visit: the
+  /// player moves on to the next episode by itself, and a viewer back from
+  /// a binge wants the episode they stopped on, not the one they chose
+  /// before it. Otherwise the visit wins, because it is the newer of the
+  /// two: the library's episode is what was watched, the visit is where
+  /// the viewer went after.
+  DetailsVisit? _visitToResume(MetaDetailsState state) {
+    final visit = _lastVisit;
+    if (visit == null || widget.videoId != null) return null;
+    final watched = state.libraryItem?.lastWatched;
+    if (watched != null && watched.isAfter(visit.at)) return null;
+    return visit;
+  }
+
+  /// The episode to open on when the screen picks one: the one it was
+  /// told, else the last visit's ([_visitToResume]). Null leaves the pick
+  /// to [MetaDetailsState.initialVideo], which falls back on the library's
+  /// last-watched episode.
+  String? _preferredVideoId(MetaDetailsState state) =>
+      widget.videoId ?? _visitToResume(state)?.videoId;
+
+  /// The season to open on before the viewer or the selection chooses
+  /// one: the last visit's, which need not be its episode's -- walking
+  /// the pills changes the season without choosing an episode.
+  int? _resumedSeason(MetaDetailsState state, List<int> seasons) {
+    final season = _visitToResume(state)?.season;
+    return season != null && seasons.contains(season) ? season : null;
+  }
+
+  /// Writes down where the viewer is, once they have stayed there for
+  /// [_visitWriteDelay] -- see [DetailsVisitMemory]. Only for a title with
+  /// episodes: a film's screen has nowhere on the ladder to come back to.
+  void _rememberVisit() {
+    _visitWrite?.cancel();
+    _visitWrite = Timer(_visitWriteDelay, _writeVisit);
+  }
+
+  void _writeVisit() {
+    _visitWrite = null;
+    final prefs = _prefs;
+    final visit = _currentVisit();
+    if (prefs == null || visit == null) return;
+    unawaited(prefs.setDetailsVisits(prefs.detailsVisits.withVisit(visit)));
+  }
+
+  /// Where the viewer is now, as a visit; null for a title with no
+  /// episodes, or before it has any.
+  DetailsVisit? _currentVisit() {
+    final state = ownState;
+    final meta = state?.meta;
+    if (state == null || meta == null || !state.hasVideos) return null;
+    final videoId = _requestedVideoId ?? state.streamPath?.id;
+    return DetailsVisit(
+      meta: widget.id,
+      season:
+          _season ?? (videoId == null ? null : meta.videoById(videoId)?.season),
+      videoId: videoId,
+      at: DateTime.now().toUtc(),
+    );
+  }
+
+  /// A visit still waiting to be written, written now: the screen is
+  /// going. Before the field is let go, which is what the visit is read
+  /// from; [AppPrefs.setDetailsVisits] tells no listener, so writing while
+  /// the tree comes down asks nothing of it.
+  void _flushVisit() {
+    final pending = _visitWrite;
+    if (pending == null || !pending.isActive) return;
+    pending.cancel();
+    _writeVisit();
+  }
+
+  /// The season pills moved the episode list.
+  void _chooseSeason(int season) {
+    setState(() => _season = season);
+    _rememberVisit();
+  }
+
   /// The episode the screen shows as selected: the tap in flight, else the
   /// engine's own selection.
   String? _selectedVideoId(MetaDetailsState state) =>
@@ -778,10 +882,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void _maybePickInitialVideo(MetaDetailsState state) {
     if (_pickedInitialVideo) return;
     if (state.streamPath != null || state.engineWillGuessStream) return;
-    final video = state.initialVideo(preferred: widget.videoId);
+    final video = state.initialVideo(preferred: _preferredVideoId(state));
     if (video == null) return;
     _pickedInitialVideo = true;
     _selectVideo(video);
+    // A visit left on a season other than its episode's -- the pills were
+    // walked after the episode was chosen -- opens on that season still.
+    final season = _resumedSeason(state, state.meta?.seasons ?? const []);
+    if (season != null && season != video.season && mounted) {
+      setState(() => _season = season);
+    }
   }
 
   /// Shows [video]'s streams. [reveal] is a selection the user made (a tap
@@ -801,6 +911,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final acknowledge = reveal && !_isWide && !_isTv;
     if (acknowledge) _awaitingVideoId = video.id;
     if (mounted) setState(() => _season = video.season);
+    _rememberVisit();
     if (acknowledge) _revealStreams(atEnd: true);
   }
 
