@@ -288,6 +288,9 @@ void main() {
   testWidgets('the auto-pick writes nothing down', (tester) async {
     useWideViewport(tester);
     final client = FakePrefsClient({
+      // An install that has played before: its viewer id is kept already,
+      // so the player screen's token writes nothing either.
+      AppPrefs.viewerIdKey: '0123456789abcdef',
       'subtitlePicks': {
         'shows': [
           {'series': series, 'language': 'English', 'releaseGroup': 'fgt'},
@@ -357,7 +360,9 @@ void main() {
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
-    expect(client.writes, isEmpty);
+    // Nothing but the install's viewer id, made the first time a player
+    // screen asks for its token (`AppPrefs.viewerId`) -- which is no pick.
+    expect(client.writes.where((key) => key != AppPrefs.viewerIdKey), isEmpty);
     expect(prefs.subtitlePicks, SubtitlePickMemory.empty);
   });
 

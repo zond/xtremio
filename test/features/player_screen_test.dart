@@ -100,7 +100,23 @@ void main() {
         ),
         BufferAhead.normal,
       );
-      expect(engine.opened, [(expectedUrl, Duration.zero)]);
+      // And this screen's player token, which is what makes the server
+      // treat the request as the viewer's play session (and so the only
+      // thing that may share): the install's viewer id, then the screen's
+      // own number.
+      expect(engine.opened, hasLength(1));
+      final (opened, at) = engine.opened.single;
+      expect(at, Duration.zero);
+      expect(
+        opened.queryParameters['p'],
+        matches(RegExp(r'^[0-9a-f]{16}\.\d+$')),
+      );
+      expect(
+        opened.replace(
+          queryParameters: Map.of(opened.queryParametersAll)..remove('p'),
+        ),
+        expectedUrl,
+      );
       expect(find.text('video surface'), findsOneWidget);
       expect(find.text('Night of the Living Dead'), findsOneWidget);
       // A torrent shows its start-up overlay (not a bare spinner) until the

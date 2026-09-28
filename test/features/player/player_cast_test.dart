@@ -167,6 +167,15 @@ void main() {
       expect(media.url.host, '192.168.1.20');
       expect(media.url.port, 39271);
       expect(media.url.path, '/11ea02584fa6351956f35671962ab46354d99060/0');
+      // With the player token the film was opened with here: the cast is
+      // this screen's playback moved to the receiver, so the server keeps
+      // the same play session and shares from it as it did before.
+      final openedHere = harness.engine.opened.last.$1;
+      expect(
+        media.url.queryParameters['p'],
+        matches(RegExp(r'^[0-9a-f]{16}\.\d+$')),
+      );
+      expect(media.url.queryParameters['p'], openedHere.queryParameters['p']);
       expect(media.contentType, 'video/mp4');
       expect(start, const Duration(minutes: 12));
       // Local playback stopped, so the film is not running twice.

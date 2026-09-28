@@ -81,12 +81,17 @@ extension _PlayerOpen on _PlayerScreenState {
   ///
   /// `buffer=` goes on the torrent alone: a remote host knows nothing of it,
   /// and a kept download (a loopback URL, left alone by the proxy check too)
-  /// has nothing left to read ahead of. The proxy makes the server's cache
+  /// has nothing left to read ahead of. The torrent also carries this
+  /// screen's player token `p=` ([withPlayerToken]), which is what makes the
+  /// server treat it as the viewer's play session; a proxied URL carries the
+  /// same token inside the proxy address. The proxy makes the server's cache
   /// the only one ([proxiedThroughServer]); the player keeps nothing on
   /// disk.
   Uri _mediaUrl(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
-    if (_bufferOnUrlFor(url)) return withBufferAhead(url, _bufferAhead);
+    if (_bufferOnUrlFor(url)) {
+      return withPlayerToken(withBufferAhead(url, _bufferAhead), _proxyToken);
+    }
     final proxied = proxiedThroughServer(
       url,
       serverBase: _serverBase,

@@ -7,6 +7,41 @@ import 'package:xtremio/core/core.dart';
 import '../support/fake_prefs_client.dart';
 
 void main() {
+  group('viewerId', () {
+    test('is made once, kept, and read back by a fresh start', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+      await prefs.load();
+      final viewer = prefs.viewerId;
+      expect(viewer, matches(RegExp(r'^[0-9a-f]{16}$')));
+      expect(prefs.viewerId, viewer, reason: 'the same id every time asked');
+      // The write is queued behind the chain; a load of a fresh AppPrefs
+      // over the same client reads it back.
+      await Future<void>.delayed(Duration.zero);
+      expect(client.stored[AppPrefs.viewerIdKey], viewer);
+      final restarted = AppPrefs(client: client);
+      await restarted.load();
+      expect(restarted.viewerId, viewer);
+      expect(
+        client.writes.where((key) => key == AppPrefs.viewerIdKey),
+        hasLength(1),
+        reason: 'a kept id is not written again',
+      );
+    });
+
+    test('a stored value of the wrong shape is replaced', () async {
+      final client = FakePrefsClient({AppPrefs.viewerIdKey: 'a.b'});
+      final prefs = AppPrefs(client: client);
+      await prefs.load();
+      expect(prefs.viewerId, isNot('a.b'));
+      expect(prefs.viewerId, matches(RegExp(r'^[0-9a-f]{16}$')));
+    });
+
+    test('two installs are two viewers', () {
+      expect(AppPrefs.inMemory().viewerId, isNot(AppPrefs.inMemory().viewerId));
+    });
+  });
+
   test('defaults to sectioned streams until something is loaded', () async {
     final prefs = AppPrefs(client: FakePrefsClient());
     expect(prefs.streamsSectioned, isTrue);

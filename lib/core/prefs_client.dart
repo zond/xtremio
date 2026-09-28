@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -237,6 +239,17 @@ class AppPrefs extends ChangeNotifier {
   /// preferences. It is never logged whole (`DrivePairingJob.logId`).
   static const String drivePendingSessionKey = 'drivePendingSession';
 
+  /// The `viewerId` key: this install's name for its viewer, the first half
+  /// of every player token (`p=<viewer>.<screen>`, see
+  /// `PlayerScreen`'s `_proxyToken`). The streaming server keeps one play
+  /// session per viewer, so every player screen of this install -- the next
+  /// episode opens a new one -- continues the same session rather than
+  /// starting another. (Another install never shares this server: it is
+  /// embedded in the app, and no other device's player uses it.) Random,
+  /// made once and kept; not a secret, since it names nothing but a session
+  /// on the server this app talks to.
+  static const String viewerIdKey = 'viewerId';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -303,6 +316,32 @@ class AppPrefs extends ChangeNotifier {
   bool get driveTokenDead => _driveTokenDead;
 
   String? _drivePendingSession;
+
+  /// See [viewerIdKey]. Made on first use when the file holds none, and
+  /// written then; what [load] finds replaces it only if nothing has asked
+  /// for it yet.
+  String get viewerId {
+    if (!_viewerIdKept) {
+      _viewerIdKept = true;
+      unawaited(_write(viewerIdKey, _viewerId));
+    }
+    return _viewerId;
+  }
+
+  String _viewerId = _newViewerId();
+  bool _viewerIdKept = false;
+
+  /// Sixteen lowercase hex digits from a secure source: no `.`, so the
+  /// token's screen number is always what follows the last one.
+  static String _newViewerId() {
+    final random = Random.secure();
+    return [
+      for (var i = 0; i < 8; i++)
+        random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ].join();
+  }
+
+  static final RegExp _viewerIdShape = RegExp(r'^[0-9a-z]{1,64}$');
 
   /// See [drivePendingSessionKey]. Null when nothing is outstanding, which
   /// is the ordinary state.
@@ -450,6 +489,13 @@ class AppPrefs extends ChangeNotifier {
         _drivePendingSession = pendingSession;
         changed = true;
       }
+    }
+    final storedViewer = stored[viewerIdKey];
+    if (!_viewerIdKept &&
+        storedViewer is String &&
+        _viewerIdShape.hasMatch(storedViewer)) {
+      _viewerId = storedViewer;
+      _viewerIdKept = true;
     }
     if (changed) notifyListeners();
     // After the values are in memory, because nothing above waits on it:

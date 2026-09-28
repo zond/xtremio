@@ -271,15 +271,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// plays direct.
   Uri? _serverBase;
 
-  /// This player's name for its own proxied streams, written into the
-  /// `/proxy` URLs it fetches (`p=`) and the only thing that says which of
-  /// the server's live streams are this screen's ([_closeProxiedStreams]).
+  /// This player screen's token, `<viewer>.<screen>`: the install's viewer
+  /// id ([AppPrefs.viewerId]) and this screen's number. Written into every
+  /// URL this screen hands the engine -- the `/proxy` URLs (`p=`, where it
+  /// is also the only thing that says which of the server's live streams
+  /// are this screen's, [_closeProxiedStreams]) and the torrent's own
+  /// ([withPlayerToken]) -- and what tells the server a request is the
+  /// viewer's playback: the viewer's play session follows the newest screen
+  /// of the viewer, so the next episode's screen moves it, and a request
+  /// from an older screen (its player still reconnecting as this one takes
+  /// over) moves nothing.
   ///
   /// A name, not a credential: it is acted on only through the server's
   /// bearer-protected loopback control API, and the server strips it before
-  /// asking the origin for anything. Unique within the process is enough.
-  late final String _proxyToken = 'player-${++_proxyTokenSeq}';
-  static int _proxyTokenSeq = 0;
+  /// asking the origin for anything. Unique per screen, whole, is what a
+  /// proxy close retires for good.
+  late final String _proxyToken =
+      '${(_prefs ?? (_ownPrefs ??= AppPrefs.inMemory())).viewerId}.${++_proxyTokenSeq}';
+
+  /// The last screen number handed out. Seeded from the clock, not zero, so
+  /// it never goes backwards across a restart of the app. The server is the
+  /// app's own -- embedded, it dies with the process, and no other device's
+  /// player ever uses it -- so nothing on it remembers a screen across a
+  /// restart today; a number that only grows keeps that from mattering.
+  static int _proxyTokenSeq = DateTime.now().millisecondsSinceEpoch;
 
   /// How this screen ends those streams on the way out, from
   /// [PlaybackScope].

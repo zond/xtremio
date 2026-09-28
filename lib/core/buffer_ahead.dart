@@ -112,3 +112,21 @@ Uri withBufferAhead(Uri url, BufferAhead choice) {
   params['buffer'] = [choice.wire];
   return url.replace(queryParameters: params);
 }
+
+/// [url] with the player token `p=` set to [token]: the name of the player
+/// screen this stream is for, `<viewer>.<screen>` (the install's
+/// `AppPrefs.viewerId` and the screen's number).
+///
+/// It is what tells the server that a request is the viewer's playback and
+/// not a subtitle, a side file or another client: only a request carrying it
+/// starts or moves a play session, and only a play session shares anything
+/// (stream-server `docs/storage.md`, "Sharing"). Every other parameter
+/// survives, as in [withBufferAhead].
+Uri withPlayerToken(Uri url, String token) {
+  final params = <String, List<String>>{};
+  url.queryParametersAll.forEach((key, values) {
+    if (key.isNotEmpty) params[key] = values;
+  });
+  params['p'] = [token];
+  return url.replace(queryParameters: params);
+}

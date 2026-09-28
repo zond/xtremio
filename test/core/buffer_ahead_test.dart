@@ -65,4 +65,25 @@ void main() {
       expect(withBuffer.query, 'buffer=normal');
     });
   });
+
+  group('withPlayerToken', () {
+    test('names the player and keeps every other parameter', () {
+      final url = Uri.parse(
+        'http://127.0.0.1:1/abc/0?tr=udp%3A%2F%2Fa&tr=udp%3A%2F%2Fb&buffer=normal',
+      );
+      final tagged = withPlayerToken(url, '5f3a9c0e1b2d4a67.3');
+      expect(tagged.queryParameters['p'], '5f3a9c0e1b2d4a67.3');
+      expect(tagged.queryParametersAll['tr'], ['udp://a', 'udp://b']);
+      expect(tagged.queryParameters['buffer'], 'normal');
+      expect(tagged.path, url.path);
+    });
+
+    test('replaces a token already there', () {
+      final tagged = withPlayerToken(
+        Uri.parse('http://127.0.0.1:1/abc/0?p=5f3a9c0e1b2d4a67.1'),
+        '5f3a9c0e1b2d4a67.2',
+      );
+      expect(tagged.queryParametersAll['p'], ['5f3a9c0e1b2d4a67.2']);
+    });
+  });
 }

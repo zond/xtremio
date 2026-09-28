@@ -457,11 +457,17 @@ extension _PlayerCasting on _PlayerScreenState {
     _lanMediaOn = true;
     final base = await lan.lanMediaBaseUrl(peerIp: device.address);
     if (base == null) return null;
-    return local.replace(
+    final onLan = local.replace(
       scheme: base.scheme,
       host: base.host,
       port: base.hasPort ? base.port : null,
     );
+    // A torrent cast is this screen's playback moved to the receiver, so it
+    // carries the same player token ([withPlayerToken]): the server keeps
+    // the same play session, and shares from it exactly as it does while
+    // the film plays here. An archive member does not ([_bufferOnUrlFor]):
+    // archive playback shares nothing, cast or not.
+    return _bufferOnUrlFor(local) ? withPlayerToken(onLan, _proxyToken) : onLan;
   }
 
   /// Ends the session and brings playback back to this device, at the point

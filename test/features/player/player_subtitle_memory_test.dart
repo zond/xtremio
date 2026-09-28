@@ -539,7 +539,12 @@ void main() {
 
     // Picking and turning off are choices and are remembered as such;
     // what is not written is the *timing*, which nobody adjusted.
-    expect(client.writes, everyElement('subtitlePicks'));
+    // Nothing but the picks -- and the install's viewer id, made the first
+    // time a player screen asks for its token (`AppPrefs.viewerId`).
+    expect(
+      client.writes.where((key) => key != AppPrefs.viewerIdKey),
+      everyElement('subtitlePicks'),
+    );
     expect(player.engine.subtitleSpeed, 1);
   });
 }

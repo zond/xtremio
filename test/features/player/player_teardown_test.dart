@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/prefs_client.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
@@ -471,6 +472,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(harness.proxyStreams.closed, [token]);
+    });
+
+    testWidgets('the next episode\'s screen is the same viewer on a newer '
+        'screen', (tester) async {
+      // The server keeps one play session per viewer and moves it on the
+      // newest screen's requests, ignoring an older screen's: so the next
+      // episode's player must carry this install's viewer id, and a screen
+      // number past the one it replaces -- or the outgoing player's last
+      // reconnect would move the session back to the episode just left.
+      useWideViewport(tester);
+      // Under the app's preferences, as every screen of the app is: the
+      // viewer id is the install's, kept there.
+      final prefs = AppPrefs.inMemory();
+      addTearDown(prefs.dispose);
+      final harness = PlayerHarness(
+        player: remoteStreamFixture('https://rd.example/dl/tok/e1.mkv'),
+        prefs: prefs,
+      );
+      harness.fixture['nextVideo'] = const {
+        'id': 'tt0063350:1:2',
+        'title': 'The Cellar',
+        'season': 1,
+        'episode': 2,
+      };
+      harness.fixture['nextStream'] = const {
+        'url': 'https://rd.example/dl/tok/e2.mkv',
+        'name': 'Direct',
+      };
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 20));
+      await pumpEvents(tester);
+      final first = tokenOf(harness.engines.first.opened.first.$1);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.pumpAndSettle();
+      expect(harness.engines, hasLength(2), reason: 'a new player took over');
+      final next = tokenOf(harness.engines.last.opened.first.$1);
+
+      (String, int) split(String token) {
+        final dot = token.lastIndexOf('.');
+        expect(dot, greaterThan(0), reason: '$token is <viewer>.<screen>');
+        return (token.substring(0, dot), int.parse(token.substring(dot + 1)));
+      }
+
+      final (firstViewer, firstScreen) = split(first);
+      final (nextViewer, nextScreen) = split(next);
+      expect(nextViewer, firstViewer, reason: 'one viewer');
+      expect(nextScreen, greaterThan(firstScreen), reason: 'a newer screen');
     });
 
     testWidgets('a torrent has nothing to close, and is not asked', (
