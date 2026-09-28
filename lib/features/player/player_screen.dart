@@ -233,6 +233,12 @@ class PlayerScreen extends StatefulWidget {
   /// constant cannot be right for a phone and a television at once.
   static const double subtitleControlGap = 12;
 
+  /// How long the auto-pick waits for a slow subtitle addon before it
+  /// settles for what the others offered. Long enough for an addon that
+  /// answers at all; short enough that a film does not play for long with
+  /// nothing on screen where the viewer expects words.
+  static const Duration subtitleWaitLimit = Duration(seconds: 8);
+
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -547,6 +553,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// on every state and tracks event, replacing the timing and the selection
   /// under a viewer who has just adjusted them.
   bool _subtitlesChosenByHand = false;
+
+  /// The auto-pick is holding off for a subtitle addon that has not
+  /// answered yet, because what is wanted is an addon's file -- the
+  /// remembered release, or any file of the language -- and none that is
+  /// in has it. Bounded by [PlayerScreen.subtitleWaitLimit]: when it runs out, or once
+  /// every addon has answered, the pick takes the best there is.
+  Timer? _subtitleWait;
+
+  /// That wait has run out for this media, so the next try picks from
+  /// what is in.
+  bool _subtitleWaitOver = false;
 
   /// The addon files mpv has said it could not load for this media
   /// ([externalSubtitleFailure]), by URL. The auto-pick passes over them:
@@ -1090,6 +1107,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _translatedUrl = null;
     _autoPickedSubtitles = false;
     _subtitlesChosenByHand = false;
+    _subtitleWait?.cancel();
+    _subtitleWait = null;
+    _subtitleWaitOver = false;
     _mediaLoaded = false;
     // A different video: the adjustment the last subtitle was played
     // with says nothing about it, and neither does the rate the last
@@ -2012,6 +2032,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _subtitleWait?.cancel();
     // Ordinarily a no-op: [_leave] detaches at the press. This covers a
     // screen that went without a leave (a hand-over's `pushReplacement`, a
     // route dismantled from above).

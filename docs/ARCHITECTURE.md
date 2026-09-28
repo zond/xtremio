@@ -659,10 +659,18 @@ or Off -- and a count per language for the pins. The engine's own
 `subtitle_preference` is session state cleared by `Unload`, so on a fresh
 start the row is what the auto-pick falls back to: a file of the remembered
 group preferred, else the head of the language, and nothing at all for a
-language the episode does not offer or a show never watched. Only a pick by
+language the episode does not offer or a show never watched. A pick is
+final for the media, so while a subtitle addon is still answering and what
+is wanted is an addon's file that has not arrived -- the remembered group,
+or any file of the language -- it waits, up to
+`PlayerScreen.subtitleWaitLimit` (8 s), rather than settling for another
+release or the file's own track because that addon is slow. Only a pick by
 hand writes, and a preference synthesized from the row is never dispatched.
-Counts halve when their total passes a ceiling, so they follow a changing
-taste without going stale while the app is closed.
+The menu lifts the two languages picked most often ("You usually pick"),
+among those this episode offers, once one has been picked by hand at least
+`SubtitlePickMemory.pinThreshold` (2) times. Counts halve when their total
+passes a ceiling, so they follow a changing taste without going stale while
+the app is closed.
 
 ## Downloads and offline play
 

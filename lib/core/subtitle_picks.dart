@@ -168,7 +168,13 @@ final class SubtitlePickMemory {
   /// a measurement**: nothing here has measured what a viewer's second
   /// language costs them to find. It exists so one curious tap on Thai
   /// does not earn a permanent slot above the alphabet.
-  static const int pinThreshold = 3;
+  ///
+  /// Two rather than three (2026-09-28): a pick is counted only when
+  /// made by hand, and the show's own memory then applies it to every
+  /// episode after without counting, so a count is roughly one per show.
+  /// At three a viewer had to start three shows in a language before it
+  /// rose to the top, which read as the feature not being there.
+  static const int pinThreshold = 2;
 
   /// The total number of picks at which every count is halved. **Also a
   /// guess.** Halving on picks rather than on days is the point: a

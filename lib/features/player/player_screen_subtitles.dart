@@ -602,6 +602,20 @@ extension _PlayerSubtitles on _PlayerScreenState {
     );
   }
 
+  /// Starts the bounded wait of [_maybeAutoPickSubtitles] for a subtitle
+  /// addon still answering, once per media. Every answer that lands runs
+  /// the pick again on its own; this is only what ends the wait when one
+  /// never does.
+  void _waitForSubtitleAddons() {
+    if (_subtitleWait != null) return;
+    final url = _opened;
+    _subtitleWait = Timer(PlayerScreen.subtitleWaitLimit, () {
+      if (!mounted || _opened != url) return;
+      _subtitleWaitOver = true;
+      _maybeAutoPickSubtitles();
+    });
+  }
+
   /// Applies the session's subtitle preference to freshly opened media: off
   /// stays off; otherwise the first file or track in the preferred language,
   /// from the preferred source first. Waits for the media to load
@@ -665,17 +679,28 @@ extension _PlayerSubtitles on _PlayerScreenState {
       // name no group at all, both land on the head of the language the
       // way they would with nothing remembered.
       final group = preference.releaseGroup;
-      final external =
-          (group == null
-              ? null
-              : candidates
-                    .where((s) => s.releaseGroupKey == group)
-                    .firstOrNull) ??
-          candidates.firstOrNull;
+      final ofGroup = group == null
+          ? null
+          : candidates.where((s) => s.releaseGroupKey == group).firstOrNull;
+      final external = ofGroup ?? candidates.firstOrNull;
       final embedded = before.subtitle
           .where((t) => matches(t.language))
           .firstOrNull;
       final externalFirst = !preference.embeddedFirst;
+      // What was wanted is an addon's file -- the remembered release, or
+      // any file of the language -- and it is not in yet. An addon that
+      // has not answered may have it, and a pick made now is final for
+      // this media: it would settle for another release, or for the
+      // file's own track, just because that addon is slower than the
+      // video. So hold off, until it answers or [PlayerScreen.subtitleWaitLimit] is up.
+      final exact = group == null ? external : ofGroup;
+      if (externalFirst &&
+          exact == null &&
+          !_subtitleWaitOver &&
+          state.subtitles.any((addon) => addon.isLoading)) {
+        _waitForSubtitleAddons();
+        return;
+      }
       if (externalFirst && external != null ||
           embedded == null && external != null) {
         _tracks.value = before.copyWith(
