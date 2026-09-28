@@ -118,7 +118,7 @@ fn read_object(path: &std::path::Path) -> anyhow::Result<Map<String, Value>> {
 /// Stores `value` under `key`, or removes the key when it is `None`,
 /// leaving every other key exactly as it was.
 ///
-/// Serialized on the process's file lock ([`FILE`]), and never looks up the
+/// Serialized on the process's file lock (`FILE`), and never looks up the
 /// process state: the flush in `crate::core::shutdown` calls this after the
 /// state has been taken out, and must not put one back.
 ///

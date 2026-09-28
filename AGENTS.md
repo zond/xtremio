@@ -45,7 +45,7 @@ flutter analyze; echo EXIT=$?
 cargo build --manifest-path rust/Cargo.toml; echo EXIT=$?
 flutter test > /tmp/flutter-test.log 2>&1; echo EXIT=$?
 # Rust changes:
-(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test); echo EXIT=$?
+(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps && cargo test); echo EXIT=$?
 # Anything under rust/src/api:
 flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs; echo EXIT=$?
 # Kotlin with no Android in it (FrameRateMode, DownloadsProgressBar):

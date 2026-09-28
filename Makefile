@@ -86,7 +86,7 @@ version:
 # bindings are stale.
 FRB_PATHS := lib/src/rust rust/src/frb_generated.rs
 check:
-	cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && cargo test && cargo build
+	cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps && cargo test && cargo build
 	dart format --output=none --set-exit-if-changed lib test
 	flutter analyze
 	flutter test

@@ -31,7 +31,7 @@ use crate::state::AppState;
 /// **The handle's lock is held for a look and never across a call.** The
 /// sync exports read it on the UI isolate (`server_base_url`), and
 /// [`token_for`] reads it from `Env::fetch` on stremio-core's tokio workers,
-/// including the single-worker sequential runtime. [`with_handle`]'s library
+/// including the single-worker sequential runtime. `with_handle`'s library
 /// calls block for as long as the server takes -- a pin waits out a magnet's
 /// metadata, up to ninety seconds -- so they clone the `Arc` out and call
 /// through that. Held across such a call, the read lock queued the next
@@ -136,7 +136,7 @@ pub const DRIVE_NOT_LINKED: &str =
     "No Google account is linked to this device, so its Drive files cannot be downloaded.";
 
 /// How to start the embedded server. Two directories, and nothing else to
-/// decide: the port is always ephemeral (see [`spawn`]).
+/// decide: the port is always ephemeral (see `spawn`).
 #[derive(Clone, Debug)]
 pub struct StartConfig {
     /// settings.json, logs/, localFiles/ live here (app support dir).
@@ -930,7 +930,7 @@ pub fn close_proxy_streams(token: &str) -> usize {
 /// control route at all (deliberately not `/proxy` and not `/ftp`) -- and
 /// answers the address it is bound to afterwards: `Some` after a start,
 /// `None` after a stop. What it serves is the server's affair, and it is
-/// only what this device already holds; see [`LAN_MEDIA_ADDR`].
+/// only what this device already holds; see `LAN_MEDIA_ADDR`.
 ///
 /// This is what a cast session turns on and off, and the only thing that
 /// ever should: a Chromecast cannot fetch from a loopback-only server, and
@@ -940,7 +940,7 @@ pub fn close_proxy_streams(token: &str) -> usize {
 /// outright and defaults to `false`, so enabling carries that permission
 /// with it and disabling takes it back. That way the persisted answer to
 /// "may this app serve the LAN" is `false` whenever no session is running
-/// -- and [`start_in`] makes it so after a kill that skipped the disabling.
+/// -- and `start_in` makes it so after a kill that skipped the disabling.
 pub fn set_lan_media(enabled: bool) -> anyhow::Result<Option<SocketAddr>> {
     with_handle(|handle| {
         if !enabled {

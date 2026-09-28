@@ -23,7 +23,7 @@
 //! nothing to do with each other already overlap a great deal. What is
 //! reported and thresholded is therefore how far the overlap beats what
 //! two files of these two densities would reach by accident -- see
-//! [`above_chance`].
+//! `above_chance`.
 
 /// One cue's span: when a line goes up and when it comes down, in seconds.
 ///
@@ -51,18 +51,18 @@ pub type Cue = (f64, f64);
 /// settings (`line:90% align:middle`) after the end time, so only the
 /// first token on the right of the arrow is read.
 ///
-/// Cues are *not* deduplicated and *not* merged, because [`Bitmap::of`]
+/// Cues are *not* deduplicated and *not* merged, because `Bitmap::of`
 /// takes their union rather than their sum: two boxes on screen together
 /// are one lit interval once the bitmap is built. A cue whose end precedes
 /// its start is dropped because it describes no interval at all. **Sorted**
 /// because the extent of the file is read off the ends, and because that
 /// union is taken in one pass over cues in order of when they go up.
 ///
-/// **A cue past the file's [`horizon`] is dropped too**, and for the same
+/// **A cue past the file's `horizon` is dropped too**, and for the same
 /// reason: it parses, but it does not describe this recording. Everything
 /// downstream reads the *last* moment a file has text on screen -- it is
 /// how long the bitmap is, and it is the timeline the two files' densities
-/// and therefore [`above_chance`] are measured over -- so a single mistyped
+/// and therefore `above_chance` are measured over -- so a single mistyped
 /// digit that parses is not one damaged cue's worth of damage, it is the
 /// whole measurement's.
 pub fn cue_spans(text: &str) -> Vec<Cue> {
@@ -214,7 +214,7 @@ pub struct Alignment {
     /// How much of the overlap this line achieves is more than two files
     /// of these densities would have reached by accident: 1 for two files
     /// lit over exactly the same moments, 0 for two that do no better than
-    /// chance, negative for two that do worse. See [`above_chance`].
+    /// chance, negative for two that do worse. See `above_chance`.
     pub score: f64,
 }
 
@@ -295,14 +295,14 @@ const WIDEST_OFFSET: f64 = 600.0;
 /// well the lines land -- a partial track that recovers the ratio exactly
 /// and puts four fifths of its starts within a third of a second scored
 /// 0.33. Buying those back means scoring differently, not lowering this;
-/// see [`tests::chance_is_measured_from_both_densities`].
+/// see `tests::chance_is_measured_from_both_densities`.
 ///
 /// **The fixture's four worst pairings to apply are not that.** Each names
 /// one file, each found the right transform (a median start error of a
 /// fifth of a second) and each scored about *zero*, the signature of a file
 /// whose timeline one damaged cue has stretched rather than of Dice's
 /// ceiling. The parse drops such a cue before it reaches the search
-/// ([`horizon`]), so re-recording the corpus should lose those rows;
+/// (`horizon`), so re-recording the corpus should lose those rows;
 /// nothing above them moves, since the populations the threshold is set
 /// from are summarised by percentile.
 pub const CONVINCING: f64 = 0.45;
@@ -315,7 +315,7 @@ pub const CONVINCING: f64 = 0.45;
 /// Refusing to measure is better than measuring badly, and the floor
 /// guards both sides because either file can be the sparse one.
 ///
-/// Fifty is generous: [`tests::a_handful_of_cues_can_be_laid_onto_anything`]
+/// Fifty is generous: `tests::a_handful_of_cues_can_be_laid_onto_anything`
 /// measures an unrelated pair as alignable by accident down to about eight
 /// cues a side, and at fifty the best an unrelated pair reaches is well
 /// under [`CONVINCING`]. A file with fewer than fifty cues is a signs track
@@ -366,7 +366,7 @@ impl Alignment {
 /// Solves for the line that maps `playing` onto `reference`, both being
 /// cue spans as [`cue_spans`] answers them.
 ///
-/// None when either file has too few cues to be evidence ([`FEWEST_CUES`]);
+/// None when either file has too few cues to be evidence (`FEWEST_CUES`);
 /// otherwise an [`Alignment`] and its score, *including* when the score is
 /// hopeless -- refusing is [`Alignment::is_convincing`]'s call to make, and
 /// what was found is what the viewer is owed either way.

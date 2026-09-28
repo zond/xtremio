@@ -16,12 +16,12 @@
 //! kept verbatim and still named in the launch's pin set ([`pins_in`]), and
 //! a file that is not the shape this build writes -- corrupt JSON, no
 //! `items` object -- is an error that leaves the file where it is, never an
-//! empty registry ([`read_registry`]). Init goes on either way: the
+//! empty registry (`read_registry`). Init goes on either way: the
 //! server is then told it cannot know the pin set, and keeps everything.
 //!
 //! Live progress is not stored by the server per download either: it comes
-//! from `ServerHandle::downloads()` and is merged in by [`merge_live_in`],
-//! which the FFI list call and the ~1 Hz [`ticker`] both use.
+//! from `ServerHandle::downloads()` and is merged in by `merge_live_in`,
+//! which the FFI list call and the ~1 Hz `ticker` both use.
 //!
 //! ## The row leads the server in and follows it out
 //!
@@ -149,7 +149,7 @@ struct FileStamp {
 /// on the server for as long as a magnet takes to resolve; holding one lock
 /// across all of that would stall the progress sink and every other
 /// download call with it. The order, where two are needed, is `ticking`
-/// then `file` -- [`ensure_ticker_in`] and the [`ticker`]'s stop check are
+/// then `file` -- [`ensure_ticker_in`] and the `ticker`'s stop check are
 /// the only places that take both.
 #[derive(Default)]
 pub struct DownloadsState {
@@ -591,9 +591,9 @@ impl Registry {
     /// its shape.
     ///
     /// A `version` above [`VERSION`] is kept, unknown keys survive (in
-    /// [`Entry::extra`], and at the top level in [`Registry::extra`]), and
+    /// [`Entry::extra`], and at the top level in `Registry::extra`), and
     /// an entry this build cannot read is kept
-    /// verbatim (see [`Registry::unreadable`]). What is refused is a file
+    /// verbatim (see `Registry::unreadable`). What is refused is a file
     /// that is not the shape this build writes: not JSON, not an object, no
     /// `items` object, a `version` that is not a number. None of those may
     /// read as an empty registry: this list is the only record of what the
@@ -758,18 +758,18 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
 /// Rows on their way out are left out: a removal that has begun is a
 /// download the user has already said goodbye to, and re-pinning it here
 /// would be the launch undoing the removal. So are [`State::Gone`] rows
-/// (see [`Entry::wants_pin`]).
+/// (see `Entry::wants_pin`).
 ///
 /// A row mid-swap names two files, and both are in: the one it names and
 /// the one it [`Entry::replaces`]. The old file is the title's until the
-/// new pin is in, and [`release_replaced_in`] lets it go only then; the
+/// new pin is in, and `release_replaced_in` lets it go only then; the
 /// launch runs first, and a set without it would sweep the old file before
 /// that check could keep it.
 ///
 /// **An entry this build cannot parse is in too** -- it is most likely a
 /// newer build's download, and a downgrade must not cost the film. What it
 /// names is read out of the raw entry by the two keys every build has
-/// written ([`unreadable_pins`]); whatever else it may be doing is not
+/// written (`unreadable_pins`); whatever else it may be doing is not
 /// this build's to judge, so it is pinned whether or not it is leaving. One
 /// whose file cannot be told from its keys makes the whole answer `None`:
 /// a set that leaves it out would sweep it, and one that guesses could pin
@@ -896,7 +896,7 @@ pub fn proxy_pins() -> Option<Vec<stream_server::ProxyPinKey>> {
 }
 
 /// [`pins_in`] of the registry on disk, or `None` when it would not read --
-/// see [`read_registry`] -- or names something this build cannot place.
+/// see `read_registry` -- or names something this build cannot place.
 /// Called once, by [`crate::server::start`], before the server opens its
 /// session.
 pub fn pins() -> Option<stream_server::PinSet> {
@@ -2247,7 +2247,7 @@ pub enum OpenFailure {
     /// it), or it is and cannot speak for this file yet -- the pin is
     /// dormant because the torrent was not restored, or the torrent is
     /// hash-checking or resolving and has not said the file is whole. Worth
-    /// asking again; see [`stream_url`] for why these are not `NotHeld`.
+    /// asking again; see `stream_url` for why these are not `NotHeld`.
     Unavailable,
     /// The server is running and has said it does not have this file's
     /// pieces to serve: it holds no pin for them (the root was moved, or the
@@ -2410,7 +2410,7 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
 ///
 /// A finished download the server is still holding whole answers `ok: true`
 /// with the URL it plays from -- the embedded server's media route, reading
-/// the pieces already on this device (see [`stream_url`] for why both halves
+/// the pieces already on this device (see `stream_url` for why both halves
 /// are asked) -- and its `lastPlayedAt` is stamped in the same
 /// locked read-modify-write — so the timestamp cannot be lost to a progress
 /// tick landing between the check and the write, and cannot be stamped on a
@@ -2724,7 +2724,7 @@ pub fn ensure_ticker() {
 }
 
 /// [`ensure_ticker`] against a state the caller already holds. See
-/// [`load_in`].
+/// `load_in`.
 pub fn ensure_ticker_in(app: &Arc<AppState>) {
     let mut ticking = app.downloads.ticking();
     if *ticking || !anything_unfinished_in(app) {
@@ -2991,9 +2991,9 @@ pub fn repin_drive_downloads() {
 /// which is the state this work belongs to. It is the other half of the
 /// boot that can still be running after a shutdown (a magnet blocks it for
 /// as long as the tracker takes), so it may not look a state up either, and
-/// it stops once its instance has been retired. See [`load_in`].
+/// it stops once its instance has been retired. See `load_in`.
 ///
-/// Stopping there is also why [`update_in`]'s no-resurrection guarantee
+/// Stopping there is also why `update_in`'s no-resurrection guarantee
 /// cannot be exercised through this path: the check here is what keeps a
 /// shutdown from ever driving into it.
 ///

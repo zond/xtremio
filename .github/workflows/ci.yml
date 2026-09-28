@@ -37,6 +37,12 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
         working-directory: rust
 
+      # Doc links must resolve: a link to a private or missing item is an error.
+      - run: cargo doc --no-deps
+        working-directory: rust
+        env:
+          RUSTDOCFLAGS: -D warnings
+
       - run: cargo test
         working-directory: rust
 
