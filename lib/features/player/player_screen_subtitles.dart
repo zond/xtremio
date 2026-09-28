@@ -75,6 +75,10 @@ extension _PlayerSubtitles on _PlayerScreenState {
                 'not be loaded.',
     );
     if (pick.auto) {
+      // What went back on screen is what the failed upgrade replaced, so
+      // it is that file's rank a candidate has to beat now -- and the
+      // pick is open again, past the dead file.
+      _autoPickRank = pick.rankBefore;
       _autoPickedSubtitles = false;
       _maybeAutoPickSubtitles();
     }
@@ -503,6 +507,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
       before: _tracks.value,
       beforeSubtitle: _externalSubtitle,
       auto: false,
+      rankBefore: null,
     );
     _tracks.value = _tracks.value.copyWith(
       activeSubtitleId: subtitle.url.toString(),
@@ -602,25 +607,17 @@ extension _PlayerSubtitles on _PlayerScreenState {
     );
   }
 
-  /// Starts the bounded wait of [_maybeAutoPickSubtitles] for a subtitle
-  /// addon still answering, once per media. Every answer that lands runs
-  /// the pick again on its own; this is only what ends the wait when one
-  /// never does.
-  void _waitForSubtitleAddons() {
-    if (_subtitleWait != null) return;
-    final url = _opened;
-    _subtitleWait = Timer(PlayerScreen.subtitleWaitLimit, () {
-      if (!mounted || _opened != url) return;
-      _subtitleWaitOver = true;
-      _maybeAutoPickSubtitles();
-    });
-  }
-
   /// Applies the session's subtitle preference to freshly opened media: off
-  /// stays off; otherwise the first file or track in the preferred language,
-  /// from the preferred source first. Waits for the media to load
-  /// ([_mediaLoaded]), retries as tracks and addon results arrive, and
-  /// counts as done only once the engine accepted the pick.
+  /// stays off; otherwise the best file or track in the preferred language
+  /// that is in so far. Waits for the media to load ([_mediaLoaded]).
+  ///
+  /// **Asked again every time a subtitle addon answers, and a better file
+  /// replaces the one on screen** ([_subtitleRank]): the best there is
+  /// goes up at once, so nothing waits on the slowest addon, and the file
+  /// this show was watched with takes over the moment it arrives. It
+  /// settles ([_autoPickedSubtitles]) once what is on screen cannot be
+  /// beaten, or every addon has answered and nothing better came; a pick
+  /// by hand ends it at once ([_subtitlesChosenByHand]).
   ///
   /// With no session preference (every fresh start: the core clears it on
   /// `Unload`) what this show was last watched with stands in ([_wanted]),
@@ -653,6 +650,9 @@ extension _PlayerSubtitles on _PlayerScreenState {
         .where((subtitle) => subtitle.url.toString() == before.activeSubtitleId)
         .firstOrNull;
     final Future<void>? applied;
+    // How good what is about to go on screen is; off is as good as off
+    // gets, so it settles at once.
+    int rank = _topSubtitleRank;
     if (!preference.enabled) {
       _tracks.value = before.copyWith(clearSubtitle: true);
       _resetSubtitleTiming();
@@ -686,23 +686,33 @@ extension _PlayerSubtitles on _PlayerScreenState {
       final embedded = before.subtitle
           .where((t) => matches(t.language))
           .firstOrNull;
-      final externalFirst = !preference.embeddedFirst;
-      // What was wanted is an addon's file -- the remembered release, or
-      // any file of the language -- and it is not in yet. An addon that
-      // has not answered may have it, and a pick made now is final for
-      // this media: it would settle for another release, or for the
-      // file's own track, just because that addon is slower than the
-      // video. So hold off, until it answers or [PlayerScreen.subtitleWaitLimit] is up.
-      final exact = group == null ? external : ofGroup;
-      if (externalFirst &&
-          exact == null &&
-          !_subtitleWaitOver &&
-          state.subtitles.any((addon) => addon.isLoading)) {
-        _waitForSubtitleAddons();
+      final externalRank = external == null
+          ? 0
+          : _subtitleRank(
+              preference,
+              external: true,
+              exact: group == null || identical(external, ofGroup),
+            );
+      final embeddedRank = embedded == null
+          ? 0
+          : _subtitleRank(preference, external: false, exact: true);
+      final best = externalRank > embeddedRank ? externalRank : embeddedRank;
+      final standing = _autoPickRank;
+      // Strictly better only. A file as good as the one on screen would
+      // flash the words for nothing, and after each pick the engine takes
+      // this is asked again: an equal rank replacing itself would do so
+      // for ever. Strictly rising ranks, three of them, are also what
+      // bounds a video to two switches.
+      if (best == 0 || (standing != null && best <= standing)) {
+        // Nothing better than what is on screen. Once every addon has
+        // answered, nothing better is coming either.
+        if (standing != null && _allSubtitleAddonsIn(state)) {
+          _autoPickedSubtitles = true;
+        }
         return;
       }
-      if (externalFirst && external != null ||
-          embedded == null && external != null) {
+      rank = best;
+      if (externalRank >= embeddedRank && external != null) {
         _tracks.value = before.copyWith(
           activeSubtitleId: external.url.toString(),
         );
@@ -712,6 +722,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
           before: before,
           beforeSubtitle: beforeSubtitle,
           auto: true,
+          rankBefore: standing,
         );
         applied = _addExternalSubtitle(external);
       } else if (embedded != null) {
@@ -729,11 +740,16 @@ extension _PlayerSubtitles on _PlayerScreenState {
     // mpv's `network-timeout`, so a refusal can land minutes after the
     // call, and by then the viewer may have chosen a file of their own.
     final applying = _tracks.value.activeSubtitleId;
+    final settles = rank >= _topSubtitleRank || _allSubtitleAddonsIn(state);
     _autoPickingSubtitles = true;
+    var accepted = false;
     applied
         .then(
           (_) {
-            if (_opened == url) _autoPickedSubtitles = true;
+            if (_opened != url) return;
+            accepted = true;
+            _autoPickRank = rank;
+            if (settles) _autoPickedSubtitles = true;
           },
           onError: (Object _) {
             // Rejected: show what is really selected and try again on the
@@ -748,8 +764,45 @@ extension _PlayerSubtitles on _PlayerScreenState {
             _undoSubtitlePick(before, beforeSubtitle);
           },
         )
-        .whenComplete(() => _autoPickingSubtitles = false);
+        .whenComplete(() {
+          _autoPickingSubtitles = false;
+          // An addon that answered while this was in flight found the
+          // pick busy and was not looked at: look now. Only after a pick
+          // the engine took -- asking again straight after a refusal
+          // would make the same refused pick again.
+          if (accepted && mounted && _opened == url) {
+            _maybeAutoPickSubtitles();
+          }
+        });
   }
+
+  /// The best [_subtitleRank] gives: nothing can replace a pick of it.
+  static const int _topSubtitleRank = 3;
+
+  /// How good a candidate is against [preference], higher better, for the
+  /// auto-pick's "is this better than what is on screen" -- a file of an
+  /// addon ([external]) or a track inside the video, and whether it is
+  /// [exact]ly what is wanted: the remembered release group, where one is
+  /// remembered.
+  ///
+  /// - **Addon file first** (the ordinary case): an exact file is the top,
+  ///   another file of the language is next, and the video's own track
+  ///   is the stopgap, on screen until a file arrives.
+  /// - **Track first** (the show was watched on the file's own track): the
+  ///   track is the top, and a file only stands in where there is none.
+  static int _subtitleRank(
+    _WantedSubtitle preference, {
+    required bool external,
+    required bool exact,
+  }) {
+    if (preference.embeddedFirst) return external ? 2 : _topSubtitleRank;
+    if (!external) return 1;
+    return exact ? _topSubtitleRank : 2;
+  }
+
+  /// Whether every subtitle addon has answered, one way or the other.
+  static bool _allSubtitleAddonsIn(PlayerState state) =>
+      !state.subtitles.any((addon) => addon.isLoading);
 
   // --- Subtitle timing by hand ---------------------------------------------
 

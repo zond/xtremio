@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_tracks.dart';
-import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_prefs_client.dart';
 import '../../support/player_harness.dart';
@@ -167,8 +166,16 @@ void main() {
     await pumpEvents(tester);
   }
 
-  testWidgets('the remembered release is waited for when a slower addon may '
-      'have it', (tester) async {
+  /// [harness] with a second, slower subtitle addon still answering.
+  void withSlowAddon(PlayerHarness harness) {
+    harness.fixture['subtitles'] = <dynamic>[
+      ...(harness.fixture['subtitles'] as List<dynamic>),
+      slowAddon(),
+    ];
+  }
+
+  testWidgets('the best file there is goes up at once, and the remembered '
+      'release replaces it when it arrives', (tester) async {
     useWideViewport(tester);
     final prefs = remembering({'language': 'English', 'releaseGroup': 'fgt'});
     await prefs.load();
@@ -178,39 +185,35 @@ void main() {
     final harness = harnessWith([
       upload('en-1', 'eng', plainUrl, releaseGroup: 'PLAIN'),
     ], prefs: prefs);
-    harness.fixture['subtitles'] = <dynamic>[
-      ...(harness.fixture['subtitles'] as List<dynamic>),
-      slowAddon(),
-    ];
+    withSlowAddon(harness);
     await playing(tester, harness);
-    expect(
-      harness.engine.externalSubtitles,
-      isEmpty,
-      reason: 'a pick now would be final, and the wrong release',
-    );
+    expect(harness.engine.externalSubtitles, [
+      (Uri.parse(plainUrl), 'English', 'eng'),
+    ], reason: 'nothing waits on the slowest addon');
 
     await slowAddonAnswers(tester, harness, [
       upload('en-2', 'eng', fgtUrl, releaseGroup: 'FGT'),
     ]);
-    expect(harness.engine.externalSubtitles, [
-      (Uri.parse(fgtUrl), 'English', 'eng'),
-    ]);
+    expect(harness.engine.externalSubtitles.last, (
+      Uri.parse(fgtUrl),
+      'English',
+      'eng',
+    ));
   });
 
-  testWidgets('an addon file is waited for rather than settling for the '
-      'file\'s own track', (tester) async {
+  testWidgets('the file\'s own track stands in until an addon file arrives', (
+    tester,
+  ) async {
     useWideViewport(tester);
     // Watched from an addon's file, in a language the video also carries
     // a track in: the video loads before any addon has answered.
     final prefs = remembering({'language': 'English'});
     await prefs.load();
     final harness = harnessWith(const [], prefs: prefs);
-    harness.fixture['subtitles'] = <dynamic>[
-      ...(harness.fixture['subtitles'] as List<dynamic>),
-      slowAddon(),
-    ];
+    withSlowAddon(harness);
     await playingWithTrack(tester, harness);
-    expect(harness.engine.setSubtitleTrackIds, isEmpty);
+    expect(harness.engine.setSubtitleTrackIds, ['3']);
+    expect(harness.engine.externalSubtitles, isEmpty);
 
     await slowAddonAnswers(tester, harness, [
       upload('en-2', 'eng', fgtUrl, releaseGroup: 'FGT'),
@@ -218,29 +221,66 @@ void main() {
     expect(harness.engine.externalSubtitles, [
       (Uri.parse(fgtUrl), 'English', 'eng'),
     ]);
-    expect(harness.engine.setSubtitleTrackIds, isEmpty);
   });
 
-  testWidgets('the wait is bounded: an addon that never answers does not '
-      'hold the pick back for good', (tester) async {
+  testWidgets('what is exactly what was wanted is not replaced', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final prefs = remembering({'language': 'English', 'releaseGroup': 'fgt'});
+    await prefs.load();
+    final harness = harnessWith([
+      upload('en-2', 'eng', fgtUrl, releaseGroup: 'FGT'),
+    ], prefs: prefs);
+    withSlowAddon(harness);
+    await playing(tester, harness);
+    expect(harness.engine.externalSubtitles, hasLength(1));
+
+    // A slower addon's file of the same group is not better; a second
+    // switch would only flash the words for nothing.
+    await slowAddonAnswers(tester, harness, [
+      upload('en-9', 'eng', swedishUrl, releaseGroup: 'FGT'),
+    ]);
+    expect(harness.engine.externalSubtitles, [
+      (Uri.parse(fgtUrl), 'English', 'eng'),
+    ]);
+  });
+
+  testWidgets('a pick by hand ends the upgrading', (tester) async {
     useWideViewport(tester);
     final prefs = remembering({'language': 'English', 'releaseGroup': 'fgt'});
     await prefs.load();
     final harness = harnessWith([
       upload('en-1', 'eng', plainUrl, releaseGroup: 'PLAIN'),
+      upload('sv-1', 'swe', swedishUrl),
     ], prefs: prefs);
-    harness.fixture['subtitles'] = <dynamic>[
-      ...(harness.fixture['subtitles'] as List<dynamic>),
-      slowAddon(),
-    ];
+    withSlowAddon(harness);
     await playing(tester, harness);
-    expect(harness.engine.externalSubtitles, isEmpty);
 
-    await tester.pump(PlayerScreen.subtitleWaitLimit);
+    // Pumped for a while rather than settled: the sheet shows a spinner
+    // for as long as the slow addon has not answered.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Swedish'), findsOneWidget);
+    await tester.tap(find.text('Swedish'));
+    await tester.pump(const Duration(milliseconds: 500));
     await pumpEvents(tester);
-    expect(harness.engine.externalSubtitles, [
-      (Uri.parse(plainUrl), 'English', 'eng'),
-    ], reason: 'the head of the language, as with nothing to wait for');
+    expect(harness.engine.externalSubtitles.last, (
+      Uri.parse(swedishUrl),
+      'Swedish',
+      'swe',
+    ));
+
+    await slowAddonAnswers(tester, harness, [
+      upload('en-2', 'eng', fgtUrl, releaseGroup: 'FGT'),
+    ]);
+    expect(harness.engine.externalSubtitles.last, (
+      Uri.parse(swedishUrl),
+      'Swedish',
+      'swe',
+    ), reason: 'the viewer chose; the remembered file is not forced back');
   });
 
   testWidgets('a show never watched is left alone', (tester) async {

@@ -233,12 +233,6 @@ class PlayerScreen extends StatefulWidget {
   /// constant cannot be right for a phone and a television at once.
   static const double subtitleControlGap = 12;
 
-  /// How long the auto-pick waits for a slow subtitle addon before it
-  /// settles for what the others offered. Long enough for an addon that
-  /// answers at all; short enough that a film does not play for long with
-  /// nothing on screen where the viewer expects words.
-  static const Duration subtitleWaitLimit = Duration(seconds: 8);
-
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -539,10 +533,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// core's player twice and replace this route twice over.
   bool _advancing = false;
 
-  /// Whether the session's subtitle preference has been applied to this
-  /// media yet (once per `open`), and whether an attempt is in flight.
+  /// Whether the auto-pick is settled for this media (once per `open`):
+  /// what is on screen is the best it can be, or every subtitle addon has
+  /// answered and nothing better came. Until then each answer that lands
+  /// asks again, and a better file replaces the one on screen. And
+  /// whether an attempt is in flight.
   bool _autoPickedSubtitles = false;
   bool _autoPickingSubtitles = false;
+
+  /// How good the subtitle the auto-pick put on screen is, as
+  /// `_subtitleRank` scores it; null while it has put nothing there. A
+  /// candidate has to beat this to replace it.
+  int? _autoPickRank;
 
   /// Whether the viewer has said what they want of the subtitles for this
   /// media -- picked a file, an embedded track or none, or moved the timing
@@ -554,17 +556,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// under a viewer who has just adjusted them.
   bool _subtitlesChosenByHand = false;
 
-  /// The auto-pick is holding off for a subtitle addon that has not
-  /// answered yet, because what is wanted is an addon's file -- the
-  /// remembered release, or any file of the language -- and none that is
-  /// in has it. Bounded by [PlayerScreen.subtitleWaitLimit]: when it runs out, or once
-  /// every addon has answered, the pick takes the best there is.
-  Timer? _subtitleWait;
-
-  /// That wait has run out for this media, so the next try picks from
-  /// what is in.
-  bool _subtitleWaitOver = false;
-
   /// The addon files mpv has said it could not load for this media
   /// ([externalSubtitleFailure]), by URL. The auto-pick passes over them:
   /// a dead link is dead on the next tracks event too, and picking it
@@ -573,8 +564,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the last addon file put on screen replaced, for as long as it
   /// might yet turn out not to load: its URL, the tracks as they were,
-  /// the file whose timing was in force, and whether the auto-pick made
-  /// the choice (and so should make another). `sub-add` does not answer
+  /// the file whose timing was in force, whether the auto-pick made the
+  /// choice (and so should make another), and how good what it replaced
+  /// was ([_autoPickRank], put back with it). `sub-add` does not answer
   /// a failure (see [externalSubtitleFailure]); the error that says so
   /// arrives on its own, and this is what it is undone from.
   ({
@@ -582,6 +574,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     PlaybackTracks before,
     SubtitleInfo? beforeSubtitle,
     bool auto,
+    int? rankBefore,
   })?
   _subtitlePick;
 
@@ -1106,10 +1099,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // this one's to play.
     _translatedUrl = null;
     _autoPickedSubtitles = false;
+    _autoPickRank = null;
     _subtitlesChosenByHand = false;
-    _subtitleWait?.cancel();
-    _subtitleWait = null;
-    _subtitleWaitOver = false;
     _mediaLoaded = false;
     // A different video: the adjustment the last subtitle was played
     // with says nothing about it, and neither does the rate the last
@@ -2032,7 +2023,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _subtitleWait?.cancel();
     // Ordinarily a no-op: [_leave] detaches at the press. This covers a
     // screen that went without a leave (a hand-over's `pushReplacement`, a
     // route dismantled from above).
