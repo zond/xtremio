@@ -546,6 +546,82 @@ void main() {
     expect(find.byType(PlayerScreen), findsOneWidget);
   });
 
+  testWidgets('the subtitle menu opens with the remote on its top row, '
+      'every time', (tester) async {
+    // A file is playing, so the row that is ticked is far down the sheet;
+    // the remote still starts at the top, and does again after a walk.
+    useScreen(tester, tvSize);
+    await playing(tester, device: tv);
+
+    await openMenu(tester);
+    expect(focusedLabel(tester), 'Off');
+    for (var i = 0; i < 3; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focusedLabel(tester), isNot('Off'));
+    await systemBack(tester);
+    await tester.pumpAndSettle();
+    expect(find.byType(SubtitleMenu), findsNothing);
+
+    await openMenu(tester);
+    expect(focusedLabel(tester), 'Off');
+  });
+
+  testWidgets('the panel spends no row on Reset and no button height on the '
+      'speed', (tester) async {
+    useScreen(tester, tvSize);
+    await playing(tester, device: tv);
+    await openPanel(tester);
+
+    // Reset beside Close, in the header.
+    final reset = tester.getRect(
+      find.byKey(const ValueKey('subtitle-timing-reset')),
+    );
+    final close = tester.getRect(
+      find.byKey(const ValueKey('subtitle-timing-close')),
+    );
+    expect(reset.center.dy, closeTo(close.center.dy, 2));
+    expect(reset.right, lessThanOrEqualTo(close.left));
+
+    // The speed row holds no button, so it is as tall as its number: the
+    // two values sit closer together than one button is tall.
+    final shift = tester.getRect(
+      find.descendant(
+        of: find.byType(SubtitleTimingOverlay),
+        matching: find.text(SubtitleTimingOverlay.shiftLabel),
+      ),
+    );
+    final speed = tester.getRect(
+      find.descendant(
+        of: find.byType(SubtitleTimingOverlay),
+        matching: find.text(SubtitleTimingOverlay.speedLabel),
+      ),
+    );
+    final button = tester.getRect(
+      find.byKey(const ValueKey('subtitle-shift-earlier')),
+    );
+    expect(speed.center.dy - shift.center.dy, lessThan(button.height));
+  });
+
+  testWidgets('the panel lets the picture through', (tester) async {
+    useScreen(tester, tvSize);
+    await playing(tester, device: tv);
+    await openPanel(tester);
+
+    final box = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(SubtitleTimingOverlay),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    final color = (box.decoration as BoxDecoration).color!;
+    expect(color, SubtitleTimingOverlay.background);
+    expect(color.a, lessThan(0.8), reason: 'lighter than the 80 % it was');
+    expect(color.a, greaterThanOrEqualTo(0.6), reason: 'white still reads');
+  });
+
   testWidgets('Reset and Close wear the same ring as the steppers', (
     tester,
   ) async {
@@ -583,16 +659,16 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedLabel(tester), SubtitleTimingOverlay.matchLabel);
     expect(ring(tester, 'subtitle-match'), stroke);
+    // Reset and Close share the header, so the panel spends no row on
+    // one button: up reaches Reset, and Close is beside it.
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedTooltip(), 'Close');
-    expect(ring(tester, 'subtitle-timing-close'), stroke);
-
-    for (var i = 0; i < 4; i++) {
-      await press(tester, LogicalKeyboardKey.arrowDown);
-    }
     expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);
     expect(ring(tester, 'subtitle-timing-reset'), stroke);
     expect(ring(tester, 'subtitle-timing-close'), BorderSide.none);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedTooltip(), 'Close');
+    expect(ring(tester, 'subtitle-timing-close'), stroke);
+    expect(ring(tester, 'subtitle-timing-reset'), BorderSide.none);
   });
 
   testWidgets('the steppers wear the app\'s ring, and the switch reaches it', (

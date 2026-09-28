@@ -258,10 +258,14 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       shrinkWrap: true,
       children: [
         const _MenuHeader('Subtitles'),
+        // The remote starts here, at the top, every time the sheet opens:
+        // one place to start from, whatever was picked last or wherever
+        // the sheet was scrolled, and the row below it is the timing.
         _MenuTile(
           title: 'Off',
           selected: activeId == null,
           onTap: widget.onOff,
+          autofocus: true,
         ),
         // Above the list rather than below it: a language answers with
         // sixty-nine files often enough that the bottom of this sheet is
@@ -843,6 +847,7 @@ class _MenuTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.indented = false,
+    this.autofocus = false,
   });
 
   final String title;
@@ -852,6 +857,9 @@ class _MenuTile extends StatelessWidget {
 
   /// One of a language's alternatives rather than a top-level row.
   final bool indented;
+
+  /// Whether this row takes focus when the sheet opens.
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -871,6 +879,7 @@ class _MenuTile extends StatelessWidget {
         : Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis),
     selected: selected,
     onTap: onTap,
+    autofocus: autofocus,
   );
 }
 

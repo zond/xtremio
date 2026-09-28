@@ -544,11 +544,15 @@ drawn by Flutter (media_kit's `libass: false`), so size, colour and box are a
 
 ### Adjusting timing
 
-**Adjust timing** is the last entry of the subtitle menu while a subtitle
-is showing (Shift+S opens it directly). The panel is not part of the OSD:
-the bar fades while it stays, it has its own focus scope and Back rung on
-every device, every control wears the focus ring, and it scrolls in the
-height it gets (a 360 dp phone held sideways leaves it under 300).
+**Adjust timing** is the entry under **Off** in the subtitle menu while a
+subtitle is showing (Shift+S opens it directly); the menu always opens with
+the remote on Off, its top row, whatever is ticked further down. The panel
+is not part of the OSD: the bar fades while it stays, it has its own focus
+scope and Back rung on every device, every control wears the focus ring,
+and it scrolls in the height it gets (a 360 dp phone held sideways leaves
+it under 300). It sits over the picture being judged, so it is kept short
+-- Reset shares the header with Close, and the read-only speed row is as
+tall as its text -- and its ground is black at 70 %.
 
 - **Shift** is a stepper on `sub-delay` in 0.1 s presses, counted in whole
   presses so ten forward and ten back land at zero. A hold accelerates
@@ -559,7 +563,8 @@ height it gets (a 360 dp phone held sideways leaves it under 300).
 - **Speed** is shown and cannot be pressed: it is only ever measured, and
   the number is the one thing on screen that tells a subtitle right now
   from one right for the next ten minutes.
-- **Reset** returns to 1.0 and 0.0 and discards the marks.
+- **Reset**, in the header beside Close, returns to 1.0 and 0.0 and
+  discards the marks.
 
 Every path that changes what is on screen -- another file, an embedded
 track, subtitles off, the next video, the auto-pick restoring the tracks

@@ -217,6 +217,12 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// remote is sitting on.
   static const double width = 300;
 
+  /// The panel's ground: black at 70 %. Dark enough that white text on it
+  /// reads over a bright frame, and light enough that the picture behind
+  /// it -- which is what the viewer is judging while they press -- still
+  /// shows through.
+  static const Color background = Color(0xB3000000);
+
   /// How long the shift stepper has to be held before it starts
   /// repeating.
   static const Duration holdDelay = Duration(milliseconds: 400);
@@ -303,7 +309,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
         width: width,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0xCC000000),
+            color: background,
             borderRadius: BorderRadius.circular(12),
           ),
           // Scrolls rather than overflows, because what the panel is
@@ -318,7 +324,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
           // remote still reaches every row.
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
+              padding: const EdgeInsets.fromLTRB(12, 0, 4, 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,6 +338,16 @@ class SubtitleTimingOverlay extends StatelessWidget {
                             color: Colors.white70,
                           ),
                         ),
+                      ),
+                      // Beside Close rather than on a row of its own at
+                      // the foot: the panel sits over the picture being
+                      // judged, and a row for one button is height taken
+                      // from it for nothing.
+                      TextButton(
+                        key: const ValueKey('subtitle-timing-reset'),
+                        style: focusRing(context),
+                        onPressed: timing.adjusted ? onReset : null,
+                        child: const Text(resetLabel),
                       ),
                       IconButton(
                         key: const ValueKey('subtitle-timing-close'),
@@ -406,15 +422,6 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     before: const _ButtonGap(),
                     after: const _ButtonGap(),
                   ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      key: const ValueKey('subtitle-timing-reset'),
-                      style: focusRing(context),
-                      onPressed: timing.adjusted ? onReset : null,
-                      child: const Text(resetLabel),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -438,7 +445,7 @@ class _Note extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
+    padding: const EdgeInsets.fromLTRB(4, 0, 8, 4),
     child: Text(
       text,
       style: Theme.of(context).textTheme.bodySmall
@@ -505,14 +512,15 @@ class _TimingRow extends StatelessWidget {
 double _buttonSize(BuildContext context) =>
     DeviceScope.isTv(context) ? TvDensity.minTarget : 40.0;
 
-/// The space a button would have taken. Nothing is drawn in it and
-/// nothing takes focus, so the remote walks straight past.
+/// The width a button would have taken, and none of its height: the row
+/// it sits in holds no button, so it is as tall as its text and no
+/// taller. Nothing is drawn in it and nothing takes focus, so the remote
+/// walks straight past.
 class _ButtonGap extends StatelessWidget {
   const _ButtonGap();
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox.square(dimension: _buttonSize(context));
+  Widget build(BuildContext context) => SizedBox(width: _buttonSize(context));
 }
 
 /// A round icon button on the panel: it fires once on press and then
