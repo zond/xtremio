@@ -795,8 +795,9 @@ pub struct BackgroundTraffic {
     pub uploading: bool,
     /// Whether a player is reading from the server as this is answered.
     pub playing: bool,
-    /// The sums the verdict was judged from, over the torrents that exist
-    /// right now: bytes received from and sent to peers.
+    /// The sums the verdict was judged from: bytes received from and sent
+    /// to peers over the torrents that exist right now, and on the way down
+    /// what the downloads of addon links and Drive files fetched.
     pub bytes_downloaded: u64,
     pub bytes_uploaded: u64,
     /// The window the halves were judged over, in seconds.
@@ -996,6 +997,26 @@ pub fn is_background() -> Option<bool> {
     with_handle(|handle| Ok(handle.is_background())).ok()
 }
 
+/// Holds the running server's idle sharing off, or gives it back to the
+/// `seedingEnabled` setting (`ServerHandle::set_idle_sharing_held`).
+/// Playing and a torrent download still on its way upload either way. Not
+/// a setting: nothing is persisted, and a server started later starts
+/// unheld. `false` when no server is running, which is not an error -- the
+/// app says it again on its next lifecycle change.
+///
+/// When to hold is the app's decision: in the background on a phone or a
+/// tablet, never on a television or a desktop
+/// (`lib/features/sharing/idle_sharing.dart`).
+pub fn set_idle_sharing_held(held: bool) -> bool {
+    with_handle(|handle| handle.set_idle_sharing_held(held)).is_ok()
+}
+
+/// Whether the running server's idle sharing is held; `None` when no
+/// server is running. For tests: the app only ever says, it never asks.
+pub fn idle_sharing_held() -> Option<bool> {
+    with_handle(|handle| Ok(handle.idle_sharing_held())).ok()
+}
+
 /// Whether the LAN media listener is running right now. False when no server
 /// is running either -- "nothing of ours is on the LAN" is the same answer.
 pub fn lan_media_running() -> bool {
@@ -1079,6 +1100,80 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
+
+    /// **The mirror carries each field to its own name.** Two readings
+    /// whose every field differs from the other's, and every boolean from
+    /// its neighbours, so a swap of `downloading` and `uploading` -- or of
+    /// the two byte counts -- in the `From` or in the renames is a failure
+    /// here rather than a light that shows the wrong arrow.
+    #[test]
+    fn background_traffic_crosses_with_every_field_in_its_own_place() {
+        let readings = [
+            enginefs::traffic::BackgroundTraffic {
+                active: true,
+                downloading: true,
+                uploading: false,
+                playing: false,
+                bytes_downloaded: 11,
+                bytes_uploaded: 22,
+                window_secs: 5,
+            },
+            enginefs::traffic::BackgroundTraffic {
+                active: false,
+                downloading: false,
+                uploading: true,
+                playing: true,
+                bytes_downloaded: 33,
+                bytes_uploaded: 44,
+                window_secs: 7,
+            },
+        ];
+        for reading in readings {
+            let crossed = BackgroundTraffic::from(reading.clone());
+            assert_eq!(
+                (
+                    crossed.active,
+                    crossed.downloading,
+                    crossed.uploading,
+                    crossed.playing
+                ),
+                (
+                    reading.active,
+                    reading.downloading,
+                    reading.uploading,
+                    reading.playing
+                )
+            );
+            assert_eq!(
+                (
+                    crossed.bytes_downloaded,
+                    crossed.bytes_uploaded,
+                    crossed.window_secs
+                ),
+                (
+                    reading.bytes_downloaded,
+                    reading.bytes_uploaded,
+                    reading.window_secs
+                )
+            );
+            let json = serde_json::to_value(&crossed).unwrap();
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "active": reading.active,
+                    "downloading": reading.downloading,
+                    "uploading": reading.uploading,
+                    "playing": reading.playing,
+                    "bytesDownloaded": reading.bytes_downloaded,
+                    "bytesUploaded": reading.bytes_uploaded,
+                    "windowSecs": reading.window_secs,
+                }),
+                "the names the app reads"
+            );
+            let back: BackgroundTraffic = serde_json::from_value(json).unwrap();
+            assert_eq!(back, crossed);
+        }
+    }
 
     /// A Drive pin with no grant in hand is refused with the one sentence,
     /// before the server is asked -- there is no server here, and the

@@ -9,9 +9,9 @@ use std::sync::{Arc, Mutex};
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
     server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
-    server_close_proxy_streams, server_dht_status, server_set_background, server_settings,
-    server_start, server_stop, server_storage_report, server_torrent_stats, server_update_settings,
-    ServerConfig,
+    server_close_proxy_streams, server_dht_status, server_set_background,
+    server_set_idle_sharing_held, server_settings, server_start, server_stop,
+    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -143,6 +143,17 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
     assert!(server_set_background(false)?);
     assert_eq!(xtremio_core::server::is_background(), Some(false));
+
+    // The idle-sharing hold: a server starts unheld, is held and let go,
+    // and says so.
+    assert_eq!(xtremio_core::server::idle_sharing_held(), Some(false));
+    assert!(
+        server_set_idle_sharing_held(true)?,
+        "a running server was told"
+    );
+    assert_eq!(xtremio_core::server::idle_sharing_held(), Some(true));
+    assert!(server_set_idle_sharing_held(false)?);
+    assert_eq!(xtremio_core::server::idle_sharing_held(), Some(false));
 
     // The app's control plane is the library API, no token needed: settings
     // read and patched (the patch is validated and merged like POST

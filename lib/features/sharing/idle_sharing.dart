@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/core.dart';
+import '../../src/rust/api/server.dart' as rust;
 
 /// Whether the embedded server uploads to other people while nothing is
 /// playing: what the choice means, what it defaults to and where the answer
@@ -13,12 +14,14 @@ import '../../core/core.dart';
 /// (`server/src/routes/system.rs`), true by default, merged and persisted by
 /// `POST /settings` -- which the app reaches as
 /// `ServerClient.updateSettings`, over `server_update_settings`, the same
-/// function that route runs. On, the server uploads all the time; off, only
-/// while a player is reading from it. Nothing here speaks HTTP: what the app
-/// adds is somebody deciding what to put in it, which is [IdleSharingPolicy]
-/// below. It governs uploading and nothing else, and all of it: a title kept
-/// offline goes on downloading whatever this says, and is shared on the same
-/// terms as everything else.
+/// function that route runs. The server uploads while a player is reading
+/// and while a torrent download is on its way, whatever this says:
+/// downloading is activity, not idling. What the setting governs is the
+/// rest -- what was watched or downloaded before -- which on, goes on
+/// being shared when nothing is happening, and off, is not. Nothing here
+/// speaks HTTP: what the app adds is somebody deciding what to put in it,
+/// which is [IdleSharingPolicy] below. It governs uploading and nothing
+/// else: a title kept offline goes on downloading whatever this says.
 ///
 /// **It is on everywhere, and the switch is the whole of the control.**
 /// There is no per-device default: a device this app has never met is not
@@ -35,14 +38,16 @@ import '../../core/core.dart';
 /// it says; on a phone that means the data is spent, which is accepted
 /// rather than hidden.
 ///
-/// **On a phone or a tablet it stops while the app is in the background**
-/// ([DeviceProfile.isHandheld]), and comes back when the app does. Somebody
-/// who has put their phone away does not expect the app they left to go on
-/// spending their data, and finding out it did is too bad a surprise for a
-/// switch to excuse. A television and a desktop are left running on
-/// purpose, and a program there uploading behind another window is what a
-/// torrent client does, so there it goes on. The tile says so where it
-/// applies ([backgroundNote]).
+/// **On a phone or a tablet the idle sharing stops while the app is in the
+/// background** ([DeviceProfile.isHandheld]), and comes back when the app
+/// does. Somebody who has put their phone away does not expect the app they
+/// left to go on spending their data on what they watched last week, and
+/// finding out it did is too bad a surprise for a switch to excuse. A
+/// download they started is another matter: it is still happening, so it
+/// goes on sharing while it fetches, in the background too. A television
+/// and a desktop are left running on purpose, and a program there uploading
+/// behind another window is what a torrent client does, so there it goes
+/// on. The tile says so where it applies ([backgroundNote]).
 ///
 /// **Charging is deliberately *not* a term either**: it is invisible, so a
 /// switch somebody turned on would do nothing for most of the day with
@@ -73,9 +78,10 @@ class IdleSharing {
   /// the behaviour have drifted apart before, leaving a switch drawn that
   /// did nothing.
   static const String description =
-      'Keeps uploading to other people when nothing is playing. Off, '
-      'Xtremio shares only while you watch. The light in the corner shows '
-      'when it is happening.';
+      'Keeps sharing what you have watched and downloaded when nothing is '
+      'playing. Off, Xtremio shares only while you watch and while a '
+      'download is on its way. The light in the corner shows when it is '
+      'happening.';
 
   /// What the settings tile adds on a device where [IdleSharingPolicy]
   /// holds the sharing off while the app is in the background, so nobody
@@ -83,7 +89,8 @@ class IdleSharing {
   /// leave. Drawn only there: on a television or a desktop the sharing does
   /// go on, and the sentence would be about some other device.
   static const String backgroundNote =
-      'Sharing stops while Xtremio is in the background.';
+      'In the background, Xtremio shares only while it is downloading or '
+      'casting.';
 
   /// The gentler of the two stops the status light offers, and what it
   /// costs: nothing is written down, so the next start of the app shares
@@ -93,8 +100,9 @@ class IdleSharing {
   /// "session" would be a timer somebody had to choose the length of.
   static const String pauseTitle = 'Not now';
   static const String pauseDescription =
-      'Stops sharing while nothing is playing, until you next start '
-      'Xtremio. The setting stays on.';
+      'Stops sharing what you have watched and downloaded, until you next '
+      'start Xtremio. A download on its way still shares. The setting stays '
+      'on.';
 
   /// The other stop: the switch below, from the other end of the app.
   static const String stopTitle = 'Stop sharing';
@@ -112,8 +120,9 @@ class IdleSharing {
   /// so and offers only the way out of itself.
   static const String alreadyOffTitle = 'Sharing is already off';
   static const String alreadyOffDescription =
-      'Xtremio shares only while you watch, and this stops a few seconds '
-      'after playback does. There is nothing left here to switch off.';
+      'Xtremio shares only while you watch and while a download is on its '
+      'way, and stops a few seconds after both end. There is nothing left '
+      'here to switch off.';
 
   /// What the popup says while a "Not now" is in force and the light is
   /// still lit, which it can be for the same few seconds as above: the
@@ -124,8 +133,8 @@ class IdleSharing {
   /// does something: the switch, which is the longer of the two.
   static const String pausedTitle = 'Paused until you next start Xtremio';
   static const String pausedDescription =
-      'What is still going out stops within a few seconds. The setting is '
-      'still on.';
+      'What is still going out stops within a few seconds, unless a download '
+      'is on its way. The setting is still on.';
 
   /// What the settings tile adds while a "Not now" is in force. Without it
   /// the tile would show the switch on while nothing is being shared, which
@@ -138,6 +147,27 @@ class IdleSharing {
   /// switch is off. So the resumption this promises is the one the setting
   /// will still be asking for at the next start.
   static const String pausedNote = 'Paused until you next start Xtremio.';
+}
+
+/// The one call that holds the embedded server's idle sharing off while
+/// the app is away, behind an interface so a test can record what the app
+/// said.
+abstract interface class IdleSharingHold {
+  /// Holds the idle sharing off (`true`) or gives it back to the setting
+  /// (`false`). Answers whether a server was running to be told; throws
+  /// when the call itself failed.
+  Future<bool> setHeld(bool held);
+}
+
+/// [IdleSharingHold] over FFI (`server_set_idle_sharing_held`), which
+/// reaches stream-server's `ServerHandle::set_idle_sharing_held`: not a
+/// setting and never persisted, so the app's lifecycle is the whole of
+/// its memory.
+class RustIdleSharingHold implements IdleSharingHold {
+  const RustIdleSharingHold();
+
+  @override
+  Future<bool> setHeld(bool held) => rust.serverSetIdleSharingHeld(held: held);
 }
 
 /// Keeps the embedded server's `seedingEnabled` equal to
@@ -177,17 +207,22 @@ class IdleSharing {
 /// is no sharing for a pause to hold back and [pauseUntilRestart] takes
 /// none.
 ///
-/// **On a phone or a tablet, the app being in the background is a pause of
+/// **On a phone or a tablet, the app being in the background is a hold of
 /// its own** ([pausesInBackground], from [DeviceProfile.isHandheld]):
-/// [appHidden] holds the answer at false and [appResumed] gives the
-/// setting back, on the same terms as a "Not now" -- nothing written down,
-/// the preference untouched, and no third state in it. It is not a "Not
-/// now" either: the tile says nothing about it (nobody is looking at the
-/// tile while the app is away) and it lifts by itself on the way back,
-/// where a "Not now" outlasts every resume of the run it was granted in.
-/// The two are held apart so that either can end without ending the
-/// other. `XtremioApp` calls both from the lifecycle listener that tells
-/// the server's footprint the same thing.
+/// [appHidden] tells the server to hold the idle sharing off
+/// ([IdleSharingHold]) and [appResumed] lets go. It is not written into
+/// `seedingEnabled`, which the server persists: the setting keeps saying
+/// what the viewer chose, and the hold is a fact about this run that the
+/// server forgets with the process. It is the server's to apply because
+/// only the server knows what else is happening -- held, a player reading
+/// and a torrent download still on its way go on sharing, and what is
+/// held off is what was watched or finished before. It is not a "Not now"
+/// either: the tile says nothing about it (nobody is looking at the tile
+/// while the app is away) and it lifts by itself on the way back, where a
+/// "Not now" outlasts every resume of the run it was granted in. The two
+/// are held apart so that either can end without ending the other.
+/// `XtremioApp` calls both from the lifecycle listener that tells the
+/// server's footprint the same thing.
 ///
 /// **It notifies when that pause goes on or off**, and that is the only
 /// thing it says anything about: what the server was told is the server's
@@ -199,6 +234,7 @@ class IdleSharingPolicy extends ChangeNotifier {
   IdleSharingPolicy({
     required this.prefs,
     required this.server,
+    required this.hold,
     this.pausesInBackground = false,
   }) : _wasAllowed = prefs.shareWhileIdle;
 
@@ -208,8 +244,11 @@ class IdleSharingPolicy extends ChangeNotifier {
   /// Where the answer goes: one key of the embedded server's settings.
   final ServerSettingsWriter server;
 
-  /// Whether the app being in the background holds the sharing off: true
-  /// on a phone or a tablet ([DeviceProfile.isHandheld]), false on a
+  /// Where the background hold goes ([pausesInBackground]).
+  final IdleSharingHold hold;
+
+  /// Whether the app being in the background holds the idle sharing off:
+  /// true on a phone or a tablet ([DeviceProfile.isHandheld]), false on a
   /// television and a desktop, which go on sharing behind other windows.
   /// Fixed for the run, because the device is. Also what the settings tile
   /// reads to say so.
@@ -227,6 +266,14 @@ class IdleSharingPolicy extends ChangeNotifier {
   /// What the server was last told, or null when it has been told nothing
   /// (or when the telling failed, so the next change tries again).
   bool? _sent;
+
+  /// What the server was last told of the hold, or null when the telling
+  /// failed. A server starts unheld, so there is nothing to say until the
+  /// app goes away.
+  bool? _heldSent = false;
+
+  /// The hold's calls, chained like [_writes] and for the same reason.
+  Future<void> _holds = Future<void>.value();
 
   /// A "Not now" from the status light's popup: sharing is off for the rest
   /// of this run, and nothing is written down, so the next start shares
@@ -249,15 +296,16 @@ class IdleSharingPolicy extends ChangeNotifier {
     _watching = true;
     prefs.addListener(_reconsider);
     _reconsider();
+    _reconsiderHold();
   }
 
   /// The app went into the background (hidden, or paused after it). On a
-  /// phone or a tablet the sharing stops until [appResumed]; anywhere else
-  /// this changes nothing.
+  /// phone or a tablet the idle sharing is held off until [appResumed];
+  /// anywhere else this changes nothing.
   void appHidden() {
     if (_background) return;
     _background = true;
-    if (_watching) _reconsider();
+    if (_watching) _reconsiderHold();
   }
 
   /// The app is in the foreground again, and the setting (and any "Not
@@ -265,13 +313,13 @@ class IdleSharingPolicy extends ChangeNotifier {
   void appResumed() {
     if (!_background) return;
     _background = false;
-    if (_watching) _reconsider();
+    if (_watching) _reconsiderHold();
   }
 
   /// Everything written so far has landed. For tests; nothing in the app
   /// waits on this policy.
   @visibleForTesting
-  Future<void> get settled => _writes;
+  Future<void> get settled => Future.wait([_writes, _holds]);
 
   /// Stops the sharing for the rest of this run, leaving the preference
   /// alone: what the status light's "Not now" does.
@@ -322,8 +370,7 @@ class IdleSharingPolicy extends ChangeNotifier {
     final lifted = wanted != _wasAllowed && _paused;
     if (lifted) _paused = false;
     _wasAllowed = wanted;
-    final away = pausesInBackground && _background;
-    final allowed = wanted && !_paused && !away;
+    final allowed = wanted && !_paused;
     if (lifted) notifyListeners();
     if (allowed == _sent) return;
     _sent = allowed;
@@ -340,6 +387,25 @@ class IdleSharingPolicy extends ChangeNotifier {
       // be a second thing to get wrong.
       if (kDebugMode) debugPrint('sharing policy not applied: $error');
       if (_sent == allowed) _sent = null;
+    }
+  }
+
+  void _reconsiderHold() {
+    if (_stopped) return;
+    final held = pausesInBackground && _background;
+    if (held == _heldSent) return;
+    _heldSent = held;
+    _holds = _holds.then((_) => _pushHold(held));
+  }
+
+  Future<void> _pushHold(bool held) async {
+    try {
+      // "No server to tell" is not remembered as told: a server that comes
+      // up later starts unheld, and the next trip out tells it.
+      if (!await hold.setHeld(held) && _heldSent == held) _heldSent = null;
+    } catch (error) {
+      if (kDebugMode) debugPrint('idle sharing hold not applied: $error');
+      if (_heldSent == held) _heldSent = null;
     }
   }
 

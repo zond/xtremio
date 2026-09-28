@@ -75,14 +75,15 @@ screen-by-screen inventory, and a feature with a design document links it.
   television never starts the next one. What it refuses, why it refuses
   rather than guesses, and the fact that no real receiver has confirmed it
   yet are in [docs/CASTING.md](docs/CASTING.md).
-- **Sharing you can see and stop.** *Share while idle* (Settings, on by
-  default) keeps uploading to other peers when nothing is playing, except on
-  a phone or tablet while the app is in the background; off, the
-  server chokes every peer until a player reads from it again. A status light
-  on the main screens is lit only while the server measures bytes moving to
-  or from peers with nothing playing, never because of the setting: an arrow
-  up for uploading, down for bytes coming in (an offline download filling in,
-  or the title played last fetching what it keeps). Pressed while it shows an
+- **Sharing you can see and stop.** Xtremio shares while you watch and
+  while a torrent download is on its way. *Share while idle* (Settings, on
+  by default) also keeps sharing what you watched and downloaded when
+  nothing is happening, except on a phone or tablet while the app is in the
+  background. A status light on the main screens is lit only while the
+  server measures bytes moving with nothing playing, never because of the
+  setting: an arrow up for uploading, down for bytes coming in (an offline
+  download filling in -- a torrent, an addon link or a Drive file -- or the
+  title played last fetching what it keeps). Pressed while it shows an
   upload, it offers *Not now* (until the next start) or *Stop sharing*; while
   it shows bytes coming in, a *Cancel* for each offline download on its way.
 - **More like this.** A row of suggestions on every title, asked of a model

@@ -118,7 +118,11 @@ void main() {
     addTearDown(monitor.dispose);
     final prefs = AppPrefs.inMemory();
     final settings = RecordingServerSettings();
-    final policy = IdleSharingPolicy(prefs: prefs, server: settings);
+    final policy = IdleSharingPolicy(
+      prefs: prefs,
+      server: settings,
+      hold: RecordingSharingHold(),
+    );
     addTearDown(policy.dispose);
     policy.start();
     return (
@@ -805,22 +809,24 @@ void main() {
       final policy = IdleSharingPolicy(
         prefs: prefs,
         server: RecordingServerSettings(),
+        hold: RecordingSharingHold(),
         pausesInBackground: pausesInBackground,
       );
       addTearDown(policy.dispose);
       return policy..start();
     }
 
-    testWidgets('says on a phone that the sharing stops in the background, '
+    testWidgets('says on a phone what the sharing does in the background, '
         'and reads the same while it is', (tester) async {
       final prefs = AppPrefs.inMemory();
       final policy = startedPolicy(prefs, pausesInBackground: true);
       await pumpTile(tester, policy: policy, prefs: prefs);
       const said =
-          'Keeps uploading to other people when nothing is playing. Off, '
-          'Xtremio shares only while you watch. The light in the corner '
-          'shows when it is happening. Sharing stops while Xtremio is in the '
-          'background.';
+          'Keeps sharing what you have watched and downloaded when nothing '
+          'is playing. Off, Xtremio shares only while you watch and while a '
+          'download is on its way. The light in the corner shows when it is '
+          'happening. In the background, Xtremio shares only while it is '
+          'downloading or casting.';
       expect(find.text(said), findsOneWidget);
 
       // Away and back: the tile says what the device does, never where the

@@ -71,6 +71,7 @@ void main() {
     final policy = IdleSharingPolicy(
       prefs: prefs,
       server: RecordingServerSettings(),
+      hold: RecordingSharingHold(),
     );
     addTearDown(policy.dispose);
     policy.start();

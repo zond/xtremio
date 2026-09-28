@@ -130,6 +130,7 @@ class XtremioApp extends StatefulWidget {
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
     this.serverBackground = const RustServerBackgroundControl(),
+    this.sharingHold = const RustIdleSharingHold(),
   });
 
   final CoreClient core;
@@ -178,6 +179,11 @@ class XtremioApp extends StatefulWidget {
   /// Where the server's footprint is set ([ServerFootprint]): the embedded
   /// server over FFI unless a test hands over a recorder.
   final ServerBackgroundControl serverBackground;
+
+  /// Where the idle-sharing hold of a phone or a tablet in the background
+  /// is set ([IdleSharingPolicy]): the embedded server over FFI unless a
+  /// test hands over a recorder.
+  final IdleSharingHold sharingHold;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.
@@ -297,6 +303,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing = IdleSharingPolicy(
       prefs: _prefs,
       server: widget.serverSettings,
+      hold: widget.sharingHold,
       pausesInBackground: widget.device.isHandheld,
     );
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
@@ -506,8 +513,8 @@ class _XtremioAppState extends State<XtremioApp> {
   ///
   /// The server's part is its lean footprint ([ServerFootprint]), which
   /// decides for itself whether anything still needs the full one. And on a
-  /// phone or a tablet the idle sharing stops ([IdleSharingPolicy]) until
-  /// the app is back.
+  /// phone or a tablet the idle sharing is held off ([IdleSharingPolicy])
+  /// until the app is back, while a download on its way goes on sharing.
   void _onHidden() {
     _away = true;
     PaintingBinding.instance.imageCache.clear();

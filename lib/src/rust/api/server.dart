@@ -384,6 +384,16 @@ Future<String?> serverSetLanMedia({required bool enabled}) =>
 bool serverSetBackground({required bool background}) => RustLib.instance.api
     .crateApiServerServerSetBackground(background: background);
 
+/// Holds the embedded server's idle sharing off (`true`) or gives it back
+/// to the sharing setting (`false`); answers whether a server was running
+/// to be told. Playing and a torrent download still on its way upload
+/// either way. Nothing is persisted. The app calls it from its lifecycle,
+/// through `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`),
+/// which holds only on a phone or a tablet in the background. Blocks for
+/// one hop onto the server's runtime, like the settings call beside it.
+Future<bool> serverSetIdleSharingHeld({required bool held}) =>
+    RustLib.instance.api.crateApiServerServerSetIdleSharingHeld(held: held);
+
 /// Whether the LAN media listener is running. False when the server is not
 /// running either -- both mean nothing of ours is on the LAN.
 bool serverLanMediaRunning() =>

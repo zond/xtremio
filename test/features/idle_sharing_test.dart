@@ -25,11 +25,13 @@ void main() {
   IdleSharingPolicy started({
     required AppPrefs prefs,
     required RecordingServerSettings server,
+    RecordingSharingHold? hold,
     bool pausesInBackground = false,
   }) {
     final policy = IdleSharingPolicy(
       prefs: prefs,
       server: server,
+      hold: hold ?? RecordingSharingHold(),
       pausesInBackground: pausesInBackground,
     );
     addTearDown(policy.dispose);
@@ -264,26 +266,32 @@ void main() {
   });
 
   group('the app in the background', () {
-    test('stops the sharing on a phone or a tablet, and gives it back on '
+    test('holds the idle sharing on a phone or a tablet, and lets go on '
         'the way in', () async {
       final stored = FakePrefsClient();
       final prefs = AppPrefs(client: stored);
       await prefs.load();
       final server = RecordingServerSettings();
+      final hold = RecordingSharingHold();
       final policy = started(
         prefs: prefs,
         server: server,
+        hold: hold,
         pausesInBackground: true,
       );
       final announced = <bool>[];
       policy.addListener(() => announced.add(policy.pausedForRun));
       await settle(policy);
+      expect(hold.holds, isEmpty, reason: 'a server starts unheld');
 
       policy.appHidden();
       await settle(policy);
+      expect(hold.holds, [true]);
+      // The hold is the server's to apply, beside the setting and not in
+      // it: the setting still says what the viewer chose, so a download on
+      // its way can go on sharing and nothing persisted says otherwise.
       expect(server.patches, [
         {IdleSharing.seedingEnabledKey: true},
-        {IdleSharing.seedingEnabledKey: false},
       ]);
       // The choice is untouched and nothing is written down, and it is not
       // a "Not now": the tile has nothing new to draw.
@@ -294,16 +302,18 @@ void main() {
 
       policy.appResumed();
       await settle(policy);
-      expect(server.patches, [
-        {IdleSharing.seedingEnabledKey: true},
-        {IdleSharing.seedingEnabledKey: false},
-        {IdleSharing.seedingEnabledKey: true},
-      ]);
+      expect(hold.holds, [true, false]);
+      expect(server.patches, hasLength(1));
     });
 
     test('changes nothing on a television or a desktop', () async {
       final server = RecordingServerSettings();
-      final policy = started(prefs: AppPrefs.inMemory(), server: server);
+      final hold = RecordingSharingHold();
+      final policy = started(
+        prefs: AppPrefs.inMemory(),
+        server: server,
+        hold: hold,
+      );
       await settle(policy);
 
       policy.appHidden();
@@ -314,38 +324,49 @@ void main() {
       expect(server.patches, [
         {IdleSharing.seedingEnabledKey: true},
       ]);
+      expect(hold.holds, isEmpty);
     });
 
-    test('leaves a switch that is off, off', () async {
-      final prefs = AppPrefs(
-        client: FakePrefsClient({AppPrefs.shareWhileIdleKey: false}),
-      );
-      await prefs.load();
-      final server = RecordingServerSettings();
-      final policy = started(
-        prefs: prefs,
-        server: server,
-        pausesInBackground: true,
-      );
-      await settle(policy);
+    test(
+      'holds whatever the switch says, and leaves the switch alone',
+      () async {
+        // The server decides what the hold covers, so the app tells it the
+        // same thing either way.
+        final prefs = AppPrefs(
+          client: FakePrefsClient({AppPrefs.shareWhileIdleKey: false}),
+        );
+        await prefs.load();
+        final server = RecordingServerSettings();
+        final hold = RecordingSharingHold();
+        final policy = started(
+          prefs: prefs,
+          server: server,
+          hold: hold,
+          pausesInBackground: true,
+        );
+        await settle(policy);
 
-      policy.appHidden();
-      await settle(policy);
-      policy.appResumed();
-      await settle(policy);
+        policy.appHidden();
+        await settle(policy);
+        policy.appResumed();
+        await settle(policy);
 
-      expect(server.patches, [
-        {IdleSharing.seedingEnabledKey: false},
-      ]);
-    });
+        expect(server.patches, [
+          {IdleSharing.seedingEnabledKey: false},
+        ]);
+        expect(hold.holds, [true, false]);
+      },
+    );
 
     test('does not lift a "Not now" on the way back in', () async {
       // The pause is for the run, and a run has many resumes in it.
       final prefs = AppPrefs.inMemory();
       final server = RecordingServerSettings();
+      final hold = RecordingSharingHold();
       final policy = started(
         prefs: prefs,
         server: server,
+        hold: hold,
         pausesInBackground: true,
       );
       policy.pauseUntilRestart();
@@ -357,33 +378,80 @@ void main() {
       await settle(policy);
 
       // The start's answer and the pause's, and nothing from the trip out
-      // and back.
+      // and back but the hold.
       expect(policy.pausedForRun, isTrue);
       expect(server.patches, [
         {IdleSharing.seedingEnabledKey: true},
         {IdleSharing.seedingEnabledKey: false},
       ]);
+      expect(hold.holds, [true, false]);
     });
 
     test('is not told to the server ahead of the preferences', () async {
-      // Hidden before the preferences are in: the first thing the server
-      // hears is still an answer made from the viewer's choice.
+      // Hidden before the preferences are in: nothing is said until the
+      // policy starts, and then the viewer's choice and the hold both are.
       final server = RecordingServerSettings();
+      final hold = RecordingSharingHold();
       final policy = IdleSharingPolicy(
         prefs: AppPrefs.inMemory(),
         server: server,
+        hold: hold,
         pausesInBackground: true,
       );
       addTearDown(policy.dispose);
       policy.appHidden();
       await settle(policy);
       expect(server.patches, isEmpty);
+      expect(hold.holds, isEmpty);
 
       policy.start();
       await settle(policy);
       expect(server.patches, [
-        {IdleSharing.seedingEnabledKey: false},
+        {IdleSharing.seedingEnabledKey: true},
       ]);
+      expect(hold.holds, [true]);
+    });
+
+    test('a hold no server heard is said again on the next change', () async {
+      // A server that is not up yet starts unheld when it comes up, so a
+      // hold it never heard is not remembered as said.
+      final hold = RecordingSharingHold(serverRunning: false);
+      final policy = started(
+        prefs: AppPrefs.inMemory(),
+        server: RecordingServerSettings(),
+        hold: hold,
+        pausesInBackground: true,
+      );
+      policy.appHidden();
+      await settle(policy);
+      policy.appResumed();
+      await settle(policy);
+      hold.serverRunning = true;
+      policy.appHidden();
+      await settle(policy);
+      policy.appHidden();
+      await settle(policy);
+
+      expect(hold.holds, [true, false, true]);
+    });
+
+    test('a hold that failed is made again on the next change', () async {
+      final hold = RecordingSharingHold(failWhile: 1);
+      final policy = started(
+        prefs: AppPrefs.inMemory(),
+        server: RecordingServerSettings(),
+        hold: hold,
+        pausesInBackground: true,
+      );
+      policy.appHidden();
+      await settle(policy);
+      expect(hold.holds, isEmpty);
+
+      policy.appResumed();
+      await settle(policy);
+      policy.appHidden();
+      await settle(policy);
+      expect(hold.holds, [false, true]);
     });
   });
 
@@ -391,7 +459,11 @@ void main() {
     test('only while the app is up', () async {
       final prefs = AppPrefs.inMemory();
       final server = RecordingServerSettings();
-      final policy = IdleSharingPolicy(prefs: prefs, server: server);
+      final policy = IdleSharingPolicy(
+        prefs: prefs,
+        server: server,
+        hold: RecordingSharingHold(),
+      );
       policy.start();
       await settle(policy);
       expect(server.patches, hasLength(1));
@@ -457,10 +529,12 @@ void main() {
     });
 
     /// The app on [device], started and settled with the sharing on; the
-    /// function returned reads back every `seedingEnabled` it has written.
+    /// function returned reads back every `seedingEnabled` it has written,
+    /// and [hold] records every hold.
     Future<List<Object?> Function()> pumpApp(
       WidgetTester tester,
       DeviceProfile device,
+      RecordingSharingHold hold,
     ) async {
       final server = RecordingServerSettings();
       await tester.pumpWidget(
@@ -472,6 +546,7 @@ void main() {
           prefs: AppPrefs(client: FakePrefsClient()),
           serverSettings: server,
           sharingActivity: FakeSharingActivity(),
+          sharingHold: hold,
         ),
       );
       await tester.pumpAndSettle();
@@ -505,17 +580,20 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('stops the sharing on a phone while it is away', (
+    testWidgets('holds the idle sharing on a phone while it is away', (
       tester,
     ) async {
-      final sharing = await pumpApp(tester, DeviceProfile.fallback);
+      final hold = RecordingSharingHold();
+      final sharing = await pumpApp(tester, DeviceProfile.fallback, hold);
       expect(sharing(), [true]);
+      expect(hold.holds, isEmpty);
 
       await leave(tester);
-      expect(sharing(), [true, false]);
+      expect(hold.holds, [true]);
 
       await comeBack(tester);
-      expect(sharing(), [true, false, true]);
+      expect(hold.holds, [true, false]);
+      expect(sharing(), [true], reason: 'the setting is never the hold');
     });
 
     testWidgets('goes on sharing on a television and a desktop', (
@@ -525,10 +603,12 @@ void main() {
         tv,
         const DeviceProfile(isTv: false, hasTouch: false),
       ]) {
-        final sharing = await pumpApp(tester, device);
+        final hold = RecordingSharingHold();
+        final sharing = await pumpApp(tester, device, hold);
         await leave(tester);
         await comeBack(tester);
         expect(sharing(), [true], reason: '$device');
+        expect(hold.holds, isEmpty, reason: '$device');
       }
     });
   });

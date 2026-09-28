@@ -1,5 +1,32 @@
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/sharing/sharing_activity.dart';
+
+/// An [IdleSharingHold] that records what the app told the server, instead
+/// of reaching FFI.
+class RecordingSharingHold implements IdleSharingHold {
+  RecordingSharingHold({this.failWhile = 0, this.serverRunning = true});
+
+  /// Every hold, in order.
+  final List<bool> holds = [];
+
+  /// How many of the first calls throw.
+  int failWhile;
+
+  /// What a call answers: whether a server was there to be told. A call
+  /// that finds none is recorded all the same.
+  bool serverRunning;
+
+  @override
+  Future<bool> setHeld(bool held) async {
+    if (failWhile > 0) {
+      failWhile -= 1;
+      throw StateError('the call failed');
+    }
+    holds.add(held);
+    return serverRunning;
+  }
+}
 
 /// A [ServerSettingsWriter] that records what the app asked the embedded
 /// server to change, instead of reaching FFI.

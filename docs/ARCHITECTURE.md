@@ -259,22 +259,24 @@ it stands in front of that listener as the tree's `LanMediaControl`, which
 is how it hears the listener stop. Any of those ending while the app is away
 sends the server lean then.
 
-**Idle sharing is one settings key.** The server keeps uploading after
-playback when its `seedingEnabled` is true; false chokes the whole session
-while no player reads (one `set_upload_enabled` on the backend: nothing is
-paused, no peer dropped, downloads untouched). Since an unpinned engine
-nothing streams is removed five minutes after going idle whatever the
-setting says, what the switch really decides is whether those minutes
-upload. `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`)
-decides the value from the viewer's `shareWhileIdle` -- on by default
-everywhere; nothing asks what the connection costs -- pushes only changes,
-serialized, and holds it false for the run after "Not now"
-(`pauseUntilRestart`, which only a switch that is on can take). On a phone
-or a tablet (`DeviceProfile.isHandheld`: not a television, and a
-touchscreen) it also holds it false while the app is in the background,
-fed by the same lifecycle listener as `ServerFootprint`, and gives the
-setting back on resume; a television and a desktop go on sharing. The
-settings tile says so on the devices it applies to.
+**Idle sharing is one settings key and one hold.** The server's upload
+switch is one for the whole session (one `set_upload_enabled` on the
+backend: nothing is paused, no peer dropped, downloads untouched), and it is
+on while a player reads and while a torrent download is on its way --
+downloading is activity, not idling -- whatever the app says. What the app
+decides is the rest: whether what was watched or finished before goes on
+uploading when nothing is happening. That is `seedingEnabled`, which
+`IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) decides from
+the viewer's `shareWhileIdle` -- on by default everywhere; nothing asks what
+the connection costs -- pushing only changes, serialized, and holding it
+false for the run after "Not now" (`pauseUntilRestart`, which only a switch
+that is on can take). On a phone or a tablet (`DeviceProfile.isHandheld`:
+not a television, and a touchscreen) the policy also tells the server to
+hold the idle sharing off while the app is in the background
+(`server_set_idle_sharing_held`, never persisted), fed by the same lifecycle
+listener as `ServerFootprint`, and lets go on resume; a download on its way
+goes on sharing while held, and a television and a desktop are never held.
+The settings tile says so on the devices it applies to.
 
 **The status light says what is happening, never what is configured.**
 `SharingLight` (`lib/features/sharing/sharing_light.dart`) is drawn in the
