@@ -174,10 +174,14 @@ class DetailsMetaHeader extends StatelessWidget {
     required this.downloads,
     required this.onGenre,
     required this.onToggleLibrary,
+    this.onTrailer,
   });
 
   final MetaItem meta;
   final bool isWide;
+
+  /// Opens the title's trailer; null draws no button, for a title that has
+  /// none ([MetaItem.trailerUrl]).
 
   /// `libraryItem.removed == false`: the bookmark is filled.
   final bool isInLibrary;
@@ -186,6 +190,7 @@ class DetailsMetaHeader extends StatelessWidget {
   final List<DownloadView> downloads;
   final ValueChanged<ResourceRequest> onGenre;
   final VoidCallback onToggleLibrary;
+  final VoidCallback? onTrailer;
 
   static const String addTooltip = TvMetaHeader.addTooltip;
   static const String removeTooltip = TvMetaHeader.removeTooltip;
@@ -260,6 +265,12 @@ class DetailsMetaHeader extends StatelessWidget {
           const SizedBox(height: 12),
           ExpandableText(description),
         ],
+        // Under the description, which is where it goes in either width:
+        // in the column beside the poster when that is where the words are.
+        if (isWide && onTrailer != null) ...[
+          const SizedBox(height: 12),
+          TrailerButton(onPressed: onTrailer!),
+        ],
       ],
     );
 
@@ -284,10 +295,36 @@ class DetailsMetaHeader extends StatelessWidget {
             const SizedBox(height: 12),
             ExpandableText(description),
           ],
+          if (!isWide && onTrailer != null) ...[
+            const SizedBox(height: 12),
+            TrailerButton(onPressed: onTrailer!),
+          ],
         ],
       ),
     );
   }
+}
+
+/// The title's trailer, under its description: a YouTube video the meta
+/// addon listed, opened in the YouTube app (a browser where there is none)
+/// -- the embedded server has no YouTube resolver, so the player could only
+/// fail on it. One button for both layouts; a television wraps it in the
+/// ring its header's stops wear.
+class TrailerButton extends StatelessWidget {
+  const TrailerButton({super.key, required this.onPressed, this.focusNode});
+
+  final VoidCallback onPressed;
+  final FocusNode? focusNode;
+
+  static const String label = 'Trailer';
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    focusNode: focusNode,
+    onPressed: onPressed,
+    icon: const Icon(Icons.smart_display_outlined),
+    label: const Text(label),
+  );
 }
 
 /// Body text clamped to a few lines with a "More" toggle when it overflows.

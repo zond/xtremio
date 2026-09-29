@@ -118,7 +118,10 @@ void main() {
   }) async {
     asked = [];
     answer = Completer<List<SimilarTitle>>();
-    useScreen(tester, tvSize);
+    // Taller than a television's 720, so the ladder's last rung is built:
+    // what these tests ask is whether the rung is there (and when), not
+    // where the fold falls under a header the trailer button makes taller.
+    useScreen(tester, const Size(1280, 900));
     final prefs = AppPrefs(client: FakePrefsClient());
     addTearDown(prefs.dispose);
     await prefs.load();

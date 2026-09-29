@@ -7,6 +7,7 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/readout.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/text_overflow.dart';
+import 'details_header.dart' show TrailerButton;
 
 /// What a title says about itself on a television: the logo, one line of
 /// facts, and enough of the description to know whether this is the film
@@ -60,9 +61,13 @@ class TvMetaHeader extends StatelessWidget {
     required this.isInLibrary,
     required this.downloads,
     required this.onToggleLibrary,
+    this.onTrailer,
   });
 
   final MetaItem meta;
+
+  /// Opens the title's trailer; null draws no button ([MetaItem.trailerUrl]).
+  final VoidCallback? onTrailer;
 
   /// `libraryItem.removed == false`: the bookmark is filled.
   final bool isInLibrary;
@@ -76,9 +81,11 @@ class TvMetaHeader extends StatelessWidget {
   static const String addTooltip = 'Add to library';
   static const String removeTooltip = 'Remove from library';
 
-  /// Where the header's two stops stand in its walk, low first: the plot
-  /// the viewer came to read, and then the button in the corner.
+  /// Where the header's stops stand in its walk, low first: the plot the
+  /// viewer came to read, the trailer under it, and then the button in the
+  /// corner.
   static const double stopOrderDescription = 1;
+  static const double stopOrderTrailer = 1.5;
   static const double stopOrderBookmark = 2;
 
   /// How tall a logo is drawn. Wide logos are letterboxed into whatever
@@ -142,6 +149,23 @@ class TvMetaHeader extends StatelessWidget {
                     FocusTraversalOrder(
                       order: const NumericFocusOrder(stopOrderDescription),
                       child: TvDescription(text: description),
+                    ),
+                  ],
+                  if (onTrailer case final onTrailer?) ...[
+                    const SizedBox(height: 10),
+                    // Over the backdrop, so the ring the bookmark wears
+                    // rather than the floor's fill: see the bookmark below.
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(stopOrderTrailer),
+                      child: FocusHighlighted(
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(24),
+                        ),
+                        builder: (context, node) => TrailerButton(
+                          focusNode: node,
+                          onPressed: onTrailer,
+                        ),
+                      ),
                     ),
                   ],
                 ],

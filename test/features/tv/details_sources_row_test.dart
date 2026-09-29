@@ -929,6 +929,11 @@ void main() {
     expect(sourceTitles(tester), ['Alpha 1080p']);
     expect(backLeaves(tester), isFalse, reason: 'a row is open');
 
+    // A television's app bar scrolls with the panel, and the open row is
+    // far enough down to have taken it off the top: scroll it back first,
+    // as a pointer would have to.
+    await tester.ensureVisible(find.byType(BackButton));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.byType(MetaDetailsScreen), findsNothing);

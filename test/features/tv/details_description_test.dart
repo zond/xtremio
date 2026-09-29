@@ -205,14 +205,21 @@ void main() {
           'remote it is also a press spent walking past it',
     );
 
-    // The walk is unchanged: up from the rungs lands on the bookmark, and
-    // there is nothing beside it to land on.
+    // Up from the rungs lands in the header on its buttons -- the trailer
+    // and the bookmark -- and a walk across them never reaches the plot.
     for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
       await press(tester, LogicalKeyboardKey.arrowUp);
     }
-    expect(focusedTooltip(), TvMetaHeader.addTooltip);
-    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<TvMetaHeader>(), isTrue);
     expect(focusIn<TvDescription>(), isFalse);
+    for (final key in [
+      LogicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.arrowLeft,
+    ]) {
+      await press(tester, key);
+      expect(focusIn<TvDescription>(), isFalse);
+    }
   });
 
   testWidgets('select unfolds it, and select again folds it back', (

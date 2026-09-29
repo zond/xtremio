@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/details/details_header.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -49,6 +51,7 @@ void main() {
   Future<FakeLinkOpener> mount(
     WidgetTester tester, {
     required DeviceProfile device,
+    Map<String, dynamic>? fixture,
   }) async {
     final prefs = AppPrefs(
       client: FakePrefsClient({
@@ -59,7 +62,9 @@ void main() {
     addTearDown(prefs.dispose);
     await prefs.load();
     final opener = FakeLinkOpener();
-    final core = FakeCoreClient(state: {CoreField.metaDetails: withTrailer()});
+    final core = FakeCoreClient(
+      state: {CoreField.metaDetails: fixture ?? withTrailer()},
+    );
     await tester.pumpWidget(
       DeviceScope(
         profile: device,
@@ -123,5 +128,80 @@ void main() {
 
     expect(opener.opened, [youtube]);
     expect(find.byType(PlayerScreen), findsNothing);
+  });
+
+  group('the title\'s own trailer', () {
+    /// The first of the recorded title's trailers (Cinemeta lists two).
+    final first = Uri.parse('https://www.youtube.com/watch?v=DIuI6T48Sj0');
+
+    test('is the first trailer that is a YouTube video', () {
+      final meta = MetaDetailsState.fromJson(loadMetaDetailsFixture()).meta!;
+      expect(meta.trailerStreams, hasLength(2));
+      expect(meta.trailerUrl, first);
+      expect(const MetaItem({'id': 'x', 'type': 'movie'}).trailerUrl, isNull);
+    });
+
+    testWidgets('is a button under the description that opens YouTube', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final opener = await mount(
+        tester,
+        device: DeviceProfile.fallback,
+        fixture: loadMetaDetailsFixture(),
+      );
+
+      final button = find.widgetWithText(OutlinedButton, TrailerButton.label);
+      expect(button, findsOneWidget);
+      final description = find.byType(ExpandableText);
+      expect(
+        tester.getTopLeft(button).dy,
+        greaterThan(tester.getBottomLeft(description).dy),
+        reason: 'below the words',
+      );
+
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(opener.opened, [first]);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
+
+    testWidgets('is not drawn for a title with none', (tester) async {
+      tester.view.physicalSize = const Size(400, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final fixture = loadMetaDetailsFixture();
+      final meta =
+          fixture['metaItems'][0]['content']['content'] as Map<String, dynamic>;
+      meta['trailerStreams'] = <Object>[];
+      await mount(tester, device: DeviceProfile.fallback, fixture: fixture);
+
+      expect(find.text(TrailerButton.label), findsNothing);
+    });
+
+    testWidgets('on a television it is a stop under the plot, before the '
+        'bookmark, and select opens YouTube', (tester) async {
+      useScreen(tester, tvSize);
+      final opener = await mount(
+        tester,
+        device: tv,
+        fixture: loadMetaDetailsFixture(),
+      );
+
+      for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusIn<TvDescription>(), isTrue, reason: 'up lands on the plot');
+      // The header's declared order, which Tab walks: the plot, then this.
+      await press(tester, LogicalKeyboardKey.tab);
+      expect(focusedLabel(tester), TrailerButton.label);
+      expect(focusIn<TvMetaHeader>(), isTrue);
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(opener.opened, [first]);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
   });
 }

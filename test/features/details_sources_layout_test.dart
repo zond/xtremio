@@ -956,7 +956,10 @@ void main() {
             // transport URL, two groups, two headings.
             metaStreams: [
               readyGroup(alphaUrl, [
-                {'url': 'https://alpha.example/trailer.mp4', 'name': 'Trailer'},
+                {
+                  'url': 'https://alpha.example/featurette.mp4',
+                  'name': 'Featurette',
+                },
               ]),
             ],
           ),
@@ -971,14 +974,14 @@ void main() {
       await toggleAddon(tester, alphaUrl);
       expect(find.text('Alpha 720p'), findsOneWidget);
       expect(
-        find.text('Trailer'),
+        find.text('Featurette'),
         findsNothing,
         reason: 'the meta addon\'s group is remembered under its own label',
       );
       expect(prefs.openStreamAddons, {alphaUrl});
 
       await toggleAddon(tester, 'meta:$alphaUrl');
-      expect(find.text('Trailer'), findsOneWidget);
+      expect(find.text('Featurette'), findsOneWidget);
       expect(prefs.openStreamAddons, {alphaUrl, 'meta:$alphaUrl'});
     });
 

@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/details_header.dart'
+    show TrailerButton;
 import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
@@ -816,7 +818,9 @@ void main() {
       expect(focusIn<TvDescription>(), isTrue, reason: 'on the plot');
 
       await press(tester, LogicalKeyboardKey.tab);
+      expect(focusedLabel(tester), TrailerButton.label, reason: 'under it');
 
+      await press(tester, LogicalKeyboardKey.tab);
       expect(focusedTooltip(), TvMetaHeader.addTooltip);
     });
 

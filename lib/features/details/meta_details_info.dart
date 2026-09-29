@@ -41,6 +41,12 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
     final episodes = season == null ? meta.videos : meta.videosOfSeason(season);
     _shownVideoId = _selectedVideoId(state);
     final now = DateTime.now().toUtc();
+    // The trailer opens in the YouTube app, never the player: see
+    // [TrailerButton].
+    final trailer = meta.trailerUrl;
+    final onTrailer = trailer == null
+        ? null
+        : () => openInBrowser(context, trailer.toString());
     return [
       SliverAppBar(
         pinned: !isTv,
@@ -96,6 +102,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                   isInLibrary: state.isInLibrary,
                   downloads: _downloads?.ofMeta(widget.id) ?? const [],
                   onToggleLibrary: () => _toggleLibrary(state, meta),
+                  onTrailer: onTrailer,
                 ),
               )
             : DetailsMetaHeader(
@@ -105,6 +112,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                 downloads: _downloads?.ofMeta(widget.id) ?? const [],
                 onGenre: _openGenre,
                 onToggleLibrary: () => _toggleLibrary(state, meta),
+                onTrailer: onTrailer,
               ),
       ),
       if (state.hasVideos) ...[

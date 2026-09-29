@@ -11,6 +11,20 @@ final class MetaItem extends MetaItemPreview {
   /// Link category Cinemeta uses for genres (`GENRES_LINK_CATEGORY`).
   static const String genresCategory = 'Genres';
 
+  /// The title's trailers as the meta addon lists them (`trailerStreams`):
+  /// Cinemeta gives most films and series one or two YouTube videos.
+  List<StreamInfo> get trailerStreams =>
+      StreamInfo.listFromJson(json['trailerStreams']);
+
+  /// The first trailer that is a YouTube video, as the address the YouTube
+  /// app opens; null for a title with none.
+  Uri? get trailerUrl {
+    for (final trailer in trailerStreams) {
+      if (trailer.youtubeUrl case final url?) return url;
+    }
+    return null;
+  }
+
   /// Link category carrying the IMDb rating as its name
   /// (`IMDB_LINK_CATEGORY`).
   static const String imdbCategory = 'imdb';
