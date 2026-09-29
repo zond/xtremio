@@ -25,6 +25,19 @@ final class StreamInfo {
   int? get fileIdx => json['fileIdx'] as int?;
   String? get url => json['url'] as String?;
   String? get ytId => json['ytId'] as String?;
+
+  /// The YouTube video this stream is, as the address the YouTube app (and
+  /// failing that, a browser) opens; null for any other kind. A YouTube
+  /// stream is not played here: stremio-core would send the player to the
+  /// streaming server's YouTube resolver, which this app's server does not
+  /// have, and resolving YouTube is a moving target best left to YouTube's
+  /// own app.
+  Uri? get youtubeUrl {
+    final ytId = this.ytId;
+    if (ytId == null || ytId.isEmpty) return null;
+    return Uri.https('www.youtube.com', '/watch', {'v': ytId});
+  }
+
   String? get externalUrl => json['externalUrl'] as String?;
 
   Map<String, dynamic> get behaviorHints =>
@@ -143,8 +156,10 @@ final class StreamInfo {
     return StreamKind.unknown;
   }
 
-  /// Whether the core's `Player` model can turn this into something libmpv
-  /// plays: direct URLs, and everything the streaming server resolves.
+  /// Whether a press on this stream does something: libmpv plays direct
+  /// URLs and everything the streaming server resolves, and a YouTube
+  /// stream opens in the YouTube app ([youtubeUrl]) rather than the
+  /// player.
   bool get isPlayable => switch (kind) {
     StreamKind.url ||
     StreamKind.torrent ||

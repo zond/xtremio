@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/external_link.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
@@ -1089,11 +1090,20 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// between the tap and the push: a second tap is dropped rather than
   /// pushing a second player, each of which would load the shared `player`
   /// field and start an engine of its own.
+  ///
+  /// A YouTube stream -- a trailer, a channel's video -- is not played
+  /// here at all: it opens in the YouTube app, or a browser where there is
+  /// none ([StreamInfo.youtubeUrl]).
   Future<void> _play(
     MetaDetailsState state,
     StreamGroup group,
     StreamInfo stream,
   ) async {
+    final youtube = stream.youtubeUrl;
+    if (youtube != null) {
+      await openInBrowser(context, youtube.toString());
+      return;
+    }
     if (_playing) return;
     _playing = true;
     try {

@@ -66,8 +66,10 @@ marked the same way. The surviving row carries the union of every listing's
 trackers, which is what playback, downloads and the stats poll are given.
 An addon that answered with an error or with nothing is left off the list
 and not mentioned (its health shows on the Addons screen); when no addon
-had anything, the screen says so and offers the addons. Coming back from
-the player lands on the right
+had anything, the screen says so and offers the addons. A YouTube source
+-- a trailer addon's, a channel's video -- opens in the YouTube app (a
+browser where there is none), since the embedded server has no YouTube
+resolver. Coming back from the player lands on the right
 episode. A series opens on the season and episode it was left on last
 time, unless the library has watched something since (the player moving
 on to the next episode by itself), and a title in the library never opened

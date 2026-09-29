@@ -850,8 +850,14 @@ class StreamTile extends StatelessWidget {
   /// The download affordance (when there is one) beside the play one.
   Widget _trailing(BuildContext context) {
     final theme = Theme.of(context);
+    // A YouTube stream opens in the YouTube app, not here: the icon says it
+    // leaves ([StreamInfo.youtubeUrl]).
     final play = onTap != null
-        ? const Icon(Icons.play_arrow)
+        ? Icon(
+            stream.kind == StreamKind.youtube
+                ? Icons.open_in_new
+                : Icons.play_arrow,
+          )
         : Text(stream.kind.label, style: theme.textTheme.labelSmall);
     final download = _downloadAffordance(context);
     if (download == null) return play;
