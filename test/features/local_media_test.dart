@@ -170,7 +170,7 @@ void main() {
       messenger.setMockMethodCallHandler(channel, (call) async {
         return switch (call.method) {
           'access' => 'askable',
-          'requestAccess' => 'unavailable',
+          'requestAccess' => 'partial',
           'scan' => [
             {
               'uri': arrivalUri,
@@ -194,7 +194,7 @@ void main() {
       });
       const source = AndroidLocalMediaSource();
       expect(await source.access(), LocalMediaAccess.askable);
-      expect(await source.requestAccess(), LocalMediaAccess.unavailable);
+      expect(await source.requestAccess(), LocalMediaAccess.partial);
       final rows = await source.scan();
       expect(rows, [
         (

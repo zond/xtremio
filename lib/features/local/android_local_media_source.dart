@@ -32,6 +32,7 @@ class AndroidLocalMediaSource implements LocalMediaSource {
 
   static LocalMediaAccess _access(String? answer) => switch (answer) {
     'granted' => LocalMediaAccess.granted,
+    'partial' => LocalMediaAccess.partial,
     'askable' => LocalMediaAccess.askable,
     _ => LocalMediaAccess.unavailable,
   };

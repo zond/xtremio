@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
  * (MediaStore) knows of, for the Library's Local list
  * (lib/features/local/android_local_media_source.dart).
  *
- * From Dart: `access` ("granted", "askable" or "unavailable"),
+ * From Dart: `access` ("granted", "partial", "askable" or "unavailable"),
  * `requestAccess` (the same, after the system dialog), and `scan` (one map
  * per video: `uri`, `name`, `size`, `durationMillis`, `height`, `folder`).
  *
@@ -33,8 +33,11 @@ import java.util.concurrent.Executors
  * library of films.
  *
  * The permission is `READ_MEDIA_VIDEO` from Android 13, and the storage
- * read before it. On Android 14 a viewer may grant only some videos, which
- * MediaStore then answers with, so that counts as granted.
+ * read before it. **On Android 14 a viewer may grant only the videos they
+ * pick** ("partial"): MediaStore then answers with those alone, the camera
+ * filter is not applied to them -- they were chosen, one by one -- and
+ * asking again is how more are picked, so `requestAccess` asks whenever
+ * access is not whole.
  */
 class LocalMediaChannel(
     private val activity: Activity,
@@ -59,7 +62,7 @@ class LocalMediaChannel(
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "access" -> result.success(if (granted()) GRANTED else ASKABLE)
+            "access" -> result.success(state())
             "requestAccess" -> request(result)
             "scan" -> scan(result)
             else -> result.notImplemented()
@@ -76,13 +79,28 @@ class LocalMediaChannel(
         else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 
-    private fun granted(): Boolean = permissions().any {
-        ContextCompat.checkSelfPermission(activity, it) ==
+    private fun holds(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(activity, permission) ==
             PackageManager.PERMISSION_GRANTED
+
+    /** Every video: the first of [permissions] is the whole grant. */
+    private fun wholly(): Boolean = holds(permissions().first())
+
+    /** Only the videos the viewer picked (Android 14 on). */
+    private fun partly(): Boolean = Build.VERSION.SDK_INT >= 34 &&
+        !wholly() &&
+        holds(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+
+    private fun granted(): Boolean = wholly() || partly()
+
+    private fun state(): String = when {
+        wholly() -> GRANTED
+        partly() -> PARTIAL
+        else -> ASKABLE
     }
 
     private fun request(result: MethodChannel.Result) {
-        if (granted()) {
+        if (wholly()) {
             result.success(GRANTED)
             return
         }
@@ -100,7 +118,8 @@ class LocalMediaChannel(
         val pending = permission ?: return true
         permission = null
         val answer = when {
-            granted() -> GRANTED
+            wholly() -> GRANTED
+            partly() -> PARTIAL
             // Refused with "don't ask again", or refused twice: the dialog
             // will not come back, so pressing again would do nothing.
             permissions().none { activity.shouldShowRequestPermissionRationale(it) } ->
@@ -116,9 +135,10 @@ class LocalMediaChannel(
             result.success(emptyList<Map<String, Any?>>())
             return
         }
+        val picked = !wholly()
         executor.execute {
             val rows = try {
-                query()
+                query(filterCamera = !picked)
             } catch (error: RuntimeException) {
                 main.post { result.error("scan_failed", error.javaClass.simpleName, null) }
                 return@execute
@@ -127,7 +147,7 @@ class LocalMediaChannel(
         }
     }
 
-    private fun query(): List<Map<String, Any?>> {
+    private fun query(filterCamera: Boolean): List<Map<String, Any?>> {
         val collection: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Every external volume, a USB drive's included.
             MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -164,7 +184,7 @@ class LocalMediaChannel(
             val path = cursor.getColumnIndexOrThrow(where)
             while (cursor.moveToNext()) {
                 val folder = cursor.getString(path)
-                if (isCameraFolder(folder)) continue
+                if (filterCamera && isCameraFolder(folder)) continue
                 val displayName = cursor.getString(name) ?: continue
                 rows.add(
                     mapOf(
@@ -190,6 +210,7 @@ class LocalMediaChannel(
         const val CHANNEL = "xtremio/local_media"
         const val REQUEST_MEDIA = 4712
         const val GRANTED = "granted"
+        const val PARTIAL = "partial"
         const val ASKABLE = "askable"
         const val UNAVAILABLE = "unavailable"
 

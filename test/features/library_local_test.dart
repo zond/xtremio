@@ -175,6 +175,69 @@ void main() {
     );
   });
 
+  group('with only picked videos allowed', () {
+    testWidgets('what was picked is listed -- a camera clip too, since it '
+        'was chosen -- and a button beside Local picks more', (tester) async {
+      final (media, source) = await localMedia(
+        access: LocalMediaAccess.partial,
+        files: [localFacts(holidayUri, 'VID_20260927_163226235.mp4')],
+      );
+      source.afterRequest = LocalMediaAccess.partial;
+      await tester.pumpWidget(harness(media));
+      await tester.pumpAndSettle();
+      final choose = find.byTooltip(LibraryScreen.chooseVideosLabel);
+      expect(choose, findsNothing, reason: 'only while Local is on');
+
+      await tapLocal(tester);
+      expect(source.requests, 0, reason: 'opening Local does not re-ask');
+      expect(
+        find.widgetWithText(LibraryItemTile, 'VID_20260927_163226235.mp4'),
+        findsOneWidget,
+      );
+
+      source.files = [
+        ...source.files,
+        localFacts(arrivalUri, 'Some Home Video.mkv'),
+      ];
+      await tester.tap(choose);
+      await tester.pumpAndSettle();
+      expect(source.requests, 1);
+      expect(
+        find.widgetWithText(LibraryItemTile, 'Some Home Video.mkv'),
+        findsOneWidget,
+        reason: 'looked again after the picker',
+      );
+    });
+
+    testWidgets('with none picked, Local says so and offers the picker', (
+      tester,
+    ) async {
+      final (media, source) = await localMedia(
+        access: LocalMediaAccess.partial,
+      );
+      source.afterRequest = LocalMediaAccess.granted;
+      await tester.pumpWidget(harness(media));
+      await tester.pumpAndSettle();
+      await tapLocal(tester);
+      expect(find.text('No videos chosen'), findsOneWidget);
+
+      source.files = [localFacts(holidayUri, 'Holiday Party.mkv')];
+      await tester.tap(
+        find.widgetWithText(FilledButton, LibraryScreen.chooseVideosLabel),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(LibraryItemTile, 'Holiday Party.mkv'),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip(LibraryScreen.chooseVideosLabel),
+        findsNothing,
+        reason: 'every video allowed now: nothing left to pick',
+      );
+    });
+  });
+
   testWidgets('refused for good, Local says where to allow it', (tester) async {
     final (media, source) = await localMedia(
       access: LocalMediaAccess.unavailable,

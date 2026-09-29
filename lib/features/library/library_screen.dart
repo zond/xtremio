@@ -140,6 +140,10 @@ class LibraryScreen extends StatefulWidget {
   /// times a second.
   static const String reloadLabel = 'Reload';
 
+  /// The button beside Local while Android lets the app see only the videos
+  /// the viewer picked: the system's picker, to choose more.
+  static const String chooseVideosLabel = 'Choose videos';
+
   /// The line [_NamingNote] draws above the linked files.
   ///
   /// **It earns its place because the failure is invisible otherwise.** The
@@ -829,6 +833,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onLocal: (on) => _showLocal(local: on),
                     onDownloaded: (on) => _showDownloaded(downloaded: on),
                     onReload: () => unawaited(_reloadRemote()),
+                    onChooseLocal:
+                        _localMedia?.accessState == LocalMediaAccess.partial
+                        ? () => unawaited(_localMedia?.chooseMore())
+                        : null,
                   ),
                 ),
                 if (!isLoggedIn &&
@@ -1225,7 +1233,12 @@ class _FilterRow extends StatelessWidget {
     this.local = false,
     this.hasLocal = false,
     this.onLocal,
+    this.onChooseLocal,
   });
+
+  /// Opens the system's picker for more videos; null while there is no
+  /// picking to do (every video is allowed, or none).
+  final VoidCallback? onChooseLocal;
 
   final bool local;
   final bool hasLocal;
@@ -1348,6 +1361,18 @@ class _FilterRow extends StatelessWidget {
                     selected: remote,
                     onSelected: onRemote,
                   ),
+                ),
+              ),
+            // Like Reload before Remote: only while its pill is on.
+            if (hasLocal && local && onChooseLocal != null)
+              FocusTraversalOrder(
+                key: const ValueKey('choose-local'),
+                order: const NumericFocusOrder(1.4),
+                child: IconButton(
+                  tooltip: LibraryScreen.chooseVideosLabel,
+                  icon: const Icon(Icons.video_library_outlined),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onChooseLocal,
                 ),
               ),
             if (hasLocal)
@@ -1582,6 +1607,10 @@ class _LocalEmpty extends StatelessWidget {
       'clips are left out.';
   static const String allowLabel = 'Allow';
   static const String nothingTitle = 'No videos found';
+  static const String pickedTitle = 'No videos chosen';
+  static const String pickedDetail =
+      'Xtremio sees only the videos you pick. Choose some, or allow all '
+      'videos.';
 
   @override
   Widget build(BuildContext context) {
@@ -1615,6 +1644,20 @@ class _LocalEmpty extends StatelessWidget {
             null => nothingTitle,
             final type => 'No local ${contentTypeLabel(type).toLowerCase()}',
           },
+        ),
+        LocalMediaAccess.partial => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EmptyState(
+              icon: Icons.video_file_outlined,
+              title: pickedTitle,
+              detail: pickedDetail,
+            ),
+            FilledButton(
+              onPressed: () => unawaited(media.chooseMore()),
+              child: const Text(LibraryScreen.chooseVideosLabel),
+            ),
+          ],
         ),
       },
     );

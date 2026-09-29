@@ -46,6 +46,11 @@ enum LocalMediaAccess {
   /// chosen.
   granted,
 
+  /// Only the videos the viewer picked (Android 14's "Select photos and
+  /// videos"): scanned like [granted], and asking again is how more are
+  /// picked.
+  partial,
+
   /// Android's video permission has not been given; asking may.
   askable,
 
@@ -158,7 +163,10 @@ class LocalMedia extends ChangeNotifier {
       );
     }
     _setAccess(access);
-    if (access != LocalMediaAccess.granted) return;
+    if (access != LocalMediaAccess.granted &&
+        access != LocalMediaAccess.partial) {
+      return;
+    }
     _setScanning(true);
     try {
       final found = await _safely(source.scan, const <LocalMediaFacts>[]);
@@ -168,6 +176,14 @@ class LocalMedia extends ChangeNotifier {
     } finally {
       _setScanning(false);
     }
+  }
+
+  /// Asks for access again whatever it is now -- with only picked videos
+  /// allowed, that is the system's picker, which is how more are chosen --
+  /// and then looks again.
+  Future<void> chooseMore() async {
+    _setAccess(await _safely(source.requestAccess, _access));
+    await refresh();
   }
 
   /// Asks Cinemeta about every file not asked about yet, one at a time,
