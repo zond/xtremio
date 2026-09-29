@@ -322,97 +322,17 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "no file until there is something in it"
     );
 
-    // A stream that is neither a torrent nor a link is the one thing that
-    // raises. A link is a download too -- this one names a host that does
-    // not exist, so its pin is refused, which is a failure the row reports
-    // and not an exception.
-    let error = downloads_add(
-        serde_json::json!({
-            "metaId": "tt1", "videoId": "tt1", "stream": {"ytId": "abc"}
-        })
-        .to_string(),
-    )
-    .unwrap_err();
-    assert!(error.to_string().contains("infoHash"), "{error}");
-    let refused: serde_json::Value = serde_json::from_str(
-        &downloads_add(
-            serde_json::json!({
-                "metaId": "tt1", "videoId": "tt1", "stream": {"url": "https://example.invalid/x.mkv"}
-            })
-            .to_string(),
-        )
-        .expect("a link is downloadable; an unreachable one is refused, not thrown"),
-    )
-    .unwrap();
-    assert_eq!(refused["ok"], false, "{refused}");
-    assert!(
-        refused["error"]["message"]
-            .as_str()
-            .is_some_and(|m| m.contains("could not be reached")),
-        "{refused}"
-    );
-    assert_eq!(
-        list()["items"],
-        serde_json::json!({}),
-        "a refused link left no row"
-    );
-    let error = downloads_add("{".to_owned()).unwrap_err();
-    assert!(
-        error.to_string().contains("invalid download request"),
-        "{error}"
-    );
-
-    // A stream that names no file downloads the file it would *play*: the
-    // player asks the server for `/{infoHash}/-1`, which resolves to the
-    // `fileMustInclude` match or the largest media file, so pinning file 0
-    // would keep -- and later delete -- a different file than the one that
-    // streamed. The torrent's file order is the directory walk's, so both
-    // rules are checked: whichever file sits at index 0, one of them names
-    // the other.
-    let largest_idx = created["files"]
-        .as_array()
-        .expect("files")
-        .iter()
-        .enumerate()
-        .max_by_key(|(_, file)| file["length"].as_u64().unwrap_or_default())
-        .map(|(idx, _)| idx)
-        .expect("a largest file");
-    assert_eq!(largest_idx, missing_idx, "missing.bin is the bigger file");
-
-    let filtered = add_stream(
-        "tt-filtered",
-        serde_json::json!({
-            "infoHash": info_hash, "announce": [], "fileMustInclude": ["have"],
-        }),
-    );
-    assert_eq!(filtered["ok"], true, "{filtered}");
-    assert_eq!(filtered["entry"]["fileIdx"], have_idx, "{filtered}");
-    assert_eq!(filtered["entry"]["size"], HAVE_LEN, "{filtered}");
-
-    let resolved = add_stream(
-        "tt-largest",
-        serde_json::json!({"infoHash": info_hash, "name": "Test", "announce": []}),
-    );
-    assert_eq!(resolved["entry"]["fileIdx"], largest_idx, "{resolved}");
-    assert_eq!(resolved["entry"]["size"], MISSING_LEN, "{resolved}");
-
-    // The explicit `-1` the player's URL carries means the same thing.
-    let sentinel = add_stream(
-        "tt-sentinel",
-        serde_json::json!({"infoHash": info_hash, "fileIdx": -1, "announce": []}),
-    );
-    assert_eq!(sentinel["entry"]["fileIdx"], largest_idx, "{sentinel}");
-
-    for key in ["tt-filtered", "tt-largest", "tt-sentinel"] {
-        json(&downloads_remove(format!("{key}:{key}"), false)?);
-    }
-    assert!(
-        xtremio_core::server::downloads()?.is_empty(),
-        "the probes left no pin behind"
-    );
-
-    // Add both. The pin answers at once (the metadata is known), with the
-    // file's place on disk.
+    // Add both, first thing after the torrent exists. The pin answers at
+    // once (the metadata is known), with the file's place on disk.
+    //
+    // First, because until a pin names them have.bin's pieces are what
+    // they are on a real device: cache on a torrent nobody plays or pins.
+    // The reconciler's next tick (every 2 s) stops such a torrent and the
+    // retention pass reclaims its pieces as slack -- correctly -- and with
+    // no peer anywhere nothing brings them back, so the download would sit
+    // at `downloaded: 0` until the wait below gave up. The probes further
+    // down pin and unpin files of this same torrent, so they run while
+    // these two pins hold both files, never with the torrent unpinned.
     let added = add("tt-have", &info_hash, have_idx);
     assert_eq!(added["ok"], true, "{added}");
     assert_eq!(added["key"], "tt-have:tt-have");
@@ -487,6 +407,99 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(refused["error"]["fileIdx"], 99);
     assert!(refused["error"]["message"].is_string(), "{refused}");
     assert_eq!(list()["items"]["tt-nope:tt-nope"], serde_json::Value::Null);
+
+    // A stream that is neither a torrent nor a link is the one thing that
+    // raises. A link is a download too -- this one names a host that does
+    // not exist, so its pin is refused, which is a failure the row reports
+    // and not an exception.
+    let error = downloads_add(
+        serde_json::json!({
+            "metaId": "tt1", "videoId": "tt1", "stream": {"ytId": "abc"}
+        })
+        .to_string(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("infoHash"), "{error}");
+    let refused: serde_json::Value = serde_json::from_str(
+        &downloads_add(
+            serde_json::json!({
+                "metaId": "tt1", "videoId": "tt1", "stream": {"url": "https://example.invalid/x.mkv"}
+            })
+            .to_string(),
+        )
+        .expect("a link is downloadable; an unreachable one is refused, not thrown"),
+    )
+    .unwrap();
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("could not be reached")),
+        "{refused}"
+    );
+    assert_eq!(
+        list()["items"]["tt1:tt1"],
+        serde_json::Value::Null,
+        "a refused link left no row"
+    );
+    let error = downloads_add("{".to_owned()).unwrap_err();
+    assert!(
+        error.to_string().contains("invalid download request"),
+        "{error}"
+    );
+
+    // A stream that names no file downloads the file it would *play*: the
+    // player asks the server for `/{infoHash}/-1`, which resolves to the
+    // `fileMustInclude` match or the largest media file, so pinning file 0
+    // would keep -- and later delete -- a different file than the one that
+    // streamed. The torrent's file order is the directory walk's, so both
+    // rules are checked: whichever file sits at index 0, one of them names
+    // the other.
+    let largest_idx = created["files"]
+        .as_array()
+        .expect("files")
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, file)| file["length"].as_u64().unwrap_or_default())
+        .map(|(idx, _)| idx)
+        .expect("a largest file");
+    assert_eq!(largest_idx, missing_idx, "missing.bin is the bigger file");
+
+    let filtered = add_stream(
+        "tt-filtered",
+        serde_json::json!({
+            "infoHash": info_hash, "announce": [], "fileMustInclude": ["have"],
+        }),
+    );
+    assert_eq!(filtered["ok"], true, "{filtered}");
+    assert_eq!(filtered["entry"]["fileIdx"], have_idx, "{filtered}");
+    assert_eq!(filtered["entry"]["size"], HAVE_LEN, "{filtered}");
+
+    let resolved = add_stream(
+        "tt-largest",
+        serde_json::json!({"infoHash": info_hash, "name": "Test", "announce": []}),
+    );
+    assert_eq!(resolved["entry"]["fileIdx"], largest_idx, "{resolved}");
+    assert_eq!(resolved["entry"]["size"], MISSING_LEN, "{resolved}");
+
+    // The explicit `-1` the player's URL carries means the same thing.
+    let sentinel = add_stream(
+        "tt-sentinel",
+        serde_json::json!({"infoHash": info_hash, "fileIdx": -1, "announce": []}),
+    );
+    assert_eq!(sentinel["entry"]["fileIdx"], largest_idx, "{sentinel}");
+
+    for key in ["tt-filtered", "tt-largest", "tt-sentinel"] {
+        json(&downloads_remove(format!("{key}:{key}"), false)?);
+    }
+    assert_eq!(
+        xtremio_core::server::downloads()?
+            .iter()
+            .map(|pin| pin.file_idx)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([have_idx, missing_idx]),
+        "the probes left no pin behind but tt-have's and tt-missing's"
+    );
 
     // The one whose bytes are there completes once the check is done; the
     // one whose bytes are not stays queued or downloading, with a path
