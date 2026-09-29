@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/local/local_media.dart';
 import 'package:xtremio/main.dart';
 
 import 'support/empty_board.dart';
 import 'support/fake_deep_links.dart';
 import 'support/fake_downloads_client.dart';
+import 'support/fake_local_media_source.dart';
 import 'support/fake_prefs_client.dart';
 import 'support/fake_sharing.dart';
 
@@ -117,5 +119,52 @@ void main() {
     await tester.pump();
 
     expect(imageCache.currentSize, 1);
+  });
+
+  testWidgets('coming back to the app looks for local videos again: one '
+      'deleted meanwhile is gone', (tester) async {
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    final prefs = AppPrefs(client: FakePrefsClient());
+    final source = FakeLocalMediaSource(
+      files: [localFacts('content://media/external/video/media/1', 'a.mkv')],
+    );
+    final media = LocalMedia(
+      prefs: prefs,
+      source: source,
+      search: (type, query) async => const [],
+    );
+    addTearDown(media.dispose);
+    await tester.pumpWidget(
+      XtremioApp(
+        core: emptyBoardCore(),
+        deepLinks: FakeDeepLinks(),
+        downloads: downloads,
+        prefs: prefs,
+        serverSettings: RecordingServerSettings(),
+        sharingActivity: FakeSharingActivity(),
+        localMedia: media,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(source.scans, 1, reason: 'at start-up, access being there');
+    expect(media.files.entries, hasLength(1));
+
+    source.files = [];
+    // Away and back the way a device goes, a state at a time.
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    expect(source.scans, 2);
+    expect(media.files.entries, isEmpty);
+    expect(source.requests, 0, reason: 'coming back never asks');
   });
 }

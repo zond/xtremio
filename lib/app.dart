@@ -546,6 +546,10 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing.appResumed();
     if (!_away) return;
     _away = false;
+    // A video deleted or added while the app was away -- from a file
+    // manager, a download -- is in the Local list by the time it is looked
+    // at again. Only where access is already there: this never asks.
+    unawaited(_localMedia?.refresh());
     if (await _isLoggedIn()) await _pullAccount();
   }
 

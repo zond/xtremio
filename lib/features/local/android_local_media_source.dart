@@ -54,6 +54,20 @@ class AndroidLocalMediaSource implements LocalMediaSource {
     ];
   }
 
+  /// Android's own thumbnail of the video, which it keeps for every video
+  /// it indexes.
+  @override
+  Future<Uint8List?> thumbnail(String uri, {required int size}) async {
+    try {
+      return await channel.invokeMethod<Uint8List>('thumbnail', {
+        'uri': uri,
+        'size': size,
+      });
+    } on PlatformException {
+      return null;
+    }
+  }
+
   static int? _int(Object? value) => value is int ? value : null;
 
   static String? _string(Object? value) => value is String ? value : null;

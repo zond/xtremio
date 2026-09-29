@@ -18,9 +18,14 @@ class LibraryItemTile extends StatelessWidget {
     this.showWatchedMark = true,
     this.memoryId,
     this.defaultFocus = false,
+    this.posterImage,
   });
 
   final LibraryItemView item;
+
+  /// See [PosterImage.image]: a card with no poster URL, drawn from a
+  /// picture of its own.
+  final ImageProvider? posterImage;
   final VoidCallback onTap;
 
   /// Also fired by a secondary (right) click, for desktop.
@@ -53,7 +58,7 @@ class LibraryItemTile extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                PosterImage(url: item.poster),
+                PosterImage(url: item.poster, image: posterImage),
                 if (progress != null)
                   Positioned(
                     left: 0,

@@ -18,6 +18,7 @@ import '../downloads/downloads_screen.dart';
 import '../drive/drive_match.dart';
 import '../drive/remote_files.dart';
 import '../local/local_media.dart';
+import '../local/local_thumbnail.dart';
 import '../local/local_playback.dart';
 import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
@@ -1079,8 +1080,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         itemBuilder: (context, index) {
           if (index >= afterUnmatched) {
             final file = unmatchedLocal[index - afterUnmatched];
+            final media = _localMedia;
             return LibraryItemTile(
               item: _cardForLocal(file),
+              posterImage: media == null
+                  ? null
+                  : LocalThumbnail(file.uri, source: media.source),
               onTap: () => unawaited(_playLocal(file)),
               memoryId: 'local-file-${file.uri}',
             );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/local/local_media.dart';
@@ -18,6 +19,13 @@ class FakeLocalMediaSource implements LocalMediaSource {
 
   int requests = 0;
   int scans = 0;
+
+  /// What [thumbnail] answers, by address.
+  Map<String, Uint8List> thumbnails = {};
+
+  @override
+  Future<Uint8List?> thumbnail(String uri, {required int size}) async =>
+      thumbnails[uri];
 
   /// When set, a scan waits for it before answering.
   Completer<void>? holdScan;

@@ -209,6 +209,28 @@ void main() {
     });
   });
 
+  group('Android thumbnails', () {
+    const channel = MethodChannel('xtremio/local_media');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    test('are the system\'s bytes, and a refusal is none', () async {
+      final asked = <Object?>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        asked.add(call.arguments);
+        if (call.arguments['uri'] == holidayUri) {
+          throw PlatformException(code: 'gone');
+        }
+        return Uint8List.fromList([1, 2, 3]);
+      });
+      const source = AndroidLocalMediaSource();
+      expect(await source.thumbnail(arrivalUri, size: 480), [1, 2, 3]);
+      expect(await source.thumbnail(holidayUri, size: 480), isNull);
+      expect(asked.first, {'uri': arrivalUri, 'size': 480});
+    });
+  });
+
   group('a desktop', () {
     late Directory root;
     setUp(() => root = Directory.systemTemp.createTempSync('local-media'));
@@ -370,4 +392,8 @@ class _ThrowingSource implements LocalMediaSource {
 
   @override
   Future<List<LocalMediaFacts>> scan() => throw PlatformException(code: 'x');
+
+  @override
+  Future<Uint8List?> thumbnail(String uri, {required int size}) =>
+      throw PlatformException(code: 'x');
 }

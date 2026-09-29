@@ -175,12 +175,18 @@ screen asks for a new pairing. See
 Videos already on the device, found without any addon. On Android they come
 from the system's media index (USB drives included; the camera's `DCIM/`
 and `Pictures/` are left out), asked for with the video permission the
-first time the Library's **Local** pill is opened -- never at launch. On a
+first time the Library's **Local** pill is opened -- never at launch. With
+Android 14's "Select photos and videos" only the picked videos are listed
+(camera clips included, since they were chosen), and a **Choose videos**
+button beside the pill picks more. On a
 desktop they come from folders chosen in Settings → Local, walked six
 levels deep. Each is matched to a title by name the way a Drive file is:
 matched ones are sources on their titles' pages and cards in the Library,
 tracked like any other play (resume, watched, Continue Watching); unmatched
-ones are listed under Local and play as they are. The player opens them in
+ones are listed under Local, with a frame of the video as their picture on
+Android, and play as they are. The list is renewed at start-up, whenever
+Local is opened and whenever the app comes back to the foreground, so a
+video deleted from the device drops out. The player opens them in
 place (`content://` or `file://`): nothing is copied or proxied, and there
 is nothing to download. The profile's built-in Local Files addon is
 answered empty inside the app, so it no longer shows as a catalog that

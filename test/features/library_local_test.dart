@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/local/local_media.dart';
+import 'package:xtremio/features/local/local_thumbnail.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
@@ -129,6 +133,76 @@ void main() {
       args['streamRequest'],
       isNull,
       reason: 'no title to keep progress on',
+    );
+  });
+
+  testWidgets('an unmatched video\'s card is a frame of it, and its icon '
+      'where the system has none', (tester) async {
+    final (media, source) = await localMedia(
+      files: [
+        localFacts(holidayUri, 'Holiday Party.mkv'),
+        localFacts(arrivalUri, 'Some Home Video.mkv'),
+      ],
+    );
+    final png = (await tester.runAsync(() async {
+      final image = await createTestImage(width: 16, height: 9);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      return data!.buffer.asUint8List();
+    }))!;
+    source.thumbnails = {holidayUri: png};
+    // An earlier test's card may have left this address's load in the
+    // image cache, unfinished on that test's clock.
+    imageCache
+      ..clear()
+      ..clearLiveImages();
+    // Decoding is real engine work, which a test's clock never runs: done
+    // here, outside it, the card finds the frame in the image cache.
+    await tester.runAsync(() async {
+      final done = Completer<void>();
+      LocalThumbnail(holidayUri, source: source)
+          .resolve(ImageConfiguration.empty)
+          .addListener(
+            ImageStreamListener(
+              (_, _) => done.complete(),
+              onError: (error, _) => done.completeError(error),
+            ),
+          );
+      await done.future;
+    });
+    addTearDown(imageCache.clear);
+    await tester.pumpWidget(harness(media));
+    await tester.pumpAndSettle();
+    await tapLocal(tester);
+
+    Finder imageIn(String name) => find.descendant(
+      of: find.widgetWithText(LibraryItemTile, name),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Image && widget.image is LocalThumbnail,
+      ),
+    );
+    expect(imageIn('Holiday Party.mkv'), findsOneWidget);
+    expect(
+      tester.widget<Image>(imageIn('Holiday Party.mkv')).image,
+      LocalThumbnail(holidayUri, source: source),
+    );
+
+    await tester.pumpAndSettle();
+    RawImage? drawn(String name) => tester
+        .widgetList<RawImage>(
+          find.descendant(
+            of: find.widgetWithText(LibraryItemTile, name),
+            matching: find.byType(RawImage),
+          ),
+        )
+        .firstOrNull;
+    expect(drawn('Holiday Party.mkv')?.image, isNotNull);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(LibraryItemTile, 'Some Home Video.mkv'),
+        matching: find.byIcon(Icons.movie_outlined),
+      ),
+      findsOneWidget,
+      reason: 'no frame to show: the icon, as for a missing poster',
     );
   });
 

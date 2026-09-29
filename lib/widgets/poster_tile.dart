@@ -87,9 +87,13 @@ class PosterTile extends StatelessWidget {
 /// ratio is in it; only the width is given, so the source's own aspect is
 /// kept and `cover` crops as it did.
 class PosterImage extends StatelessWidget {
-  const PosterImage({super.key, required this.url});
+  const PosterImage({super.key, required this.url, this.image});
 
   final String? url;
+
+  /// A picture that is not at a URL -- a video's own frame -- drawn in
+  /// place of [url]'s, falling back to the icon the same way.
+  final ImageProvider? image;
 
   /// Width / height of a poster of the given `posterShape`
   /// (`poster` | `landscape` | `square`).
@@ -102,11 +106,20 @@ class PosterImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = this.url;
+    final image = this.image;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: ColoredBox(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: url == null
+        child: image != null
+            ? Image(
+                image: image,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (_, _, _) => const _PosterFallback(),
+              )
+            : url == null
             ? const _PosterFallback()
             : LayoutBuilder(
                 builder: (context, constraints) {

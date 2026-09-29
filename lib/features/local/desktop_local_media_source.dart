@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../../core/core.dart';
 import 'local_media.dart';
@@ -117,6 +118,11 @@ class DesktopLocalMediaSource implements LocalMediaSource {
         : dir.path;
     return path.substring(path.lastIndexOf(Platform.pathSeparator) + 1);
   }
+
+  /// None: a desktop has no system thumbnailer this app can ask, so a card
+  /// keeps its icon.
+  @override
+  Future<Uint8List?> thumbnail(String uri, {required int size}) async => null;
 
   /// Whether [name] ends in one of [videoExtensions].
   static bool isVideoName(String name) {

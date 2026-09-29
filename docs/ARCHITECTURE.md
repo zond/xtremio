@@ -889,7 +889,18 @@ renamed one is asked about again, one not found is dropped. `LocalMedia`
 `matchDriveFile` about each file not yet answered, writing each answer as
 it lands; a catalogue that cannot be reached leaves the file for the next
 refresh. Refreshes run one at a time, and one asked for during another is
-a pass after it. It sits above every screen in `LocalMediaScope`.
+a pass after it; the app refreshes at start-up and on every return to the
+foreground, never asking. It sits above every screen in `LocalMediaScope`.
+Android 14's partial grant ("Select photos and videos") is its own state,
+`LocalMediaAccess.partial`: its videos skip the camera filter, and
+`chooseMore` asks again, which is the system's picker.
+
+**Thumbnails.** An unmatched video's card is drawn from `LocalThumbnail`
+(`lib/features/local/local_thumbnail.dart`), an `ImageProvider` over
+`LocalMediaSource.thumbnail`: on Android `ContentResolver.loadThumbnail`,
+the frame the system keeps for every indexed video, sent as JPEG; nothing
+is stored by the app. A desktop answers none, and the card keeps its
+icon.
 
 **Playing.** `localStreamJson` hands the player the file's own address:
 libmpv opens `content://` through the file descriptor media_kit opens for

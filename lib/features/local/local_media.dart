@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/core.dart';
@@ -75,6 +76,10 @@ abstract interface class LocalMediaSource {
 
   /// Every video the source knows of now.
   Future<List<LocalMediaFacts>> scan();
+
+  /// A frame of the video at [uri], encoded (JPEG or PNG), fitting in
+  /// [size] pixels square; null where there is none to give.
+  Future<Uint8List?> thumbnail(String uri, {required int size});
 }
 
 /// A source with nothing in it: iOS, and anything with no source wired.
@@ -96,6 +101,9 @@ class NoLocalMediaSource implements LocalMediaSource {
 
   @override
   Future<List<LocalMediaFacts>> scan() async => const [];
+
+  @override
+  Future<Uint8List?> thumbnail(String uri, {required int size}) async => null;
 }
 
 /// This device's videos: the record in the preferences, the scan that

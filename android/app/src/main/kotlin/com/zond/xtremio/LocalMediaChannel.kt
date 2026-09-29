@@ -4,15 +4,18 @@ import android.Manifest
 import android.app.Activity
 import android.content.ContentUris
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Size
 import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
 /**
@@ -45,6 +48,9 @@ class LocalMediaChannel(
 ) : MethodChannel.MethodCallHandler {
     private val channel = MethodChannel(messenger, CHANNEL)
     private val executor = Executors.newSingleThreadExecutor()
+
+    /** Apart from the scan's, so a screen of cards does not wait on it. */
+    private val thumbnails = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
 
     /** In flight while the permission dialog is up; at most one. */
@@ -58,6 +64,7 @@ class LocalMediaChannel(
         channel.setMethodCallHandler(null)
         permission = null
         executor.shutdown()
+        thumbnails.shutdown()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -65,6 +72,11 @@ class LocalMediaChannel(
             "access" -> result.success(state())
             "requestAccess" -> request(result)
             "scan" -> scan(result)
+            "thumbnail" -> thumbnail(
+                call.argument<String>("uri"),
+                call.argument<Int>("size") ?: 480,
+                result,
+            )
             else -> result.notImplemented()
         }
     }
@@ -144,6 +156,46 @@ class LocalMediaChannel(
                 return@execute
             }
             main.post { result.success(rows) }
+        }
+    }
+
+    /**
+     * Android's own thumbnail of the video at [uri], as JPEG, fitting in
+     * [size] pixels square; null when there is none or it may not be read.
+     * The system keeps one per indexed video, so this reads, it does not
+     * decode the film.
+     */
+    private fun thumbnail(uri: String?, size: Int, result: MethodChannel.Result) {
+        if (uri == null || !granted()) {
+            result.success(null)
+            return
+        }
+        thumbnails.execute {
+            val bytes = try {
+                val parsed = Uri.parse(uri)
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    activity.contentResolver.loadThumbnail(parsed, Size(size, size), null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Video.Thumbnails.getThumbnail(
+                        activity.contentResolver,
+                        ContentUris.parseId(parsed),
+                        MediaStore.Video.Thumbnails.MINI_KIND,
+                        null,
+                    )
+                }
+                bitmap?.let {
+                    val out = ByteArrayOutputStream()
+                    it.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    out.toByteArray()
+                }
+            } catch (error: Exception) {
+                // Gone since the scan, not one of the picked videos, or a
+                // file the system could not make a frame of: the card keeps
+                // its icon.
+                null
+            }
+            main.post { result.success(bytes) }
         }
     }
 
