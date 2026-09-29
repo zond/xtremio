@@ -480,6 +480,14 @@ final class LinkedDriveFiles {
     return LinkedDriveFiles(kept);
   }
 
+  /// This list without [fileId]: the viewer took it off. Its grant stays
+  /// (a `drive.file` grant cannot be given back one file at a time), so it
+  /// is only the list that forgets it, and [reconciled] never adds it back.
+  LinkedDriveFiles without(String fileId) => LinkedDriveFiles([
+    for (final entry in entries)
+      if (entry.fileId != fileId) entry,
+  ]);
+
   /// This list with [fileId]'s match recorded, or this list unchanged when
   /// no such file is linked or it already says that.
   LinkedDriveFiles withMatch(String fileId, LinkedDriveMatch? match) {

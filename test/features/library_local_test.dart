@@ -279,6 +279,40 @@ void main() {
     expect(find.widgetWithText(LibraryItemTile, 'Arrival'), findsOneWidget);
   });
 
+  testWidgets('a long press takes an unmatched video off Local, for good, '
+      'with an undo; the file is not touched', (tester) async {
+    final (media, source) = await localMedia(
+      files: [localFacts(holidayUri, 'Holiday Party.mkv')],
+    );
+    await tester.pumpWidget(harness(media));
+    await tester.pumpAndSettle();
+    await tapLocal(tester);
+    final card = find.widgetWithText(LibraryItemTile, 'Holiday Party.mkv');
+
+    final scansBefore = source.scans;
+    await tester.longPress(card);
+    await tester.pumpAndSettle();
+    expect(find.text('The file stays on this device.'), findsOneWidget);
+    await tester.tap(find.text(LibraryScreen.removeFromLocalLabel));
+    await tester.pumpAndSettle();
+    expect(card, findsNothing);
+    expect(
+      source.scans,
+      scansBefore,
+      reason: 'nothing rescanned, nothing deleted',
+    );
+
+    // A scan finds the file again and keeps it off the list.
+    await media.refresh();
+    await tester.pumpAndSettle();
+    expect(card, findsNothing);
+    expect(media.files.forUri(holidayUri)?.hidden, isTrue);
+
+    await tester.tap(find.text(LibraryScreen.undoLabel));
+    await tester.pumpAndSettle();
+    expect(card, findsOneWidget);
+  });
+
   testWidgets('Local asks for access where it may, and then lists what it '
       'finds', (tester) async {
     final (media, source) = await localMedia(access: LocalMediaAccess.askable);

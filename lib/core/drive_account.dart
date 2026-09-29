@@ -379,6 +379,15 @@ class DriveAccount extends ChangeNotifier {
   /// A list identical to the stored one writes nothing and notifies
   /// nothing, the way [noteMatch] does: a reload that found no change is a
   /// sentence to read and not a redraw.
+  /// Takes one file off the list, as the viewer asked: [LinkedDriveFiles.without].
+  Future<void> forgetFile(String fileId) =>
+      noteReconciled(prefs.driveLinkedFiles.without(fileId));
+
+  /// Puts back a file [forgetFile] took off -- the undo of it -- with what
+  /// was known about it.
+  Future<void> rememberFile(LinkedDriveFile file) =>
+      noteReconciled(prefs.driveLinkedFiles.linking(file));
+
   Future<void> noteReconciled(LinkedDriveFiles files) async {
     if (files == prefs.driveLinkedFiles) return;
     await prefs.setDriveLinkedFiles(files);

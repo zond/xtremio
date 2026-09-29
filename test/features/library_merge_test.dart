@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
@@ -130,8 +131,10 @@ void main() {
     DriveAccount? drive,
     CatalogueSearch? search,
     DownloadsRegistry? downloaded,
+    FakeDownloadsClient? downloadsClient,
   }) {
-    final downloads = FakeDownloadsClient(registry: downloaded);
+    final downloads =
+        downloadsClient ?? FakeDownloadsClient(registry: downloaded);
     addTearDown(downloads.dispose);
     final screen = LibraryScreen(
       driveOpener: FakeDriveFileOpener(),
@@ -850,6 +853,75 @@ void main() {
       isNot(contains('Lanterns')),
       reason: 'the engine\'s own titles have no linked file',
     );
+  });
+  group('a long press on a card that is not the library\'s', () {
+    testWidgets('takes an unmatched Drive file off Remote, with an undo; '
+        'Drive is not touched', (tester) async {
+      final drive = await account(
+        files: [(id: 'drive-file-2', name: 'ep6.avi', match: null)],
+      );
+      await tester.pumpWidget(harness(fakeCore(), drive: drive));
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      expect(cards(tester), contains('ep6.avi'));
+
+      await tester.longPress(find.widgetWithText(LibraryItemTile, 'ep6.avi'));
+      await tester.pumpAndSettle();
+      expect(find.text('The file stays in your Google Drive.'), findsOneWidget);
+      await tester.tap(find.text(LibraryScreen.removeFromRemoteLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), isNot(contains('ep6.avi')));
+      expect(drive.files.forFile('drive-file-2'), isNull);
+
+      await tester.tap(find.text(LibraryScreen.undoLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), contains('ep6.avi'));
+      expect(drive.files.forFile('drive-file-2')?.name, 'ep6.avi');
+    });
+
+    testWidgets('a sheet dismissed removes nothing', (tester) async {
+      final drive = await account(
+        files: [(id: 'drive-file-2', name: 'ep6.avi', match: null)],
+      );
+      await tester.pumpWidget(harness(fakeCore(), drive: drive));
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      await tester.longPress(find.widgetWithText(LibraryItemTile, 'ep6.avi'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(drive.files.forFile('drive-file-2'), isNotNull);
+    });
+
+    testWidgets('deletes a download the library has no card for, after '
+        'asking', (tester) async {
+      // Keyed as the registry keys an entry, by title and video, so the
+      // delete finds it.
+      final json = loadDownloadsFixture();
+      final fixtureItems = json['items'] as Map<String, dynamic>;
+      final entry = Map<String, dynamic>.from(fixtureItems.values.first as Map)
+        ..['metaId'] = 'tt9999999';
+      final registry = DownloadsRegistry.fromJson({
+        'version': json['version'],
+        'items': {'tt9999999:${entry['videoId']}': entry},
+      });
+      final downloads = FakeDownloadsClient(registry: registry);
+      await tester.pumpWidget(harness(fakeCore(), downloadsClient: downloads));
+      await tester.pumpAndSettle();
+      final card = find.byWidgetPredicate(
+        (widget) => widget is LibraryItemTile && widget.item.id == 'tt9999999',
+      );
+      expect(card, findsOneWidget);
+
+      await tester.longPress(card);
+      await tester.pumpAndSettle();
+      expect(downloads.removed, isEmpty, reason: 'asked first');
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
+      await tester.pumpAndSettle();
+      expect(downloads.removed.single.key, startsWith('tt9999999:'));
+      expect(downloads.removed.single.deleteFiles, isTrue);
+      expect(card, findsNothing);
+    });
   });
 }
 

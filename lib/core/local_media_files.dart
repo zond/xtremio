@@ -47,6 +47,7 @@ final class LocalMediaFile {
     this.height,
     this.match,
     this.checked = false,
+    this.hidden = false,
   });
 
   /// The address the player opens: `content://` or `file://`.
@@ -70,6 +71,11 @@ final class LocalMediaFile {
   /// asking failed and will be tried again.
   final bool checked;
 
+  /// Taken out of the Local list by the viewer (a clip nothing matched,
+  /// kept off the list as clutter). The file is untouched, and a scan that
+  /// finds it again keeps it hidden.
+  final bool hidden;
+
   bool isFor(String cinemetaId, {String? videoId}) =>
       match?.isFor(cinemetaId, videoId: videoId) ?? false;
 
@@ -85,6 +91,7 @@ final class LocalMediaFile {
       height: facts.height ?? height,
       match: renamed ? null : match,
       checked: !renamed && checked,
+      hidden: hidden,
     );
   }
 
@@ -96,6 +103,18 @@ final class LocalMediaFile {
     height: height,
     match: match,
     checked: true,
+    hidden: hidden,
+  );
+
+  LocalMediaFile withHidden(bool hidden) => LocalMediaFile(
+    uri: uri,
+    name: name,
+    size: size,
+    durationMillis: durationMillis,
+    height: height,
+    match: match,
+    checked: checked,
+    hidden: hidden,
   );
 
   static LocalMediaFile ofFacts(LocalMediaFacts facts) => LocalMediaFile(
@@ -114,6 +133,7 @@ final class LocalMediaFile {
     'height': ?height,
     'match': ?match?.toJson(),
     if (checked) 'checked': true,
+    if (hidden) 'hidden': true,
   };
 
   static LocalMediaFile? fromJson(Object? json) {
@@ -131,6 +151,7 @@ final class LocalMediaFile {
       height: integer(json['height']),
       match: LinkedDriveMatch.fromJson(json['match']),
       checked: json['checked'] == true,
+      hidden: json['hidden'] == true,
     );
   }
 
@@ -143,11 +164,20 @@ final class LocalMediaFile {
       other.durationMillis == durationMillis &&
       other.height == height &&
       other.match == match &&
-      other.checked == checked;
+      other.checked == checked &&
+      other.hidden == hidden;
 
   @override
-  int get hashCode =>
-      Object.hash(uri, name, size, durationMillis, height, match, checked);
+  int get hashCode => Object.hash(
+    uri,
+    name,
+    size,
+    durationMillis,
+    height,
+    match,
+    checked,
+    hidden,
+  );
 
   @override
   String toString() => 'LocalMediaFile($name)';
@@ -190,6 +220,12 @@ final class LocalMediaFiles {
       ]);
 
   /// The files that are [cinemetaId], or that video of it.
+  /// This record with [uri] hidden from the Local list, or shown again.
+  LocalMediaFiles hiding(String uri, {bool hidden = true}) => LocalMediaFiles([
+    for (final entry in entries)
+      if (entry.uri == uri) entry.withHidden(hidden) else entry,
+  ]);
+
   List<LocalMediaFile> matching(String cinemetaId, {String? videoId}) => [
     for (final entry in entries)
       if (entry.isFor(cinemetaId, videoId: videoId)) entry,

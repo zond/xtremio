@@ -133,6 +133,11 @@ top of that, never written to the Stremio library or synced:
   device; Remote to what is linked from Drive, including files that matched
   nothing, with a Reload button that asks Drive for the current names;
   Local to this device's own videos, matched or not (see below);
+- a long press on a card that is not the library's own offers the one
+  thing to do about it: an unmatched Drive file comes off Remote (it stays
+  in Drive), an unmatched local video comes off Local for good (it stays on
+  the device), both with an undo; a downloaded title's card deletes the
+  download, after asking;
 - the app bar has the way to the Downloads screen and the button that links
   remote files (Google Drive today).
 

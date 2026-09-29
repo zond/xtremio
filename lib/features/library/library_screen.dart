@@ -13,8 +13,10 @@ import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/tv_ladder.dart';
 import '../details/meta_details_screen.dart';
+import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
+import '../downloads/remove_download_dialog.dart';
 import '../drive/drive_match.dart';
 import '../drive/remote_files.dart';
 import '../local/local_media.dart';
@@ -144,6 +146,12 @@ class LibraryScreen extends StatefulWidget {
   /// The button beside Local while Android lets the app see only the videos
   /// the viewer picked: the system's picker, to choose more.
   static const String chooseVideosLabel = 'Choose videos';
+
+  /// The one action a long press offers on a card nothing matched: off the
+  /// list, the file itself untouched.
+  static const String removeFromLocalLabel = 'Remove from Local';
+  static const String removeFromRemoteLabel = 'Remove from Remote';
+  static const String undoLabel = 'Undo';
 
   /// The line [_NamingNote] draws above the linked files.
   ///
@@ -639,6 +647,100 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  /// Takes a local video nothing matched off the Local list, after asking,
+  /// with an undo. The file stays where it is.
+  Future<void> _removeLocal(LocalMediaFile file) async {
+    final media = _localMedia;
+    if (media == null) return;
+    final remove = await _askFileAction(
+      name: file.name,
+      icon: Icons.visibility_off_outlined,
+      label: LibraryScreen.removeFromLocalLabel,
+      detail: 'The file stays on this device.',
+    );
+    if (!remove || !mounted) return;
+    await media.hide(file.uri);
+    _sayRemoved(
+      'Removed from Local',
+      undo: () => unawaited(media.hide(file.uri, hidden: false)),
+    );
+  }
+
+  /// Takes a linked Drive file nothing matched off the Remote list, after
+  /// asking, with an undo. The file stays in Drive, and picking it again
+  /// links it again.
+  Future<void> _removeRemote(LinkedDriveFile file) async {
+    final account = _drive;
+    if (account == null) return;
+    final remove = await _askFileAction(
+      name: file.name,
+      icon: Icons.link_off_outlined,
+      label: LibraryScreen.removeFromRemoteLabel,
+      detail: 'The file stays in your Google Drive.',
+    );
+    if (!remove || !mounted) return;
+    await account.forgetFile(file.fileId);
+    _sayRemoved(
+      'Removed from Remote',
+      undo: () => unawaited(account.rememberFile(file)),
+    );
+  }
+
+  /// Deletes a download whose card is the Library's own, after the same
+  /// question the Downloads screen asks.
+  Future<void> _deleteKept(DownloadView view) async {
+    final client = _downloadsClient;
+    final downloads = _downloads;
+    if (client == null || downloads == null) return;
+    if (!await askToRemoveDownload(context, view) || !mounted) return;
+    DownloadRemoveResult? result;
+    try {
+      result = await client.remove(view.key, deleteFiles: true);
+    } on Object {
+      result = null;
+    }
+    await downloads.refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          result == null
+              ? 'This download could not be removed.'
+              : downloadRemovedMessage(result, view),
+        ),
+      ),
+    );
+  }
+
+  /// A sheet naming [name] with one action on it: true when it was picked.
+  Future<bool> _askFileAction({
+    required String name,
+    required IconData icon,
+    required String label,
+    required String detail,
+  }) async =>
+      await showModalBottomSheet<bool>(
+        context: context,
+        builder: (_) => _FileActionSheet(
+          name: name,
+          icon: icon,
+          label: label,
+          detail: detail,
+        ),
+      ) ??
+      false;
+
+  void _sayRemoved(String message, {required VoidCallback undo}) =>
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: SnackBarAction(
+            label: LibraryScreen.undoLabel,
+            onPressed: undo,
+          ),
+        ),
+      );
+
   Future<void> _showActions(LibraryItemView item) async {
     final action = await showModalBottomSheet<_ItemAction>(
       context: context,
@@ -1073,7 +1175,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (type != null && type != 'other') return const [];
     return [
       for (final file in _localMedia?.files.entries ?? const <LocalMediaFile>[])
-        if (file.match == null) file,
+        if (file.match == null && !file.hidden) file,
     ];
   }
 
@@ -1107,6 +1209,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ? null
                   : LocalThumbnail(file.uri, source: media.source),
               onTap: () => unawaited(_playLocal(file)),
+              onLongPress: () => unawaited(_removeLocal(file)),
               memoryId: 'local-file-${file.uri}',
             );
           }
@@ -1118,6 +1221,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               // nothing identified, and inventing one would be a page about
               // a title nobody knows.
               onTap: () => unawaited(_playUnmatched(file)),
+              onLongPress: () => unawaited(_removeRemote(file)),
               memoryId: 'linked-file-${file.fileId}',
             );
           }
@@ -1136,8 +1240,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
             return LibraryItemTile(
               item: _cardForDownload(view),
               onTap: () => unawaited(_openKept(view)),
-              // No long press, for the reason a matched file has none: the
-              // sheet's actions are about a library item, and this is not.
+              // Not the library item's sheet -- its actions are about a
+              // library item, and this is not one -- but the one thing
+              // there is to do about a download: delete it.
+              onLongPress: () => unawaited(_deleteKept(view)),
               memoryId: 'kept-${view.metaId}',
             );
           }
@@ -1461,6 +1567,47 @@ class _FilterRow extends StatelessWidget {
 enum _ItemAction { remove, markWatched, rewind, toggleNotifications }
 
 /// The long-press menu of one item.
+/// The long press on a card nothing matched: the file's name and the one
+/// thing to do about it.
+class _FileActionSheet extends StatelessWidget {
+  const _FileActionSheet({
+    required this.name,
+    required this.icon,
+    required this.label,
+    required this.detail,
+  });
+
+  final String name;
+  final IconData icon;
+  final String label;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          title: Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        ListTile(
+          // A remote has nothing to point with, as in [_ItemActionsSheet].
+          autofocus: DeviceScope.isTv(context),
+          leading: Icon(icon),
+          title: Text(label),
+          subtitle: Text(detail),
+          onTap: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    ),
+  );
+}
+
 class _ItemActionsSheet extends StatelessWidget {
   const _ItemActionsSheet({required this.item});
 

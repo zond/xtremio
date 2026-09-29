@@ -120,6 +120,25 @@ void main() {
     expect(again.localFolders, ['/home/me/Films']);
   });
 
+  test('a hidden file stays hidden through a scan, a rename and a '
+      'restart', () {
+    final hidden = LocalMediaFiles.empty
+        .reconciled([localFacts(one, 'holiday.mkv')])
+        .answering(one, null)
+        .hiding(one);
+    expect(hidden.forUri(one)!.hidden, isTrue);
+    expect(
+      hidden.reconciled([localFacts(one, 'holiday.mkv')]).forUri(one)!.hidden,
+      isTrue,
+    );
+    expect(
+      hidden.reconciled([localFacts(one, 'renamed.mkv')]).forUri(one)!.hidden,
+      isTrue,
+    );
+    expect(LocalMediaFiles.fromJson(hidden.toJson()), hidden);
+    expect(hidden.hiding(one, hidden: false).forUri(one)!.hidden, isFalse);
+  });
+
   test('a record entry with no address is dropped, not trusted', () {
     final files = LocalMediaFiles.fromJson([
       {'uri': '', 'name': 'x.mkv'},

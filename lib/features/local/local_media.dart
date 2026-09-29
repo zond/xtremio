@@ -186,6 +186,13 @@ class LocalMedia extends ChangeNotifier {
     }
   }
 
+  /// Takes [uri] off the Local list, or puts it back with [hidden] false.
+  /// Nothing happens to the file.
+  Future<void> hide(String uri, {bool hidden = true}) async {
+    await prefs.setLocalMedia(files.hiding(uri, hidden: hidden));
+    notifyListeners();
+  }
+
   /// Asks for access again whatever it is now -- with only picked videos
   /// allowed, that is the system's picker, which is how more are chosen --
   /// and then looks again.
