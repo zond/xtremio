@@ -53,7 +53,9 @@ Map<String, dynamic> _load(String model, Object? args) =>
 
 /// Builders for the actions the app dispatches.
 abstract final class CoreActions {
-  /// Home board: every catalog of every installed addon.
+  /// Discover's rows: every catalog of every installed addon that opens
+  /// with nothing chosen, of [type] or of every type (null). Planned only;
+  /// [loadBoardRange] fetches.
   static CoreAction loadBoard({
     String? type,
     List<ExtraValue> extra = const [],
@@ -71,19 +73,6 @@ abstract final class CoreActions {
   /// so widening the range is idempotent.
   static CoreAction loadBoardRange(int start, int end) =>
       _catalogsWithExtraRange(CoreField.board, start, end);
-
-  /// Discover's rows before a catalog is chosen: the board's catalogs, of
-  /// [type] or of every type (null), on a field of their own so the Board
-  /// tab's rows are never replaced by a filtered set. Planned only, like
-  /// [loadBoard]; [loadDiscoverRowsRange] fetches.
-  static CoreAction loadDiscoverRows({String? type}) => CoreAction(
-    field: CoreField.discoverRows,
-    action: _load('CatalogsWithExtra', {'type': type, 'extra': <Object>[]}),
-  );
-
-  /// [loadBoardRange], for [loadDiscoverRows].
-  static CoreAction loadDiscoverRowsRange(int start, int end) =>
-      _catalogsWithExtraRange(CoreField.discoverRows, start, end);
 
   /// Search: every catalog whose manifest supports the `search` extra. Each
   /// Load also pushes [query] to the profile's search history, so callers

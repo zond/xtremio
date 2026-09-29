@@ -90,7 +90,7 @@ tests, run from `rust/`:
 ```bash
 cargo test --test cinemeta -- --ignored        # network: a Cinemeta catalog
 cargo test --test meta_details -- --ignored    # network: meta, streams, Player and continue watching for a public-domain torrent, plus a series
-cargo test --test board -- --ignored           # network: Board rows and a search over the default addons
+cargo test --test board -- --ignored           # network: Discover's rows and a search over the default addons
 cargo test --test library_addons -- --ignored  # network: ctx (logged out), installed/remote addons, addon details, library
 cargo test --test downloads -- --ignored       # no network: downloads_registry.json, from two torrents it builds itself
 cargo test --test embedded -- --ignored        # no network: background_traffic.json on a server that has just started

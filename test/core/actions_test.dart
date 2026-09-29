@@ -79,12 +79,13 @@ void main() {
     });
   });
 
-  test('loadDiscoverRows plans the board on its own field, of one type', () {
+  test('loadBoard plans on the board field, of one type', () {
     // `ActionLoad::CatalogsWithExtra(Selected { type, extra })`: the type
     // filters the catalogs planned, and no extra keeps the ones that need
-    // a choice made out.
-    final movies = CoreActions.loadDiscoverRows(type: 'movie');
-    expect(movies.field, CoreField.discoverRows);
+    // a choice made out. Discover's rows and the plain board are the same
+    // field now, so there is no field of its own to tell apart any more.
+    final movies = CoreActions.loadBoard(type: 'movie');
+    expect(movies.field, CoreField.board);
     expect(movies.action, {
       'action': 'Load',
       'args': {
@@ -92,13 +93,11 @@ void main() {
         'args': {'type': 'movie', 'extra': <Object>[]},
       },
     });
-    expect((CoreActions.loadDiscoverRows().action['args'] as Map)['args'], {
+    expect((CoreActions.loadBoard().action['args'] as Map)['args'], {
       'type': null,
       'extra': <Object>[],
     });
-    final range = CoreActions.loadDiscoverRowsRange(2, 5);
-    expect(range.field, CoreField.discoverRows);
-    expect(range.action, CoreActions.loadBoardRange(2, 5).action);
+    expect(CoreActions.loadBoardRange(2, 5).field, CoreField.board);
   });
 
   test('loadMetaDetails defaults to guessing the stream', () {

@@ -12,18 +12,42 @@ import '../../widgets/poster_tile.dart';
 import '../addons/addons_screen.dart';
 import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
-import '../discover/discover_screen.dart';
 
-/// Home: a "Continue watching" row over `continue_watching_preview` followed
-/// by one horizontal row per catalog of every installed addon (`board`).
+/// Discover's rows: a "Continue watching" row, then one row per catalog
+/// that can be asked with nothing chosen, of [type] or of every type
+/// (`board`, a `CatalogsWithExtra`).
 ///
 /// `Load CatalogsWithExtra` only plans the catalogs; their first pages are
 /// fetched by `LoadRange` for the rows on screen (plus overscan), re-issued
 /// as the user scrolls whenever the requested range grows, like stremio-web.
-/// The continue-watching row is never loaded or unloaded: the engine keeps
-/// it in step with the library.
-class BoardScreen extends StatefulWidget {
-  const BoardScreen({super.key});
+/// Changing [type] plans the rows again and starts them from the top. The
+/// continue-watching row is never loaded or unloaded: the engine keeps it
+/// in step with the library, and it follows [type] here.
+class CatalogRows extends StatefulWidget {
+  const CatalogRows({
+    super.key,
+    required this.onSeeAll,
+    this.type,
+    this.defaultFocus = false,
+    this.empty,
+  });
+
+  /// The one type to show, or every type (null). The "Continue watching"
+  /// row follows it too.
+  final String? type;
+
+  /// A row's "See all" was pressed.
+  final ValueChanged<CatalogRow> onSeeAll;
+
+  /// Whether the first tile takes the remote when nothing else has it --
+  /// which it has at start-up, Discover being the screen the app opens on,
+  /// and not when the tab is walked to from the rail, where the remote
+  /// stays like on every other tab.
+  final bool defaultFocus;
+
+  /// Drawn where there are no rows at all, in place of the "install an
+  /// addon" note.
+  final Widget? empty;
 
   /// Every row (continue watching included) has this extent, so the visible
   /// rows follow from the scroll offset alone. A tile's width follows from
@@ -52,73 +76,6 @@ class BoardScreen extends StatefulWidget {
   static String failedCatalogsLabel(int count) => count == 1
       ? '1 catalog could not be loaded'
       : '$count catalogs could not be loaded';
-
-  // No [TvLadder] here, deliberately: the app bar holds only a title,
-  // nothing on it takes focus, and a ladder whose top rung wraps an empty
-  // bar disagrees with what is drawn -- the failure the ladder scheme
-  // exists to prevent. The link button's own rung lives at
-  // [LibraryScreen.appBarLevel]. The rows keep the directional traversal
-  // between them.
-
-  @override
-  State<BoardScreen> createState() => _BoardScreenState();
-}
-
-class _BoardScreenState extends State<BoardScreen> {
-  void _openCatalog(CatalogRow row) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DiscoverScreen(request: row.firstRequest),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Board')),
-    body: CatalogRows(
-      field: CoreField.board,
-      defaultFocus: true,
-      onSeeAll: _openCatalog,
-    ),
-  );
-}
-
-/// The board's rows: a "Continue watching" row, then one row per catalog
-/// that can be asked with nothing chosen, of [type] or of every type.
-///
-/// The Board tab shows every type on [CoreField.board]; Discover shows one
-/// type or all of them on [CoreField.discoverRows], its own field, so the
-/// two never replace each other's rows. Changing [type] plans the rows
-/// again and starts them from the top.
-class CatalogRows extends StatefulWidget {
-  const CatalogRows({
-    super.key,
-    required this.field,
-    required this.onSeeAll,
-    this.type,
-    this.defaultFocus = false,
-    this.empty,
-  });
-
-  /// [CoreField.board] or [CoreField.discoverRows].
-  final CoreField field;
-
-  /// The one type to show, or every type (null). The "Continue watching"
-  /// row follows it too.
-  final String? type;
-
-  /// A row's "See all" was pressed.
-  final ValueChanged<CatalogRow> onSeeAll;
-
-  /// Whether the first tile takes the remote when nothing else has it: the
-  /// Board, which is the screen the app opens on. A tab the viewer walks
-  /// to leaves the remote on the rail, like every other tab.
-  final bool defaultFocus;
-
-  /// Drawn where there are no rows at all, in place of the board's own
-  /// "install an addon" note.
-  final Widget? empty;
 
   @override
   State<CatalogRows> createState() => _CatalogRowsState();
@@ -163,7 +120,7 @@ class _CatalogRowsState extends State<CatalogRows> {
       _continueWatching?.dispose();
       _ctx?.dispose();
       _client = client;
-      _board = CoreFieldNotifier(client, widget.field)
+      _board = CoreFieldNotifier(client, CoreField.board)
         ..addListener(_onBoardChanged);
       _continueWatching = CoreFieldNotifier(
         client,
@@ -190,20 +147,16 @@ class _CatalogRowsState extends State<CatalogRows> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
   }
 
-  CoreAction _loadAction() => widget.field == CoreField.discoverRows
-      ? CoreActions.loadDiscoverRows(type: widget.type)
-      : CoreActions.loadBoard(type: widget.type);
+  CoreAction _loadAction() => CoreActions.loadBoard(type: widget.type);
 
   CoreAction _rangeAction(int start, int end) =>
-      widget.field == CoreField.discoverRows
-      ? CoreActions.loadDiscoverRowsRange(start, end)
-      : CoreActions.loadBoardRange(start, end);
+      CoreActions.loadBoardRange(start, end);
 
   @override
   void dispose() {
     _debounce?.cancel();
     _scroll.dispose();
-    _client?.dispatch(CoreActions.unload(widget.field));
+    _client?.dispatch(CoreActions.unload(CoreField.board));
     _board?.removeListener(_onBoardChanged);
     _board?.dispose();
     _continueWatching?.dispose();
@@ -231,7 +184,7 @@ class _CatalogRowsState extends State<CatalogRows> {
 
   void _scheduleRangeUpdate() {
     _debounce?.cancel();
-    _debounce = Timer(BoardScreen.scrollDebounce, _updateRange);
+    _debounce = Timer(CatalogRows.scrollDebounce, _updateRange);
   }
 
   /// Each read below is one parse per change of its field, however many
@@ -288,10 +241,10 @@ class _CatalogRowsState extends State<CatalogRows> {
         position?.viewportDimension ?? MediaQuery.sizeOf(context).height;
     final firstVisual = math.max(
       0,
-      (offset / extent).floor() - BoardScreen.overscanRows,
+      (offset / extent).floor() - CatalogRows.overscanRows,
     );
     final lastVisual =
-        ((offset + viewport) / extent).ceil() - 1 + BoardScreen.overscanRows;
+        ((offset + viewport) / extent).ceil() - 1 + CatalogRows.overscanRows;
 
     final rows = _rows(_boardState, _continueWatchingState);
     int start;
@@ -381,7 +334,7 @@ class _CatalogRowsState extends State<CatalogRows> {
             SliverToBoxAdapter(
               child: FailedAddonsSection(
                 failures: failures,
-                summaryLabel: BoardScreen.failedCatalogsLabel(
+                summaryLabel: CatalogRows.failedCatalogsLabel(
                   board.failedRows.length,
                 ),
                 collapseSingle: true,
@@ -421,7 +374,7 @@ final class _CatalogRow extends _BoardRow {
 class _RowLayout {
   const _RowLayout(this.baseExtent, {this.textFactor = 1, this.focusSlack = 0});
 
-  /// The row's height at text scale 1: what [BoardScreen.rowExtentFor]
+  /// The row's height at text scale 1: what [CatalogRows.rowExtentFor]
   /// picked for this window.
   final double baseExtent;
 
@@ -451,7 +404,7 @@ class _RowLayout {
   static _RowLayout of(BuildContext context) {
     final isTv = DeviceScope.isTv(context);
     return _RowLayout(
-      BoardScreen.rowExtentFor(MediaQuery.sizeOf(context).width, isTv: isTv),
+      CatalogRows.rowExtentFor(MediaQuery.sizeOf(context).width, isTv: isTv),
       textFactor: math.max(1, TvDensity.textFactorOf(context)),
       focusSlack: isTv ? focusRoom : 0,
     );
@@ -634,7 +587,7 @@ class _CatalogRowView extends StatelessWidget {
         padding: layout.stripPadding,
       );
     }
-    final shown = math.min(items.length, BoardScreen.maxTilesPerRow);
+    final shown = math.min(items.length, CatalogRows.maxTilesPerRow);
     final tileWidth = layout.tileWidthFor(row.posterShape);
     return _HorizontalStrip(
       padding: layout.stripPadding,

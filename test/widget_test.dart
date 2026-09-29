@@ -11,7 +11,7 @@ import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 void main() {
-  testWidgets('app boots into the Board section with navigation', (
+  testWidgets('app boots into the Discover section with navigation', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -22,8 +22,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The default section renders.
-    expect(find.text('Board'), findsWidgets);
+    // The default section renders: its own empty state, since the board is
+    // planned but empty.
+    expect(find.text('No catalogs'), findsOneWidget);
 
     // All primary destinations are reachable from the shell.
     expect(find.text('Discover'), findsWidgets);

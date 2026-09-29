@@ -3,9 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
-import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
-import 'package:xtremio/features/discover/discover_screen.dart';
+import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../support/empty_board.dart';
@@ -29,10 +28,17 @@ class _TableTextScaler extends TextScaler {
 
 void main() {
   // CoreScope sits above MaterialApp, as in the app, so pushed routes see it.
-  Widget harness(FakeCoreClient core) => CoreScope(
-    client: core,
-    child: const MaterialApp(home: BoardScreen()),
-  );
+  // defaultFocus: true, as Discover passes it for the screen the app opens
+  // on -- the behaviour this harness stands in for.
+  Widget harness(FakeCoreClient core, {ValueChanged<CatalogRow>? onSeeAll}) =>
+      CoreScope(
+        client: core,
+        child: MaterialApp(
+          home: Scaffold(
+            body: CatalogRows(defaultFocus: true, onSeeAll: onSeeAll ?? (_) {}),
+          ),
+        ),
+      );
 
   FakeCoreClient fakeCore({
     Map<String, dynamic>? board,
@@ -402,7 +408,7 @@ void main() {
       final ranges = rangeDispatches(core).length;
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
       await tester.pumpAndSettle();
-      await tester.pump(BoardScreen.scrollDebounce);
+      await tester.pump(CatalogRows.scrollDebounce);
       await tester.pump();
 
       expect(
@@ -487,7 +493,7 @@ void main() {
     );
   });
 
-  testWidgets('"See all" opens the catalog in Discover', (tester) async {
+  testWidgets('"See all" calls onSeeAll with that row', (tester) async {
     // Trim the first row so its trailing tile is built without scrolling.
     final board = loadBoardFixture();
     final firstPage =
@@ -501,22 +507,19 @@ void main() {
       board: board,
       continueWatching: {'items': <Object>[]},
     );
-    core.setState(CoreField.discover, loadDiscoverFixture());
-    await tester.pumpWidget(harness(core));
+    CatalogRow? seenRow;
+    await tester.pumpWidget(harness(core, onSeeAll: (row) => seenRow = row));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('See all').first);
     await tester.pumpAndSettle();
 
-    expect(find.byType(DiscoverScreen), findsOneWidget);
     final request = CatalogsWithExtraState.fromJson(board)
         .rows
         .first
         .firstRequest;
-    final load = core.dispatched.firstWhere(
-      (a) => a.field == CoreField.discover,
-    );
-    expect(load.action, CoreActions.loadDiscover(request).action);
+    expect(seenRow, isNotNull);
+    expect(seenRow!.firstRequest, request);
     expect(request.path.id, 'top');
   });
 
@@ -538,7 +541,7 @@ void main() {
       const Offset(0, -20),
     );
     await tester.pumpAndSettle();
-    await tester.pump(BoardScreen.scrollDebounce * 2);
+    await tester.pump(CatalogRows.scrollDebounce * 2);
     expect(rangeDispatches(core), hasLength(1));
 
     await tester.drag(
@@ -546,7 +549,7 @@ void main() {
       const Offset(0, -5000),
     );
     await tester.pumpAndSettle();
-    await tester.pump(BoardScreen.scrollDebounce * 2);
+    await tester.pump(CatalogRows.scrollDebounce * 2);
 
     final ranges = rangeDispatches(core);
     expect(ranges, hasLength(2));
@@ -561,7 +564,7 @@ void main() {
       const Offset(0, 5000),
     );
     await tester.pumpAndSettle();
-    await tester.pump(BoardScreen.scrollDebounce * 2);
+    await tester.pump(CatalogRows.scrollDebounce * 2);
     expect(rangeDispatches(core), hasLength(2));
   });
 
@@ -617,7 +620,7 @@ void main() {
         data: MediaQuery.of(context).copyWith(textScaler: scaler),
         child: child!,
       ),
-      home: const BoardScreen(),
+      home: Scaffold(body: CatalogRows(defaultFocus: true, onSeeAll: (_) {})),
     ),
   );
 
@@ -677,7 +680,7 @@ void main() {
     // never smaller, since the captions ask for less than was set aside.
     expect(scaled.width, unscaled.width);
     expect(scaled.height, greaterThanOrEqualTo(unscaled.height));
-    expect(rowExtent(tester), greaterThan(BoardScreen.rowExtentFor(400)));
+    expect(rowExtent(tester), greaterThan(CatalogRows.rowExtentFor(400)));
   });
 
   testWidgets('a small system font leaves the row header its size', (
@@ -698,7 +701,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(rowExtent(tester), BoardScreen.rowExtentFor(400));
+    expect(rowExtent(tester), CatalogRows.rowExtentFor(400));
     final rows = tester.getTopLeft(find.byKey(const Key('board-rows'))).dy;
     final firstTile = tester.getTopLeft(find.byType(PosterTile).first).dy;
     expect(firstTile - rows, closeTo(52, 0.01));
@@ -712,10 +715,10 @@ void main() {
     await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
 
-    expect(rowExtent(tester), BoardScreen.rowExtentFor(400));
+    expect(rowExtent(tester), CatalogRows.rowExtentFor(400));
     expect(
-      BoardScreen.rowExtentFor(400),
-      lessThan(BoardScreen.rowExtentFor(1000)),
+      CatalogRows.rowExtentFor(400),
+      lessThan(CatalogRows.rowExtentFor(1000)),
     );
     expect(find.text('Popular'), findsWidgets);
   });

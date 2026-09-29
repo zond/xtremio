@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
+import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
@@ -22,7 +22,9 @@ Widget harness(FakeCoreClient core) => DeviceScope(
   profile: tv,
   child: CoreScope(
     client: core,
-    child: const MaterialApp(home: BoardScreen()),
+    child: MaterialApp(
+      home: Scaffold(body: CatalogRows(defaultFocus: true, onSeeAll: (_) {})),
+    ),
   ),
 );
 

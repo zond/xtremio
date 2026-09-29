@@ -332,11 +332,12 @@ adb shell input text "the%squery"             # %s is a space
 adb shell input keyevent KEYCODE_ENTER        # Done: the field submits with it
 ```
 
-A walk from the Board to playback:
+A walk from Discover to playback:
 
 ```bash
 K() { adb shell input keyevent "$@"; sleep 1; }
-K KEYCODE_DPAD_RIGHT   # rail → first poster
+K KEYCODE_DPAD_RIGHT   # rail → the types above the rows
+K KEYCODE_DPAD_DOWN    # → first poster
 K KEYCODE_DPAD_CENTER  # open Details
 K KEYCODE_DPAD_DOWN; K KEYCODE_DPAD_CENTER   # pick a stream → player
 K KEYCODE_MEDIA_PLAY_PAUSE

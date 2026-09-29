@@ -519,13 +519,18 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     // Which tile geometry lands on from the last filter row is its own
-    // business; the second tile is the one this test is about.
-    if (focusedTileName(tester) != 'The Whisper Man') {
-      await press(tester, LogicalKeyboardKey.arrowRight);
+    // business, and the grid holds more than the two library items (a
+    // complete and an in-progress download are merged in beside them): walk
+    // left to the row's known first tile, then right once onto the one
+    // this test is about.
+    for (var i = 0; i < 3 && focusedTileName(tester) != 'Lanterns'; i++) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
     }
+    expect(focusedTileName(tester), 'Lanterns');
+    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTileName(tester), 'The Whisper Man');
 
-    await tester.tap(find.text('Board'));
+    await tester.tap(find.text('Discover'));
     await tester.pumpAndSettle();
     expect(find.byType(LibraryScreen), findsNothing);
     await tester.tap(find.text('Library'));

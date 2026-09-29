@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
@@ -64,7 +64,7 @@ Future<void> pumpDetails(
   await tester.pumpAndSettle();
 }
 
-/// The Board alone, over the recorded catalogs, on [device].
+/// [CatalogRows] alone, over the recorded catalogs, on [device].
 Future<void> pumpBoard(
   WidgetTester tester, {
   required DeviceProfile device,
@@ -80,7 +80,11 @@ Future<void> pumpBoard(
             CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
           },
         ),
-        child: const MaterialApp(home: BoardScreen()),
+        child: MaterialApp(
+          home: Scaffold(
+            body: CatalogRows(defaultFocus: true, onSeeAll: (_) {}),
+          ),
+        ),
       ),
     ),
   );
@@ -293,7 +297,7 @@ void main() {
     });
   });
 
-  group('the Board', () {
+  group('CatalogRows', () {
     testWidgets('a television gets bigger posters than a window of the same '
         'size', (tester) async {
       await pumpBoard(tester, device: DeviceProfile.fallback);

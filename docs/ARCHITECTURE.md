@@ -63,12 +63,12 @@ per-type mirroring and survives engine upgrades; Dart keeps small view
 classes (`lib/core/state/`) over the maps.
 
 The model (`XtremioModel`, `rust/src/model.rs`) has `ctx`,
-`continue_watching_preview`, `board`, `discover_rows`, `search`,
-`discover`, `meta_details`, `streaming_server`, `player`, `library`,
+`continue_watching_preview`, `board`, `search`, `discover`,
+`meta_details`, `streaming_server`, `player`, `library`,
 `installed_addons`, `remote_addons` and `addon_details`;
-`lib/core/fields.dart` mirrors the list. `discover_rows` is a second
-`CatalogsWithExtra`, the Discover tab's rows of one type or all, so that
-they and the Board tab's never replace each other.
+`lib/core/fields.dart` mirrors the list. `board` is stremio-core's name for
+the model behind Discover's rows (`CatalogsWithExtra`), of one type or all;
+`discover` is the one catalog Discover opens.
 
 - `ctx` serializes as `{profile, notifications, events}` only -- its
   library, streams and server-URL buckets are `#[serde(skip)]` -- so the

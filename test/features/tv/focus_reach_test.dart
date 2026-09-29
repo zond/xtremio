@@ -7,7 +7,6 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
-import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
@@ -157,7 +156,7 @@ void main() {
   /// most obviously missing.
   ///
   /// [pushed] puts it on the navigator over a blank route, which is how
-  /// the app reaches everything that is not one of the shell's five tabs.
+  /// the app reaches everything that is not one of the shell's four tabs.
   /// That is not a detail of the harness: an [AppBar] grows its back
   /// button only when there is something to pop, and on a protected
   /// addon's detail screen -- installed, official and up to date, so no
@@ -218,7 +217,6 @@ void main() {
     state: {
       CoreField.ctx: loadCtxLoggedOutFixture(),
       CoreField.board: loadBoardFixture(),
-      CoreField.discoverRows: loadBoardFixture(),
       CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
       CoreField.discover: loadDiscoverFixture(),
       CoreField.search: loadSearchFixture(),
@@ -554,7 +552,7 @@ void main() {
 
   /// Every screen as it is first drawn.
   final drawn = <Case>[
-    walk('board_screen.dart', 'the shell, rail and Board together', (
+    walk('discover_screen.dart', 'the shell, rail and Discover together', (
       tester,
     ) async {
       useScreen(tester, tvSize);
@@ -563,14 +561,6 @@ void main() {
           client: fullCore(),
           child: onTv(const RootShell(), prefs: bold()),
         ),
-      );
-      await tester.pumpAndSettle();
-      await walkEveryStop(tester);
-    }),
-    walk('board_screen.dart', 'Board', (tester) async {
-      useScreen(tester, tvSize);
-      await tester.pumpWidget(
-        CoreScope(client: fullCore(), child: onTv(const BoardScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
@@ -875,7 +865,7 @@ void main() {
 
   /// The same walk over what a screen puts *over* itself.
   final opened = <Case>[
-    walk('board_screen.dart', 'the Uninstall dialog on a failed catalog', (
+    walk('discover_screen.dart', 'the Uninstall dialog on a failed catalog', (
       tester,
     ) async {
       // Tall enough for the sliver that accounts for the failures, which
@@ -889,7 +879,7 @@ void main() {
             CoreField.board: boardWithFailure(4, 'Failed to fetch: HTTP 404'),
             CoreField.continueWatchingPreview: {'items': <Object>[]},
           }),
-          child: onTv(const BoardScreen()),
+          child: onTv(const DiscoverScreen()),
         ),
       );
       await tester.pumpAndSettle();
@@ -933,7 +923,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The catalog menu is a type's: choose one first.
+      // The first tile takes the remote at start-up; up to the header
+      // before the types are walked. The catalog menu is a type's: choose
+      // one first.
+      await press(tester, LogicalKeyboardKey.arrowUp);
       await pressUntil(
         tester,
         LogicalKeyboardKey.tab,

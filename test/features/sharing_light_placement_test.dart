@@ -20,7 +20,7 @@ import '../support/tv.dart';
 /// is not "the corner is empty", which no fixed position over somebody
 /// else's screen can promise, but that the light never takes a press meant
 /// for something else. Two things say that, and both are checked on all
-/// five shell screens:
+/// four shell screens:
 ///
 /// - **Nothing an app bar draws is touched.** That is what the toolbar's
 ///   height of offset buys: an app bar's trailing action is the one control
@@ -40,12 +40,12 @@ import '../support/tv.dart';
 void main() {
   const lightKey = Key('sharing-light');
 
-  /// The five tabs, in the order the shell lists them.
-  const tabs = ['Board', 'Discover', 'Search', 'Library', 'Settings'];
+  /// The four tabs, in the order the shell lists them.
+  const tabs = ['Discover', 'Search', 'Library', 'Settings'];
 
   /// The shell with the light lit, on [profile] at [size].
   ///
-  /// The core answers for every tab, since this walks all five.
+  /// The core answers for every tab, since this walks all four.
   Future<FakeCoreClient> mount(
     WidgetTester tester, {
     required DeviceProfile profile,
@@ -170,9 +170,9 @@ void main() {
   }
 
   testWidgets('on a television the light takes no press meant for a '
-      'control, on any of the five screens', (tester) async {
+      'control, on any of the four screens', (tester) async {
     await mount(tester, profile: tv, size: const Size(1280, 720));
-    checkCorner(tester, 'the television Board');
+    checkCorner(tester, 'the television Discover');
     for (final tab in tabs.skip(1)) {
       await show(tester, tab);
       checkCorner(tester, 'the television $tab');
@@ -192,7 +192,7 @@ void main() {
         profile: DeviceProfile.fallback,
         size: Size(width.toDouble(), 800),
       );
-      checkCorner(tester, 'the $width-wide phone Board');
+      checkCorner(tester, 'the $width-wide phone Discover');
       for (final tab in tabs.skip(1)) {
         await show(tester, tab);
         checkCorner(tester, 'the $width-wide phone $tab');

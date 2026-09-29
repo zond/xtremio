@@ -8,15 +8,16 @@ import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/shared_field_screen.dart';
 import '../../widgets/tv_ladder.dart';
-import '../board/board_screen.dart';
 import '../details/meta_details_screen.dart';
+import 'catalog_rows.dart';
 import 'discover_catalogs.dart';
 
 /// Browses the catalogs of the installed addons: all of them as rows, one
 /// type's as rows, or one catalog with its filters as a grid.
 ///
-/// **The tab** ([request] null) opens on every catalog's first page as a
-/// row, the board's view, on [CoreField.discoverRows]. Across the top are
+/// **The tab** ([request] null) is the screen the app opens on: every
+/// catalog's first page as a row ([CatalogRows], on [CoreField.board]),
+/// under a "Continue watching" row. Across the top are
 /// the types, starting with All; choosing one shows the rows of that type.
 /// A type other than All adds a catalog menu, on "Any" -- the rows -- and
 /// choosing a catalog there, or "See all" on a row, opens that catalog as
@@ -24,8 +25,8 @@ import 'discover_catalogs.dart';
 /// the catalog to its type's rows, a type's rows to All. The rows stay
 /// built under the grid, so coming back finds them where they were.
 ///
-/// **A Discover pushed with a [request]** (a genre chip on a title, a
-/// catalog's "See all" on the Board) opens straight on that catalog and
+/// **A Discover pushed with a [request]** (a genre chip on a title) opens
+/// straight on that catalog and
 /// stays a catalog view: its types and catalogs are the engine's own, and
 /// it never shows rows -- the rows' field is the tab's, and a second screen
 /// loading it would empty the tab's rows when it left.
@@ -310,8 +311,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           child: _tvGroup(
                             isTv,
                             CatalogRows(
-                              field: CoreField.discoverRows,
                               type: _type,
+                              // The first tile takes the remote at start-up,
+                              // this being the screen the app opens on.
+                              defaultFocus: true,
                               onSeeAll: (row) => _openCatalog(row.firstRequest),
                               empty: _type == null ? null : const _NoRows(),
                             ),

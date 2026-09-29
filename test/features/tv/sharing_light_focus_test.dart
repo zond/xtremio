@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
+import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/sharing/sharing_activity.dart';
 import 'package:xtremio/features/sharing/sharing_light.dart';
@@ -158,7 +158,7 @@ void main() {
     // to its right-hand end -- under the light -- and presses up, which is
     // the press that means "the row above" and would find the light first
     // if the light were in the traversal at all.
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
     await press(tester, LogicalKeyboardKey.arrowDown);
     for (var i = 0; i < 8; i++) {
       await press(tester, LogicalKeyboardKey.arrowRight);
@@ -166,7 +166,7 @@ void main() {
     }
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusIn<SharingLight>(), isFalse);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
 
     // Tab does not find it either, and neither loop is what keeps it out:
     // the light is skipped by traversal outright. Nothing observable here

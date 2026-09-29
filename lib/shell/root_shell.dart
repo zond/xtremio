@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/focus_emphasis.dart';
-import '../features/board/board_screen.dart';
 import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/search/search_screen.dart';
@@ -166,7 +165,6 @@ class _RootShellState extends State<RootShell> {
   }
 
   static const _destinations = <_Destination>[
-    _Destination('Board', Icons.home_outlined, Icons.home, BoardScreen()),
     _Destination(
       'Discover',
       Icons.explore_outlined,

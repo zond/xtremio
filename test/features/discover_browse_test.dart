@@ -20,7 +20,7 @@ void main() {
   FakeCoreClient fullCore() => FakeCoreClient(
     state: {
       CoreField.ctx: loadCtxLoggedOutFixture(),
-      CoreField.discoverRows: loadBoardFixture(),
+      CoreField.board: loadBoardFixture(),
       CoreField.discover: loadDiscoverFixture(),
       CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
     },
@@ -46,7 +46,7 @@ void main() {
 
   /// The `Load`s of the rows, by the type each asked for.
   List<String?> rowLoads(FakeCoreClient core) => [
-    for (final action in actionsOn(core, CoreField.discoverRows))
+    for (final action in actionsOn(core, CoreField.board))
       if (action.action['action'] == 'Load')
         ((action.action['args'] as Map)['args'] as Map)['type'] as String?,
   ];
@@ -97,7 +97,7 @@ void main() {
     final core = FakeCoreClient(
       state: {
         CoreField.ctx: loadCtxLoggedOutFixture(),
-        CoreField.discoverRows: loadBoardFixture(),
+        CoreField.board: loadBoardFixture(),
       },
     );
     await tester.pumpWidget(harness(core));
@@ -225,7 +225,7 @@ void main() {
     final core = FakeCoreClient(
       state: {
         CoreField.ctx: loadCtxLoggedOutFixture(),
-        CoreField.discoverRows: rows,
+        CoreField.board: rows,
         CoreField.discover: loadDiscoverFixture(),
       },
     );
@@ -264,7 +264,7 @@ void main() {
     final core = FakeCoreClient(
       state: {
         CoreField.ctx: loadCtxLoggedOutFixture(),
-        CoreField.discoverRows: {
+        CoreField.board: {
           'selected': {'type': 'series', 'extra': <Object>[]},
           'catalogs': <Object>[],
           'catalogLabels': <Object>[],

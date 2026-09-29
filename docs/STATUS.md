@@ -10,21 +10,21 @@ library, addons and settings; downloads, Google Drive, casting and the
 Android TV layout are all built. What is not is in the README's
 [What is next](../README.md#what-is-next) and in [WISHLIST.md](WISHLIST.md).
 
-## Board, Discover, Search
+## Discover, Search
 
-- **Board**: a continue-watching row, then one row per catalog that
-  answered, and one line at the end for the catalogs that could not be
-  loaded -- expanding to the addon, what it said, and **Check addon** /
-  **Uninstall** -- so a dead addon is never mistaken for a title nobody has.
-- **Discover** opens on the board's rows, with the addons' types across the
-  top starting with **All**. A type shows that type's rows (Continue
+- **Discover** is the screen the app opens on: a continue-watching row,
+  then one row per catalog that answered, and one line at the end for the
+  catalogs that could not be loaded -- expanding to the addon, what it
+  said, and **Check addon** / **Uninstall** -- so a dead addon is never
+  mistaken for a title nobody has. The addons' types run across the top,
+  starting with **All**. A type shows that type's rows (Continue
   watching too) and a catalog menu on **Any**; choosing a catalog there, or
   **See all** on a row, opens it as a grid with its genre and other
   filters. Back comes down the same way: catalog, type, All. The menu
   offers every catalog that opens without a search -- one that needs a
   genre opens on its first -- which is stremio-core's own rule for
   Discover. A Discover opened from a title's genre chip is that catalog
-  alone. The Board tab is still there while the two are compared.
+  alone. (It replaced a separate Board tab, whose rows were All's.)
 - **Search** asks every addon that supports it, groups the hits per addon,
   and accounts for the addons that could not be searched the same way.
 

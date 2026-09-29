@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
+import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
@@ -16,7 +16,7 @@ import '../../support/fixtures.dart';
 import '../../support/text_entry.dart';
 import '../../support/tv.dart';
 
-/// A core with the Board, Library and Search tabs all able to settle.
+/// A core with the Discover, Library and Search tabs all able to settle.
 FakeCoreClient fakeCore({Map<String, dynamic>? continueWatching}) =>
     FakeCoreClient(
       state: {
@@ -74,7 +74,7 @@ String? focusedRailLabel(WidgetTester tester) {
   return tester.widget<Text>(texts.first).data;
 }
 
-/// The Board's first catalog row (Cinemeta Popular movies), by name.
+/// Discover's first catalog row (Cinemeta Popular movies), by name.
 List<String> popularNames() => [
   for (final item in CatalogsWithExtraState.fromJson(
     loadBoardFixture(),
@@ -82,7 +82,8 @@ List<String> popularNames() => [
     item.name,
 ];
 
-/// Walks focus from wherever it is to the rail's first destination (Board).
+/// Walks focus from wherever it is to the rail's first destination
+/// (Discover).
 Future<void> focusRailTop(WidgetTester tester) async {
   while (!focusIn<NavigationRail>()) {
     await press(tester, LogicalKeyboardKey.arrowLeft);
@@ -96,7 +97,6 @@ Future<void> focusRailTop(WidgetTester tester) async {
 /// Walks focus from wherever it is to the rail's Search destination.
 Future<void> focusSearchDestination(WidgetTester tester) async {
   await focusRailTop(tester);
-  await press(tester, LogicalKeyboardKey.arrowDown);
   await press(tester, LogicalKeyboardKey.arrowDown);
   expect(focusedRailLabel(tester), 'Search');
 }
@@ -122,13 +122,13 @@ void main() {
     expect(find.byType(NavigationRail), findsNothing);
   });
 
-  testWidgets('focus starts on the first tile of the Board', (tester) async {
+  testWidgets('focus starts on the first tile of Discover', (tester) async {
     useScreen(tester, const Size(1280, 720));
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
 
     // The continue-watching row is first; its one item is the movie.
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
     expect(focusedTileName(tester), 'Night of the Living Dead');
   });
 
@@ -137,14 +137,14 @@ void main() {
     useScreen(tester, const Size(1280, 720));
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
 
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusIn<NavigationRail>(), isTrue);
-    expect(focusIn<BoardScreen>(), isFalse);
+    expect(focusIn<DiscoverScreen>(), isFalse);
 
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
     expect(focusIn<NavigationRail>(), isFalse);
 
     // And back once more, from a tile further down.
@@ -156,12 +156,12 @@ void main() {
     // Tab walks the rail as one group: from its last destination it moves
     // on to the body rather than to a tile in between.
     await focusRailTop(tester);
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 3; i++) {
       await press(tester, LogicalKeyboardKey.tab);
       expect(focusIn<NavigationRail>(), isTrue, reason: 'tab $i');
     }
     await press(tester, LogicalKeyboardKey.tab);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
   });
 
   testWidgets('select on a rail destination switches the tab and right '
@@ -171,12 +171,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await focusRailTop(tester);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(LibraryScreen), findsOneWidget);
-    expect(find.byType(BoardScreen), findsNothing);
+    expect(find.byType(DiscoverScreen), findsNothing);
     expect(focusIn<NavigationRail>(), isTrue);
 
     await press(tester, LogicalKeyboardKey.arrowRight);
@@ -189,7 +189,7 @@ void main() {
     useScreen(tester, const Size(1280, 720));
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
 
     // A touch remote or mouse taps the rail without focusing it first; the
     // Library has nothing to restore, so focus must show on the rail, as it
@@ -224,11 +224,11 @@ void main() {
     expect(find.byType(LibraryScreen), findsOneWidget);
     expect(focusedTileName(tester), isNull);
 
-    await tester.tap(find.text('Board'));
+    await tester.tap(find.text('Discover'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(BoardScreen), findsOneWidget);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(find.byType(DiscoverScreen), findsOneWidget);
+    expect(focusIn<DiscoverScreen>(), isTrue);
     expect(focusedTileName(tester), popular[1]);
   });
 
@@ -243,17 +243,17 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), popular[0]);
     await focusRailTop(tester);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(LibraryScreen), findsOneWidget);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       await press(tester, LogicalKeyboardKey.arrowUp);
     }
     await press(tester, LogicalKeyboardKey.select);
 
-    expect(find.byType(BoardScreen), findsOneWidget);
+    expect(find.byType(DiscoverScreen), findsOneWidget);
     expect(focusedTileName(tester), popular[0]);
   });
 
@@ -271,7 +271,7 @@ void main() {
 
     // The continue-watching row appears above the Popular row, so every row
     // moves down one slot and the widgets that showed row n now show row
-    // n - 1, among them the tile the Board remembers. That is a rebuild,
+    // n - 1, among them the tile Discover remembers. That is a rebuild,
     // not a key press, so focus must stay where the user put it.
     core.setState(
       CoreField.continueWatchingPreview,
@@ -283,9 +283,9 @@ void main() {
     expect(focusIn<NavigationRail>(), isTrue);
     expect(focusedTileName(tester), isNull);
 
-    // Right from the rail still enters the Board on the remembered tile.
+    // Right from the rail still enters Discover on the remembered tile.
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
   });
 
   testWidgets('select on Search keeps focus on the rail; right enters the '
@@ -411,29 +411,29 @@ void main() {
     await tester.pumpAndSettle();
 
     // Directional traversal is geometric and knows nothing of the rail as
-    // a unit: past either end of the menu it would find a Board tile that
-    // happens to lie above or below, and a select there opens its details
-    // when the user meant to keep walking the menu.
+    // a unit: past either end of the menu it would find a Discover tile
+    // that happens to lie above or below, and a select there opens its
+    // details when the user meant to keep walking the menu.
     await focusRailTop(tester);
-    expect(focusedRailLabel(tester), 'Board');
+    expect(focusedRailLabel(tester), 'Discover');
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedRailLabel(tester), 'Board');
+    expect(focusedRailLabel(tester), 'Discover');
 
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 3; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(focusedRailLabel(tester), 'Settings');
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedRailLabel(tester), 'Settings');
-    expect(focusIn<BoardScreen>(), isFalse);
+    expect(focusIn<DiscoverScreen>(), isFalse);
 
     // Right still enters the body.
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<BoardScreen>(), isTrue);
+    expect(focusIn<DiscoverScreen>(), isTrue);
   });
 
   group("the rail wears the app's own ring", () {
-    /// Whether each of the rail's five destinations is ringed, in the
+    /// Whether each of the rail's four destinations is ringed, in the
     /// order they are drawn. One ring per destination: only one of
     /// `icon`/`selectedIcon` is built at a time.
     List<bool> railRings(WidgetTester tester) => tester
@@ -453,19 +453,19 @@ void main() {
       await tester.pumpWidget(harness(fakeCore()));
       await tester.pumpAndSettle();
       // Focus starts in the body, so nothing in the rail is ringed.
-      expect(railRings(tester), [false, false, false, false, false]);
+      expect(railRings(tester), [false, false, false, false]);
 
       await focusRailTop(tester);
-      expect(railRings(tester), [true, false, false, false, false]);
+      expect(railRings(tester), [true, false, false, false]);
 
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedRailLabel(tester), 'Discover');
-      expect(railRings(tester), [false, true, false, false, false]);
+      expect(focusedRailLabel(tester), 'Search');
+      expect(railRings(tester), [false, true, false, false]);
 
       // And it goes out again when the remote leaves the rail entirely.
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusIn<NavigationRail>(), isFalse);
-      expect(railRings(tester), [false, false, false, false, false]);
+      expect(railRings(tester), [false, false, false, false]);
     });
 
     testWidgets('off a television the rail is left to Material', (

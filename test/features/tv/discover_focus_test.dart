@@ -42,12 +42,15 @@ void main() {
     final core = FakeCoreClient(
       state: {
         CoreField.ctx: loadCtxLoggedOutFixture(),
-        CoreField.discoverRows: loadBoardFixture(),
+        CoreField.board: loadBoardFixture(),
       },
     );
     await tester.pumpWidget(harness(core, home: const DiscoverScreen()));
     await tester.pumpAndSettle();
 
+    // The first tile takes the remote at start-up -- this is the screen the
+    // app opens on -- so up to the header first, then across the types.
+    await press(tester, LogicalKeyboardKey.arrowUp);
     for (var i = 0; i < 6 && focusedLabel(tester) != 'Series'; i++) {
       await press(tester, LogicalKeyboardKey.tab);
     }
@@ -57,11 +60,11 @@ void main() {
     Map<String, dynamic> lastRowsLoad() => core.dispatched
         .lastWhere(
           (action) =>
-              action.field == CoreField.discoverRows &&
+              action.field == CoreField.board &&
               action.action['action'] == 'Load',
         )
         .action;
-    expect(lastRowsLoad(), CoreActions.loadDiscoverRows(type: 'series').action);
+    expect(lastRowsLoad(), CoreActions.loadBoard(type: 'series').action);
 
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), startsWith('Catalog:'));
@@ -71,7 +74,7 @@ void main() {
     await systemBack(tester);
     expect(
       lastRowsLoad(),
-      CoreActions.loadDiscoverRows().action,
+      CoreActions.loadBoard().action,
       reason: 'Back from a type\'s rows is All',
     );
     expect(find.textContaining('Catalog:'), findsNothing);

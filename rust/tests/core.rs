@@ -116,7 +116,6 @@ fn core_lifecycle() -> anyhow::Result<()> {
         "ctx",
         "continue_watching_preview",
         "board",
-        "discover_rows",
         "search",
         "discover",
         "meta_details",

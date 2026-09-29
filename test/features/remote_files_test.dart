@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
+import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 import 'package:xtremio/features/drive/remote_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
@@ -25,7 +25,7 @@ void main() {
     },
   );
 
-  FakeCoreClient boardCore() => FakeCoreClient(
+  FakeCoreClient discoverCore() => FakeCoreClient(
     state: {
       CoreField.board: loadBoardFixture(),
       CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
@@ -69,12 +69,15 @@ void main() {
       );
     });
 
-    testWidgets('and the board does not, nor anything else in its bar', (
+    testWidgets('and Discover does not, nor anything else in its bar', (
       tester,
     ) async {
-      // The board is what an addon catalogue offers; a file on the viewer's
-      // own Drive is not that, so its app bar carries only a title.
-      await tester.pumpWidget(harness(const BoardScreen(), core: boardCore()));
+      // Discover's rows are what an addon catalogue offers; a file on the
+      // viewer's own Drive is not that, so its app bar carries only a
+      // title.
+      await tester.pumpWidget(
+        harness(const DiscoverScreen(), core: discoverCore()),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byTooltip(RemoteFilesButton.label), findsNothing);

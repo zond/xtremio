@@ -57,7 +57,7 @@ class _SearchScreenState extends State<SearchScreen> {
   ///
   /// Subscribed to only once a search has actually failed, by
   /// [_watchProfileForFailures] -- the same lazy pattern as
-  /// `BoardScreen._ctx`: every event on `ctx` costs an FFI serialize and a
+  /// `CatalogRows._ctx`: every event on `ctx` costs an FFI serialize and a
   /// decode, not worth paying before there is a name to show.
   CoreFieldNotifier? _ctx;
   final TextEditingController _controller = TextEditingController();
