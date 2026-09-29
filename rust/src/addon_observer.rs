@@ -101,6 +101,7 @@ const PATH_DIGEST_HEX: usize = 16;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum Watched {
     Board,
+    DiscoverRows,
     Search,
     Discover,
     MetaDetails,
@@ -113,6 +114,7 @@ impl Watched {
     fn of(field: &XtremioModelField) -> Option<Self> {
         match field {
             XtremioModelField::Board => Some(Self::Board),
+            XtremioModelField::DiscoverRows => Some(Self::DiscoverRows),
             XtremioModelField::Search => Some(Self::Search),
             XtremioModelField::Discover => Some(Self::Discover),
             XtremioModelField::MetaDetails => Some(Self::MetaDetails),
@@ -280,6 +282,11 @@ fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
     match field {
         Watched::Board => {
             for page in model.board.catalogs.iter().flatten() {
+                walk.note(page);
+            }
+        }
+        Watched::DiscoverRows => {
+            for page in model.discover_rows.catalogs.iter().flatten() {
                 walk.note(page);
             }
         }

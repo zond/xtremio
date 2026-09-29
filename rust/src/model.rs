@@ -49,6 +49,12 @@ pub struct XtremioModel {
     /// Home: every catalog of every installed addon
     /// (`ActionLoad::CatalogsWithExtra`).
     pub board: GridCatalogs,
+    /// Discover's rows: the board's catalogs, of one type or of every type,
+    /// before a single catalog is chosen (`ActionLoad::CatalogsWithExtra`
+    /// with a type). A field of its own so that the Board tab, which loads
+    /// every type into [`Self::board`], and Discover's filtered rows never
+    /// overwrite each other.
+    pub discover_rows: GridCatalogs,
     /// Search results: every catalog supporting the `search` extra
     /// (`ActionLoad::CatalogsWithExtra` with `["search", query]`).
     pub search: GridCatalogs,
@@ -242,6 +248,7 @@ impl XtremioModel {
             ),
             continue_watching_preview,
             board: Default::default(),
+            discover_rows: Default::default(),
             search: Default::default(),
             discover,
             meta_details: Default::default(),
@@ -277,6 +284,9 @@ impl XtremioModel {
     pub fn snapshot(&self, field: &XtremioModelField) -> serde_json::Result<FieldSnapshot> {
         let json = match field {
             XtremioModelField::Board => return Ok(FieldSnapshot::Grid(self.grid(&self.board))),
+            XtremioModelField::DiscoverRows => {
+                return Ok(FieldSnapshot::Grid(self.grid(&self.discover_rows)))
+            }
             XtremioModelField::Search => return Ok(FieldSnapshot::Grid(self.grid(&self.search))),
             XtremioModelField::Ctx => serde_json::to_string(&self.ctx)?,
             XtremioModelField::ContinueWatchingPreview => {
@@ -432,10 +442,11 @@ mod tests {
     use stremio_core::runtime::Model as _;
     use stremio_core::types::addon::{ResourcePath, ResourceRequest, ResourceResponse};
 
-    const FIELD_NAMES: [&str; 12] = [
+    const FIELD_NAMES: [&str; 13] = [
         "ctx",
         "continue_watching_preview",
         "board",
+        "discover_rows",
         "search",
         "discover",
         "meta_details",
@@ -758,7 +769,11 @@ mod tests {
     #[test]
     fn catalogs_with_extra_carry_empty_labels_when_unloaded() {
         let model = default_model();
-        for field in [XtremioModelField::Board, XtremioModelField::Search] {
+        for field in [
+            XtremioModelField::Board,
+            XtremioModelField::DiscoverRows,
+            XtremioModelField::Search,
+        ] {
             let json: serde_json::Value =
                 serde_json::from_str(&model.get_state_json(&field).unwrap()).unwrap();
             assert_eq!(json["selected"], serde_json::Value::Null);
@@ -818,7 +833,11 @@ mod tests {
         assert!(item.description.is_some());
         let base = "https://v3-cinemeta.strem.io/manifest.json";
         let mut model = default_model();
-        for field in [XtremioModelField::Board, XtremioModelField::Search] {
+        for field in [
+            XtremioModelField::Board,
+            XtremioModelField::DiscoverRows,
+            XtremioModelField::Search,
+        ] {
             let catalogs = CatalogsWithExtra {
                 selected: Some(Selected {
                     r#type: Some("movie".to_owned()),
@@ -841,6 +860,7 @@ mod tests {
             };
             match field {
                 XtremioModelField::Board => model.board = catalogs.into(),
+                XtremioModelField::DiscoverRows => model.discover_rows = catalogs.into(),
                 _ => model.search = catalogs.into(),
             }
             let json: serde_json::Value =

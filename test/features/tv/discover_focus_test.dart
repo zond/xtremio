@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fixtures.dart';
@@ -20,7 +21,7 @@ Widget harness(FakeCoreClient core, {Widget? home}) => DeviceScope(
   profile: tv,
   child: CoreScope(
     client: core,
-    child: MaterialApp(home: home ?? const DiscoverScreen()),
+    child: MaterialApp(home: home ?? DiscoverScreen(request: topMovies)),
   ),
 );
 
@@ -35,6 +36,47 @@ List<String> names() => [
 const int columns = 8;
 
 void main() {
+  testWidgets('the tab: a type, its catalog menu, then its rows, and Back '
+      'comes down to All', (tester) async {
+    useScreen(tester, tvSize);
+    final core = FakeCoreClient(
+      state: {
+        CoreField.ctx: loadCtxLoggedOutFixture(),
+        CoreField.discoverRows: loadBoardFixture(),
+      },
+    );
+    await tester.pumpWidget(harness(core, home: const DiscoverScreen()));
+    await tester.pumpAndSettle();
+
+    for (var i = 0; i < 6 && focusedLabel(tester) != 'Series'; i++) {
+      await press(tester, LogicalKeyboardKey.tab);
+    }
+    expect(focusedLabel(tester), 'Series');
+    await press(tester, LogicalKeyboardKey.select);
+    // The last plan of the rows, whatever ranges followed it.
+    Map<String, dynamic> lastRowsLoad() => core.dispatched
+        .lastWhere(
+          (action) =>
+              action.field == CoreField.discoverRows &&
+              action.action['action'] == 'Load',
+        )
+        .action;
+    expect(lastRowsLoad(), CoreActions.loadDiscoverRows(type: 'series').action);
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), startsWith('Catalog:'));
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<PosterTile>(), isTrue, reason: 'on the rows');
+
+    await systemBack(tester);
+    expect(
+      lastRowsLoad(),
+      CoreActions.loadDiscoverRows().action,
+      reason: 'Back from a type\'s rows is All',
+    );
+    expect(find.textContaining('Catalog:'), findsNothing);
+  });
+
   testWidgets('the D-pad walks the filter bar, then the grid, row by row', (
     tester,
   ) async {

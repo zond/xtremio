@@ -218,6 +218,7 @@ void main() {
     state: {
       CoreField.ctx: loadCtxLoggedOutFixture(),
       CoreField.board: loadBoardFixture(),
+      CoreField.discoverRows: loadBoardFixture(),
       CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
       CoreField.discover: loadDiscoverFixture(),
       CoreField.search: loadSearchFixture(),
@@ -945,6 +946,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // The catalog menu is a type's: choose one first.
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedLabel(tester) == 'Movies',
+        target: 'the Movies type',
+      );
+      await press(tester, LogicalKeyboardKey.select);
       await pressUntil(
         tester,
         LogicalKeyboardKey.tab,

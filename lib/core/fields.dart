@@ -4,6 +4,7 @@ enum CoreField {
   ctx('ctx'),
   continueWatchingPreview('continue_watching_preview'),
   board('board'),
+  discoverRows('discover_rows'),
   search('search'),
   discover('discover'),
   metaDetails('meta_details'),

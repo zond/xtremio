@@ -65,6 +65,66 @@ class BoardScreen extends StatefulWidget {
 }
 
 class _BoardScreenState extends State<BoardScreen> {
+  void _openCatalog(CatalogRow row) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DiscoverScreen(request: row.firstRequest),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Board')),
+    body: CatalogRows(
+      field: CoreField.board,
+      defaultFocus: true,
+      onSeeAll: _openCatalog,
+    ),
+  );
+}
+
+/// The board's rows: a "Continue watching" row, then one row per catalog
+/// that can be asked with nothing chosen, of [type] or of every type.
+///
+/// The Board tab shows every type on [CoreField.board]; Discover shows one
+/// type or all of them on [CoreField.discoverRows], its own field, so the
+/// two never replace each other's rows. Changing [type] plans the rows
+/// again and starts them from the top.
+class CatalogRows extends StatefulWidget {
+  const CatalogRows({
+    super.key,
+    required this.field,
+    required this.onSeeAll,
+    this.type,
+    this.defaultFocus = false,
+    this.empty,
+  });
+
+  /// [CoreField.board] or [CoreField.discoverRows].
+  final CoreField field;
+
+  /// The one type to show, or every type (null). The "Continue watching"
+  /// row follows it too.
+  final String? type;
+
+  /// A row's "See all" was pressed.
+  final ValueChanged<CatalogRow> onSeeAll;
+
+  /// Whether the first tile takes the remote when nothing else has it: the
+  /// Board, which is the screen the app opens on. A tab the viewer walks
+  /// to leaves the remote on the rail, like every other tab.
+  final bool defaultFocus;
+
+  /// Drawn where there are no rows at all, in place of the board's own
+  /// "install an addon" note.
+  final Widget? empty;
+
+  @override
+  State<CatalogRows> createState() => _CatalogRowsState();
+}
+
+class _CatalogRowsState extends State<CatalogRows> {
   CoreClient? _client;
   CoreFieldNotifier? _board;
   CoreFieldNotifier? _continueWatching;
@@ -103,7 +163,7 @@ class _BoardScreenState extends State<BoardScreen> {
       _continueWatching?.dispose();
       _ctx?.dispose();
       _client = client;
-      _board = CoreFieldNotifier(client, CoreField.board)
+      _board = CoreFieldNotifier(client, widget.field)
         ..addListener(_onBoardChanged);
       _continueWatching = CoreFieldNotifier(
         client,
@@ -112,16 +172,38 @@ class _BoardScreenState extends State<BoardScreen> {
       _ctx = null;
       _requestedStart = null;
       _requestedEnd = null;
-      client.dispatch(CoreActions.loadBoard());
+      client.dispatch(_loadAction());
       WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
     }
   }
 
   @override
+  void didUpdateWidget(CatalogRows oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.type == widget.type) return;
+    // Another type is another set of rows: planned again, requested again
+    // from the first, and looked at from the top.
+    _requestedStart = null;
+    _requestedEnd = null;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _client?.dispatch(_loadAction());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
+  }
+
+  CoreAction _loadAction() => widget.field == CoreField.discoverRows
+      ? CoreActions.loadDiscoverRows(type: widget.type)
+      : CoreActions.loadBoard(type: widget.type);
+
+  CoreAction _rangeAction(int start, int end) =>
+      widget.field == CoreField.discoverRows
+      ? CoreActions.loadDiscoverRowsRange(start, end)
+      : CoreActions.loadBoardRange(start, end);
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _scroll.dispose();
-    _client?.dispatch(CoreActions.unload(CoreField.board));
+    _client?.dispatch(CoreActions.unload(widget.field));
     _board?.removeListener(_onBoardChanged);
     _board?.dispose();
     _continueWatching?.dispose();
@@ -183,10 +265,17 @@ class _BoardScreenState extends State<BoardScreen> {
   List<_BoardRow> _rows(
     CatalogsWithExtraState board,
     ContinueWatchingState continueWatching,
-  ) => [
-    if (!continueWatching.isEmpty) _ContinueWatchingRow(continueWatching),
-    for (final row in board.visibleRows) _CatalogRow(row),
-  ];
+  ) {
+    final type = widget.type;
+    final watching = [
+      for (final item in continueWatching.items)
+        if (type == null || item.type == type) item,
+    ];
+    return [
+      if (watching.isNotEmpty) _ContinueWatchingRow(watching),
+      for (final row in board.visibleRows) _CatalogRow(row),
+    ];
+  }
 
   /// Dispatches `LoadRange` for the catalogs whose rows are on screen (plus
   /// overscan) when that widens what has been requested so far.
@@ -230,7 +319,7 @@ class _BoardScreenState extends State<BoardScreen> {
     if (nextStart == _requestedStart && nextEnd == _requestedEnd) return;
     _requestedStart = nextStart;
     _requestedEnd = nextEnd;
-    _client!.dispatch(CoreActions.loadBoardRange(nextStart, nextEnd));
+    _client!.dispatch(_rangeAction(nextStart, nextEnd));
   }
 
   void _openDetails(String type, String id, {String? videoId}) {
@@ -241,22 +330,8 @@ class _BoardScreenState extends State<BoardScreen> {
     );
   }
 
-  void _openCatalog(CatalogRow row) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DiscoverScreen(request: row.firstRequest),
-      ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final layout = _RowLayout.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Board')),
-      body: _body(layout),
-    );
-  }
+  Widget build(BuildContext context) => _body(_RowLayout.of(context));
 
   Widget _body(_RowLayout layout) => ListenableBuilder(
     listenable: Listenable.merge([_board!, _continueWatching!, _ctx]),
@@ -271,7 +346,7 @@ class _BoardScreenState extends State<BoardScreen> {
         if (!board.isLoaded || board.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
-        return const _EmptyBoard();
+        return widget.empty ?? const _EmptyBoard();
       }
       return CustomScrollView(
         key: const Key('board-rows'),
@@ -283,19 +358,19 @@ class _BoardScreenState extends State<BoardScreen> {
             itemExtent: layout.extent,
             itemCount: rows.length,
             itemBuilder: (context, index) => switch (rows[index]) {
-              _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
-                state: state,
+              _ContinueWatchingRow(:final items) => _ContinueWatchingRowView(
+                items: items,
                 layout: layout,
-                isFirstRow: index == 0,
+                isFirstRow: widget.defaultFocus && index == 0,
                 onOpen: (item) =>
                     _openDetails(item.type, item.id, videoId: item.videoId),
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
                 layout: layout,
-                isFirstRow: index == 0,
+                isFirstRow: widget.defaultFocus && index == 0,
                 onOpen: (item) => _openDetails(item.type, item.id),
-                onSeeAll: () => _openCatalog(row),
+                onSeeAll: () => widget.onSeeAll(row),
               ),
             },
           ),
@@ -329,9 +404,10 @@ sealed class _BoardRow {
 }
 
 final class _ContinueWatchingRow extends _BoardRow {
-  const _ContinueWatchingRow(this.state);
+  const _ContinueWatchingRow(this.items);
 
-  final ContinueWatchingState state;
+  /// The row's items: every one, or only those of the type being shown.
+  final List<LibraryItemView> items;
 }
 
 final class _CatalogRow extends _BoardRow {
@@ -469,13 +545,13 @@ class _RowHeader extends StatelessWidget {
 
 class _ContinueWatchingRowView extends StatelessWidget {
   const _ContinueWatchingRowView({
-    required this.state,
+    required this.items,
     required this.layout,
     required this.isFirstRow,
     required this.onOpen,
   });
 
-  final ContinueWatchingState state;
+  final List<LibraryItemView> items;
   final _RowLayout layout;
 
   /// The row's first tile is where TV focus starts on a fresh Board.
@@ -491,9 +567,9 @@ class _ContinueWatchingRowView extends StatelessWidget {
         Expanded(
           child: _HorizontalStrip(
             padding: layout.stripPadding,
-            itemCount: state.items.length,
+            itemCount: items.length,
             itemBuilder: (context, index) {
-              final item = state.items[index];
+              final item = items[index];
               return SizedBox(
                 width: layout.tileWidthFor(item.posterShape),
                 child: LibraryItemTile(

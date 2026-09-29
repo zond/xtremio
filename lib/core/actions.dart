@@ -72,6 +72,19 @@ abstract final class CoreActions {
   static CoreAction loadBoardRange(int start, int end) =>
       _catalogsWithExtraRange(CoreField.board, start, end);
 
+  /// Discover's rows before a catalog is chosen: the board's catalogs, of
+  /// [type] or of every type (null), on a field of their own so the Board
+  /// tab's rows are never replaced by a filtered set. Planned only, like
+  /// [loadBoard]; [loadDiscoverRowsRange] fetches.
+  static CoreAction loadDiscoverRows({String? type}) => CoreAction(
+    field: CoreField.discoverRows,
+    action: _load('CatalogsWithExtra', {'type': type, 'extra': <Object>[]}),
+  );
+
+  /// [loadBoardRange], for [loadDiscoverRows].
+  static CoreAction loadDiscoverRowsRange(int start, int end) =>
+      _catalogsWithExtraRange(CoreField.discoverRows, start, end);
+
   /// Search: every catalog whose manifest supports the `search` extra. Each
   /// Load also pushes [query] to the profile's search history, so callers
   /// debounce.
@@ -98,14 +111,6 @@ abstract final class CoreActions {
       'action': 'LoadRange',
       'args': {'start': start, 'end': end},
     }),
-  );
-
-  /// The Discover screen with no catalog chosen: the engine picks the first
-  /// catalog of the highest-priority type (movie, then series, ...) across
-  /// the installed addons.
-  static CoreAction loadDiscoverDefault() => CoreAction(
-    field: CoreField.discover,
-    action: _load('CatalogWithFilters', null),
   );
 
   /// One catalog with its filters (the Discover screen). Every entry of

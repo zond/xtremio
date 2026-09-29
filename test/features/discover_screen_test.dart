@@ -13,9 +13,20 @@ void main() {
   final topMovies = ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top');
 
   // CoreScope sits above MaterialApp, as in the app, so pushed routes see it.
-  Widget harness(FakeCoreClient core, {ResourceRequest? request}) => CoreScope(
+  //
+  // A catalog view unless [tab]: what most of this file is about -- the
+  // filter bar, the grid, the paging -- is one catalog, which is what a
+  // Discover opened on a catalog shows. The tab opens on rows, and has
+  // tests of its own below.
+  Widget harness(
+    FakeCoreClient core, {
+    ResourceRequest? request,
+    bool tab = false,
+  }) => CoreScope(
     client: core,
-    child: MaterialApp(home: DiscoverScreen(request: request)),
+    child: MaterialApp(
+      home: DiscoverScreen(request: tab ? null : (request ?? topMovies)),
+    ),
   );
 
   /// Phone width, below [FilterSegments.breakpoint].
@@ -131,7 +142,7 @@ void main() {
   });
 
   testWidgets(
-    'without a request lets the engine pick, shows the catalog name, unloads',
+    'opens its catalog, names it in the bar, and unloads it when it goes',
     (tester) async {
       final fixture = loadDiscoverFixture();
       final core = FakeCoreClient(state: {CoreField.discover: fixture});
@@ -142,7 +153,7 @@ void main() {
       expect(core.dispatched.single.field, CoreField.discover);
       expect(
         core.dispatched.single.action,
-        CoreActions.loadDiscoverDefault().action,
+        CoreActions.loadDiscover(topMovies).action,
       );
 
       // App bar names the selected catalog.

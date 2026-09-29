@@ -9,6 +9,7 @@ void main() {
         CoreField.ctx: 'ctx',
         CoreField.continueWatchingPreview: 'continue_watching_preview',
         CoreField.board: 'board',
+        CoreField.discoverRows: 'discover_rows',
         CoreField.search: 'search',
         CoreField.discover: 'discover',
         CoreField.metaDetails: 'meta_details',

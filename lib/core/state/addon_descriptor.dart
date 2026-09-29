@@ -1,3 +1,4 @@
+import '../resource.dart';
 import '../well_formed_text.dart';
 
 /// View over stremio-core's `Descriptor` JSON (camelCase): a manifest, the
@@ -93,10 +94,69 @@ final class ManifestCatalog {
   String get type => json['type'] as String;
   String? get name => json['name'] as String?;
 
+  /// The extra properties the catalog takes, from either form a manifest
+  /// may use: the full `extra` list, or the short `extraRequired` /
+  /// `extraSupported` pair, whose properties have no options -- which is
+  /// how stremio-core reads them (`ManifestExtra::iter`).
+  List<ManifestExtraProp> get extraProps {
+    final full = json['extra'];
+    if (full is List) {
+      return [
+        for (final prop in full)
+          if (prop is Map<String, dynamic> && prop['name'] is String)
+            ManifestExtraProp(
+              name: prop['name'] as String,
+              isRequired: prop['isRequired'] == true,
+              options: [...?(prop['options'] as List?)?.whereType<String>()],
+            ),
+      ];
+    }
+    final required = {
+      ...?(json['extraRequired'] as List?)?.whereType<String>(),
+    };
+    return [
+      for (final name
+          in (json['extraSupported'] as List?)?.whereType<String>() ??
+              const <String>[])
+        ManifestExtraProp(name: name, isRequired: required.contains(name)),
+    ];
+  }
+
+  /// Whether the catalog can be asked with nothing chosen: no property of
+  /// it is required. What puts a catalog on the board, as a row.
+  bool get needsNoInput => !extraProps.any((prop) => prop.isRequired);
+
+  /// The extra that opens the catalog: each required property at its
+  /// first option. Null when a required property has no options -- a
+  /// search-only catalog -- which nothing but a search can open.
+  /// stremio-core's `default_required_extra`, which decides what Discover
+  /// offers.
+  List<ExtraValue>? get defaultRequiredExtra {
+    final extra = <ExtraValue>[];
+    for (final prop in extraProps.where((prop) => prop.isRequired)) {
+      if (prop.options.isEmpty) return null;
+      extra.add(ExtraValue(prop.name, prop.options.first));
+    }
+    return extra;
+  }
+
   static List<ManifestCatalog> listFromJson(Object? json) => [
     for (final item in (json as List<dynamic>? ?? const []))
       ManifestCatalog(item as Map<String, dynamic>),
   ];
+}
+
+/// One extra property of a [ManifestCatalog].
+final class ManifestExtraProp {
+  const ManifestExtraProp({
+    required this.name,
+    this.isRequired = false,
+    this.options = const [],
+  });
+
+  final String name;
+  final bool isRequired;
+  final List<String> options;
 }
 
 /// `Manifest.behaviorHints`; every flag defaults to false.
