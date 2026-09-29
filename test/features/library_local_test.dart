@@ -225,6 +225,60 @@ void main() {
     );
   });
 
+  testWidgets('with more library than one page, Local pages it through '
+      'itself: its short grid cannot be scrolled to the end', (tester) async {
+    final (media, _) = await localMedia(
+      files: [localFacts(arrivalUri, 'Arrival.2016.1080p.mkv')],
+    );
+    final fixture = loadLibraryFixture();
+    final paged = FakeCoreClient(
+      state: {
+        CoreField.library: {
+          ...fixture,
+          'selectable': {
+            ...fixture['selectable'] as Map<String, dynamic>,
+            'next_page': {'request': const LibraryRequest(page: 2).toJson()},
+          },
+        },
+        CoreField.ctx: loadCtxLoggedOutFixture(),
+      },
+    );
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(
+      LocalMediaScope(
+        media: media,
+        child: CoreScope(
+          client: paged,
+          child: DownloadsScope(
+            client: downloads,
+            child: PlaybackScope(
+              createEngine: FakePlaybackEngine.new,
+              child: const MaterialApp(home: LibraryScreen()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    List<CoreAction> nextPages() => [
+      for (final action in paged.dispatched)
+        if (action.action['action'] == 'LibraryWithFilters') action,
+    ];
+    expect(nextPages(), isEmpty, reason: 'the whole grid pages by scrolling');
+    expect(find.widgetWithText(LibraryItemTile, 'Arrival'), findsNothing);
+
+    await tapLocal(tester);
+    expect(nextPages(), hasLength(1));
+    await tester.pump();
+    expect(nextPages(), hasLength(1), reason: 'once per length');
+
+    // The engine answers with the rest: the matched card is drawn.
+    paged.setState(CoreField.library, fixture);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(LibraryItemTile, 'Arrival'), findsOneWidget);
+  });
+
   testWidgets('Local asks for access where it may, and then lists what it '
       'finds', (tester) async {
     final (media, source) = await localMedia(access: LocalMediaAccess.askable);

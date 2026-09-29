@@ -548,6 +548,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text(driveReloadMessage(outcome))));
 
+  /// Asks for the engine's next page while a pill narrows the grid.
+  ///
+  /// **A narrowed grid cannot page by scrolling.** Remote, Local and
+  /// Downloaded keep a few of the engine's cards, which fit on one screen,
+  /// so [_onScroll] never fires -- and the merged cards ([_appended],
+  /// [_kept]) wait for the last page, so a matched title the library does
+  /// not hold never appeared under its own pill until something else had
+  /// paged the library through. The pages are the engine's own, cumulative
+  /// and cheap; one is asked for per length, as [_onScroll] asks.
+  void _pageThroughUnderAPill(LibraryState? state) {
+    if (state == null || !state.isLoaded || !state.hasNextPage) return;
+    if (!_remote && !_local && !_downloadedOnly) return;
+    if (_nextPageRequestedAt == state.items.length) return;
+    _nextPageRequestedAt = state.items.length;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _client?.dispatch(CoreActions.loadLibraryNextPage());
+    });
+  }
+
   bool _onScroll(ScrollNotification notification, LibraryState state) {
     if (notification.metrics.extentAfter < 600 &&
         state.hasNextPage &&
@@ -754,6 +773,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final unmatchedLocal = state == null || !state.isLoaded
             ? const <LocalMediaFile>[]
             : _unmatchedLocal(state);
+        _pageThroughUnderAPill(state);
         final isLoggedIn = _isLoggedIn;
         return TvLadder(
           child: Scaffold(
