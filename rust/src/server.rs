@@ -146,7 +146,8 @@ pub struct StartConfig {
     /// (which the system does not purge) and the app cache elsewhere.
     pub cache_dir: PathBuf,
     /// **Joins no swarm on its own**: no public trackers added to a
-    /// torrent, no DHT, no local service discovery. For a test whose torrent is
+    /// torrent, no DHT, no local service discovery -- and its torrent and
+    /// cast listeners bind loopback rather than every interface. For a test whose torrent is
     /// built on the spot: without this its info hash was announced to the
     /// public trackers and the DHT, and strangers dialled in. The app never
     /// sets it.
@@ -186,7 +187,13 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
         http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
-        lan_media_addr: Some(LAN_MEDIA_ADDR),
+        // Offline, on loopback: a test's cast listener is for this process
+        // and nothing on the LAN.
+        lan_media_addr: Some(if config.offline {
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)
+        } else {
+            LAN_MEDIA_ADDR
+        }),
         // **What the user asked to keep, and the only record of it.** The
         // server keeps none: it sweeps everything this set does not claim
         // before its session opens, which is the one moment early enough to
@@ -209,6 +216,11 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
         resolve_dht_bootstrap_names: !config.offline,
         enable_local_service_discovery: !config.offline,
         enable_dht: !config.offline,
+        torrent_listen_port: if config.offline {
+            stream_server::TorrentListenPort::Loopback
+        } else {
+            stream_server::TorrentListenPort::Ephemeral
+        },
         ..stream_server::ServerConfig::default()
     }
 }
@@ -1615,6 +1627,18 @@ mod tests {
         let test = config(true);
         assert!(!test.use_public_trackers && !test.resolve_dht_bootstrap_names);
         assert!(!test.enable_dht && !test.enable_local_service_discovery);
+        assert_eq!(app.lan_media_addr, Some(LAN_MEDIA_ADDR));
+        assert!(test
+            .lan_media_addr
+            .is_some_and(|addr| addr.ip().is_loopback()));
+        assert_eq!(
+            app.torrent_listen_port,
+            stream_server::TorrentListenPort::Ephemeral
+        );
+        assert_eq!(
+            test.torrent_listen_port,
+            stream_server::TorrentListenPort::Loopback
+        );
     }
 
     /// With no server running there is nothing to open, and that is an

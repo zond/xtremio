@@ -43,8 +43,9 @@ fn config(root: &std::path::Path) -> ServerConfig {
     }
 }
 
-/// The listener binds every interface, so the way to reach it from this
-/// process is loopback on the port it reported.
+/// Where to reach the listener from this process: loopback on the port it
+/// reported. A test's listener binds loopback only (`StartConfig::offline`);
+/// the app's binds every interface, which loopback reaches as well.
 fn loopback(addr: &str) -> anyhow::Result<SocketAddr> {
     let addr: SocketAddr = addr.parse()?;
     Ok(SocketAddr::from(([127, 0, 0, 1], addr.port())))
@@ -267,13 +268,12 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     // Both of those were counted, refusals and all. The count is not about
     // what was served: it is the answer to "did the receiver reach this
     // device at all", which a receiver told an unroutable address never
-    // does -- it hangs on the connect and reports nothing. Greater rather
-    // than equal because this listener is bound to every interface, and
-    // whatever else is on the LAN is welcome to knock.
+    // does -- it hangs on the connect and reports nothing. Exactly two:
+    // a test's listener is on loopback, so nothing else could have knocked.
     let served = server_lan_media_requests_served()?;
-    assert!(
-        served >= 2,
-        "the two requests above went uncounted ({served})"
+    assert_eq!(
+        served, 2,
+        "the two requests above, and only they, are counted"
     );
 
     // The URL a receiver is handed names an interface that can reach it.
@@ -301,14 +301,17 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     );
     // No peer at all -- what iOS leaves us with, since the Cast SDK reports
     // no receiver address there and only the Android half reads one off the
-    // route: the host's best-ranked interface, never loopback.
+    // route: still a URL. Which interface a wildcard-bound listener names
+    // then is stream-server's ranking, tested there on built interface lists
+    // (`lan_media::pick_host_ranks_what_a_receiver_could_reach`) rather than
+    // on whatever network this machine is on; a listener bound to one
+    // address, as a test's is, names that address.
     let best_effort = tokio::task::spawn_blocking(|| server_lan_media_base_url(None))
         .await??
         .expect("a base URL with no peer named");
     let best_effort = url::Url::parse(&best_effort)?;
     assert_eq!(best_effort.port(), Some(socket.port()));
-    assert_ne!(best_effort.host_str(), Some("127.0.0.1"));
-    assert_ne!(best_effort.host_str(), Some("0.0.0.0"));
+    assert_eq!(best_effort.host_str(), Some("127.0.0.1"));
 
     // Idempotent in both directions.
     let again = tokio::task::spawn_blocking(|| server_set_lan_media(true)).await??;
