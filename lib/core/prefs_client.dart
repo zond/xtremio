@@ -196,6 +196,11 @@ class AppPrefs extends ChangeNotifier {
   /// never reads this.
   static const String localFoldersKey = 'localFolders';
 
+  /// The `localFolderBookmarks` key: on macOS, each chosen folder's
+  /// security-scoped bookmark (base64), which is what lets a sandboxed app
+  /// read the folder again after it quits. Folder to bookmark.
+  static const String localFolderBookmarksKey = 'localFolderBookmarks';
+
   /// The `detailsVisits` key: which season and episode each title's
   /// details screen was left on (see [DetailsVisitMemory]).
   static const String detailsVisitsKey = 'detailsVisits';
@@ -327,6 +332,11 @@ class AppPrefs extends ChangeNotifier {
 
   /// The folders a desktop looks in -- see [localFoldersKey].
   List<String> get localFolders => _localFolders;
+
+  Map<String, String> _localFolderBookmarks = const {};
+
+  /// macOS's way back into each folder -- see [localFolderBookmarksKey].
+  Map<String, String> get localFolderBookmarks => _localFolderBookmarks;
 
   /// Where each title's details screen was left -- see [detailsVisitsKey].
   DetailsVisitMemory get detailsVisits => _detailsVisits;
@@ -510,6 +520,19 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(localFolderBookmarksKey)) {
+      final raw = stored[localFolderBookmarksKey];
+      final bookmarks = <String, String>{
+        if (raw is Map)
+          for (final MapEntry(:key, :value) in raw.entries)
+            if (key is String && value is String && value.isNotEmpty)
+              key: value,
+      };
+      if (!mapEquals(bookmarks, _localFolderBookmarks)) {
+        _localFolderBookmarks = bookmarks;
+        changed = true;
+      }
+    }
     if (loaded(detailsVisitsKey)) {
       final visits = DetailsVisitMemory.fromJson(stored[detailsVisitsKey]);
       if (visits != _detailsVisits) {
@@ -664,6 +687,14 @@ class AppPrefs extends ChangeNotifier {
     _localFolders = List.unmodifiable(folders);
     notifyListeners();
     await _write(localFoldersKey, folders.isEmpty ? null : folders);
+  }
+
+  /// Stores the macOS bookmarks of the chosen folders. Nothing draws from
+  /// them, so this tells no listener.
+  Future<void> setLocalFolderBookmarks(Map<String, String> bookmarks) async {
+    if (mapEquals(bookmarks, _localFolderBookmarks)) return;
+    _localFolderBookmarks = Map.unmodifiable(bookmarks);
+    await _write(localFolderBookmarksKey, bookmarks.isEmpty ? null : bookmarks);
   }
 
   /// Stores [value], or removes the key entirely once nothing is

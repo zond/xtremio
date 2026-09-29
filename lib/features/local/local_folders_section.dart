@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import 'folder_access.dart';
 import 'local_media.dart';
 
 /// Asks the viewer for a folder: its path, or null for a dialog closed
@@ -25,11 +26,15 @@ class LocalFoldersSection extends StatelessWidget {
     required this.prefs,
     required this.media,
     this.pickFolder = pickFolderWithTheSystem,
+    this.access = const NoFolderAccess(),
   });
 
   final AppPrefs prefs;
   final LocalMedia media;
   final FolderPicker pickFolder;
+
+  /// Keeps a picked folder readable after a restart (see [FolderAccess]).
+  final FolderAccess access;
 
   static const String addLabel = 'Add a folder';
   static const String removeTooltip = 'Stop looking here';
@@ -47,6 +52,9 @@ class LocalFoldersSection extends StatelessWidget {
     if (picked == null || picked.isEmpty) return;
     final folders = prefs.localFolders;
     if (folders.contains(picked)) return;
+    // Now, while the picker's grant holds: on macOS this is the only
+    // moment the folder can be bookmarked.
+    await access.remember(picked);
     await prefs.setLocalFolders([...folders, picked]);
     await media.refresh();
   }
@@ -56,6 +64,7 @@ class LocalFoldersSection extends StatelessWidget {
       for (final kept in prefs.localFolders)
         if (kept != folder) kept,
     ]);
+    await access.forget(folder);
     await media.refresh();
   }
 

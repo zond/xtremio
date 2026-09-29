@@ -188,17 +188,20 @@ desktop they come from folders chosen in Settings → Local, walked six
 levels deep. Each is matched to a title by name the way a Drive file is:
 matched ones are sources on their titles' pages and cards in the Library,
 tracked like any other play (resume, watched, Continue Watching); unmatched
-ones are listed under Local, with a frame of the video as their picture on
-Android, and play as they are. The list is renewed at start-up, whenever
+ones are listed under Local, with a frame of the video as their picture
+(Android's own thumbnail; on a desktop one taken with libmpv and cached),
+and play as they are. The list is renewed at start-up, whenever
 Local is opened and whenever the app comes back to the foreground, so a
 video deleted from the device drops out. The player opens them in
 place (`content://` or `file://`): nothing is copied or proxied, and there
 is nothing to download. The profile's built-in Local Files addon is
 answered empty inside the app, so it no longer shows as a catalog that
-could not be loaded. Not yet: the next episode's local file is not offered
-by the player's up-next, and on macOS a chosen folder is readable only
-until the app quits (the sandbox needs a security-scoped bookmark, not
-kept). See [ARCHITECTURE.md](ARCHITECTURE.md#local-videos).
+could not be loaded. The player's up-next plays the next episode's local
+file (after a download of it, before a Drive file). A wrong or missing
+match is corrected by renaming the file: the next scan drops the old match
+and asks about the new name. On macOS a chosen folder stays readable after
+a restart through a security-scoped bookmark. See
+[ARCHITECTURE.md](ARCHITECTURE.md#local-videos).
 
 ## Addons
 

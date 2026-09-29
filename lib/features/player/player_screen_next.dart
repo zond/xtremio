@@ -57,7 +57,9 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   /// details screen pointing at the episode so its streams can be picked.
   ///
   /// The new player gets, in order: a finished download of that episode
-  /// (the better source, and the only one offline), its linked Drive file
+  /// (the better source, and the only one offline), a video on this device
+  /// matched to it (as good, and needing nothing opened), its linked Drive
+  /// file
   /// (the engine cannot find one: a Drive play's request names a service
   /// that answers no addon query, [driveStreamRequest]), or the stream the
   /// engine found (same addon, same binge group). [_advancing] holds a
@@ -81,8 +83,10 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     }
     final downloads = DownloadsScope.maybeOf(context);
     final drive = DriveAccountScope.maybeOf(context);
+    final local = LocalMediaScope.maybeOf(context);
     final metaRequest = state.metaRequest ?? widget.metaRequest;
-    if (metaRequest == null || (downloads == null && drive == null)) {
+    if (metaRequest == null ||
+        (downloads == null && drive == null && local == null)) {
       _handOver(navigator, state, next, state.nextStream?.json);
       return;
     }
@@ -91,6 +95,7 @@ extension _PlayerNextEpisode on _PlayerScreenState {
         navigator,
         downloads,
         drive,
+        local,
         metaRequest,
         state,
         next,
@@ -99,12 +104,14 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   }
 
   /// Hands over to the next episode's own file when the registry has a
-  /// finished download of it, to its linked Drive file when there is one
-  /// that opens, and to whatever the engine found otherwise.
+  /// finished download of it, to a video on this device matched to it, to
+  /// its linked Drive file when there is one that opens, and to whatever
+  /// the engine found otherwise.
   Future<void> _handOverFromOwnCopy(
     NavigatorState navigator,
     DownloadsClient? downloads,
     DriveAccount? drive,
+    LocalMedia? local,
     ResourceRequest metaRequest,
     PlayerState state,
     VideoInfo next,
@@ -121,6 +128,22 @@ extension _PlayerNextEpisode on _PlayerScreenState {
         _handOver(navigator, state, next, playback);
         return;
       }
+    }
+    // The engine cannot find it either: a local play's request names the
+    // Local Files addon, which answers every stream query empty.
+    final onDevice = local?.files.matching(metaId, videoId: next.id);
+    if (onDevice != null && onDevice.isNotEmpty) {
+      _handOver(
+        navigator,
+        state,
+        next,
+        localStreamJson(onDevice.first),
+        streamRequest: localStreamRequest(
+          type: metaRequest.path.type,
+          videoId: next.id,
+        ),
+      );
+      return;
     }
     final linked = drive?.files.matching(metaId, videoId: next.id);
     if (drive != null && linked != null && linked.isNotEmpty) {
@@ -155,8 +178,8 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   ///
   /// The new player's stream request is this one's with the id moved on,
   /// unless [streamRequest] names the one [stream] really came from: a
-  /// Drive file found for the next episode is not the addon this episode
-  /// played from.
+  /// Drive file or a local video found for the next episode is not the
+  /// addon this episode played from.
   void _handOver(
     NavigatorState navigator,
     PlayerState state,

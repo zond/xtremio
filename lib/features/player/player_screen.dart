@@ -29,6 +29,8 @@ import 'subtitle_timing.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
+import '../local/local_media.dart';
+import '../local/local_playback.dart';
 import 'up_next_card.dart';
 
 part 'player_screen_open.dart';

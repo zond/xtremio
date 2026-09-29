@@ -244,6 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               prefs: _prefs,
               media: media,
               pickFolder: widget.pickFolder,
+              access: (media.source as DesktopLocalMediaSource).folderAccess,
             ),
           ],
           const _SectionHeader('Player'),

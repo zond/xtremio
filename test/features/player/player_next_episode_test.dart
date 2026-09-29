@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
+import 'package:xtremio/features/local/local_media.dart';
+import 'package:xtremio/features/local/local_playback.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
@@ -40,6 +42,7 @@ void main() {
     FakeCastClient? cast,
     DriveAccount? drive,
     DriveFileOpener? driveOpener,
+    LocalMedia? localMedia,
   }) {
     final harness = PlayerHarness(
       cast: cast,
@@ -53,6 +56,7 @@ void main() {
       downloads: downloads,
       drive: drive,
       driveOpener: driveOpener,
+      localMedia: localMedia,
     );
     harness.fixture['nextVideo'] = nextVideo;
     harness.fixture['nextStream'] = withStream ? nextStream : null;
@@ -399,6 +403,88 @@ void main() {
         )['streamRequest']['base'],
         harness.selected['streamRequest']['base'],
       );
+    });
+  });
+
+  group('a video on this device of the next episode', () {
+    const localUri = 'content://media/external/video/media/12';
+
+    Future<LocalMedia> withNextEpisodeLocally() async {
+      final prefs = AppPrefs(client: FakePrefsClient());
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await prefs.setLocalMedia(
+        LocalMediaFiles.empty
+            .reconciled([
+              (
+                uri: localUri,
+                name: 'The.Show.S01E02.mkv',
+                size: null,
+                durationMillis: null,
+                height: null,
+              ),
+            ])
+            .answering(
+              localUri,
+              const LinkedDriveMatch(
+                cinemetaId: 'tt0063350',
+                type: 'series',
+                name: 'The Show',
+                season: 1,
+                episode: 2,
+              ),
+            ),
+      );
+      final media = LocalMedia(prefs: prefs);
+      addTearDown(media.dispose);
+      return media;
+    }
+
+    testWidgets('is what the next player opens, at its own address, under '
+        'the Local Files addon\'s request -- ahead of a Drive file', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final opener = FakeDriveFileOpener();
+      final harness = harnessWithNext(
+        drive: await withNextEpisodeOnDrive(),
+        driveOpener: opener,
+        localMedia: await withNextEpisodeLocally(),
+      );
+      await harness.pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+
+      expect(opener.asked, isEmpty, reason: 'on the device already');
+      expect(harness.engines, hasLength(2));
+      final next = loadArgs(
+        harness.core.dispatched.lastWhere((a) => a.action['action'] == 'Load'),
+      );
+      expect(next['stream']['url'], localUri);
+      expect(
+        next['streamRequest'],
+        localStreamRequest(
+          type: harness.selected['metaRequest']['path']['type'] as String,
+          videoId: nextId,
+        ).toJson(),
+      );
+    });
+
+    testWidgets('comes after a download of it', (tester) async {
+      useWideViewport(tester);
+      final downloads = withNextEpisodeOnDisk();
+      addTearDown(downloads.dispose);
+      final harness = harnessWithNext(
+        downloads: downloads,
+        localMedia: await withNextEpisodeLocally(),
+      );
+      await harness.pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+
+      expect(lastLoadedStream(harness)['url'], nextUrl);
     });
   });
 

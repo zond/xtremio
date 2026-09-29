@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/local/android_local_media_source.dart';
 import 'package:xtremio/features/local/desktop_local_media_source.dart';
+import 'package:xtremio/features/local/folder_access.dart';
 import 'package:xtremio/features/local/local_folders_section.dart';
 import 'package:xtremio/features/local/local_media.dart';
 
@@ -96,6 +97,40 @@ void main() {
 
       await media.refresh();
       expect(searches, asked, reason: 'every file was answered already');
+    });
+
+    test('renaming a file is how a match is corrected: the old match goes '
+        'and the new name is asked about, on Android (same address) and on '
+        'a desktop (new address)', () async {
+      final source = FakeLocalMediaSource(
+        files: [
+          localFacts(holidayUri, 'Holiday Party.mkv'),
+          localFacts('file:///films/old.mkv', 'Holiday Party 2.mkv'),
+        ],
+      );
+      final media = LocalMedia(
+        prefs: await prefs(),
+        source: source,
+        search: _cinemeta,
+      );
+      addTearDown(media.dispose);
+      await media.refresh();
+      expect(media.files.forUri(holidayUri)!.match, isNull);
+
+      source.files = [
+        localFacts(holidayUri, 'Arrival.2016.1080p.mkv'),
+        localFacts('file:///films/Arrival (2016).mkv', 'Arrival (2016).mkv'),
+      ];
+      await media.refresh();
+      expect(media.files.forUri(holidayUri)!.match?.cinemetaId, 'tt2543164');
+      expect(media.files.forUri('file:///films/old.mkv'), isNull);
+      expect(
+        media.files
+            .forUri('file:///films/Arrival (2016).mkv')!
+            .match
+            ?.cinemetaId,
+        'tt2543164',
+      );
     });
 
     test('a catalogue that cannot be reached leaves the file for the next '
@@ -359,6 +394,36 @@ void main() {
       expect(find.text('/home/me/Films'), findsNothing);
     });
 
+    testWidgets('a folder is bookmarked as it is added and forgotten as it '
+        'is dropped; a scan opens the bookmarks first', (tester) async {
+      final (p, media, _) = await setUpMedia();
+      final access = _RecordingAccess();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LocalFoldersSection(
+              prefs: p,
+              media: media,
+              access: access,
+              pickFolder: () async => '/Users/me/Films',
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text(LocalFoldersSection.addLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(LocalFoldersSection.removeTooltip));
+      await tester.pumpAndSettle();
+      expect(access.calls, [
+        'remember /Users/me/Films',
+        'forget /Users/me/Films',
+      ]);
+
+      final source = DesktopLocalMediaSource(prefs: p, folderAccess: access);
+      await source.scan();
+      expect(access.calls.last, 'open');
+    });
+
     test('the scan line counts in words a person says', () {
       expect(
         LocalFoldersSection.statusLine(scanning: true, found: 3),
@@ -396,4 +461,17 @@ class _ThrowingSource implements LocalMediaSource {
   @override
   Future<Uint8List?> thumbnail(String uri, {required int size}) =>
       throw PlatformException(code: 'x');
+}
+
+class _RecordingAccess implements FolderAccess {
+  final List<String> calls = [];
+
+  @override
+  Future<void> remember(String folder) async => calls.add('remember $folder');
+
+  @override
+  Future<void> forget(String folder) async => calls.add('forget $folder');
+
+  @override
+  Future<void> open() async => calls.add('open');
 }

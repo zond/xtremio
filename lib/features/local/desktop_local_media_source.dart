@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../core/core.dart';
+import 'desktop_thumbnails.dart';
+import 'folder_access.dart';
 import 'local_media.dart';
 
 /// [LocalMediaSource] on a desktop: the folders the viewer chose in
@@ -15,9 +17,21 @@ import 'local_media.dart';
 /// [maxDepth] and [maxFiles] so a folder chosen by mistake -- a whole disk
 /// -- costs a bounded scan.
 class DesktopLocalMediaSource implements LocalMediaSource {
-  const DesktopLocalMediaSource({required this.prefs});
+  DesktopLocalMediaSource({
+    required this.prefs,
+    DesktopThumbnails? thumbnails,
+    FolderAccess? folderAccess,
+  }) : thumbnails = thumbnails ?? DesktopThumbnails(),
+       folderAccess = folderAccess ?? platformFolderAccess(prefs);
 
   final AppPrefs prefs;
+
+  /// Where a card's frame comes from: see [DesktopThumbnails].
+  final DesktopThumbnails thumbnails;
+
+  /// What keeps a chosen folder readable after a restart (macOS's
+  /// bookmarks); opened before every walk.
+  final FolderAccess folderAccess;
 
   /// How deep under a chosen folder the walk goes: a film in its own
   /// folder, a series in season folders, a collection above either.
@@ -59,6 +73,7 @@ class DesktopLocalMediaSource implements LocalMediaSource {
 
   @override
   Future<List<LocalMediaFacts>> scan() async {
+    await folderAccess.open();
     final found = <LocalMediaFacts>[];
     for (final folder in prefs.localFolders) {
       await _walk(Directory(folder), 0, found);
@@ -119,10 +134,11 @@ class DesktopLocalMediaSource implements LocalMediaSource {
     return path.substring(path.lastIndexOf(Platform.pathSeparator) + 1);
   }
 
-  /// None: a desktop has no system thumbnailer this app can ask, so a card
-  /// keeps its icon.
+  /// A frame taken with libmpv and kept on disk ([DesktopThumbnails]): a
+  /// desktop has no system thumbnailer the app can ask.
   @override
-  Future<Uint8List?> thumbnail(String uri, {required int size}) async => null;
+  Future<Uint8List?> thumbnail(String uri, {required int size}) =>
+      thumbnails.thumbnail(uri, size: size);
 
   /// Whether [name] ends in one of [videoExtensions].
   static bool isVideoName(String name) {

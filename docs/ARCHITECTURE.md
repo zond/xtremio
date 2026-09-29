@@ -899,8 +899,25 @@ Android 14's partial grant ("Select photos and videos") is its own state,
 (`lib/features/local/local_thumbnail.dart`), an `ImageProvider` over
 `LocalMediaSource.thumbnail`: on Android `ContentResolver.loadThumbnail`,
 the frame the system keeps for every indexed video, sent as JPEG; nothing
-is stored by the app. A desktop answers none, and the card keeps its
-icon.
+is stored by the app. A desktop has no system thumbnailer to ask, so
+`DesktopThumbnails` (`desktop_thumbnails.dart`) takes a frame with a
+hidden, muted libmpv player -- video decoding switched back on (media_kit
+sets `vid=no` without a view), started a tenth of the way in, scaled to
+card size by an mpv `vf` -- one file at a time, and keeps it in the cache
+directory under a hash of the path, modification time and length.
+
+**macOS folders.** A sandboxed app reads a picked folder only until it
+quits, so `MacFolderAccess` (`folder_access.dart`) takes a
+security-scoped bookmark when the folder is added (`localFolderBookmarks`)
+and opens every bookmark before a walk, keeping the fresh one when the
+system calls a bookmark stale. The native half is `FolderAccess` in
+`macos/Runner/MainFlutterWindow.swift`, with the
+`files.bookmarks.app-scope` entitlement.
+
+**Up next.** The player hands over to the next episode's local file after a
+download of it and before a linked Drive file
+(`player_screen_next.dart`): the engine cannot find it, because the Local
+Files addon answers every stream query empty.
 
 **Playing.** `localStreamJson` hands the player the file's own address:
 libmpv opens `content://` through the file descriptor media_kit opens for

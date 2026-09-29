@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
+import 'package:xtremio/features/local/local_media.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
@@ -41,6 +42,7 @@ class PlayerHarness {
     this.prefs,
     this.drive,
     this.driveOpener,
+    this.localMedia,
     this.navigatorObservers = const [],
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
@@ -203,6 +205,10 @@ class PlayerHarness {
   /// FFI.
   final DriveFileOpener? driveOpener;
 
+  /// This device's videos above the screen, or null for no
+  /// [LocalMediaScope].
+  final LocalMedia? localMedia;
+
   /// Observers on the screen's own navigator: how a test watches what the
   /// player pushes over itself.
   final List<NavigatorObserver> navigatorObservers;
@@ -268,9 +274,10 @@ class PlayerHarness {
         : DownloadsScope(client: downloads, child: casted);
     final prefs = this.prefs;
     final drive = this.drive;
+    final withLocal = LocalMediaScope(media: localMedia, child: scoped);
     final withDrive = drive == null
-        ? scoped
-        : DriveAccountScope(account: drive, child: scoped);
+        ? withLocal
+        : DriveAccountScope(account: drive, child: withLocal);
     final withPrefs = prefs == null
         ? withDrive
         : PrefsScope(prefs: prefs, child: withDrive);
