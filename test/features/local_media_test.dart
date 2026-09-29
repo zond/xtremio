@@ -180,6 +180,12 @@ void main() {
               'height': 1080,
             },
             {'uri': holidayUri, 'name': 'Holiday.mp4', 'height': null},
+            {
+              'uri': 'content://x/10',
+              'name': 'pappas.pengar.s01e07.mkv',
+              'folder': 'Sample',
+            },
+            {'uri': 'content://x/11', 'name': 'sample-arrival.mkv'},
             {'name': 'no address.mkv'},
             {'uri': 'content://x/9'},
           ],
@@ -240,6 +246,22 @@ void main() {
         File.fromUri(Uri.parse(found.first.uri)).existsSync(),
         isTrue,
         reason: 'the address is the file\'s own',
+      );
+    });
+
+    test('a release\'s sample clip is not listed', () async {
+      touch('Films/Arrival.2016/Sample/arrival.sample.mkv');
+      touch('Films/Arrival.2016/Sample/whatever.mkv');
+      touch('Films/Arrival.2016/sample-arrival.mkv');
+      touch('Films/Arrival.2016/Arrival.2016.mkv');
+      // A title with the word in it is a title.
+      touch('Films/The.Sample.Man.2020.mkv');
+      final p = await prefs();
+      await p.setLocalFolders(['${root.path}/Films']);
+      final found = await DesktopLocalMediaSource(prefs: p).scan();
+      expect(
+        [for (final file in found) file.name],
+        ['Arrival.2016.mkv', 'The.Sample.Man.2020.mkv'],
       );
     });
 

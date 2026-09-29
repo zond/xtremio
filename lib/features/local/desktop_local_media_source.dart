@@ -91,7 +91,9 @@ class DesktopLocalMediaSource implements LocalMediaSource {
       if (name.isEmpty || name.startsWith('.')) continue;
       if (child is Directory) {
         await _walk(child, depth + 1, found);
-      } else if (child is File && isVideoName(name)) {
+      } else if (child is File &&
+          isVideoName(name) &&
+          !isReleaseSample(name, folder: _nameOf(dir))) {
         int? size;
         try {
           size = await child.length();
@@ -107,6 +109,13 @@ class DesktopLocalMediaSource implements LocalMediaSource {
         ));
       }
     }
+  }
+
+  static String _nameOf(Directory dir) {
+    final path = dir.path.endsWith(Platform.pathSeparator)
+        ? dir.path.substring(0, dir.path.length - 1)
+        : dir.path;
+    return path.substring(path.lastIndexOf(Platform.pathSeparator) + 1);
   }
 
   /// Whether [name] ends in one of [videoExtensions].

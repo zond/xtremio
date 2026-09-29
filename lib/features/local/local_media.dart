@@ -27,6 +27,19 @@ LocalMediaSource? platformLocalMediaSource(AppPrefs prefs) {
   return null;
 }
 
+/// Whether [name], in the folder named [folder], is a release's sample
+/// clip rather than the release: a scene release carries a minute of
+/// itself in a `Sample` folder, or named `sample-...` or `....sample.mkv`,
+/// and a list of them beside the films is noise. Both sources leave them
+/// out.
+bool isReleaseSample(String name, {String? folder}) {
+  if (folder != null && folder.toLowerCase() == 'sample') return true;
+  final lower = name.toLowerCase();
+  return lower.startsWith('sample-') ||
+      lower.startsWith('sample.') ||
+      RegExp(r'[.\-_]sample\.[a-z0-9]+$').hasMatch(lower);
+}
+
 /// What a scan could do.
 enum LocalMediaAccess {
   /// The source has what it needs: the index can be read, or folders are

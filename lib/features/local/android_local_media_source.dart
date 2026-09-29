@@ -41,7 +41,8 @@ class AndroidLocalMediaSource implements LocalMediaSource {
     final rows = await channel.invokeListMethod<Object?>('scan') ?? const [];
     return [
       for (final row in rows)
-        if (row case {'uri': final String uri, 'name': final String name})
+        if (row case {'uri': final String uri, 'name': final String name}
+            when !isReleaseSample(name, folder: _string(row['folder'])))
           (
             uri: uri,
             name: name,
@@ -53,4 +54,6 @@ class AndroidLocalMediaSource implements LocalMediaSource {
   }
 
   static int? _int(Object? value) => value is int ? value : null;
+
+  static String? _string(Object? value) => value is String ? value : null;
 }

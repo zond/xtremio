@@ -22,7 +22,7 @@ import java.util.concurrent.Executors
  *
  * From Dart: `access` ("granted", "askable" or "unavailable"),
  * `requestAccess` (the same, after the system dialog), and `scan` (one map
- * per video: `uri`, `name`, `size`, `durationMillis`, `height`).
+ * per video: `uri`, `name`, `size`, `durationMillis`, `height`, `folder`).
  *
  * **The index, not the disk.** MediaStore already knows every video on the
  * device's storage and on a USB drive plugged into it, so nothing here
@@ -163,7 +163,8 @@ class LocalMediaChannel(
             val height = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
             val path = cursor.getColumnIndexOrThrow(where)
             while (cursor.moveToNext()) {
-                if (isCameraFolder(cursor.getString(path))) continue
+                val folder = cursor.getString(path)
+                if (isCameraFolder(folder)) continue
                 val displayName = cursor.getString(name) ?: continue
                 rows.add(
                     mapOf(
@@ -173,6 +174,8 @@ class LocalMediaChannel(
                         "size" to cursor.longOrNull(size),
                         "durationMillis" to cursor.longOrNull(duration),
                         "height" to cursor.longOrNull(height),
+                        // For the Dart side's sample rule.
+                        "folder" to innermostFolder(folder, Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q),
                     ),
                 )
             }
@@ -194,6 +197,16 @@ class LocalMediaChannel(
          * `DCIM/Camera/` and the like: a relative path from Android 10, a
          * whole path before it, so both are matched on the folder's name.
          */
+        /**
+         * The name of the folder a video is in: the last part of a relative
+         * path (Android 10 on), or the one before the file's own name in a
+         * whole path (before it).
+         */
+        fun innermostFolder(path: String?, relative: Boolean): String? {
+            val parts = path?.split('/')?.filter { it.isNotEmpty() } ?: return null
+            return if (relative) parts.lastOrNull() else parts.dropLast(1).lastOrNull()
+        }
+
         fun isCameraFolder(path: String?): Boolean {
             if (path == null) return false
             val normalised = "/" + path.trimStart('/')
