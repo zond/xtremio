@@ -145,6 +145,12 @@ pub struct StartConfig {
     /// in `lib/main.dart`, the app's external files directory on Android
     /// (which the system does not purge) and the app cache elsewhere.
     pub cache_dir: PathBuf,
+    /// **Joins no swarm on its own**: no public trackers added to a
+    /// torrent, no DHT, no local service discovery. For a test whose torrent is
+    /// built on the spot: without this its info hash was announced to the
+    /// public trackers and the DHT, and strangers dialled in. The app never
+    /// sets it.
+    pub offline: bool,
 }
 
 fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
@@ -197,6 +203,12 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
         // so it is configured here, once, from the one place this app
         // writes that origin down.
         drive_refresh_endpoint: Url::parse(DRIVE_REFRESH_ENDPOINT).ok(),
+        // What stream-server's own offline tests turn off
+        // (`torrent_fixtures::offline_config`); see `StartConfig::offline`.
+        use_public_trackers: !config.offline,
+        resolve_dht_bootstrap_names: !config.offline,
+        enable_local_service_discovery: !config.offline,
+        enable_dht: !config.offline,
         ..stream_server::ServerConfig::default()
     }
 }
@@ -1226,6 +1238,7 @@ mod tests {
             StartConfig {
                 config_dir: tmp.path().join("server"),
                 cache_dir: tmp.path().join("cache"),
+                offline: false,
             },
         )
         .expect("server start");
@@ -1255,6 +1268,7 @@ mod tests {
         let config = StartConfig {
             config_dir: tmp.path().join("server"),
             cache_dir: tmp.path().join("cache"),
+            offline: false,
         };
         let traced = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
 
@@ -1301,6 +1315,7 @@ mod tests {
             StartConfig {
                 config_dir: tmp.path().join("server"),
                 cache_dir: tmp.path().join("cache"),
+                offline: false,
             },
         )
         .expect("server start");
@@ -1341,6 +1356,7 @@ mod tests {
         StartConfig {
             config_dir: tmp.join("server"),
             cache_dir: tmp.join("cache"),
+            offline: false,
         }
     }
 
@@ -1570,12 +1586,35 @@ mod tests {
         let config = server_config(&StartConfig {
             config_dir: PathBuf::from("/tmp/xtremio-test-config"),
             cache_dir: PathBuf::from("/tmp/xtremio-test-cache"),
+            offline: false,
         });
         assert_eq!(config.drive_refresh_endpoint, Some(url));
         // And Drive itself stays the server's own constant: an origin this
         // side could name would be a credentialed relay with a cache behind
         // it (`routes::drive::DriveEndpoints`).
         assert_eq!(config.drive_api_base, None);
+    }
+
+    /// **The app joins the swarm; only an offline start does not.** The
+    /// app's config keeps public trackers, the DHT and local discovery --
+    /// without them a real torrent finds no peers -- and `offline` turns all
+    /// of them off, which is what keeps a test's made-up torrent from being
+    /// announced to strangers.
+    #[test]
+    fn only_an_offline_start_keeps_off_the_swarm() {
+        let config = |offline| {
+            server_config(&StartConfig {
+                config_dir: PathBuf::from("/tmp/xtremio-test-config"),
+                cache_dir: PathBuf::from("/tmp/xtremio-test-cache"),
+                offline,
+            })
+        };
+        let app = config(false);
+        assert!(app.use_public_trackers && app.resolve_dht_bootstrap_names);
+        assert!(app.enable_dht && app.enable_local_service_discovery);
+        let test = config(true);
+        assert!(!test.use_public_trackers && !test.resolve_dht_bootstrap_names);
+        assert!(!test.enable_dht && !test.enable_local_service_discovery);
     }
 
     /// With no server running there is nothing to open, and that is an

@@ -19,8 +19,22 @@ static SERVER: Mutex<()> = Mutex::const_new(());
 
 use xtremio_core::api::server::{
     server_lan_media_base_url, server_lan_media_requests_served, server_lan_media_running,
-    server_set_lan_media, server_settings, server_start, server_stop, ServerConfig,
+    server_set_lan_media, server_settings, server_stop, ServerConfig,
 };
+
+/// The embedded server, started the way the app starts it but **joining no
+/// swarm**: no public trackers, no DHT, no local discovery
+/// (`xtremio_core::server::StartConfig::offline`). The torrents here are
+/// built on the spot; announced, their info hashes went to the public
+/// trackers and the DHT, and strangers dialled in.
+fn server_start(config: ServerConfig) -> anyhow::Result<String> {
+    xtremio_core::server::start(xtremio_core::server::StartConfig {
+        config_dir: config.config_dir.into(),
+        cache_dir: config.cache_dir.into(),
+        offline: true,
+    })
+    .map(|url| url.to_string())
+}
 
 fn config(root: &std::path::Path) -> ServerConfig {
     ServerConfig {

@@ -10,9 +10,23 @@ use reqwest::StatusCode;
 use xtremio_core::api::server::{
     server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
     server_close_proxy_streams, server_dht_status, server_set_background,
-    server_set_idle_sharing_held, server_settings, server_start, server_stop,
-    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
+    server_set_idle_sharing_held, server_settings, server_stop, server_storage_report,
+    server_torrent_stats, server_update_settings, ServerConfig,
 };
+
+/// The embedded server, started the way the app starts it but **joining no
+/// swarm**: no public trackers, no DHT, no local discovery
+/// (`xtremio_core::server::StartConfig::offline`). The torrents here are
+/// built on the spot; announced, their info hashes went to the public
+/// trackers and the DHT, and strangers dialled in.
+fn server_start(config: ServerConfig) -> anyhow::Result<String> {
+    xtremio_core::server::start(xtremio_core::server::StartConfig {
+        config_dir: config.config_dir.into(),
+        cache_dir: config.cache_dir.into(),
+        offline: true,
+    })
+    .map(|url| url.to_string())
+}
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
 /// downloaded here: the stats calls only create its engine.

@@ -20,9 +20,21 @@ use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
     downloads_add, downloads_list, downloads_open, downloads_remove, downloads_start_fresh,
 };
-use xtremio_core::api::server::{
-    server_settings, server_start, server_update_settings, ServerConfig,
-};
+use xtremio_core::api::server::{server_settings, server_update_settings, ServerConfig};
+
+/// The embedded server, started the way the app starts it but **joining no
+/// swarm**: no public trackers, no DHT, no local discovery
+/// (`xtremio_core::server::StartConfig::offline`). The torrents here are
+/// built on the spot; announced, their info hashes went to the public
+/// trackers and the DHT, and strangers dialled in.
+fn server_start(config: ServerConfig) -> anyhow::Result<String> {
+    xtremio_core::server::start(xtremio_core::server::StartConfig {
+        config_dir: config.config_dir.into(),
+        cache_dir: config.cache_dir.into(),
+        offline: true,
+    })
+    .map(|url| url.to_string())
+}
 
 /// Whole 16 KiB pieces per file, so no piece straddles the two and "this
 /// file is complete" means only its own bytes are on disk.

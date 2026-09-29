@@ -28,6 +28,7 @@ impl From<ServerConfig> for crate::server::StartConfig {
         Self {
             config_dir: config.config_dir.into(),
             cache_dir: config.cache_dir.into(),
+            offline: false,
         }
     }
 }

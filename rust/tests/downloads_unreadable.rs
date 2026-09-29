@@ -13,7 +13,21 @@
 //! The server and the storage directory are process globals, so it is one
 //! test function in a binary of its own.
 
-use xtremio_core::api::server::{server_start, server_stop, ServerConfig};
+use xtremio_core::api::server::{server_stop, ServerConfig};
+
+/// The embedded server, started the way the app starts it but **joining no
+/// swarm**: no public trackers, no DHT, no local discovery
+/// (`xtremio_core::server::StartConfig::offline`). The torrents here are
+/// built on the spot; announced, their info hashes went to the public
+/// trackers and the DHT, and strangers dialled in.
+fn server_start(config: ServerConfig) -> anyhow::Result<String> {
+    xtremio_core::server::start(xtremio_core::server::StartConfig {
+        config_dir: config.config_dir.into(),
+        cache_dir: config.cache_dir.into(),
+        offline: true,
+    })
+    .map(|url| url.to_string())
+}
 
 /// A torrent the registry names in a way this build cannot parse.
 const NEWER: &str = "1111111111111111111111111111111111111111";
