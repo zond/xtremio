@@ -39,9 +39,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// resolutions across restarts, and this is one row at a time that Back
   /// puts away (see [_openSourceGroup]).
   ///
-  /// Everything around the sources stays where it was, below them: the
-  /// addons that had nothing, the ones that failed, and the notice when
-  /// nobody had anything.
+  /// Below them, only when no addon had anything for this title: the
+  /// notice that says so ([_tvNothingFound]). What each addon did besides
+  /// answer is not drawn.
   List<Widget> _tvSourceSlivers(
     MetaDetailsState state, {
     required bool isSectioned,
@@ -49,8 +49,6 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     required List<StreamSection<SourceRow>> sections,
     required List<SourceGroup> grouped,
     required ProfileState? profile,
-    required List<StreamGroup> empties,
-    required List<AddonFailure> failures,
     required bool foundNothing,
     required bool noneYet,
     required (StreamGroup, StreamInfo)? lastUsed,
@@ -99,13 +97,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     // open sources rung with nothing under its header at all; the row the
     // pills will fill gets a spinner in its middle instead.
     final waiting = groups.isEmpty && state.isLoadingStreams;
-    final accounting = _tvAccounting(
-      profile: profile,
-      empties: empties,
-      failures: failures,
-      foundNothing: foundNothing,
-      isEpisode: state.hasVideos,
-    );
+    final nothing = foundNothing
+        ? _tvNothingFound(isEpisode: state.hasVideos)
+        : null;
     // A rung with nothing behind its header is not drawn at all, so the
     // walk steps over it rather than stopping on a line that opens
     // nothing.
@@ -114,7 +108,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
       state,
       hasLastUsed: lastUsedStream != null,
       hasSources: hasSources,
-      hasAddons: accounting != null,
+      hasAddons: nothing != null,
     );
     final sourcesOpen = rung == _DetailsRung.sources;
     // What Back has to put away, which is the row [TvSourceRows] will
@@ -249,13 +243,12 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
           key: const ValueKey('tv-more-like-this'),
           child: _tvSimilarRung(open: rung == _DetailsRung.moreLikeThis),
         ),
-      if (accounting != null)
+      if (nothing != null)
         SliverToBoxAdapter(
-          key: const ValueKey('tv-source-accounting'),
+          key: const ValueKey('tv-nothing-found'),
           child: TvLadderRung(
             level: _ladderAddonsHeader,
-            label: accounting.label,
-            summary: accounting.summary,
+            label: nothing.label,
             open: rung == _DetailsRung.addons,
             onSelect: () => _selectRung(_DetailsRung.addons),
             children: [
@@ -267,7 +260,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
                 // D-pad.
                 child: TvSourceRow(
                   defaultFocus: _startedOn == null,
-                  sources: accounting.sources,
+                  sources: nothing.sources,
                 ),
               ),
             ],
@@ -371,83 +364,30 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     ].join(' · ');
   }
 
-  /// What the addons did other than answer with streams, as a rung of its
-  /// own at the foot of the ladder; null when there is nothing to account
-  /// for.
+  /// No addon had anything for this title: a rung of its own at the foot
+  /// of the ladder, named for it, whose one card opens the addons -- on a
+  /// fresh profile it is the answer to the screen, and a card to press is
+  /// how the remote gets anywhere from it.
   ///
-  /// A rung and not one more pill among the resolutions: it is not a
-  /// group of sources, and its one line -- how many failed, how many had
-  /// nothing -- is exactly the shape a rung header has and nothing a
-  /// 36 dp pill could carry. The row underneath carries
-  /// the names, what each dead addon said, and the two things worth doing
-  /// about one: opening its details, whose manifest fetch is the
-  /// reachability test (select), and uninstalling it (a hold, since a
-  /// button drawn inside a card cannot be reached by a remote).
-  ///
-  /// Nobody having anything at all is not one more line here but the
-  /// rung's own name, because on a fresh profile it is the answer to the
-  /// screen rather than a footnote to it.
-  ({String label, String summary, List<TvSource> sources})? _tvAccounting({
-    required ProfileState? profile,
-    required List<StreamGroup> empties,
-    required List<AddonFailure> failures,
-    required bool foundNothing,
+  /// It is the only thing said about the addons. Which of them failed and
+  /// which had nothing used to be a rung here of its own, one card each,
+  /// under every title -- a row about other people's servers at the foot
+  /// of every screen, where a viewer looking for something to watch did
+  /// not want it (zond, 2026-09-29). An addon that is down shows on the
+  /// Addons screen's health verdict instead.
+  ({String label, List<TvSource> sources}) _tvNothingFound({
     required bool isEpisode,
-  }) {
-    if (empties.isEmpty && failures.isEmpty && !foundNothing) return null;
-    final locked = profile?.addonsLocked ?? false;
-    final quiet = [
-      for (final group in empties)
-        (name: _addonNameOf(profile, group), transportUrl: group.request.base),
-    ];
-    final names = [for (final addon in quiet) addon.name];
-    return (
-      label: foundNothing
-          ? NoStreamsNotice.titleOf(isEpisode)
-          : kSourceAccountingLabel,
-      summary: [
-        if (failures.isNotEmpty)
-          FailedAddonsSection.addonsLabel(failures.length),
-        if (names.isNotEmpty)
-          EmptyAddonsSummary.summaryLabel(names.length, isEpisode: isEpisode),
-        if (failures.isEmpty && names.isEmpty) kNothingCameBack,
-      ].join(' · '),
-      sources: [
-        if (foundNothing)
-          _accountingCard(
-            icon: Icons.extension_outlined,
-            title: NoStreamsNotice.addonsLabel,
-            lines: [NoStreamsNotice.explanation],
-            onSelect: _openAddons,
-          ),
-        for (final failure in failures)
-          _accountingCard(
-            icon: Icons.cloud_off_outlined,
-            title: failure.name,
-            lines: [failure.message],
-            onSelect: () => openAddonDetails(context, failure.transportUrl),
-            onHold: failure.isRemovable && !locked
-                ? () =>
-                      confirmAndUninstallAddon(context, _client, failure.addon!)
-                : null,
-          ),
-        // One card each rather than one card listing them all: a joined
-        // line is ellipsized at the fourth name in a card 300 wide, and
-        // there is no press on a television that unfolds it -- which is
-        // how the phone's summary shows the same names. Each takes a
-        // press to its own details, the same one a failed addon's card
-        // takes, which is also what lets the remote walk the row far
-        // enough to read the last of them.
-        for (final addon in quiet)
-          _accountingCard(
-            icon: Icons.inbox_outlined,
-            title: addon.name,
-            lines: const [kAddonHadNothing],
-            onSelect: () => openAddonDetails(context, addon.transportUrl),
-          ),
-      ],
-    );
-  }
+  }) => (
+    label: NoStreamsNotice.titleOf(isEpisode),
+    sources: [
+      _accountingCard(
+        icon: Icons.extension_outlined,
+        title: NoStreamsNotice.addonsLabel,
+        lines: [NoStreamsNotice.explanation],
+        onSelect: _openAddons,
+      ),
+    ],
+  );
 
   /// One row of the sources list as a television card draws it: the whole
   /// of what the addon sent, the parse of it as pills, and a quiet line of

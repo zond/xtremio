@@ -327,11 +327,6 @@ void main() {
       // deciding which rung to spend a press on.
       expect(find.text('Season 1 · 7'), findsOneWidget);
       expect(find.text('1 from 1 addon'), findsOneWidget);
-      expect(
-        find.text('1 addons did not answer'),
-        findsOneWidget,
-        reason: 'and what the rest of them did instead',
-      );
     });
   });
 
@@ -343,11 +338,14 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowDown);
 
       expect(focusedLabel(tester), kSourcesLabel);
+      // Sources is the last rung now that a failed addon is not accounted
+      // for anywhere on the screen, so one more press down goes nowhere.
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedLabel(tester), kSourceAccountingLabel);
-      // And back up the same way.
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedLabel(tester), kSourcesLabel);
+      // And back up the same way, into the episodes rung it came from --
+      // still open, so up lands on the card rather than its header.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<TvEpisodeCard>(), isTrue);
     });
 
     testWidgets('select on a header opens that rung and shuts the one that '
@@ -451,7 +449,6 @@ void main() {
         kEpisodesLabel,
         kContinueWatchingLabel,
         kSourcesLabel,
-        kSourceAccountingLabel,
       ], reason: 'the order they are drawn down the panel');
 
       // Down to the foot of the ladder, then up the whole of it and down
@@ -465,23 +462,14 @@ void main() {
       expect(await walkRungs(tester, LogicalKeyboardKey.arrowDown), drawn);
     });
 
-    testWidgets('and so does every stop inside the open rung, now that the '
-        'line under the sources has gone', (tester) async {
+    testWidgets('and so does every stop inside the open rung', (tester) async {
       // The ladder counts levels; the viewer counts what is on the screen.
       // The two only agree while everything drawn between two levels can
       // be stepped over or is deliberately excluded from the walk (an
       // `ExcludeFocus`). So this walks the stops rather than the headers,
-      // down and back up, with the sources rung open and a rung below it
-      // to walk on to.
-      await mount(
-        tester,
-        film()
-          ..['streams'] = [
-            ...(film()['streams'] as List<dynamic>),
-            emptyGroup('quiet.example'),
-          ],
-        sectioned: true,
-      );
+      // down and back up, with the sources rung open and nothing to walk
+      // on to below it.
+      await mount(tester, film(), sectioned: true);
       await stepUpToRung(tester, kSourcesLabel);
 
       final down = await walkStops(tester, LogicalKeyboardKey.arrowDown);
@@ -493,11 +481,11 @@ void main() {
           StreamOrder.peersPerSize.label,
           '1080p',
           'Alpha 1080p',
-          kSourceAccountingLabel,
         ],
         reason:
-            'the header, its two controls, the pill, the card, the '
-            'rung below -- and nothing between the card and that rung',
+            'the header, its two controls, the pill, the card -- and '
+            'nothing past the card, since there is no rung below the '
+            'sources any more',
       );
 
       final up = await walkStops(tester, LogicalKeyboardKey.arrowUp);
@@ -546,12 +534,7 @@ void main() {
         id: seriesId,
       );
       final drawn = rungs(tester);
-      expect(drawn, [
-        kEpisodesLabel,
-        kContinueWatchingLabel,
-        kSourcesLabel,
-        kSourceAccountingLabel,
-      ]);
+      expect(drawn, [kEpisodesLabel, kContinueWatchingLabel, kSourcesLabel]);
 
       for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
         await press(tester, LogicalKeyboardKey.arrowUp);
@@ -657,7 +640,6 @@ void main() {
 
       expect(rungs(tester), [kSourcesLabel]);
       expect(find.text(kEpisodesLabel), findsNothing);
-      expect(find.text(kSourceAccountingLabel), findsNothing);
     });
   });
 

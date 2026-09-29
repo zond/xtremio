@@ -17,8 +17,6 @@ final class _StreamDerivation {
     required this.driveFiles,
     required this.driveRows,
     required this.profile,
-    required this.empties,
-    required this.failures,
     required this.sources,
     required this.sections,
     required this.grouped,
@@ -40,10 +38,6 @@ final class _StreamDerivation {
 
   /// The profile behind [ctx]; null until its first pull comes back.
   final ProfileState? profile;
-
-  /// The groups that answered with nothing, and the addons that failed.
-  final List<StreamGroup> empties;
-  final List<AddonFailure> failures;
 
   /// What the addons agree is one source, and its merged trackers.
   final StreamSourceIndex sources;
@@ -209,34 +203,15 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     MetaDetailsScreen.debugStreamDerivations++;
     final profile = ctx == null ? null : ProfileState.fromCtx(ctx);
     final groups = state.allStreamGroups;
-    // An addon that answered with an error has nothing to list, so it is
-    // pulled out of the run of groups and collected below the streams
-    // instead: several dead addons at once are one row there, not a wall
-    // of them above the streams that do work.
-    final answered = [
-      for (final g in groups)
-        if (!_hasFailed(g)) g,
-    ];
-    // An addon that answered with nothing is not a section of its own
-    // either: most stream addons have nothing for most episodes, and a
-    // label plus "No streams" each was most of what the list showed.
+    // Only the addons that answered with something are listed. One that
+    // failed has nothing to list, and one that answered with nothing is
+    // not a section either: most stream addons have nothing for most
+    // episodes. Neither is accounted for anywhere on this screen -- a row
+    // about other people's servers under every title was noise (zond,
+    // 2026-09-29) -- and a dead addon shows on the Addons screen instead.
     final listed = [
-      for (final g in answered)
-        if (!_answeredEmpty(g)) g,
-    ];
-    final empties = [
-      for (final g in answered)
-        if (_answeredEmpty(g)) g,
-    ];
-    final failures = [
-      for (final group in groups)
-        if (_hasFailed(group))
-          AddonFailure(
-            transportUrl: group.request.base,
-            addon: profile?.installedAddon(group.request.base),
-            fallbackName: group.addonLabel,
-            message: group.error?.message ?? '',
-          ),
+      for (final g in groups)
+        if (!_hasFailed(g) && !_answeredEmpty(g)) g,
     ];
     // What the addons agree is one source, and what each of them said its
     // trackers were. Both layouts collapse on it, and the row that
@@ -249,14 +224,10 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     // The viewer's own linked files for this video, as rows of the shape
     // an addon's answer becomes.
     //
-    // **Read after the accounting above is settled, and deliberately so.**
-    // [answered], [listed], [empties], [failures] and [sources] are all
-    // built out of [groups] alone, so nothing a Drive file does can change
-    // what this screen says about the addons: a title with a linked file
-    // still reports the same four addons having had nothing, is unaffected
-    // by an addon being dead, and does not count as one more thing an
-    // addon offered. It is not an addon result and is not accounted as
-    // one; it is one more source, which is a different sentence.
+    // **Read after the addons' answers are settled, and deliberately so.**
+    // [listed] and [sources] are built out of [groups] alone, so a linked
+    // file does not count as one more thing an addon offered. It is not an
+    // addon result; it is one more source, which is a different sentence.
     final driveRows = [for (final file in driveFiles) _driveRow(file)];
     // The sectioned layout: every listed addon's streams together, put in
     // the chosen order ([StreamOrder], the same one for every section) and
@@ -358,8 +329,6 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
       driveFiles: driveFiles,
       driveRows: driveRows,
       profile: profile,
-      empties: empties,
-      failures: failures,
       sources: sources,
       sections: sections,
       grouped: grouped,

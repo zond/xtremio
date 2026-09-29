@@ -625,21 +625,24 @@ void main() {
       expect(find.text('Downloading ${request.name}'), findsOneWidget);
     });
 
-    testWidgets('the addons that answered with nothing are counted without '
-        'it, and the "no streams" notice gives way to it', (tester) async {
+    testWidgets('the "no streams" notice gives way to it, and the addons that '
+        'answered with nothing are still not accounted for anywhere', (
+      tester,
+    ) async {
       useWideViewport(tester);
       const betaUrl = 'https://beta.example/manifest.json';
       final empties = [emptyGroup(alphaUrl), emptyGroup(betaUrl)];
 
-      // Without the file: every addon had nothing, and the screen says so.
+      // Without the file: every addon had nothing, and the screen says
+      // so, without naming or counting either of them.
       await tester.pumpWidget(harness(coreWith(empties)));
       await tester.pumpAndSettle();
       expect(find.text(_NoStreams.title), findsOneWidget);
-      expect(find.textContaining('2 addons had nothing'), findsOneWidget);
+      expect(find.textContaining('had nothing'), findsNothing);
 
-      // With it: the same two addons are still counted, and the notice --
-      // "None of your sources had anything to play" -- is gone, because one
-      // of them did.
+      // With it: the notice -- "None of your sources had anything to
+      // play" -- is gone, because one of them did, and the addons that
+      // answered with nothing are still not accounted for anywhere.
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(
         harness(
@@ -649,11 +652,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(_NoStreams.title), findsNothing);
-      expect(
-        find.textContaining('2 addons had nothing'),
-        findsOneWidget,
-        reason: 'a Drive file is not an addon that answered',
-      );
+      expect(find.textContaining('had nothing'), findsNothing);
       await toggleSection(tester, StreamResolution.fhd1080);
       expect(find.text(driveRelease), findsOneWidget);
     });

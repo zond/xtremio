@@ -64,8 +64,10 @@ and file index) or the same URL collapse, keeping the best-ranked instance
 and saying "Also from ..."; the grouped layout keeps a copy per addon,
 marked the same way. The surviving row carries the union of every listing's
 trackers, which is what playback, downloads and the stats poll are given.
-An addon that answered with an error is named and can be checked or
-uninstalled on the spot. Coming back from the player lands on the right
+An addon that answered with an error or with nothing is left off the list
+and not mentioned (its health shows on the Addons screen); when no addon
+had anything, the screen says so and offers the addons. Coming back from
+the player lands on the right
 episode. A series opens on the season and episode it was left on last
 time, unless the library has watched something since (the player moving
 on to the next episode by itself), and a title in the library never opened
@@ -88,9 +90,9 @@ Continue watching -- wins over both.
 - sources are the last two rows: a card per group (resolution or addon, per
   the same layout preference), and under the chosen one a row of its
   sources. The last-used source is a card above them and where the remote
-  starts. Back closes the open row before leaving. What the addons did
-  besides answer -- failed, had nothing -- is the last group card, naming
-  each addon in the row it opens.
+  starts. Back closes the open row before leaving. An addon that failed
+  or had nothing is not drawn at all; when no addon had anything, the last
+  rung says so, with a card that opens the addons.
 
 ## Player
 

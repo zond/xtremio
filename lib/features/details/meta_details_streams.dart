@@ -89,8 +89,6 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
       driveFiles: driveFiles,
     );
     final profile = derived.profile;
-    final empties = derived.empties;
-    final failures = derived.failures;
     final sources = derived.sources;
     final sections = derived.sections;
     final grouped = derived.grouped;
@@ -120,8 +118,6 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         sections: sections,
         grouped: grouped,
         profile: profile,
-        empties: empties,
-        failures: failures,
         foundNothing: foundNothing,
         noneYet: noneYet,
         lastUsed: lastUsed,
@@ -188,25 +184,6 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
             downloads: downloadsFor(downloads, entry.group),
           ),
       ],
-      if (empties.isNotEmpty)
-        SliverToBoxAdapter(
-          child: EmptyAddonsSummary(
-            names: [for (final group in empties) _addonNameOf(profile, group)],
-            isEpisode: state.hasVideos,
-          ),
-        ),
-      if (failures.isNotEmpty)
-        SliverToBoxAdapter(
-          child: FailedAddonsSection(
-            failures: failures,
-            summaryLabel: FailedAddonsSection.addonsLabel(failures.length),
-            locked: profile?.addonsLocked ?? false,
-            onCheck: (failure) =>
-                openAddonDetails(context, failure.transportUrl),
-            onUninstall: (failure) =>
-                confirmAndUninstallAddon(context, _client, failure.addon!),
-          ),
-        ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
   }

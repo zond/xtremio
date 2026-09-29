@@ -1144,9 +1144,7 @@ void main() {
   });
 
   group('sections keep everything around the streams', () {
-    testWidgets('the last-used shortcut, the empty summary and the failures', (
-      tester,
-    ) async {
+    testWidgets('the last-used shortcut', (tester) async {
       useWideViewport(tester);
       final streams = [
         ...twoAddons(),
@@ -1178,16 +1176,11 @@ void main() {
         topOf('Continue with last source'),
         lessThan(topOfSection(tester, StreamResolution.uhd2160)),
       );
-      // The addon that had nothing, and the one that failed, both below --
-      // below the last section, open or not.
-      expect(find.text('1 addon had nothing for this title'), findsOneWidget);
-      expect(
-        topOf('1 addon had nothing for this title'),
-        greaterThan(topOfSection(tester, null)),
-      );
-      expect(find.text('mirror.example'), findsOneWidget);
-      expect(find.text('Failed to fetch: 404 Not Found'), findsOneWidget);
-      expect(find.text('Check addon'), findsOneWidget);
+      // The addon that had nothing, and the one that failed, are left out
+      // of the list as before, and are not accounted for anywhere else on
+      // the screen.
+      expect(find.textContaining('had nothing for this'), findsNothing);
+      expect(find.textContaining('Failed to fetch'), findsNothing);
     });
 
     testWidgets('the notice when every addon came up empty', (tester) async {
@@ -1196,8 +1189,9 @@ void main() {
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
 
-      expect(find.text('2 addons had nothing for this title'), findsOneWidget);
+      expect(find.text('No streams for this title'), findsOneWidget);
       expect(find.text('Add an addon'), findsOneWidget);
+      expect(find.textContaining('had nothing for this'), findsNothing);
     });
   });
 

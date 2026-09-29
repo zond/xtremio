@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
@@ -466,27 +465,6 @@ void main() {
     expect(find.byType(TvSourceCard), findsNothing);
   });
 
-  testWidgets('down from a source card lands on the next rung', (tester) async {
-    await mount(
-      tester,
-      movieWith([
-        readyGroup('alpha.example', [
-          torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
-        ]),
-        emptyGroup('quiet.example'),
-      ]),
-      sectioned: true,
-      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
-    );
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), 'Alpha 1080p');
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
-
-    expect(focusedLabel(tester), kSourceAccountingLabel);
-  });
-
   testWidgets('another group is another set of cards, and down still lands '
       'on the one that row will hand back', (tester) async {
     // The row a sideways press puts out is a different list -- with a card
@@ -541,19 +519,20 @@ void main() {
           torrent(hash(1), 'Alpha 1080p a', '👤 90 💾 2 GB'),
           torrent(hash(2), 'Alpha 1080p b', '👤 20 💾 2 GB'),
         ]),
-        emptyGroup('quiet.example'),
       ]),
       sectioned: true,
-      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
     );
     await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedLabel(tester), 'Alpha 1080p b');
 
-    // Away into the rung below, which shuts this one, and back.
-    await openRung(tester, kSourceAccountingLabel);
-    expect(find.byType(TvSourceCard), findsWidgets);
-    await press(tester, LogicalKeyboardKey.arrowUp);
+    // Shut the rung from its own header, and open it again.
+    for (var i = 0; i < 6 && focusedLabel(tester) != kSourcesLabel; i++) {
+      await press(tester, LogicalKeyboardKey.arrowUp);
+    }
+    expect(focusedLabel(tester), kSourcesLabel);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.byType(TvSourceCard), findsNothing);
     await press(tester, LogicalKeyboardKey.select);
 
     // The walk back down to the row: the header, the two
@@ -851,8 +830,8 @@ void main() {
     expect(backLeaves(tester), isTrue);
   });
 
-  testWidgets('the addons that failed and the ones that had nothing are '
-      'the card at the end of the row', (tester) async {
+  testWidgets('an addon that failed and one that had nothing are not '
+      'accounted for anywhere on the screen', (tester) async {
     await mount(
       tester,
       movieWith([
@@ -865,86 +844,16 @@ void main() {
       also: {CoreField.ctx: loadCtxLoggedOutFixture()},
     );
 
-    // A rung of its own below the sources, counting both without being
-    // opened at all: what the addons did is not a group of sources, and
-    // its one line is exactly what a rung header has room for and a 36 dp
-    // pill has not.
+    // The addon that answered is still listed; the one that failed and
+    // the one that had nothing are left out of the sources list, as
+    // before -- but neither is accounted for anywhere else on the screen
+    // any more: no rung below the sources, no summary line, no name.
     expect(groupLabels(tester), ['alpha.example']);
-    expect(find.text(kSourceAccountingLabel), findsOneWidget);
-    expect(
-      find.text('1 addons did not answer · 1 addon had nothing for this title'),
-      findsOneWidget,
-    );
-
-    await openRung(tester, kSourceAccountingLabel);
-    expect(sourceTitles(tester), ['mirror.example', 'quiet.example']);
-    expect(
-      inSource('mirror.example', find.text('Failed to fetch: 404 Not Found')),
-      findsOneWidget,
-    );
-    expect(
-      inSource('quiet.example', find.text(kAddonHadNothing)),
-      findsOneWidget,
-    );
-
-    // Select on the dead one opens its details, whose manifest fetch is
-    // the reachability test.
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedLabel(tester), 'mirror.example');
-    // Not `press`: the screen it pushes fetches the manifest and spins
-    // while it waits, so nothing ever settles.
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(AddonDetailsScreen), findsOneWidget);
-  });
-
-  testWidgets('every addon that had nothing is named on a card the remote '
-      'can reach', (tester) async {
-    // A phone unfolds the summary into a name per line. Joined into one
-    // card's second line here, the fourth name is already ellipsized and
-    // there is no press that shows the rest -- and with nothing in the
-    // row taking focus, the row cannot even be scrolled to it.
-    await mount(
-      tester,
-      movieWith([
-        readyGroup('alpha.example', [
-          torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
-        ]),
-        for (final host in ['one', 'two', 'three', 'four', 'five'])
-          emptyGroup('$host.example'),
-      ]),
-      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
-    );
-
-    expect(
-      find.text('5 addons had nothing for this title'),
-      findsOneWidget,
-      reason: 'the shut rung still counts them',
-    );
-    await openRung(tester, kSourceAccountingLabel);
-    expect(sourceTitles(tester), [
-      'one.example',
-      'two.example',
-      'three.example',
-      'four.example',
-      'five.example',
-    ]);
-
-    // And the remote walks to the last of them, which is off the panel:
-    // five cards 300 wide is more than a 720p television is.
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    for (var i = 0; i < 8 && focusedLabel(tester) != 'five.example'; i++) {
-      await press(tester, LogicalKeyboardKey.arrowRight);
-    }
-    expect(focusedLabel(tester), 'five.example');
-    // The accounting is a rung of its own, so what has to hold the last
-    // card is its one row rather than the two the sources are.
-    final row = tester.getRect(find.byType(TvSourceRow));
-    final card = tester.getRect(find.byType(TvSourceCard).last);
-    expect(card.left, greaterThanOrEqualTo(row.left));
-    expect(card.right, lessThanOrEqualTo(row.right));
+    expect(find.textContaining('did not answer'), findsNothing);
+    expect(find.textContaining('had nothing for this'), findsNothing);
+    expect(find.text('mirror.example'), findsNothing);
+    expect(find.text('quiet.example'), findsNothing);
+    expect(find.text('Addons'), findsNothing);
   });
 
   testWidgets('nobody having anything at all names the rung, and the screen '
@@ -956,11 +865,12 @@ void main() {
 
     // There is no sources rung to open -- nothing answered with one -- so
     // this is the rung the screen is for, and the remote is on the one
-    // thing there is to press rather than nowhere at all.
+    // thing there is to press rather than nowhere at all. Neither addon
+    // that had nothing is named or counted any more.
     expect(groupLabels(tester), isEmpty);
     expect(find.text('No streams for this title'), findsOneWidget);
-    expect(find.text('2 addons had nothing for this title'), findsOneWidget);
-    expect(sourceTitles(tester).first, 'Add an addon');
+    expect(find.byKey(const ValueKey('tv-nothing-found')), findsOneWidget);
+    expect(sourceTitles(tester), ['Add an addon']);
     expect(focusedLabel(tester), 'Add an addon');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();

@@ -252,19 +252,6 @@ void main() {
     return board;
   }
 
-  /// The meta details fixture with WatchHub's stream request failed.
-  ///
-  /// WatchHub is installed and unprotected in the logged-out profile, so
-  /// the card the accounting row draws for it is the removable kind and a
-  /// hold on it asks before uninstalling. The failure the fixture already
-  /// records is the local addon's, which is protected and offers nothing.
-  Map<String, dynamic> metaDetailsWithFailure(String message) {
-    final state = loadMetaDetailsFixture();
-    final groups = state['streams'] as List<dynamic>;
-    (groups[0] as Map<String, dynamic>)['content'] = failedPage(message);
-    return state;
-  }
-
   /// The addon details fixture with the protected flag cleared.
   ///
   /// What is recorded is Cinemeta, which every profile protects: the
@@ -1107,55 +1094,6 @@ void main() {
       expect(find.text('Delete'), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
     }),
-    walk(
-      'meta_details_screen.dart',
-      'the Uninstall dialog on an addon that answered a stream request '
-          'with an error',
-      (tester) async {
-        useScreen(tester, tvSize);
-        await tester.pumpWidget(
-          CoreScope(
-            client: fullCore({
-              CoreField.metaDetails: metaDetailsWithFailure(
-                'Failed to fetch: HTTP 502',
-              ),
-            }),
-            child: onTv(
-              const MetaDetailsScreen(type: 'movie', id: 'tt0063350'),
-              pushed: true,
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // What the addons did other than answer is the last card of the
-        // group row, and the dead addon's own card is in the row it opens.
-        // The dialog is on a hold, because a button drawn inside a card is
-        // not a button a remote can reach.
-        await pressUntil(
-          tester,
-          LogicalKeyboardKey.tab,
-          () => focusedLabel(tester) == kSourceAccountingLabel,
-          target: 'the card that accounts for the addons',
-        );
-        await press(tester, LogicalKeyboardKey.select);
-        // The accounting card is the right-hand end of the group row, so
-        // down lands on the card under it -- the local addon, which is
-        // protected and offers no hold -- and the removable one is to the
-        // left of that.
-        await press(tester, LogicalKeyboardKey.arrowDown);
-        await pressUntil(
-          tester,
-          LogicalKeyboardKey.arrowLeft,
-          () => focusedLabel(tester) == 'WatchHub',
-          target: "the failed addon's card",
-          limit: 8,
-        );
-        await press(tester, LogicalKeyboardKey.contextMenu);
-        expect(find.byType(AlertDialog), findsOneWidget);
-        await walkEveryStop(tester, stops: 12);
-      },
-    ),
     walk(
       'meta_details_screen.dart',
       'the replace dialog a hold on a source card opens',

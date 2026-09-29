@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
@@ -202,10 +201,8 @@ void main() {
         ),
       );
       expect(external.enabled, isFalse);
-      // The addon that answered with nothing is a line below the streams,
-      // not a labelled section of its own.
+      // The addon that answered with nothing is not listed at all.
       expect(find.text('No streams'), findsNothing);
-      expect(find.text('1 addon had nothing for this title'), findsOneWidget);
       expect(find.text('EmptyContent'), findsNothing);
 
       // Leaving unloads the field.
@@ -859,12 +856,9 @@ void main() {
       );
 
       // A section per addon that has something to show: the one that
-      // answered with nothing is a line below them, the one that failed
-      // has its own row, and the torrents keep their parsed hints.
+      // answered with nothing and the one that failed are not listed at
+      // all, and the torrents keep their parsed hints.
       expect(find.text('No streams'), findsNothing);
-      expect(find.text('1 addon had nothing for this episode'), findsOneWidget);
-      expect(find.text('127.0.0.1'), findsOneWidget);
-      expect(find.textContaining('Failed to fetch'), findsOneWidget);
       expect(find.text('torrentio.example'), findsOneWidget);
       expect(find.text(kTileRelease), findsOneWidget);
       // Said once, and this is the assertion that says so. `find.text` is
@@ -937,13 +931,11 @@ void main() {
         find.textContaining('comes with no torrent addon'),
         findsOneWidget,
       );
-      // The addon that failed still says so on its own row, and the one
-      // that answered with nothing is counted below -- neither of them
-      // repeating the notice above.
-      expect(find.textContaining('Failed to fetch'), findsOneWidget);
+      // Neither the addon that failed nor the one that answered with
+      // nothing is accounted for anywhere on the screen any more.
+      expect(find.textContaining('Failed to fetch'), findsNothing);
       expect(find.text('No streams'), findsNothing);
-      expect(find.text('1 addon had nothing for this episode'), findsOneWidget);
-      expect(find.text('No streams for this episode'), findsOneWidget);
+      expect(find.textContaining('had nothing for this'), findsNothing);
 
       await tester.tap(find.text('Add an addon'));
       // (That screen spins over the fields this fake has no state for.)
@@ -1327,174 +1319,15 @@ void main() {
     });
   });
 
-  group('failing addons', () {
-    const watchHubUrl = 'https://watchhub.strem.io/manifest.json';
+  group('addons that failed or had nothing to say', () {
     const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
     const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
     const strangerUrl = 'https://mirror.example/stremio/manifest.json';
-    // The fetch error [failedGroup] records.
-    const failure = 'Failed to fetch: 404 Not Found';
 
     /// The movie fixture with [streams] in place of its own, and the
-    /// default profile as `ctx` so the failing addons can be named.
-    Future<FakeCoreClient> mount(
-      WidgetTester tester,
-      List<Map<String, dynamic>> streams,
-    ) async {
-      useWideViewport(tester);
-      final core = FakeCoreClient(
-        state: {
-          CoreField.metaDetails: loadMetaDetailsFixture()
-            ..['streams'] = streams,
-          CoreField.ctx: loadCtxLoggedOutFixture(),
-        },
-      );
-      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
-      await tester.pumpAndSettle();
-      return core;
-    }
-
-    testWidgets('names the installed addon behind the error', (tester) async {
-      await mount(tester, [failedGroup(watchHubUrl)]);
-
-      expect(find.text('WatchHub'), findsOneWidget);
-      expect(find.text(failure), findsOneWidget);
-      expect(
-        find.text('watchhub.strem.io'),
-        findsNothing,
-        reason: 'the host is what the profile replaces',
-      );
-      expect(find.text('Check addon'), findsOneWidget);
-      expect(find.text('Uninstall'), findsOneWidget);
-    });
-
-    testWidgets('an addon that is not installed is still named by its host', (
-      tester,
-    ) async {
-      await mount(tester, [failedGroup(strangerUrl)]);
-
-      expect(find.text('mirror.example'), findsOneWidget);
-      expect(find.text(failure), findsOneWidget);
-      expect(find.text('Check addon'), findsOneWidget);
-      expect(
-        find.text('Uninstall'),
-        findsNothing,
-        reason: 'there is nothing installed to uninstall',
-      );
-    });
-
-    testWidgets('a protected addon cannot be uninstalled from here', (
-      tester,
-    ) async {
-      await mount(tester, [failedGroup(localAddonUrl)]);
-
-      expect(
-        find.text('Local Files (without catalog support)'),
-        findsOneWidget,
-      );
-      expect(find.text('Check addon'), findsOneWidget);
-      expect(find.text('Uninstall'), findsNothing);
-    });
-
-    testWidgets('uninstalling asks first, then sends the descriptor', (
-      tester,
-    ) async {
-      final core = await mount(tester, [failedGroup(watchHubUrl)]);
-      final descriptor = ProfileState.fromCtx(loadCtxLoggedOutFixture())
-          .installedAddon(watchHubUrl)!;
-
-      // A cancelled dialog changes nothing.
-      await tester.tap(find.text('Uninstall'));
-      await tester.pumpAndSettle();
-      expect(find.text('Uninstall WatchHub?'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(core.dispatched.where((a) => a.field == CoreField.ctx), isEmpty);
-
-      await tester.tap(find.text('Uninstall'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Uninstall'));
-      await tester.pumpAndSettle();
-
-      expect(
-        core.dispatched.last.action,
-        CoreActions.uninstallAddon(descriptor).action,
-      );
-      expect(find.text('Uninstalled WatchHub'), findsOneWidget);
-    });
-
-    testWidgets('checking an addon opens its details on that manifest URL', (
-      tester,
-    ) async {
-      final core = await mount(tester, [failedGroup(watchHubUrl)]);
-
-      await tester.tap(find.text('Check addon'));
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
-
-      expect(find.byType(AddonDetailsScreen), findsOneWidget);
-      expect(
-        core.dispatched.last.action,
-        CoreActions.loadAddonDetails(watchHubUrl).action,
-      );
-    });
-
-    testWidgets('several failures collapse into one row below the streams', (
-      tester,
-    ) async {
-      final core = await mount(tester, [
-        ...(loadMetaDetailsFixture()['streams'] as List<dynamic>)
-            .cast<Map<String, dynamic>>(),
-        failedGroup(youTubeUrl),
-        failedGroup(strangerUrl),
-      ]);
-
-      // The playable stream is still the first thing in the section.
-      expect(find.text('1080p'), findsOneWidget);
-      expect(find.text(failure), findsNothing);
-      expect(find.text('2 addons did not answer'), findsOneWidget);
-      expect(find.text('YouTube, mirror.example'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('2 addons did not answer')).dy,
-        greaterThan(tester.getTopLeft(find.text('1080p')).dy),
-      );
-
-      await tester.tap(find.text('2 addons did not answer'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('YouTube'), findsOneWidget);
-      expect(find.text('mirror.example'), findsOneWidget);
-      expect(find.text(failure), findsNWidgets(2));
-      expect(find.text('Check addon'), findsNWidgets(2));
-      expect(
-        find.text('Uninstall'),
-        findsOneWidget,
-        reason: 'only the installed one can be dropped',
-      );
-      expect(
-        core.dispatched,
-        hasLength(1),
-        reason: 'expanding dispatches nothing',
-      );
-    });
-  });
-
-  group('addons with nothing to say', () {
-    const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
-    const strangerUrl = 'https://mirror.example/stremio/manifest.json';
-    const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
-
-    /// The movie's own groups that answered with streams.
-    List<Map<String, dynamic>> playableGroups() => [
-      for (final g
-          in (loadMetaDetailsFixture()['streams'] as List<dynamic>)
-              .cast<Map<String, dynamic>>())
-        if ((g['content'] as Map)['type'] == 'Ready') g,
-    ];
-
-    /// The movie fixture with [streams] in place of its own, and the
-    /// default profile as `ctx` so the addons can be named. Pumped by hand
-    /// rather than settled: a waiting group's spinner never settles.
+    /// default profile as `ctx` so a named addon could be told from a
+    /// failed or empty one, if either still were. Pumped by hand rather
+    /// than settled: a waiting group's spinner never settles.
     Future<FakeCoreClient> mount(
       WidgetTester tester,
       List<Map<String, dynamic>> streams,
@@ -1513,51 +1346,32 @@ void main() {
       return core;
     }
 
-    testWidgets('an empty answer is a line below the streams, not a section', (
-      tester,
-    ) async {
-      await mount(tester, [...playableGroups(), emptyGroup(youTubeUrl)]);
+    testWidgets(
+      'are left off the sources list and are not accounted for anywhere '
+      'else on the screen',
+      (tester) async {
+        await mount(tester, [
+          ...(loadMetaDetailsFixture()['streams'] as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .where((g) => (g['content'] as Map)['type'] == 'Ready'),
+          emptyGroup(youTubeUrl),
+          failedGroup(strangerUrl),
+        ]);
 
-      // Nothing is labelled with an addon that had nothing under it.
-      expect(find.text('No streams'), findsNothing);
-      expect(find.text('1 addon had nothing for this title'), findsOneWidget);
-      expect(find.text('1080p'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('1 addon had nothing for this title')).dy,
-        greaterThan(tester.getTopLeft(find.text('1080p')).dy),
-      );
-      // Named from the profile, and only in that line.
-      expect(find.text('YouTube'), findsOneWidget);
-    });
-
-    testWidgets('the summary counts them and expands to name them', (
-      tester,
-    ) async {
-      final core = await mount(tester, [
-        ...playableGroups(),
-        emptyGroup(youTubeUrl),
-        emptyGroup(strangerUrl),
-        emptyGroup(localAddonUrl),
-      ]);
-
-      expect(find.text('3 addons had nothing for this title'), findsOneWidget);
-      expect(find.text('YouTube, mirror.example, Local Files'), findsNothing);
-
-      await tester.tap(find.text('3 addons had nothing for this title'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('YouTube'), findsOneWidget);
-      expect(find.text('mirror.example'), findsOneWidget);
-      expect(
-        find.text('Local Files (without catalog support)'),
-        findsOneWidget,
-      );
-      expect(
-        core.dispatched,
-        hasLength(1),
-        reason: 'expanding dispatches nothing',
-      );
-    });
+        // The playable stream is still there, and nothing about the addon
+        // that failed or the one that had nothing shows up: no summary
+        // line, no failed-addon row, no name, no error text.
+        expect(find.text('1080p'), findsOneWidget);
+        expect(find.text('No streams'), findsNothing);
+        expect(find.textContaining('had nothing for this'), findsNothing);
+        expect(find.textContaining('did not answer'), findsNothing);
+        expect(find.textContaining('Failed to fetch'), findsNothing);
+        expect(find.text('Check addon'), findsNothing);
+        expect(find.text('Uninstall'), findsNothing);
+        expect(find.text('YouTube'), findsNothing);
+        expect(find.text('mirror.example'), findsNothing);
+      },
+    );
 
     testWidgets('an addon still answering keeps its label and a spinner', (
       tester,
@@ -1572,44 +1386,23 @@ void main() {
       expect(find.text('v3-channels.strem.io'), findsNothing);
       expect(find.text(kLookingForStreams), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
-      expect(find.textContaining('had nothing for this'), findsNothing);
-    });
-
-    testWidgets('empty, waiting, failed and populated each land in place', (
-      tester,
-    ) async {
-      await mount(tester, [
-        ...playableGroups(),
-        loadingGroup(youTubeUrl),
-        emptyGroup(strangerUrl),
-        failedGroup(localAddonUrl),
-      ]);
-
-      final stream = tester.getTopLeft(find.text('1080p')).dy;
-      final waiting = tester.getTopLeft(find.text(kLookingForStreams)).dy;
-      final empty = tester
-          .getTopLeft(find.text('1 addon had nothing for this title'))
-          .dy;
-      final failed = tester
-          .getTopLeft(find.text('Local Files (without catalog support)'))
-          .dy;
-      expect(stream, lessThan(waiting));
-      expect(waiting, lessThan(empty));
-      expect(empty, lessThan(failed));
-      expect(find.text('Failed to fetch: 404 Not Found'), findsOneWidget);
-      expect(find.text('No streams'), findsNothing);
     });
 
     testWidgets('everything empty still offers the Addons screen', (
       tester,
     ) async {
-      await mount(tester, [emptyGroup(youTubeUrl), emptyGroup(strangerUrl)]);
+      await mount(tester, [
+        emptyGroup(youTubeUrl),
+        emptyGroup(strangerUrl),
+        failedGroup(localAddonUrl),
+      ]);
 
-      // The notice is what it always was, and the summary says how many
-      // addons that "nothing" came from rather than repeating it.
+      // The notice is what it always was; neither the addon that failed
+      // nor the ones that had nothing are named or counted any more.
       expect(find.text('No streams for this title'), findsOneWidget);
       expect(find.text('Add an addon'), findsOneWidget);
-      expect(find.text('2 addons had nothing for this title'), findsOneWidget);
+      expect(find.textContaining('had nothing for this'), findsNothing);
+      expect(find.textContaining('Failed to fetch'), findsNothing);
     });
   });
 }

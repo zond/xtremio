@@ -12,7 +12,6 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/tv_ladder.dart';
 import '../../widgets/shared_field_screen.dart';
 import '../addons/addons_screen.dart';
-import '../addons/failed_addons.dart';
 import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
@@ -34,13 +33,10 @@ import 'tv_source_row.dart';
 export 'stream_list.dart'
     show
         driveSourceStorageLabel,
-        kAddonHadNothing,
         kContinueWatchingLabel,
         kContinueWithLastSource,
         kEpisodesLabel,
         kLookingForStreams,
-        kNothingCameBack,
-        kSourceAccountingLabel,
         kSourcesLabel,
         kStreamsGroupedLabel,
         kStreamsSectionedLabel,
@@ -78,7 +74,8 @@ enum _DetailsRung {
   /// select on its header and at no other time.
   moreLikeThis,
 
-  /// What the addons did other than answer with streams.
+  /// No addon had anything for this title: the notice, and a way to the
+  /// addons. Drawn only then.
   addons,
 }
 

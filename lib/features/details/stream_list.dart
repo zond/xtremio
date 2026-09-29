@@ -5,7 +5,6 @@ import '../../shell/device_profile.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/tv_ladder.dart';
 import '../../widgets/remote_press.dart';
-import '../addons/failed_addons.dart';
 import '../downloads/download_labels.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
@@ -105,10 +104,6 @@ const String kLookingForStreams = 'Looking for streams…';
 /// sections on a phone and its own card on a television.
 const String kContinueWithLastSource = 'Continue with last source';
 
-/// The rung at the foot of a television's ladder: what the addons did
-/// other than answer with streams.
-const String kSourceAccountingLabel = 'Addons';
-
 /// What the rung holding the last-used source is called when it is shut.
 const String kContinueWatchingLabel = 'Continue watching';
 
@@ -119,15 +114,6 @@ const String kSourcesLabel = 'Sources';
 
 /// What the rung holding the season and its episodes is called.
 const String kEpisodesLabel = 'Episodes';
-
-/// What that card says when every addon answered and none of them said
-/// anything worth counting.
-const String kNothingCameBack = 'Nothing came back';
-
-/// What one card of that row says under an addon that answered with
-/// nothing. The count and the wording that goes with it -- for this
-/// episode, for this title -- are on the card that opens the row.
-const String kAddonHadNothing = 'Had nothing to offer';
 
 /// What each of the header's two layout chips reads. The selected one is
 /// the layout on screen, which is why both are worded as states rather
@@ -583,10 +569,8 @@ class ResolutionSectionSliver extends StatelessWidget {
 /// own ranking, and a summary of what is inside would be summarising an
 /// order the addon chose rather than one this screen did.
 ///
-/// Only groups with something to show reach here. An addon that *failed* is
-/// collected into [FailedAddonsSection], and one that answered with
-/// nothing into [EmptyAddonsSummary], both below the streams that did
-/// arrive.
+/// Only groups with something to show reach here: an addon that failed or
+/// answered with nothing is not listed at all.
 class StreamGroupSliver extends StatelessWidget {
   const StreamGroupSliver({
     super.key,
@@ -693,84 +677,6 @@ class StreamGroupSliver extends StatelessWidget {
               );
             },
           ),
-      ],
-    );
-  }
-}
-
-/// The addons that answered this video with nothing, as one quiet line
-/// below the streams that did arrive.
-///
-/// Most stream addons have nothing for most episodes, so listing each as a
-/// labelled section with "No streams" under it filled the pane with the
-/// addons that had nothing to say and pushed the ones that did off the
-/// screen. The count is kept, because "four addons were asked and had
-/// nothing" and "no addon has answered yet" are different answers, and the
-/// row expands to name them.
-class EmptyAddonsSummary extends StatefulWidget {
-  const EmptyAddonsSummary({
-    super.key,
-    required this.names,
-    required this.isEpisode,
-  });
-
-  /// The addons, named from the profile where it knows them.
-  final List<String> names;
-
-  /// Whether the streams are an episode's, for the wording.
-  final bool isEpisode;
-
-  static String summaryLabel(int count, {required bool isEpisode}) =>
-      '$count ${count == 1 ? 'addon' : 'addons'} had nothing for this '
-      '${isEpisode ? 'episode' : 'title'}';
-
-  @override
-  State<EmptyAddonsSummary> createState() => _EmptyAddonsSummaryState();
-}
-
-class _EmptyAddonsSummaryState extends State<EmptyAddonsSummary> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final names = widget.names;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ListTile(
-          dense: true,
-          leading: Icon(Icons.inbox_outlined, color: muted),
-          title: Text(
-            EmptyAddonsSummary.summaryLabel(
-              names.length,
-              isEpisode: widget.isEpisode,
-            ),
-            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-          ),
-          subtitle: _expanded
-              ? null
-              : Text(
-                  names.join(', '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-          trailing: Icon(
-            _expanded ? Icons.expand_less : Icons.expand_more,
-            color: muted,
-          ),
-          onTap: () => setState(() => _expanded = !_expanded),
-        ),
-        if (_expanded)
-          for (final name in names)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
-              child: Text(
-                name,
-                style: theme.textTheme.bodySmall?.copyWith(color: muted),
-              ),
-            ),
       ],
     );
   }

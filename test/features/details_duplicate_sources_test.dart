@@ -439,61 +439,58 @@ void main() {
   });
 
   group('everything around the streams is untouched', () {
-    testWidgets(
-      'the last-used shortcut, the empty summary and the failures, with '
-      'duplicates in the list',
-      (tester) async {
-        useWideViewport(tester);
-        final streams = [
-          ...theSameReleaseTwice(),
-          emptyGroup(youTubeUrl),
-          failedGroup(strangerUrl),
-        ];
-        final core = coreWith(
-          streams,
-          also: {CoreField.player: loadPlayerFixture()},
-          lastUsed: {
-            'request': streams.first['request'],
-            'content': {
-              'type': 'Ready',
-              'content':
-                  (streams.first['content']
-                      as Map<String, dynamic>)['content']![0],
-            },
+    testWidgets('the last-used shortcut, with duplicates in the list', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final streams = [
+        ...theSameReleaseTwice(),
+        emptyGroup(youTubeUrl),
+        failedGroup(strangerUrl),
+      ];
+      final core = coreWith(
+        streams,
+        also: {CoreField.player: loadPlayerFixture()},
+        lastUsed: {
+          'request': streams.first['request'],
+          'content': {
+            'type': 'Ready',
+            'content':
+                (streams.first['content']
+                    as Map<String, dynamic>)['content']![0],
           },
-        );
-        await pumpSectioned(tester, core);
+        },
+      );
+      await pumpSectioned(tester, core);
 
-        // The shortcut is above the one remaining row, still the shortcut.
-        expect(find.text('Continue with last source'), findsOneWidget);
-        // The shortcut's own subtitle is the release's name too, so the
-        // row proper is the last of the two.
-        expect(
-          topOf(tester, 'Continue with last source'),
-          lessThan(
-            tester.getTopLeft(find.text('The Same Release 1080p').last).dy,
-          ),
-        );
-        // The addon that had nothing, and the one that failed, both below
-        // and both counted exactly as before.
-        expect(find.text('1 addon had nothing for this title'), findsOneWidget);
-        expect(find.text('mirror.example'), findsOneWidget);
-        expect(find.text('Failed to fetch: 404 Not Found'), findsOneWidget);
-        expect(find.text('Check addon'), findsOneWidget);
+      // The shortcut is above the one remaining row, still the shortcut.
+      expect(find.text('Continue with last source'), findsOneWidget);
+      // The shortcut's own subtitle is the release's name too, so the
+      // row proper is the last of the two.
+      expect(
+        topOf(tester, 'Continue with last source'),
+        lessThan(
+          tester.getTopLeft(find.text('The Same Release 1080p').last).dy,
+        ),
+      );
+      // The addon that had nothing, and the one that failed, are still
+      // left out of the list -- unaffected by there being duplicates in
+      // it -- and are not accounted for anywhere else on the screen.
+      expect(find.textContaining('had nothing for this'), findsNothing);
+      expect(find.textContaining('Failed to fetch'), findsNothing);
 
-        // And the shortcut is the same source as the collapsed row, so it
-        // plays with the merged trackers too.
-        await tester.tap(find.text('Continue with last source'));
-        await tester.pumpAndSettle();
-        final load = core.dispatched.firstWhere(
-          (a) => a.field == CoreField.player,
-        );
-        final args =
-            (load.action['args'] as Map<String, dynamic>)['args']
-                as Map<String, dynamic>;
-        expect(args['stream']['announce'], mergedTrackers);
-      },
-    );
+      // And the shortcut is the same source as the collapsed row, so it
+      // plays with the merged trackers too.
+      await tester.tap(find.text('Continue with last source'));
+      await tester.pumpAndSettle();
+      final load = core.dispatched.firstWhere(
+        (a) => a.field == CoreField.player,
+      );
+      final args =
+          (load.action['args'] as Map<String, dynamic>)['args']
+              as Map<String, dynamic>;
+      expect(args['stream']['announce'], mergedTrackers);
+    });
   });
 
   group('the index itself', () {
