@@ -34,8 +34,8 @@ Facts and genres; for a series a season picker and episode list with
 watched state (picking an episode loads its streams); a bookmark to add or
 remove the title from the library; a **More like this** row of suggestions
 ([Recommendations](ARCHITECTURE.md#recommendations)); and the sources every
-installed addon returned, plus any linked Google Drive file matched to this
-title or episode.
+installed addon returned, plus any linked Google Drive file and any video
+on this device matched to this title or episode.
 
 **The sources list** has two layouts and a toggle in its header saying
 which is on and what tapping switches to:
@@ -126,11 +126,13 @@ with a hint to sign in when anonymous and **Sync now** when signed in. On
 top of that, never written to the Stremio library or synced:
 
 - **downloaded titles** appear whether or not they were added, and so do
-  **linked Drive files** matched to a title, under their type;
-- **Downloaded** and **Remote** are filter chips that combine with the type
-  pills and the sort: Downloaded narrows to what is on this device; Remote
-  to what is linked from Drive, including files that matched nothing, with a
-  Reload button that asks Drive for the current names;
+  **linked Drive files** and **videos on this device** matched to a title,
+  under their type;
+- **Downloaded**, **Remote** and **Local** are filter chips that combine
+  with the type pills and the sort: Downloaded narrows to what is on this
+  device; Remote to what is linked from Drive, including files that matched
+  nothing, with a Reload button that asks Drive for the current names;
+  Local to this device's own videos, matched or not (see below);
 - the app bar has the way to the Downloads screen and the button that links
   remote files (Google Drive today).
 
@@ -167,6 +169,25 @@ server (which renews the access itself), are tracked like any other play
 and download like any other source. When Google refuses the grant, every
 screen asks for a new pairing. See
 [ARCHITECTURE.md](ARCHITECTURE.md#google-drive).
+
+## Local videos
+
+Videos already on the device, found without any addon. On Android they come
+from the system's media index (USB drives included; the camera's `DCIM/`
+and `Pictures/` are left out), asked for with the video permission the
+first time the Library's **Local** pill is opened -- never at launch. On a
+desktop they come from folders chosen in Settings → Local, walked six
+levels deep. Each is matched to a title by name the way a Drive file is:
+matched ones are sources on their titles' pages and cards in the Library,
+tracked like any other play (resume, watched, Continue Watching); unmatched
+ones are listed under Local and play as they are. The player opens them in
+place (`content://` or `file://`): nothing is copied or proxied, and there
+is nothing to download. The profile's built-in Local Files addon is
+answered empty inside the app, so it no longer shows as a catalog that
+could not be loaded. Not yet: the next episode's local file is not offered
+by the player's up-next, and on macOS a chosen folder is readable only
+until the app quits (the sandbox needs a security-scoped bookmark, not
+kept). See [ARCHITECTURE.md](ARCHITECTURE.md#local-videos).
 
 ## Addons
 

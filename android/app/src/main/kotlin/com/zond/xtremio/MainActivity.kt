@@ -53,6 +53,13 @@ class MainActivity : FlutterActivity() {
      */
     private var drivePicker: DrivePicker? = null
 
+    /**
+     * The videos in Android's media index, for the Library's Local list
+     * (lib/features/local/android_local_media_source.dart). Held so the
+     * permission answer can reach it.
+     */
+    private var localMedia: LocalMediaChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Answers `DeviceProfile.detect()` (lib/shell/device_profile.dart),
@@ -121,6 +128,7 @@ class MainActivity : FlutterActivity() {
         // The native Drive picker (lib/core/drive_native_pick.dart), which is
         // the only picker on a phone that can choose more than one file.
         drivePicker = DrivePicker(this, flutterEngine.dartExecutor.binaryMessenger)
+        localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -440,6 +448,7 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         downloads?.onRequestPermissionsResult(requestCode, grantResults)
+        localMedia?.onRequestPermissionsResult(requestCode, grantResults)
     }
 
     override fun onDestroy() {
@@ -448,6 +457,8 @@ class MainActivity : FlutterActivity() {
         displayRefreshRates?.detach()
         displayRefreshRates = null
         drivePicker?.detach()
+        localMedia?.detach()
+        localMedia = null
         drivePicker = null
         textEntry = null
         super.onDestroy()

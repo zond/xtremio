@@ -423,6 +423,54 @@ async fn fetch_bytes(request: reqwest::Request, host: Option<String>) -> Result<
         })
 }
 
+/// `bytes` as JSON of `OUT`, a failure naming the path where it went wrong.
+fn decode<OUT: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<OUT, EnvError> {
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    serde_path_to_error::deserialize::<_, OUT>(&mut deserializer)
+        .map_err(|error| EnvError::Serde(crate::serde_fault::at_path(error.path(), error.inner())))
+}
+
+/// Where every Stremio profile keeps its built-in Local Files addon
+/// (`org.stremio.local`): on the streaming server, under this path.
+const LOCAL_ADDON_PATH: &str = "/local-addon/";
+
+/// The answer to a request for the profile's Local Files addon, which is
+/// given here and never sent: None for any other URL.
+///
+/// **The addon is Stremio's streaming server's, and this app's server has
+/// none.** Its transport URL is `http://127.0.0.1:11470/local-addon/...`
+/// in every profile, and nothing may retarget it -- the addon list syncs
+/// to the Stremio account, which the official apps share. Sent as it is,
+/// the request reaches a port nothing listens on (the embedded server
+/// binds a port the OS picks), and Discover reports the catalog as one
+/// that could not be loaded, on every board. The app finds this device's
+/// videos itself (`lib/features/local/`), so what the addon is asked
+/// here is answered empty: a catalog with nothing in it is a row Discover
+/// leaves out without comment, and no streams is what a local play's
+/// tracking request (`localTrackingManifestUrl`) is meant to find when the
+/// engine asks it for the next episode. Anything else -- its manifest, a
+/// `local:` meta -- is refused as not served, as an addon without it would.
+fn local_addon_answer(uri: &http::Uri) -> Option<Result<Vec<u8>, EnvError>> {
+    let host = uri.host()?;
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
+    let rest = uri.path().strip_prefix(LOCAL_ADDON_PATH)?;
+    if !loopback || uri.scheme_str() != Some("http") {
+        return None;
+    }
+    let body: &[u8] = match rest.split('/').next() {
+        Some("catalog") => br#"{"metas":[]}"#,
+        Some("stream") => br#"{"streams":[]}"#,
+        Some("subtitles") => br#"{"subtitles":[]}"#,
+        _ => return Some(Err(EnvError::Fetch("not served by this app".to_owned()))),
+    };
+    Some(Ok(body.to_vec()))
+}
+
 /// The addon, type and id of a meta request's URL --
 /// `{base}/meta/{type}/{id}.json`, the shape stremio-core builds from a
 /// `ResourceRequest` -- with the base given back as the manifest URL the
@@ -476,6 +524,11 @@ impl Env for XtremioEnv {
         request: Request<IN>,
     ) -> TryEnvFuture<OUT> {
         let (parts, body) = request.into_parts();
+        if parts.method == Method::GET {
+            if let Some(answer) = local_addon_answer(&parts.uri) {
+                return future::ready(answer.and_then(|bytes| decode::<OUT>(&bytes))).boxed_env();
+            }
+        }
         let body = match serde_json::to_string(&body) {
             Ok(body) if body != "null" && parts.method != Method::GET => Body::from(body),
             Ok(_) => Body::from(Vec::<u8>::new()),
@@ -544,10 +597,7 @@ impl Env for XtremioEnv {
                     }
                 }
             };
-            let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-            serde_path_to_error::deserialize::<_, OUT>(&mut deserializer).map_err(|error| {
-                EnvError::Serde(crate::serde_fault::at_path(error.path(), error.inner()))
-            })
+            decode::<OUT>(&bytes)
         }
         .boxed_env()
     }
@@ -1019,6 +1069,66 @@ mod tests {
     /// request to a Torrentio-style addon has the debrid API key in its
     /// path, and `EnvError::Fetch`'s text is what the failed-addons line on
     /// screen shows verbatim -- on a television in a shared room.
+    /// **The profile's Local Files addon is answered here, never sent**:
+    /// its catalog and streams come back empty, as the engine's own
+    /// response type reads them, from every loopback spelling of its
+    /// address -- whatever port it names, none of which is this app's
+    /// server's.
+    #[test]
+    fn the_local_files_addon_is_answered_without_a_request() {
+        use stremio_core::types::addon::ResourceResponse;
+        for base in [
+            "http://127.0.0.1:11470/local-addon",
+            "http://localhost:11470/local-addon",
+            "http://[::1]:11470/local-addon",
+            "http://127.0.0.1:1/local-addon",
+        ] {
+            let request = Request::get(format!("{base}/catalog/movie/local.json"))
+                .body(())
+                .expect("request");
+            let answer: ResourceResponse = CONCURRENT
+                .block_on(XtremioEnv::fetch(request))
+                .unwrap_or_else(|error| panic!("{base}: {error:?}"));
+            assert!(
+                matches!(&answer, ResourceResponse::Metas { metas } if metas.is_empty()),
+                "{base}: {answer:?}"
+            );
+
+            let request = Request::get(format!("{base}/stream/series/tt0944947%3A1%3A1.json"))
+                .body(())
+                .expect("request");
+            let answer: ResourceResponse = CONCURRENT
+                .block_on(XtremioEnv::fetch(request))
+                .expect("streams");
+            assert!(
+                matches!(&answer, ResourceResponse::Streams { streams } if streams.is_empty()),
+                "{base}: {answer:?}"
+            );
+
+            let request = Request::get(format!("{base}/manifest.json"))
+                .body(())
+                .expect("request");
+            let refused = CONCURRENT
+                .block_on(XtremioEnv::fetch::<(), serde_json::Value>(request))
+                .unwrap_err();
+            assert!(matches!(refused, EnvError::Fetch(_)), "{base}: {refused:?}");
+        }
+    }
+
+    /// The same path anywhere but on this machine is an ordinary addon's,
+    /// and goes out like any other.
+    #[test]
+    fn a_local_addon_path_off_this_machine_is_not_answered_here() {
+        for uri in [
+            "http://example.org/local-addon/catalog/movie/local.json",
+            "https://127.0.0.1:11470/local-addon/catalog/movie/local.json",
+            "http://127.0.0.1:11470/other/catalog/movie/local.json",
+        ] {
+            let uri: http::Uri = uri.parse().expect("uri");
+            assert!(local_addon_answer(&uri).is_none(), "{uri}");
+        }
+    }
+
     #[test]
     fn fetch_keeps_the_url_out_of_its_errors() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");

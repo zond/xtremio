@@ -5,10 +5,15 @@ import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/local/desktop_local_media_source.dart';
+import 'package:xtremio/features/local/local_folders_section.dart';
+import 'package:xtremio/features/local/local_media.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
+import '../support/fake_local_media_source.dart';
+import '../support/fake_prefs_client.dart';
 import '../support/fixtures.dart';
 
 void main() {
@@ -446,6 +451,52 @@ void main() {
             'new Peer discovery row next to it',
       );
       expect(subtitleOf(tester), 'Connected, 5 nodes');
+    });
+  });
+
+  group('Local', () {
+    Future<void> mount(
+      WidgetTester tester,
+      LocalMediaSource Function(AppPrefs) source,
+    ) async {
+      final prefs = AppPrefs(client: FakePrefsClient());
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      final media = LocalMedia(prefs: prefs, source: source(prefs));
+      addTearDown(media.dispose);
+      await tester.pumpWidget(
+        LocalMediaScope(
+          media: media,
+          child: PrefsScope(
+            prefs: prefs,
+            child: CoreScope(
+              client: FakeCoreClient(
+                state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+              ),
+              child: MaterialApp(
+                home: SettingsScreen(pickFolder: () async => '/home/me/Films'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a desktop chooses its folders here', (tester) async {
+      await mount(tester, (prefs) => DesktopLocalMediaSource(prefs: prefs));
+      expect(find.text('Local'), findsOneWidget);
+      await tester.ensureVisible(find.text(LocalFoldersSection.addLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LocalFoldersSection.addLabel));
+      await tester.pumpAndSettle();
+      expect(find.text('/home/me/Films'), findsOneWidget);
+    });
+
+    testWidgets('Android has nothing to choose: its media index is the '
+        'list', (tester) async {
+      await mount(tester, (_) => FakeLocalMediaSource());
+      expect(find.text(LocalFoldersSection.addLabel), findsNothing);
     });
   });
 }

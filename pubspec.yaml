@@ -43,6 +43,7 @@ dependencies:
   # that looks right on the panel and no camera reads, which is a bug found
   # in a living room rather than in this suite.
   qr_flutter: ^4.1.0
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

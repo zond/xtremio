@@ -19,6 +19,8 @@ import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
+import '../local/local_media.dart';
+import '../local/local_playback.dart';
 import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
 import 'details_header.dart';
@@ -252,6 +254,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// entirely -- which is also what a paired account with nothing matched
   /// to this title draws.
   DriveAccount? _driveAccount;
+
+  /// This device's own videos, when the app put them above this screen:
+  /// the matched ones are sources here the way linked Drive files are.
+  LocalMedia? _localMedia;
 
   /// The app's preferences, for the sources list's layout. From the
   /// [PrefsScope] the app puts above every screen; a screen mounted
@@ -606,6 +612,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // up runs this again and the Drive row appears without anything here
     // subscribing to anything.
     _driveAccount = DriveAccountScope.maybeOf(context);
+    // The same for this device's videos: a scan that matches one while the
+    // screen is up adds its row.
+    _localMedia = LocalMediaScope.maybeOf(context);
     final downloads = DownloadsScope.maybeOf(context);
     if (_downloadsClient != downloads) {
       _downloads
@@ -1007,12 +1016,45 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// One dispatcher and not a branch per sliver: the two layouts draw the
   /// same row from the same reading, and a press on it has to *do* the same
   /// thing in both as well. A row with no addon group behind it is a linked
-  /// Drive file and there is exactly one other kind of row, which is why
-  /// this is a null check rather than a switch.
+  /// Drive file or a video on this device.
   Future<void> _playRow(MetaDetailsState state, SourceRow row) {
     final drive = row.drive;
     if (drive != null) return _playDrive(state, drive);
+    final local = row.local;
+    if (local != null) return _playLocal(state, local);
     return _play(state, row.group!, row.stream);
+  }
+
+  /// Pushes the player at a video on this device: its own address, which
+  /// needs nothing opened first, recorded under [localStreamRequest] for
+  /// the video on screen for the reason [_playDrive] records under
+  /// [driveStreamRequest].
+  Future<void> _playLocal(MetaDetailsState state, LocalMediaFile file) async {
+    if (_playing) return;
+    _playing = true;
+    try {
+      final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
+      await Navigator.of(context).push<PlayerScreenResult>(
+        MaterialPageRoute<PlayerScreenResult>(
+          settings: const RouteSettings(name: PlayerScreen.routeName),
+          builder: (_) => PlayerScreen(
+            stream: localStreamJson(file),
+            streamRequest: localStreamRequest(
+              type: widget.type,
+              videoId: videoId,
+            ),
+            metaRequest: state.metaRequest,
+            subtitlesPath: ResourcePath(
+              resource: 'subtitles',
+              type: widget.type,
+              id: videoId,
+            ),
+          ),
+        ),
+      );
+    } finally {
+      _playing = false;
+    }
   }
 
   /// Opens a linked Drive file and pushes the player at it: the same route

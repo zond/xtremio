@@ -30,6 +30,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
     final groups = state.allStreamGroups;
     final videoId = state.streamPath?.id ?? meta.id;
     final driveFiles = _driveFilesFor(videoId);
+    final localFiles = _localFilesFor(videoId);
     final noneYet =
         state.hasVideos && state.streamPath == null && groups.isEmpty;
     // Every addon that was asked has answered and none of them offered
@@ -48,6 +49,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         !state.isLoadingStreams &&
         lastUsed == null &&
         driveFiles.isEmpty &&
+        localFiles.isEmpty &&
         state.playableStreams.isEmpty;
     // A tapped episode whose streams have not arrived: everything below is
     // still the previous selection's, so show none of it.
@@ -87,6 +89,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
       isSectioned: isSectioned,
       order: order,
       driveFiles: driveFiles,
+      localFiles: localFiles,
     );
     final profile = derived.profile;
     final sources = derived.sources;
@@ -124,6 +127,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         lastUsedStream: lastUsedStream,
         sourceCount: sources.length,
         driveCount: derived.driveRows.length,
+        localCount: derived.localRows.length,
         downloads: downloads,
       );
     }

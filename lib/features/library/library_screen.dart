@@ -17,6 +17,8 @@ import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../drive/drive_match.dart';
 import '../drive/remote_files.dart';
+import '../local/local_media.dart';
+import '../local/local_playback.dart';
 import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
 
@@ -121,6 +123,11 @@ class LibraryScreen extends StatefulWidget {
   /// Not "Google Drive", and not "Linked": the same word as the button that
   /// links them, because a share on a NAS arrives under it too.
   static const String remoteLabel = 'Remote';
+
+  /// The pill that narrows the grid to the videos on this device
+  /// ([LocalMedia]): the matched ones under their titles, and the rest as
+  /// files.
+  static const String localLabel = 'Local';
 
   /// Tooltip of the reload button drawn just before the Remote pill while
   /// it is on: fetch the linked files again. An icon and not a chip, so
@@ -229,6 +236,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Drive.
   bool _downloadedOnly = false;
 
+  /// Whether the body is the videos on this device ([LocalMedia]): the
+  /// library's cards that have a local file, the matched titles it has no
+  /// card for, and the files nothing matched. The third local filter, and
+  /// an alternative to the other two like they are to each other.
+  ///
+  /// **The unmatched files are drawn only here**, where the unmatched Drive
+  /// files are drawn in "All" too: a Drive file was linked by hand, and a
+  /// video on this device was not chosen by anybody -- a phone's Download
+  /// folder is not a list of films.
+  bool _local = false;
+
+  /// This device's videos, as the scope last gave them.
+  LocalMedia? _localMedia;
+
   /// A reload is in flight, so a second press is dropped. Nothing is drawn
   /// from it: a chip that turned into a spinner under a viewer's thumb is a
   /// chip a remote loses its focus on, and the answer to "did that do
@@ -318,6 +339,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_remote && (drive?.files.entries.isEmpty ?? true)) {
       _remote = false;
     }
+    // Depended on here for the same reason the Drive account is: a scan or
+    // a match landing rebuilds the grid.
+    _localMedia = LocalMediaScope.maybeOf(context);
+    if (_local && _localMedia == null) _local = false;
     _resumePairing();
     _matchLinkedFiles();
   }
@@ -411,7 +436,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // title narrowed by both would be a third thing neither pill names.
     setState(() {
       _remote = remote;
-      if (remote) _downloadedOnly = false;
+      if (remote) {
+        _downloadedOnly = false;
+        _local = false;
+      }
     });
   }
 
@@ -419,8 +447,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_downloadedOnly == downloaded) return;
     setState(() {
       _downloadedOnly = downloaded;
-      if (downloaded) _remote = false;
+      if (downloaded) {
+        _remote = false;
+        _local = false;
+      }
     });
+  }
+
+  /// Turning Local on is also when the device is asked: a scan, and on
+  /// Android the permission the first time -- here, where the viewer asked
+  /// to see their videos, and not at start-up.
+  void _showLocal({required bool local}) {
+    if (_local == local) return;
+    setState(() {
+      _local = local;
+      if (local) {
+        _remote = false;
+        _downloadedOnly = false;
+      }
+    });
+    if (local) unawaited(_localMedia?.refresh(ask: true));
+  }
+
+  /// Plays a local video nothing matched: straight into the player, with
+  /// no title to keep progress on.
+  Future<void> _playLocal(LocalMediaFile file) async {
+    if (_playing) return;
+    _playing = true;
+    try {
+      final requests = localMatchRequests(file);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: PlayerScreen.routeName),
+          builder: (_) => PlayerScreen(
+            stream: localStreamJson(file),
+            streamRequest: requests?.stream,
+            metaRequest: requests?.meta,
+          ),
+        ),
+      );
+    } finally {
+      _playing = false;
+    }
   }
 
   /// Asks Drive what the linked files are called now, and says what came of
@@ -625,21 +693,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // this the pill narrowed the engine's list and this merge put every
     // matched remote title straight back -- Downloaded read as Remote.
     if (_downloadedOnly) return const [];
-    // A build of the app that cannot link anything has nothing to merge,
-    // which is not a failure to report.
-    final files = DriveAccountScope.maybeOf(context)?.files;
-    if (files == null) return const [];
-    return files.unlistedMatches(
-      // What is *drawn*, not what the engine sent: under Remote the grid is
-      // already narrowed to titles that have a linked file, so a match whose
-      // title was filtered out of it is one this list has to put back.
-      listed: {
-        for (final item in shown) item.id,
-        // A matched title that is also downloaded already has a card.
-        for (final view in kept) view.metaId,
-      },
-      type: state.selected!.type,
-    );
+    // What is *drawn*, not what the engine sent: under Remote the grid is
+    // already narrowed to titles that have a linked file, so a match whose
+    // title was filtered out of it is one this list has to put back.
+    final listed = {
+      for (final item in shown) item.id,
+      // A matched title that is also downloaded already has a card.
+      for (final view in kept) view.metaId,
+    };
+    final type = state.selected!.type;
+    // Drive's matches, then this device's -- each only where its own pill
+    // or no pill is on. A build that cannot link anything has nothing of
+    // the one kind to merge, which is not a failure to report.
+    final drive = _local
+        ? null
+        : DriveAccountScope.maybeOf(context)?.files
+              .unlistedMatches(listed: listed, type: type);
+    final local = _remote
+        ? null
+        : _localMedia?.files.unlistedMatches(
+            listed: {
+              ...listed,
+              for (final match in drive ?? const <LinkedDriveMatch>[])
+                match.cinemetaId,
+            },
+            type: type,
+          );
+    return [...?drive, ...?local];
   }
 
   bool get _isLoggedIn {
@@ -666,6 +746,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final unmatched = state == null || !state.isLoaded
             ? const <LinkedDriveFile>[]
             : _unmatched(state);
+        final unmatchedLocal = state == null || !state.isLoaded
+            ? const <LocalMediaFile>[]
+            : _unmatchedLocal(state);
         final isLoggedIn = _isLoggedIn;
         return TvLadder(
           child: Scaffold(
@@ -731,20 +814,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ? state.selectable
                         : const LibrarySelectable.empty(),
                     remote: _remote,
+                    local: _local,
                     downloaded: _downloadedOnly,
                     // A control with nothing to act on is not drawn. Neither
                     // of these is the engine's, so neither appears merely
                     // because a library did.
                     hasRemote: (_drive?.files.entries.isNotEmpty ?? false),
                     hasDownloads: _hasDownloads,
+                    // Always there where a device can have videos: the pill
+                    // is also how the permission is first asked for.
+                    hasLocal: _localMedia != null,
                     onSelect: _select,
                     onRemote: (on) => _showRemote(remote: on),
+                    onLocal: (on) => _showLocal(local: on),
                     onDownloaded: (on) => _showDownloaded(downloaded: on),
                     onReload: () => unawaited(_reloadRemote()),
                   ),
                 ),
                 if (!isLoggedIn &&
                     !_remote &&
+                    !_local &&
                     state != null &&
                     !state.isLibraryEmpty)
                   const _SignInHint(),
@@ -767,10 +856,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       : shown.isNotEmpty ||
                             kept.isNotEmpty ||
                             appended.isNotEmpty ||
-                            unmatched.isNotEmpty
+                            unmatched.isNotEmpty ||
+                            unmatchedLocal.isNotEmpty
                       ? _tvGroup(
                           context,
-                          _buildGrid(state, shown, kept, appended, unmatched),
+                          _buildGrid(
+                            state,
+                            shown,
+                            kept,
+                            appended,
+                            unmatched,
+                            unmatchedLocal,
+                          ),
+                        )
+                      : _local && _localMedia != null
+                      ? _LocalEmpty(
+                          media: _localMedia!,
+                          type: state.selected?.type,
                         )
                       // A local filter that narrowed the grid to nothing
                       // says so in its own words: the library is not empty,
@@ -806,6 +908,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     if (_remote) {
       final files = _drive?.files;
+      if (files == null) return const [];
+      return [
+        for (final item in state.items)
+          if (files.matching(item.id).isNotEmpty) item,
+      ];
+    }
+    if (_local) {
+      final files = _localMedia?.files;
       if (files == null) return const [];
       return [
         for (final item in state.items)
@@ -865,7 +975,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// twice when that page arrives -- the grid is scrolled to its end by the
   /// time this matters anyway, since this is drawn after the last page.
   List<DownloadView> _kept(LibraryState? state, List<LibraryItemView> shown) {
-    if (state == null || !state.isLoaded || _remote) return const [];
+    if (state == null || !state.isLoaded || _remote || _local) {
+      return const [];
+    }
     if (state.hasNextPage) return const [];
     final type = state.selected?.type;
     final cards = {for (final item in shown) item.id};
@@ -908,7 +1020,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// read would be linked, would have cost a grant, and would be reachable
   /// from nowhere in the app.
   List<LinkedDriveFile> _unmatched(LibraryState state) {
-    if (_downloadedOnly) return const [];
+    if (_downloadedOnly || _local) return const [];
     // No title, so no type to be a movie or a series by: drawn under "All"
     // and under "Other", which is where a card of type `other` belongs.
     final type = state.selected?.type;
@@ -924,25 +1036,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// scrolled to. The count grows by what was appended and the builder
   /// picks the list by index; nothing walks the engine's items to build
   /// them.
+  /// The local videos nothing matched: drawn under Local only, and there
+  /// under "All" and "Other" -- no title, so no type -- like Drive's.
+  List<LocalMediaFile> _unmatchedLocal(LibraryState state) {
+    if (!_local) return const [];
+    final type = state.selected?.type;
+    if (type != null && type != 'other') return const [];
+    return [
+      for (final file in _localMedia?.files.entries ?? const <LocalMediaFile>[])
+        if (file.match == null) file,
+    ];
+  }
+
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,
     List<DownloadView> kept,
     List<LinkedDriveMatch> appended,
     List<LinkedDriveFile> unmatched,
+    List<LocalMediaFile> unmatchedLocal,
   ) {
     // The engine's items, then the merged cards in a fixed order: what is
     // on this device, what is matched in Drive, and what nothing matched.
     final afterItems = items.length;
     final afterKept = afterItems + kept.length;
     final afterAppended = afterKept + appended.length;
+    final afterUnmatched = afterAppended + unmatched.length;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: posterGridDelegate,
-        itemCount: afterAppended + unmatched.length,
+        itemCount: afterUnmatched + unmatchedLocal.length,
         itemBuilder: (context, index) {
+          if (index >= afterUnmatched) {
+            final file = unmatchedLocal[index - afterUnmatched];
+            return LibraryItemTile(
+              item: _cardForLocal(file),
+              onTap: () => unawaited(_playLocal(file)),
+              memoryId: 'local-file-${file.uri}',
+            );
+          }
           if (index >= afterAppended) {
             final file = unmatched[index - afterAppended];
             return LibraryItemTile(
@@ -994,6 +1128,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
     '_id': 'drive-file:${file.fileId}',
     'type': 'other',
     'name': file.name.isEmpty ? file.fileId : file.name,
+  });
+
+  /// A local video nothing matched as its card: its file name, with no
+  /// poster, the way an unmatched Drive file is drawn.
+  static LibraryItemView _cardForLocal(LocalMediaFile file) => LibraryItemView({
+    // Keyed on the address, never shaped like a meta id.
+    '_id': 'local-file:${file.uri}',
+    'type': 'other',
+    'name': file.name,
   });
 
   /// A downloaded title as its card: the title's own meta when the download
@@ -1079,7 +1222,14 @@ class _FilterRow extends StatelessWidget {
     required this.hasRemote,
     required this.hasDownloads,
     required this.onDownloaded,
+    this.local = false,
+    this.hasLocal = false,
+    this.onLocal,
   });
+
+  final bool local;
+  final bool hasLocal;
+  final ValueChanged<bool>? onLocal;
 
   final LibrarySelectable selectable;
 
@@ -1159,7 +1309,7 @@ class _FilterRow extends StatelessWidget {
       // to Remote first whatever order the chips' nodes happen to register
       // in (`TvLadderRow` sorts stops by a declared order when they all
       // have one).
-      if (hasRemote || hasDownloads)
+      if (hasRemote || hasDownloads || hasLocal)
         Wrap(
           spacing: 12,
           runSpacing: 8,
@@ -1197,6 +1347,20 @@ class _FilterRow extends StatelessWidget {
                     label: const Text(LibraryScreen.remoteLabel),
                     selected: remote,
                     onSelected: onRemote,
+                  ),
+                ),
+              ),
+            if (hasLocal)
+              FocusTraversalOrder(
+                key: const ValueKey('local'),
+                order: const NumericFocusOrder(1.5),
+                child: FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: FilterChip(
+                    avatar: const Icon(Icons.phone_android_outlined, size: 18),
+                    label: const Text(LibraryScreen.localLabel),
+                    selected: local,
+                    onSelected: onLocal,
                   ),
                 ),
               ),
@@ -1402,6 +1566,59 @@ class _EmptyLocal extends StatelessWidget {
                 '${remote ? 'linked file' : 'download'}.',
     ),
   );
+}
+
+/// What Local shows with no video to draw: why, and the one thing that
+/// would change it -- the permission on Android, a folder on a desktop.
+class _LocalEmpty extends StatelessWidget {
+  const _LocalEmpty({required this.media, required this.type});
+
+  final LocalMedia media;
+  final String? type;
+
+  static const String askTitle = 'Allow access to your videos';
+  static const String askDetail =
+      'Local lists the films and episodes on this device. The camera\'s own '
+      'clips are left out.';
+  static const String allowLabel = 'Allow';
+  static const String nothingTitle = 'No videos found';
+
+  @override
+  Widget build(BuildContext context) {
+    if (media.scanning) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Center(
+      child: switch (media.accessState) {
+        LocalMediaAccess.askable => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EmptyState(
+              icon: Icons.video_file_outlined,
+              title: askTitle,
+              detail: askDetail,
+            ),
+            FilledButton(
+              onPressed: () => unawaited(media.refresh(ask: true)),
+              child: const Text(allowLabel),
+            ),
+          ],
+        ),
+        LocalMediaAccess.unavailable => EmptyState(
+          icon: Icons.video_file_outlined,
+          title: media.source.setupTitle,
+          detail: media.source.setupDetail,
+        ),
+        LocalMediaAccess.granted => EmptyState(
+          icon: Icons.video_file_outlined,
+          title: switch (type) {
+            null => nothingTitle,
+            final type => 'No local ${contentTypeLabel(type).toLowerCase()}',
+          },
+        ),
+      },
+    );
+  }
 }
 
 class _EmptyLibrary extends StatelessWidget {

@@ -849,17 +849,62 @@ merged into the list and never written to the engine's library or synced:
 - **Downloaded titles** appear whether or not they were added, one card per
   title the grid has no card for, of the selected type, once the engine has
   no page left to send (`_kept`).
-- **Matched linked Drive files** appear the same way (`_appended`); files
-  that matched nothing appear under All and Other.
+- **Matched linked Drive files** and **matched local videos** appear the
+  same way (`_appended`); files that matched nothing appear under All and
+  Other, under their own pill.
 
-**Downloaded** and **Remote** are filter chips on a row under the types, and
+**Downloaded**, **Remote** and **Local** are filter chips on a row under the types, and
 they filter whatever the engine answered: they combine with the type pills
 and the sort, dispatch nothing, and are not turned off by the engine's
 controls. Remote shows everything linked, matched or not, with a Reload
 button beside it. The app bar holds the way to the Downloads screen and
 `RemoteFilesButton`, where files are linked from. One matching pass runs
 per screen (`DriveMatchRun`). Tests: `test/features/library_merge_test.dart`,
-`library_remote_test.dart`, `library_screen_test.dart`.
+`library_remote_test.dart`, `library_local_test.dart`,
+`library_screen_test.dart`.
+
+## Local videos
+
+The device's own videos are the Drive arrangement without an account: a
+record of files, matched by name, merged into the library and the details
+page, played in place.
+
+**Finding them** is a `LocalMediaSource` per platform
+(`lib/features/local/`): `AndroidLocalMediaSource` over the
+`xtremio/local_media` channel (`LocalMediaChannel.kt`), which queries
+MediaStore's external video collection -- every volume, a USB drive's
+included -- and leaves out `DCIM/` and `Pictures/`; and
+`DesktopLocalMediaSource`, which walks the folders in the `localFolders`
+preference (Settings → Local, `LocalFoldersSection`, a `file_selector`
+dialog) to a bounded depth and count, skipping hidden names and links.
+Android's permission is `READ_MEDIA_VIDEO` (with the partial-access grant on
+14, the storage read before 13), asked only when the Library's Local pill
+opens; start-up scans only what is already allowed.
+
+**The record** (`LocalMediaFiles`, `lib/core/local_media_files.dart`) is
+the `localMedia` preference: address, name, size, duration, height, and
+the match. A scan reconciles it -- a file found again keeps its match, a
+renamed one is asked about again, one not found is dropped. `LocalMedia`
+(`lib/features/local/local_media.dart`) owns it: it scans, then asks
+`matchDriveFile` about each file not yet answered, writing each answer as
+it lands; a catalogue that cannot be reached leaves the file for the next
+refresh. Refreshes run one at a time, and one asked for during another is
+a pass after it. It sits above every screen in `LocalMediaScope`.
+
+**Playing.** `localStreamJson` hands the player the file's own address:
+libmpv opens `content://` through the file descriptor media_kit opens for
+it, and `file://` directly; only `http(s)` is ever proxied, so neither
+touches the embedded server, and the download controls refuse both. A
+matched play carries `localStreamRequest`, naming the profile's Local Files
+addon (`http://127.0.0.1:11470/local-addon/manifest.json`), for the reason
+Drive's carries `driveStreamRequest`. That address is not this app's
+server, which binds a port the OS picks and has no such route, and the
+addon's URL is not rewritten because the addon list syncs to the account;
+instead `XtremioEnv::fetch` answers it itself (`local_addon_answer` in
+`rust/src/env.rs`): an empty catalog, which Discover drops without
+comment, and no streams. Tests: `test/core/local_media_files_test.dart`,
+`test/features/local_media_test.dart`,
+`test/features/details_local_source_test.dart`, and the env tests.
 
 ## Addons
 

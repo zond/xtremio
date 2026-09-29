@@ -28,6 +28,13 @@
          notification and nothing else: the service still runs and downloads
          still finish. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- The Library's Local list: the videos in Android's media index
+         (LocalMediaChannel). Asked for when the list is first opened. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the

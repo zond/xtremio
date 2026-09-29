@@ -9,6 +9,7 @@ import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
 import 'details_visits.dart';
 import 'drive_link.dart';
+import 'local_media_files.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
 import 'stream_order.dart';
@@ -186,6 +187,15 @@ class AppPrefs extends ChangeNotifier {
   /// at different moments and forgotten independently.
   static const String subtitlePicksKey = 'subtitlePicks';
 
+  /// The `localMedia` key: the videos on this device and what each one
+  /// matched (see [LocalMediaFiles]).
+  static const String localMediaKey = 'localMedia';
+
+  /// The `localFolders` key: the folders a desktop looks for videos in,
+  /// chosen in Settings. A phone or a television uses its media index and
+  /// never reads this.
+  static const String localFoldersKey = 'localFolders';
+
   /// The `detailsVisits` key: which season and episode each title's
   /// details screen was left on (see [DetailsVisitMemory]).
   static const String detailsVisitsKey = 'detailsVisits';
@@ -307,6 +317,16 @@ class AppPrefs extends ChangeNotifier {
   SubtitlePickMemory get subtitlePicks => _subtitlePicks;
 
   DetailsVisitMemory _detailsVisits = DetailsVisitMemory.empty;
+
+  LocalMediaFiles _localMedia = LocalMediaFiles.empty;
+
+  /// The videos on this device -- see [localMediaKey].
+  LocalMediaFiles get localMedia => _localMedia;
+
+  List<String> _localFolders = const [];
+
+  /// The folders a desktop looks in -- see [localFoldersKey].
+  List<String> get localFolders => _localFolders;
 
   /// Where each title's details screen was left -- see [detailsVisitsKey].
   DetailsVisitMemory get detailsVisits => _detailsVisits;
@@ -471,6 +491,25 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(localMediaKey)) {
+      final media = LocalMediaFiles.fromJson(stored[localMediaKey]);
+      if (media != _localMedia) {
+        _localMedia = media;
+        changed = true;
+      }
+    }
+    if (loaded(localFoldersKey)) {
+      final raw = stored[localFoldersKey];
+      final folders = [
+        if (raw is List)
+          for (final folder in raw)
+            if (folder is String && folder.trim().isNotEmpty) folder,
+      ];
+      if (!listEquals(folders, _localFolders)) {
+        _localFolders = folders;
+        changed = true;
+      }
+    }
     if (loaded(detailsVisitsKey)) {
       final visits = DetailsVisitMemory.fromJson(stored[detailsVisitsKey]);
       if (visits != _detailsVisits) {
@@ -602,6 +641,29 @@ class AppPrefs extends ChangeNotifier {
       subtitlePicksKey,
       value == SubtitlePickMemory.empty ? null : value.toJson(),
     );
+  }
+
+  /// Stores [value], or removes the key once nothing is on this device.
+  ///
+  /// **Tells no listener**, for the reason [setDetailsVisits] tells none:
+  /// matching writes once per file, a phone holds hundreds, and what draws
+  /// from the record listens to `LocalMedia`, which says when it changed.
+  Future<void> setLocalMedia(LocalMediaFiles value) async {
+    if (_localMedia == value) return;
+    _localMedia = value;
+    await _write(
+      localMediaKey,
+      value == LocalMediaFiles.empty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores the folders a desktop looks for videos in; the Settings list
+  /// draws from them, so this one does notify.
+  Future<void> setLocalFolders(List<String> folders) async {
+    if (listEquals(folders, _localFolders)) return;
+    _localFolders = List.unmodifiable(folders);
+    notifyListeners();
+    await _write(localFoldersKey, folders.isEmpty ? null : folders);
   }
 
   /// Stores [value], or removes the key entirely once nothing is

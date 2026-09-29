@@ -9,6 +9,9 @@ import '../diagnostics/diagnostics_screen.dart';
 import '../diagnostics/server_storage_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
+import '../local/desktop_local_media_source.dart';
+import '../local/local_folders_section.dart';
+import '../local/local_media.dart';
 import '../player/player_screen.dart';
 import 'account_section.dart';
 import 'core_settings.dart';
@@ -41,13 +44,20 @@ import 'core_settings.dart';
 /// a header is a label on the row below it, and that row is a stop whose
 /// own reveal brings the header on screen with it.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.dhtStatus});
+  const SettingsScreen({
+    super.key,
+    this.dhtStatus,
+    this.pickFolder = pickFolderWithTheSystem,
+  });
 
   /// Where the Peer discovery row's [DhtStatus] comes from (absent,
   /// `ServerClient().dhtStatus`) -- a plain function, the way
   /// `PlaybackScope.dhtStatus` is, so a widget test can hand over one that
   /// returns a chosen state or throws instead of reaching FFI.
   final DhtStatus Function()? dhtStatus;
+
+  /// Asks for a folder to find local videos in; a test's answers one.
+  final FolderPicker pickFolder;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -225,6 +235,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
           ),
+          // On a desktop only: Android finds this device's videos in its
+          // media index, with nothing to choose.
+          if (LocalMediaScope.maybeOf(context) case final media?
+              when media.source is DesktopLocalMediaSource) ...[
+            const _SectionHeader('Local'),
+            LocalFoldersSection(
+              prefs: _prefs,
+              media: media,
+              pickFolder: widget.pickFolder,
+            ),
+          ],
           const _SectionHeader('Player'),
           // Not a `profile.settings` field, so it is outside `_withSettings`
           // and shows whether or not the `ctx` field has arrived.

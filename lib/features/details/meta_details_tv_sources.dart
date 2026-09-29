@@ -59,6 +59,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     /// from [sourceCount], which is what the addons between them offered;
     /// see [_sourcesSummary].
     required int driveCount,
+
+    /// The same for this device's own videos.
+    required int localCount,
     required StreamDownloads? downloads,
   }) {
     TvSource source(SourceRow row) => _tvSource(
@@ -169,12 +172,16 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
             // Nothing to count yet and addons still out: say what is
             // being waited for rather than "0 from 0 addons".
             summary:
-                sourceCount == 0 && driveCount == 0 && state.isLoadingStreams
+                sourceCount == 0 &&
+                    driveCount == 0 &&
+                    localCount == 0 &&
+                    state.isLoadingStreams
                 ? kLookingForStreams
                 : _sourcesSummary(
                     state,
                     sources: sourceCount,
                     drive: driveCount,
+                    local: localCount,
                   ),
             // The heading's own small spinner had nowhere left to go once
             // the heading became this line, and a line that says how many
@@ -348,6 +355,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     MetaDetailsState state, {
     required int sources,
     required int drive,
+    required int local,
   }) {
     final addons = state.allStreamGroups
         .where((group) => group.streams.isNotEmpty)
@@ -361,6 +369,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     return [
       '$sources from $from',
       if (drive > 0) '$drive from $driveSourceLabel',
+      if (local > 0) '$local $localSourceLabel',
     ].join(' · ');
   }
 

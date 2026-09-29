@@ -24,6 +24,7 @@ import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 import 'shell/server_footprint.dart';
 import 'shell/tv_density.dart';
+import 'features/local/local_media.dart';
 import 'widgets/focusable_tile.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
@@ -124,6 +125,7 @@ class XtremioApp extends StatefulWidget {
     this.cast,
     this.prefs,
     this.drive,
+    this.localMedia,
     this.addonHealth = const RustAddonHealthClient(),
     this.deepLinks,
     this.device = DeviceProfile.fallback,
@@ -154,6 +156,11 @@ class XtremioApp extends StatefulWidget {
   /// implementation of — that reads as a device nobody has paired, which
   /// is what a test that has not paired anything wants.
   final DriveAccount? drive;
+
+  /// This device's videos, for tests that want them over a fake source.
+  /// Read once, like [drive]. The one built here reads the platform's own
+  /// source ([platformLocalMediaSource]); a platform with none has no Local.
+  final LocalMedia? localMedia;
 
   /// How the installed addons have been answering, for the Addons screen.
   /// Null shows no verdicts at all, which is what a test that does not care
@@ -247,6 +254,8 @@ class _XtremioAppState extends State<XtremioApp> {
   /// The one Drive pairing, and the same rule again.
   late final DriveAccount _drive;
   late final bool _ownsDrive;
+  late final LocalMedia? _localMedia;
+  late final bool _ownsLocalMedia;
 
   /// The one Cast sender, and the same rule again.
   late final CastClient _cast;
@@ -292,6 +301,13 @@ class _XtremioAppState extends State<XtremioApp> {
     _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
+    _ownsLocalMedia = widget.localMedia == null;
+    _localMedia =
+        widget.localMedia ??
+        switch (platformLocalMediaSource(_prefs)) {
+          null => null,
+          final source => LocalMedia(prefs: _prefs, source: source),
+        };
     _ownsDrive = widget.drive == null;
     _drive =
         widget.drive ??
@@ -325,6 +341,9 @@ class _XtremioAppState extends State<XtremioApp> {
         // is half the secure store and half this file, and a read of one
         // half before the other is an answer about neither.
         unawaited(_drive.load());
+        // A scan only where access is already there: the first launch asks
+        // nothing, and the Local list is where the asking happens.
+        unawaited(_localMedia?.refresh());
       }),
     );
     _lifecycle = AppLifecycleListener(
@@ -612,6 +631,7 @@ class _XtremioAppState extends State<XtremioApp> {
     // Stops the polling with it; nothing else holds the timer.
     _activity.dispose();
     if (_ownsDrive) _drive.dispose();
+    if (_ownsLocalMedia) _localMedia?.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
@@ -648,33 +668,36 @@ class _XtremioAppState extends State<XtremioApp> {
                 // only the token itself is anywhere else.
                 child: DriveAccountScope(
                   account: _drive,
-                  child: SharingScope(
-                    policy: _sharing,
-                    monitor: _activity,
-                    child: PlaybackScope(
-                      createEngine: _createEngine,
-                      // Under the [PrefsScope] rather than above it, so that
-                      // the focus floor is rebuilt when the Bold switch is
-                      // flipped: the scope is an [InheritedNotifier] and this
-                      // builder reads it. Every other part of the theme is
-                      // settled before the app is built.
-                      child: Builder(
-                        builder: (context) => _showingFocus(
-                          isTv: isTv,
-                          child: MaterialApp(
-                            title: 'Xtremio',
-                            debugShowCheckedModeBanner: false,
-                            navigatorKey: _navigator,
-                            theme: XtremioApp.themeFor(
-                              isTv: isTv,
-                              emphasis: FocusHighlight.emphasisOf(context),
+                  child: LocalMediaScope(
+                    media: _localMedia,
+                    child: SharingScope(
+                      policy: _sharing,
+                      monitor: _activity,
+                      child: PlaybackScope(
+                        createEngine: _createEngine,
+                        // Under the [PrefsScope] rather than above it, so that
+                        // the focus floor is rebuilt when the Bold switch is
+                        // flipped: the scope is an [InheritedNotifier] and this
+                        // builder reads it. Every other part of the theme is
+                        // settled before the app is built.
+                        child: Builder(
+                          builder: (context) => _showingFocus(
+                            isTv: isTv,
+                            child: MaterialApp(
+                              title: 'Xtremio',
+                              debugShowCheckedModeBanner: false,
+                              navigatorKey: _navigator,
+                              theme: XtremioApp.themeFor(
+                                isTv: isTv,
+                                emphasis: FocusHighlight.emphasisOf(context),
+                              ),
+                              builder: isTv ? TvMediaQuery.builder : null,
+                              navigatorObservers: [
+                                _routes,
+                                if (kDebugMode) RouteLogObserver(),
+                              ],
+                              home: const RootShell(),
                             ),
-                            builder: isTv ? TvMediaQuery.builder : null,
-                            navigatorObservers: [
-                              _routes,
-                              if (kDebugMode) RouteLogObserver(),
-                            ],
-                            home: const RootShell(),
                           ),
                         ),
                       ),

@@ -16,6 +16,8 @@ final class _StreamDerivation {
     required this.order,
     required this.driveFiles,
     required this.driveRows,
+    required this.localFiles,
+    required this.localRows,
     required this.profile,
     required this.sources,
     required this.sections,
@@ -35,6 +37,10 @@ final class _StreamDerivation {
   /// walking the sections again.
   final List<LinkedDriveFile> driveFiles;
   final List<SourceRow> driveRows;
+
+  /// This device's videos matched to the video, and their rows.
+  final List<LocalMediaFile> localFiles;
+  final List<SourceRow> localRows;
 
   /// The profile behind [ctx]; null until its first pull comes back.
   final ProfileState? profile;
@@ -62,12 +68,14 @@ final class _StreamDerivation {
     required bool isSectioned,
     required StreamOrder order,
     required List<LinkedDriveFile> driveFiles,
+    required List<LocalMediaFile> localFiles,
   }) =>
       identical(this.state, state) &&
       identical(this.ctx, ctx) &&
       this.isSectioned == isSectioned &&
       this.order == order &&
-      listEquals(this.driveFiles, driveFiles);
+      listEquals(this.driveFiles, driveFiles) &&
+      listEquals(this.localFiles, localFiles);
 }
 
 /// What an addon is called in a list that has lost its headings: the
@@ -97,6 +105,7 @@ SourceRow _rowOf(ProfileState? profile, StreamGroup group, StreamInfo stream) =>
     (
       group: group,
       drive: null,
+      local: null,
       stream: stream,
       facts: StreamFacts.of(stream, addonName: _addonNameOf(profile, group)),
       alsoFrom: const <String>[],
@@ -125,10 +134,30 @@ SourceRow _driveRow(LinkedDriveFile file) {
   return (
     group: null,
     drive: file,
+    local: null,
     stream: stream,
     facts: StreamFacts.of(
       stream,
       addonName: driveSourceLabel,
+      measuredHeight: file.height,
+    ),
+    alsoFrom: const <String>[],
+  );
+}
+
+/// One video on this device as a row of the sources list: read the way a
+/// Drive file's row is ([_driveRow]), under [localSourceLabel], with the
+/// height the media index measured where it has one.
+SourceRow _localRow(LocalMediaFile file) {
+  final stream = StreamInfo(localStreamJson(file));
+  return (
+    group: null,
+    drive: null,
+    local: file,
+    stream: stream,
+    facts: StreamFacts.of(
+      stream,
+      addonName: localSourceLabel,
       measuredHeight: file.height,
     ),
     alsoFrom: const <String>[],
@@ -156,6 +185,7 @@ List<SourceRow> _collapse(
         (
           group: row.group,
           drive: row.drive,
+          local: row.local,
           stream: sources.merged(row.stream),
           facts: row.facts,
           alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
@@ -187,6 +217,7 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     required bool isSectioned,
     required StreamOrder order,
     required List<LinkedDriveFile> driveFiles,
+    required List<LocalMediaFile> localFiles,
   }) {
     final ctx = _ctx?.value;
     final derived = _derived;
@@ -197,6 +228,7 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
           isSectioned: isSectioned,
           order: order,
           driveFiles: driveFiles,
+          localFiles: localFiles,
         )) {
       return derived;
     }
@@ -229,6 +261,7 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     // file does not count as one more thing an addon offered. It is not an
     // addon result; it is one more source, which is a different sentence.
     final driveRows = [for (final file in driveFiles) _driveRow(file)];
+    final localRows = [for (final file in localFiles) _localRow(file)];
     // The sectioned layout: every listed addon's streams together, put in
     // the chosen order ([StreamOrder], the same one for every section) and
     // then split into a collapsible section per resolution. Each row names
@@ -256,6 +289,7 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
               sortedByStreamOrder(
                 [
                   ...driveRows,
+                  ...localRows,
                   for (final group in listed)
                     for (final stream in group.streams)
                       _rowOf(profile, group, stream),
@@ -296,6 +330,17 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
                 isLoading: false,
                 rows: driveRows,
               ),
+            // This device's own videos, after Drive's and before the
+            // addons, for the same reason: not an addon either.
+            if (localRows.isNotEmpty)
+              (
+                group: null,
+                name: localSourceLabel,
+                storageLabel: localSourceStorageLabel,
+                isFromMeta: false,
+                isLoading: false,
+                rows: localRows,
+              ),
             for (final group in listed)
               (
                 group: group,
@@ -328,6 +373,8 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
       order: order,
       driveFiles: driveFiles,
       driveRows: driveRows,
+      localFiles: localFiles,
+      localRows: localRows,
       profile: profile,
       sources: sources,
       sections: sections,
@@ -354,4 +401,10 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
   List<LinkedDriveFile> _driveFilesFor(String videoId) =>
       _driveAccount?.files.matching(widget.id, videoId: videoId) ??
       const <LinkedDriveFile>[];
+
+  /// This device's videos matched to [videoId] of this title, read the way
+  /// [_driveFilesFor] reads the linked files.
+  List<LocalMediaFile> _localFilesFor(String videoId) =>
+      _localMedia?.files.matching(widget.id, videoId: videoId) ??
+      const <LocalMediaFile>[];
 }

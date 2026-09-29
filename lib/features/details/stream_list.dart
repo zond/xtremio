@@ -20,6 +20,10 @@ import 'tv_source_row.dart';
 /// and it cannot collide with a URL or with a `meta:` prefixed one.
 const String driveSourceStorageLabel = 'drive';
 
+/// The same, for the group of this device's own videos in the grouped
+/// layout.
+const String localSourceStorageLabel = 'local';
+
 /// The downloads binding for one source group: an addon's, recorded
 /// against its request, or -- for the group with no addon behind it, the
 /// linked Drive files -- one that pins with no request at all.
@@ -371,6 +375,7 @@ typedef SourceGroup = ({
 typedef SourceRow = ({
   StreamGroup? group,
   LinkedDriveFile? drive,
+  LocalMediaFile? local,
   StreamInfo stream,
   StreamFacts facts,
   List<String> alsoFrom,
