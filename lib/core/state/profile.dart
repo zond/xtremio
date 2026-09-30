@@ -116,8 +116,9 @@ final class ProfileSettings {
   /// `ctx` state has not been pulled yet).
   bool get isEmpty => json.isEmpty;
 
-  /// The streaming server the engine talks to; loopback means the embedded
-  /// server (retargeted to its actual port at init).
+  /// The streaming server the engine talks to: always the embedded server,
+  /// which `core::pin_to_embedded` points it at on every launch and again
+  /// after a login or logout resets the settings.
   String? get streamingServerUrl => json[streamingServerUrlKey] as String?;
 
   bool get bingeWatching => json[bingeWatchingKey] as bool? ?? true;

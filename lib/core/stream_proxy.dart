@@ -56,10 +56,7 @@ import 'dart:io';
 ///   serving is not one to give back to it.
 /// - Everything, when [serverBase] is null -- a build that started no
 ///   embedded server. No server means no proxy, and a stream that plays
-///   direct is better than one that does not play. Note that a viewer who
-///   configured a streaming server elsewhere is *not* this case: the
-///   embedded server keeps running and keeps being named, so those streams
-///   are proxied like anybody else's.
+///   direct is better than one that does not play.
 ///
 /// The shape is the one stremio-core builds and the server parses: the
 /// target's origin percent-encoded into a `d=` path segment, the target's
@@ -144,10 +141,9 @@ bool isProxiedByServer(Uri url) {
 /// device. False with no embedded server.
 ///
 /// The one rule for "ours", which the player, the proxy and the cast all
-/// ask -- not "any loopback host": a streaming server typed as `localhost`
-/// is the embedded one when the port matches, but `localhost` is not
-/// `127.0.0.1` as a string, so a test on loopback alone would miss it and
-/// its streams would draw no stats cards. The port is what separates this
+/// ask -- not "any loopback host", and not the host as a string: a URL that
+/// names this device as `localhost` on the server's port is the embedded
+/// server, though `localhost` is not `127.0.0.1`. The port is what separates this
 /// server from another on the same machine (the standard Stremio server on
 /// 11470, say); the host cannot.
 bool isEmbeddedServer(Uri url, Uri? serverBase) {

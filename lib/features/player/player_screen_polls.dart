@@ -8,23 +8,6 @@ part of 'player_screen.dart';
 /// torrent's stats, what the server holds of the stream, and the hints it
 /// is told.
 extension _PlayerServerPolls on _PlayerScreenState {
-  /// Whether [url] is a stream this device's embedded server is serving --
-  /// the rule behind both questions this screen asks that server about a
-  /// stream ([_heldStreamUrl] and [_startTorrentStats]).
-  ///
-  /// The server cannot tell whose stream it is asked about (stream numbers
-  /// answer on the path and `f=` alone; the stats route takes a bare info
-  /// hash), so the asker must only ask about streams it serves. With a
-  /// streaming server configured on another machine a torrent is sent there
-  /// ([_mediaUrl]), while the embedded server here would answer for the same
-  /// hash out of its own engine -- and a stats ask *creates* that engine
-  /// (`ServerClient.torrentStats`), starting an add on this device and
-  /// measuring it instead of the playback on screen.
-  ///
-  /// False with no embedded server ([_serverBase] null).
-  bool _servedHere(Uri? url) =>
-      url != null && isEmbeddedServer(url, _serverBase);
-
   /// Puts back the torrent the failure forgot ([_failPlayback] stops the
   /// polling for good), so the stall card and the stats panel have
   /// something to ask about again.
@@ -113,15 +96,16 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// overlay. The first request goes out on the first tick, never before the
   /// engine's `open` has been issued.
   ///
-  /// Only a torrent this device's server is serving ([_servedHere], on the
-  /// URL [_open] has just handed the engine): for one on another machine
-  /// this server would answer from an engine of its own, and start one. No
+  /// Every torrent is served by the embedded server -- the core's streaming
+  /// server URL is pinned to it (`core::pin_to_embedded`) -- so the only
+  /// torrent not asked about is one in a build that started no embedded
+  /// server ([_serverBase] null): there is no engine here to ask. No
   /// request means no swarm rows, no start-up card and no stall card.
   void _startTorrentStats(PlayerState state) {
     _stopTorrentStats();
     final stream = state.selectedStream;
     if (stream?.kind != StreamKind.torrent) return;
-    if (!_servedHere(_engineUrl)) return;
+    if (_serverBase == null) return;
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
@@ -304,13 +288,15 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// [_engineUrl], not [_opened]: the bytes are cached under the URL the
   /// engine was handed (a `/proxy` URL for anything not a torrent), and the
   /// server finds the store by path, so the bare origin would find nothing.
-  /// And only a stream this server serves ([_servedHere]): otherwise the
-  /// sharing row would show this device's numbers for a film coming off
-  /// somebody else's box. `buffer=` stays on: the server ignores every query
-  /// key but `f=`.
+  /// And only a URL on the embedded server ([isEmbeddedServer], false with
+  /// no embedded server). The server answers on the path and `f=` alone, so
+  /// a stream left unproxied on another server on this device (a loopback
+  /// URL, [proxiedThroughServer]) would be answered with this server's
+  /// numbers for whatever it holds under the same path. `buffer=` stays on:
+  /// the server ignores every query key but `f=`.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
-    return _servedHere(url) ? url : null;
+    return url != null && isEmbeddedServer(url, _serverBase) ? url : null;
   }
 
   /// Drops the last answer and starts again for the stream now open. Called

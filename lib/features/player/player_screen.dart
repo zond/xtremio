@@ -260,13 +260,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ///
   /// From `CoreInitInfo`, because it must be known before the first `open`,
   /// and `profile.settings.streamingServerUrl` arrives with a `ctx` pull that
-  /// may land after the player state.
-  ///
-  /// **It names the embedded server whatever the viewer configured.** A
-  /// streaming server configured elsewhere changes `streamingServerUrl`, not
-  /// this, so a remote host's stream is still proxied through the embedded
-  /// server, while a torrent has an info hash and [_mediaUrl] sends it
-  /// straight to the configured server with `buffer=` and no proxy.
+  /// may land after the player state. The two name the same server: the
+  /// profile's URL is pinned to this one (`core::pin_to_embedded`), so a
+  /// torrent's URL is on it already and [_mediaUrl] only adds `buffer=`.
   ///
   /// Null only in a build that started no embedded server (nothing the app
   /// ships: a server that will not start fails the boot); the stream then
@@ -676,9 +672,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// has no answer for the stream's file, a poll asks for the torrent-level
   /// [_torrentStatsFallback].
   ///
-  /// Null means: not a torrent, a torrent served by another machine
-  /// ([_servedHere]), or no embedded server. Read it as "there is a torrent
-  /// here we can ask our own server about".
+  /// Null means: not a torrent, or no embedded server. Read it as "there is
+  /// a torrent here we can ask our own server about".
   TorrentStatsClient? _torrentStatsClient;
   TorrentStatsRequest? _torrentStatsRequest;
   TorrentStatsRequest? _torrentStatsFallback;

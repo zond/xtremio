@@ -204,14 +204,12 @@ extension _PlayerCasting on _PlayerScreenState {
       facts: _streamFacts,
       filename: _castFilename,
       stats: _lastStats,
-      // A torrent this device's server is serving and has not named the file
-      // of yet: "not until it has", answered without reopening anything,
-      // since the poll that names it rebuilds this screen. A torrent on
-      // another machine records no request, so it is judged from what there
-      // is: nothing here will ever name that file. A member is judged the
-      // same way: [_reopenAt] restores the request ([_restoreTorrentStats])
-      // that [_failPlayback] cleared, so a member of a torrent served here is
-      // pending until a poll names the file.
+      // A torrent the server has not named the file of yet: "not until it
+      // has", answered without reopening anything, since the poll that names
+      // it rebuilds this screen. A member is judged the same way:
+      // [_reopenAt] restores the request ([_restoreTorrentStats]) that
+      // [_failPlayback] cleared, so a member of a torrent is pending until a
+      // poll names the file.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {

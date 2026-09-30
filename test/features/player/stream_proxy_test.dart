@@ -300,11 +300,9 @@ void main() {
     testWidgets('plays direct when this build runs no server of its own', (
       tester,
     ) async {
-      // A build that started no embedded server at all -- which is not
-      // what choosing a streaming server elsewhere does, since that leaves
-      // the embedded one running and `CoreInitInfo.serverBaseUrl` naming
-      // it, and those streams go through the proxy like anybody else's.
-      // With nothing to proxy through, the stream goes straight out.
+      // A build that started no embedded server at all
+      // (`CoreInitInfo.serverBaseUrl` null). With nothing to proxy
+      // through, the stream goes straight out.
       useWideViewport(tester);
       const remote = 'https://rd.example/dl/tok/film.mkv';
       final harness = PlayerHarness(

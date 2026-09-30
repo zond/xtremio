@@ -567,19 +567,35 @@ void main() {
     testWidgets('a stream off another server on this device is not rebuilt', (
       tester,
     ) async {
-      // The LAN listener serves the embedded server's routes, so a stream
-      // off another server on this machine -- the standard one on 11470,
-      // say -- must not be rebuilt on it: the receiver would be handed a
-      // path on a server that does not serve it.
+      // The LAN listener serves the embedded server's routes, so an addon's
+      // link to another server on this machine -- the standard one on
+      // 11470, say, left unproxied as every loopback URL is -- must not be
+      // rebuilt on it: the receiver would be handed a path on a server that
+      // does not serve it.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final fixture = playerWithFilename('clip.mp4');
-      final content =
-          (fixture['stream'] as Map<String, dynamic>)['content'] as List;
-      (content[0] as Map<String, dynamic>)['streaming_url'] =
-          'http://127.0.0.1:11470/11ea02584fa6351956f35671962ab46354d99060/0';
-      final harness = castHarness(cast: cast, lanMedia: lan, player: fixture);
+      const url = 'http://127.0.0.1:11470/clip/clip.mp4';
+      const direct = {
+        'url': url,
+        'name': 'Local server',
+        'behaviorHints': {'filename': 'clip.mp4'},
+      };
+      final harness = PlayerHarness(
+        player: {
+          'selected': {'stream': direct},
+          'stream': {
+            'type': 'Ready',
+            'content': [
+              {'streaming_url': url},
+              direct,
+            ],
+          },
+        },
+        stream: direct,
+        cast: cast,
+        lanMedia: lan,
+      );
       await harness.pump(tester);
 
       await castTo(tester, livingRoom);

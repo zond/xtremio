@@ -403,8 +403,7 @@ extension _PlayerOpen on _PlayerScreenState {
   /// the server says the torrent is not ready yet (resolving metadata,
   /// checking, filling the initial window) or has not answered at all: mpv
   /// gives up on the first refusal, when the server has nothing to serve
-  /// yet. A torrent on another machine's server, which this device asks
-  /// nothing about ([_startTorrentStats]), gets the same bounded retries.
+  /// yet.
   ///
   /// A direct HTTP stream, a torrent the server has given up on, an unknown
   /// phase, and a `ready` torrent that still would not open are real

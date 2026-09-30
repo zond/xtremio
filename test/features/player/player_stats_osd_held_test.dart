@@ -8,7 +8,6 @@ import 'package:xtremio/features/player/playback_stats_overlay.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_stats.dart';
 
-import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// The cache and sharing rows in the stats OSD: what this server holds of
@@ -343,73 +342,34 @@ void main() {
     expect(find.textContaining('speed    '), findsNothing);
   });
 
-  testWidgets('a stream off another machine is not asked about here', (
-    tester,
-  ) async {
-    // A streaming server configured elsewhere. A torrent goes straight
-    // there -- an info hash needs no proxy -- so the URL the engine is
-    // handed is that machine's, while the server this app can ask is the
-    // embedded one.
-    final fixture = loadPlayerFixture();
-    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
-    final content = List<Object?>.from(stream['content'] as List);
-    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
-    content[0] = {
-      ...content[0]! as Map<String, dynamic>,
-      'streaming_url': 'http://192.168.7.20:11470/$hash/0',
-    };
-    final harness = await pumpPlaying(
-      tester,
-      player: {
-        ...fixture,
-        'stream': {...stream, 'content': content},
-      },
-    );
-    expect(harness.engine.opened.last.$1.host, '192.168.7.20');
-    harness.streamNumbers.response = held;
-
-    // The server answers on the path and the `f=` query alone and says so
-    // deliberately: the host is not part of the question, so nothing stops
-    // it answering about *its* engine for this info hash -- one this
-    // device has downloaded, or seeded from an earlier viewing. Those
-    // would be this device's committed set and this device's ratio, drawn
-    // over a film coming off somebody else's box. Not asking is the only
-    // place that can be decided.
-    await openPanel(tester, harness);
-    expect(overlay, findsOneWidget);
-    expect(harness.streamNumbers.requests, isEmpty);
-    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
-    expect(harness.streamNumbers.requests, isEmpty);
-    expect(row('cache    12.0s mpv'), findsOneWidget);
-    expect(find.textContaining('sharing'), findsNothing);
-  });
-
   testWidgets('a stream off another server on this host is not ours either', (
     tester,
   ) async {
-    // A streaming server configured on this very machine: the standard
-    // `http://127.0.0.1:11470/`, while the embedded server here is on the
-    // ephemeral port it bound at start-up. The host is the same host, and
-    // the stream is still not one this server is serving -- the bytes are
-    // held by that other server, under its own engine for this info hash,
-    // and the embedded one would answer about an engine of its own. So the
-    // port is as much of the answer as the host is.
-    final fixture = loadPlayerFixture();
-    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
-    final content = List<Object?>.from(stream['content'] as List);
-    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
-    content[0] = {
-      ...content[0]! as Map<String, dynamic>,
-      'streaming_url': 'http://127.0.0.1:11470/$hash/0',
-    };
+    // An addon's direct link to another server on this very machine -- the
+    // standard Stremio one on `http://127.0.0.1:11470/`, while the embedded
+    // server here is on the ephemeral port it bound at start-up. A loopback
+    // URL is left unproxied, so the engine is handed it as it is, and the
+    // embedded server answers on the path alone: asked, it would describe
+    // whatever it holds under that path, not the bytes the other server is
+    // serving. So the port is as much of the answer as the host is.
+    const url = 'http://127.0.0.1:11470/clip/film.mkv';
+    const direct = {'url': url, 'name': 'Local server'};
     final harness = await pumpPlaying(
       tester,
       player: {
-        ...fixture,
-        'stream': {...stream, 'content': content},
+        'selected': {'stream': direct},
+        'stream': {
+          'type': 'Ready',
+          'content': [
+            {'streaming_url': url},
+            direct,
+          ],
+        },
       },
+      stream: direct,
     );
     final opened = harness.engine.opened.last.$1;
+    expect(opened.toString(), url);
     expect(opened.host, PlayerHarness.recordedServerBaseUrl.host);
     expect(opened.port, isNot(PlayerHarness.recordedServerBaseUrl.port));
     harness.streamNumbers.response = held;
@@ -421,44 +381,6 @@ void main() {
     expect(harness.streamNumbers.requests, isEmpty);
     expect(row('cache    12.0s mpv'), findsOneWidget);
     expect(find.textContaining('sharing'), findsNothing);
-
-    // And nothing asked of the stats route either, which is the half that
-    // does harm by being asked: it takes a bare info hash and creates the
-    // engine it is asked about, so the swarm rows and the start-up card
-    // would be drawn off an add this device started for a film playing off
-    // the other server.
-    await tester.pump(PlayerScreen.torrentStatsInterval * 3);
-    expect(harness.torrentStats.requests, isEmpty);
-  });
-
-  testWidgets('the embedded server under the name localhost is ours', (
-    tester,
-  ) async {
-    // A streaming server typed as `localhost` on the embedded server's own
-    // port is the embedded server. The host was compared as a string, and
-    // `localhost` is not `127.0.0.1`, so its streams drew no rows.
-    final fixture = loadPlayerFixture();
-    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
-    final content = List<Object?>.from(stream['content'] as List);
-    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
-    final port = PlayerHarness.recordedServerBaseUrl.port;
-    content[0] = {
-      ...content[0]! as Map<String, dynamic>,
-      'streaming_url': 'http://localhost:$port/$hash/0',
-    };
-    final harness = await pumpPlaying(
-      tester,
-      player: {
-        ...fixture,
-        'stream': {...stream, 'content': content},
-      },
-    );
-    expect(harness.engine.opened.last.$1.host, 'localhost');
-    harness.streamNumbers.response = held;
-
-    await openPanel(tester, harness);
-
-    expect(harness.streamNumbers.requests, isNotEmpty);
   });
 
   testWidgets('a build with no server of its own is asked nothing', (
