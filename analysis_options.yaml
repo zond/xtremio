@@ -11,6 +11,8 @@ analyzer:
     - linux/**
 
     - rust_builder/cargokit/**
+    # Vendored packages, kept as their authors wrote them (PATCHES.md).
+    - third_party/**
 linter:
   rules:
     # `comment_references` stays off: the doc comments here point across

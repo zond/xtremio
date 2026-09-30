@@ -64,9 +64,18 @@ dev_dependencies:
 # decoder for codec 'truehd'" in the log. The override is this package with
 # four URLs changed: same libmpv, same ffmpeg, same NDK, same licence, and
 # 3.4 MiB more per ABI (see `third_party/media_kit_libs_android_video`).
+#
+# And media_kit itself, 1.2.6 with one change (third_party/media_kit/PATCHES.md):
+# a URI whose scheme the app registered with libmpv's `stream_cb` protocol
+# API (`xtremio://<id>`, `rust/src/mpv_stream.rs`) is loaded with its own
+# `loadfile`, as media_kit already loads `fd://`. Its `open` otherwise
+# writes a playlist file, and mpv refuses a `stream_cb` URL from a playlist
+# as an unsafe origin.
 dependency_overrides:
   media_kit_libs_android_video:
     path: third_party/media_kit_libs_android_video
+  media_kit:
+    path: third_party/media_kit
 
 flutter:
   uses-material-design: true
