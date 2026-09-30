@@ -44,6 +44,8 @@ pub struct AppState {
     /// What the runtime pump has already seen each addon answer, so the
     /// same settled answer is never counted twice.
     pub addon_observer: crate::addon_observer::ObserverState,
+    /// The plays the app registered for media ids, which mpv's opens read.
+    pub media: crate::media::MediaState,
 }
 
 /// The one process static. `None` until something needs the state, and

@@ -3,6 +3,7 @@ pub mod core;
 pub mod diagnostics;
 pub mod downloads;
 pub mod hello;
+pub mod media;
 pub mod prefs;
 pub mod server;
 pub mod subtitles;

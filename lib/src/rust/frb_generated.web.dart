@@ -11,6 +11,7 @@ import 'api/core.dart';
 import 'api/diagnostics.dart';
 import 'api/downloads.dart';
 import 'api/hello.dart';
+import 'api/media.dart';
 import 'api/prefs.dart';
 import 'api/server.dart';
 import 'api/subtitles.dart';

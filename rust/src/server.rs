@@ -399,13 +399,15 @@ pub(crate) fn base_url_in(app: &AppState) -> Option<Url> {
 /// block the calling thread until the server's runtime answers, so callers
 /// stay off the UI thread (FRB's worker pool is fine). No lock is held
 /// while `f` runs (see [`ServerState`]).
-fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
+pub(crate) fn with_handle<T>(
+    f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
     let app = crate::state::current().ok_or_else(not_running)?;
     with_handle_in(&app, f)
 }
 
 /// [`with_handle`] against a given state.
-fn with_handle_in<T>(
+pub(crate) fn with_handle_in<T>(
     app: &AppState,
     f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>,
 ) -> anyhow::Result<T> {

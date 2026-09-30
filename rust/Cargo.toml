@@ -98,6 +98,12 @@ regex = "1"
 # nothing new is compiled.
 fs4 = "1.1.0"
 serde = { version = "1", features = ["derive"] }
+# Opens the libmpv media_kit already loaded, to reach
+# `mpv_stream_cb_add_ro` on its handle (`src/mpv_stream.rs`): media_kit's
+# Dart bindings do not export the stream_cb API. Already in the lock (as
+# clang-sys's, for the armv7 aws-lc-sys bindings), so nothing new is
+# fetched; it is small and has no dependencies on these targets.
+libloading = "0.8"
 # Digests the addon transport URL that keys the health record, so the URL --
 # which can carry a debrid API key -- is never written down. Already in the
 # graph (stream-server's tree pulls it), so nothing new is compiled.
