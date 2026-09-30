@@ -44,16 +44,10 @@ import 'dart:io';
 ///
 /// - Anything that is not `http` or `https` -- a `magnet:` the core has not
 ///   resolved. There is nothing for a proxy to fetch.
-/// - A loopback URL. That is the embedded server itself or another server
-///   on this device. Proxying the first would be the server fetching from
-///   itself, and the second already serves the bytes off this device, so a
-///   proxied copy would be a second one of them on the same disk. A kept
-///   download's URL is one of these -- the server's own media route, off
-///   the pieces already on the device.
-/// - A URL on the embedded server by any name ([isEmbeddedServer]). The
-///   loopback case again, said in terms of the server we were handed
-///   rather than of the address family: a stream this server is already
-///   serving is not one to give back to it.
+/// - A loopback URL ([isEmbeddedServerHost]). That is the embedded server
+///   itself -- a torrent, a `/proxy` URL the core built, a Drive file, a
+///   kept download, an archive member -- and proxying it would be the
+///   server fetching from itself.
 /// - Everything, when [serverBase] is null -- a build that started no
 ///   embedded server. No server means no proxy, and a stream that plays
 ///   direct is better than one that does not play.
@@ -94,9 +88,7 @@ Uri proxiedThroughServer(
 }) {
   if (serverBase == null) return url;
   if (!url.isScheme('http') && !url.isScheme('https')) return url;
-  if (isLoopbackHost(url.host) || isEmbeddedServer(url, serverBase)) {
-    return url;
-  }
+  if (isEmbeddedServerHost(url.host)) return url;
 
   final target = url.removeFragment();
   final origin = '${target.scheme}://${target.authority}';
@@ -136,26 +128,18 @@ bool isProxiedByServer(Uri url) {
   return segments.isNotEmpty && segments.first == 'proxy';
 }
 
-/// Whether [url] is on this app's embedded server at [serverBase]: the
-/// server's own port, on the server's own host or on any name for this
-/// device. False with no embedded server.
+/// Whether [host] names this device, and so the embedded server: every
+/// loopback URL the app meets is the embedded server's -- a torrent route,
+/// a `/proxy` URL the core built, `/drive/stream`, `/downloads/{key}/stream`,
+/// an archive route.
 ///
-/// The one rule for "ours", which the player, the proxy and the cast all
-/// ask -- not "any loopback host", and not the host as a string: a URL that
-/// names this device as `localhost` on the server's port is the embedded
-/// server, though `localhost` is not `127.0.0.1`. The port is what separates this
-/// server from another on the same machine (the standard Stremio server on
-/// 11470, say); the host cannot.
-bool isEmbeddedServer(Uri url, Uri? serverBase) {
-  if (serverBase == null) return false;
-  if (!url.isScheme('http') && !url.isScheme('https')) return false;
-  if (url.port != serverBase.port) return false;
-  return url.host == serverBase.host ||
-      (isLoopbackHost(url.host) && isLoopbackHost(serverBase.host));
-}
-
-/// Whether [host] names this device -- which is not the same as naming the
-/// embedded server: another server can run here too ([isEmbeddedServer]).
-bool isLoopbackHost(String host) =>
+/// There is no other server on this device as far as the app is concerned.
+/// The core's streaming server URL is pinned to the embedded one
+/// (`core::pin_to_embedded`), and an addon handing out a loopback link to a
+/// server of its own is not something the app supports, so the port is no
+/// part of the question: the embedded server binds whatever port it gets.
+/// Any name for this device counts, `localhost` as much as `127.0.0.1` or
+/// `::1`.
+bool isEmbeddedServerHost(String host) =>
     host == 'localhost' ||
     (InternetAddress.tryParse(host)?.isLoopback ?? false);

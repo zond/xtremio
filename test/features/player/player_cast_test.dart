@@ -564,37 +564,23 @@ void main() {
       expect(lan.running, isFalse);
     });
 
-    testWidgets('a stream off another server on this device is not rebuilt', (
+    testWidgets('a build with no server of its own rebuilds nothing', (
       tester,
     ) async {
-      // The LAN listener serves the embedded server's routes, so an addon's
-      // link to another server on this machine -- the standard one on
-      // 11470, say, left unproxied as every loopback URL is -- must not be
-      // rebuilt on it: the receiver would be handed a path on a server that
-      // does not serve it.
+      // No embedded server (`CoreInitInfo.serverBaseUrl` null). The
+      // recorded torrent's URL is still a loopback one, but nothing here
+      // serves it, so there is nothing for the LAN listener to put on the
+      // network: the listener is never started and nothing is cast.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      const url = 'http://127.0.0.1:11470/clip/clip.mp4';
-      const direct = {
-        'url': url,
-        'name': 'Local server',
-        'behaviorHints': {'filename': 'clip.mp4'},
-      };
       final harness = PlayerHarness(
-        player: {
-          'selected': {'stream': direct},
-          'stream': {
-            'type': 'Ready',
-            'content': [
-              {'streaming_url': url},
-              direct,
-            ],
-          },
-        },
-        stream: direct,
+        player: playerWithFilename(
+          'Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
+        ),
         cast: cast,
         lanMedia: lan,
+        embeddedServer: false,
       );
       await harness.pump(tester);
 
@@ -602,7 +588,6 @@ void main() {
 
       expect(cast.loads, isEmpty);
       expect(lan.toggles, isEmpty);
-      expect(find.byType(CastRefusedDialog), findsOneWidget);
     });
 
     testWidgets('a second receiver with no route ends the cast it replaced', (

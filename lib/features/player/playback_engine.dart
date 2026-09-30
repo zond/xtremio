@@ -549,7 +549,7 @@ class MediaKitEngine implements PlaybackEngine {
   static bool forcesSeekable(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return false;
     if (isProxiedByServer(url)) return false;
-    return isLoopbackHost(url.host);
+    return isEmbeddedServerHost(url.host);
   }
 
   /// Sets [overrides] ([overridesFor]) on the native backend. Only libmpv

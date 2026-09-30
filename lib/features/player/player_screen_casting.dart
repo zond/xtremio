@@ -437,13 +437,12 @@ extension _PlayerCasting on _PlayerScreenState {
   /// the member is rebuilt on the LAN base rather than re-created there, and
   /// the receiver's reads keep its session leased.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
-    // The LAN listener serves the embedded server's routes and nothing
-    // else, so a URL on another server on this device has no address a
-    // receiver could use: rebuilt on the listener, it asked this server for
-    // a path another one serves.
-    if (!isEmbeddedServer(local, _serverBase)) {
-      return isLoopbackHost(local.host) ? null : local;
-    }
+    if (!isEmbeddedServerHost(local.host)) return local;
+    // Every loopback URL is the embedded server's ([isEmbeddedServerHost]),
+    // and the LAN listener serves its routes, so any of them is rebuilt on
+    // the listener -- unless this build started no server of its own, when
+    // nothing here serves it at all.
+    if (_serverBase == null) return null;
     final lan = _lanMedia;
     if (lan == null) return null;
     try {

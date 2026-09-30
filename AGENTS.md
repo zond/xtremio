@@ -281,10 +281,9 @@ exist takes its row (or its half of one) away, never a dash. Tests:
 - The transfer counters cover the torrent's current live period and the row
   says `since it last went live`. Label them; never persist them.
 - The server is asked with the URL the engine was handed
-  (`_heldStreamUrl`), and only when that URL is on the embedded server
-  (`isEmbeddedServer`): a loopback stream off another server on this
-  device is left unproxied, and the server answers on the path alone. The
-  torrent stats poll asks about every torrent (all of them are the
+  (`_heldStreamUrl`), and only when that URL is on the embedded server --
+  any loopback URL (`isEmbeddedServerHost`: there is no other server on
+  this device) in a build that started one. The torrent stats poll asks about every torrent (all of them are the
   embedded server's, `core::pin_to_embedded`), and asks nothing in a build
   with no embedded server, since a stats call creates the engine it asks
   about.

@@ -200,16 +200,17 @@ void main() {
       );
     });
 
-    test('a stream already on the server we would proxy through', () {
-      // The same refusal as the loopback one above, reached by the other
-      // rule: whatever base URL we are handed, a stream already on it is
-      // one that server is serving, not one to hand back to it. In this
-      // app the two rules always agree, because the base URL is always the
-      // loopback embedded server.
-      final base = Uri.parse('https://server.example.com/');
-      final url = Uri.parse('https://server.example.com/abc123/0');
-
-      expect(proxiedThroughServer(url, serverBase: base), url);
+    test('any loopback URL, by any name for this device', () {
+      // Every loopback URL is the embedded server's -- there is no other
+      // server on this device -- so neither the name nor the port makes
+      // one worth wrapping in the server's proxy of itself.
+      for (final url in [
+        Uri.parse('http://localhost:39661/drive/stream?id=f'),
+        Uri.parse('http://[::1]:39661/downloads/k/stream'),
+        Uri.parse('http://127.0.0.1:11470/abc123/0'),
+      ]) {
+        expect(proxiedThroughServer(url, serverBase: server), url);
+      }
     });
 
     test('an offline file, and a magnet the core has not resolved', () {
@@ -330,40 +331,13 @@ void main() {
   });
 
   group('what counts as the embedded server', () {
-    final base = Uri.parse('http://127.0.0.1:39661/');
-
-    test('its port on any name for this device, and nothing else', () {
-      expect(
-        isEmbeddedServer(Uri.parse('http://127.0.0.1:39661/a/0'), base),
-        isTrue,
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('http://localhost:39661/a/0'), base),
-        isTrue,
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('http://[::1]:39661/a/0'), base),
-        isTrue,
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('http://127.0.0.1:11470/a/0'), base),
-        isFalse,
-        reason: 'another server on this machine',
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('http://192.168.7.20:39661/a/0'), base),
-        isFalse,
-        reason: 'the same port on another machine',
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('file://127.0.0.1:39661/a/0'), base),
-        isFalse,
-        reason: 'not something any server answers',
-      );
-      expect(
-        isEmbeddedServer(Uri.parse('http://127.0.0.1:39661/'), null),
-        isFalse,
-      );
+    test('any name for this device, and nothing else', () {
+      for (final host in ['127.0.0.1', '127.0.0.2', 'localhost', '::1']) {
+        expect(isEmbeddedServerHost(host), isTrue, reason: host);
+      }
+      for (final host in ['192.168.7.20', 'rd.example', '']) {
+        expect(isEmbeddedServerHost(host), isFalse, reason: host);
+      }
     });
   });
 }

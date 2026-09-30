@@ -342,47 +342,6 @@ void main() {
     expect(find.textContaining('speed    '), findsNothing);
   });
 
-  testWidgets('a stream off another server on this host is not ours either', (
-    tester,
-  ) async {
-    // An addon's direct link to another server on this very machine -- the
-    // standard Stremio one on `http://127.0.0.1:11470/`, while the embedded
-    // server here is on the ephemeral port it bound at start-up. A loopback
-    // URL is left unproxied, so the engine is handed it as it is, and the
-    // embedded server answers on the path alone: asked, it would describe
-    // whatever it holds under that path, not the bytes the other server is
-    // serving. So the port is as much of the answer as the host is.
-    const url = 'http://127.0.0.1:11470/clip/film.mkv';
-    const direct = {'url': url, 'name': 'Local server'};
-    final harness = await pumpPlaying(
-      tester,
-      player: {
-        'selected': {'stream': direct},
-        'stream': {
-          'type': 'Ready',
-          'content': [
-            {'streaming_url': url},
-            direct,
-          ],
-        },
-      },
-      stream: direct,
-    );
-    final opened = harness.engine.opened.last.$1;
-    expect(opened.toString(), url);
-    expect(opened.host, PlayerHarness.recordedServerBaseUrl.host);
-    expect(opened.port, isNot(PlayerHarness.recordedServerBaseUrl.port));
-    harness.streamNumbers.response = held;
-
-    await openPanel(tester, harness);
-    expect(overlay, findsOneWidget);
-    expect(harness.streamNumbers.requests, isEmpty);
-    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
-    expect(harness.streamNumbers.requests, isEmpty);
-    expect(row('cache    12.0s mpv'), findsOneWidget);
-    expect(find.textContaining('sharing'), findsNothing);
-  });
-
   testWidgets('a build with no server of its own is asked nothing', (
     tester,
   ) async {

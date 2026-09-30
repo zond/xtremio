@@ -1,8 +1,7 @@
-import 'dart:io' show InternetAddress;
-
 import 'package:flutter/foundation.dart';
 
 import '../src/rust/api/diagnostics.dart' as rust;
+import 'stream_proxy.dart' show isEmbeddedServerHost;
 
 /// Where a Dart-side diagnostic line goes. The app installs the one that
 /// writes into the Rust core's log ring ([DiagnosticsLog.useCoreRing]);
@@ -236,10 +235,7 @@ abstract final class DiagnosticsLog {
   /// debrid key included -- the same as a public addon's does.
   static bool _isOurs(Uri url) {
     final host = url.host;
-    if (host == 'localhost' ||
-        (InternetAddress.tryParse(host)?.isLoopback ?? false)) {
-      return true;
-    }
+    if (isEmbeddedServerHost(host)) return true;
     return _ownServers.any(
       (base) => base.host == host && base.port == url.port,
     );

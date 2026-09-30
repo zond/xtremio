@@ -288,15 +288,14 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// [_engineUrl], not [_opened]: the bytes are cached under the URL the
   /// engine was handed (a `/proxy` URL for anything not a torrent), and the
   /// server finds the store by path, so the bare origin would find nothing.
-  /// And only a URL on the embedded server ([isEmbeddedServer], false with
-  /// no embedded server). The server answers on the path and `f=` alone, so
-  /// a stream left unproxied on another server on this device (a loopback
-  /// URL, [proxiedThroughServer]) would be answered with this server's
-  /// numbers for whatever it holds under the same path. `buffer=` stays on:
-  /// the server ignores every query key but `f=`.
+  /// And only a URL on the embedded server: a loopback one
+  /// ([isEmbeddedServerHost]), which every stream the engine is handed is
+  /// unless this build started no embedded server ([_serverBase] null).
+  /// `buffer=` stays on: the server ignores every query key but `f=`.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
-    return url != null && isEmbeddedServer(url, _serverBase) ? url : null;
+    if (url == null || _serverBase == null) return null;
+    return isEmbeddedServerHost(url.host) ? url : null;
   }
 
   /// Drops the last answer and starts again for the stream now open. Called
