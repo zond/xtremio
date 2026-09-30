@@ -17,6 +17,7 @@ import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
 import 'fake_proxy_streams.dart';
 import 'fake_playback_hints.dart';
+import 'fake_media_ids.dart';
 import 'fake_stream_numbers_client.dart';
 import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
@@ -121,6 +122,10 @@ class PlayerHarness {
   /// What the app hinted to the server about the playback; see
   /// [FakePlaybackHints].
   late final FakePlaybackHints hints = FakePlaybackHints()..callLog = calls;
+
+  /// What a torrent is registered with and played by id through; see
+  /// [FakeMediaIds].
+  final FakeMediaIds mediaIds = FakeMediaIds();
 
   /// What a stream that failed before loading turns out to be, as the
   /// screen's archive check hears it: nothing, until a test says otherwise.
@@ -243,6 +248,7 @@ class PlayerHarness {
         proxyStreams: proxyStreams,
         streamNumbers: streamNumbers,
         hints: hints,
+        mediaIds: mediaIds,
         archiveSniff: _archiveSniff,
         archiveRoute: _archiveRoute,
         child: MaterialApp(

@@ -130,7 +130,9 @@ Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
 
 ## The app never speaks HTTP to the embedded server
 
-libmpv fetches the open media routes, and stremio-core's `StreamingServer`
+libmpv fetches the open media routes -- or, for a torrent, reads a media id
+through the `xtremio://` protocol (`rust/src/mpv_stream.rs`), which is no
+HTTP at all -- and stremio-core's `StreamingServer`
 model calls its handful of control routes through `Env::fetch`, which adds
 the bearer token. Everything the app itself asks of the server -- settings,
 stats, storage, downloads, Drive, the LAN listener, the lean background
@@ -280,8 +282,9 @@ exist takes its row (or its half of one) away, never a dash. Tests:
   no sharing row. mpv's `collecting…` holds back only mpv's readings.
 - The transfer counters cover the torrent's current live period and the row
   says `since it last went live`. Label them; never persist them.
-- The server is asked with the URL the engine was handed
-  (`_heldStreamUrl`), and only when that URL is on the embedded server --
+- The server is asked about what the engine was handed: a torrent's media
+  id (`_playingMediaId`), or the URL (`_heldStreamUrl`) only when that URL
+  is on the embedded server --
   any loopback URL (`isEmbeddedServerHost`: there is no other server on
   this device) in a build that started one. The torrent stats poll asks about every torrent (all of them are the
   embedded server's, `core::pin_to_embedded`), and asks nothing in a build

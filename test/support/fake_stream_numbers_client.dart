@@ -44,6 +44,13 @@ class FakeStreamNumbersClient implements StreamNumbersReader {
     }
   }
 
+  /// Asks by media id are recorded in [requests] as the URL mpv was
+  /// handed for the id ([mediaIdUrl]), so a test says which stream was
+  /// asked about the same way for both.
+  @override
+  Future<StreamNumbers?> mediaStreamNumbers(String id) =>
+      streamNumbers(mediaIdUrl(id));
+
   @override
   Future<StreamNumbers?> streamNumbers(Uri url) async {
     requests.add(url);

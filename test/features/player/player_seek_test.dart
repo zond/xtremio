@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart' show mediaIdUrl;
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
@@ -59,6 +60,19 @@ void main() {
       );
       expect(
         MediaKitEngine.forcesSeekable(Uri.parse('http://[::1]:11470/a/0')),
+        isTrue,
+      );
+    });
+
+    test('so is a stream played by its media id', () {
+      // `xtremio://<id>` is read through the server's own reader, which
+      // answers any offset of every source it reads in process -- the
+      // same claim as its stream route, without the URL.
+      expect(MediaKitEngine.forcesSeekable(mediaIdUrl('m1')), isTrue);
+      expect(
+        MediaKitEngine.forcesSeekable(
+          Uri.parse('xtremio://0123456789abcdef0123456789abcdef'),
+        ),
         isTrue,
       );
     });

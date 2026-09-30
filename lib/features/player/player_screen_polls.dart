@@ -45,7 +45,24 @@ extension _PlayerServerPolls on _PlayerScreenState {
       _opened?.queryParametersAll['f'] ?? const [];
 
   /// Tells the server how long the film is; see [_onCastStatus].
+  ///
+  /// By the media id when the torrent is played by one ([_playingMediaId]):
+  /// the server knows which file it is, and nothing is taken apart from a
+  /// URL. By the URL's own hash, index and filters otherwise.
   Future<void> _reportDuration(Duration duration) async {
+    final seconds = duration.inMicroseconds / Duration.microsecondsPerSecond;
+    final id = _playingMediaId;
+    if (id != null) {
+      try {
+        await _playbackHints?.noteMediaDuration(
+          id: id,
+          durationSeconds: seconds,
+        );
+      } catch (_) {
+        // A hint; see below.
+      }
+      return;
+    }
     final request = _torrentStatsRequest;
     final fileIdx = _openedFileIdx;
     if (request == null || fileIdx == null) return;
@@ -54,8 +71,7 @@ extension _PlayerServerPolls on _PlayerScreenState {
         infoHash: request.infoHash,
         fileIdx: fileIdx,
         filters: _openedFilters,
-        durationSeconds:
-            duration.inMicroseconds / Duration.microsecondsPerSecond,
+        durationSeconds: seconds,
       );
     } catch (_) {
       // A hint, like the playhead: one that does not arrive costs the
@@ -63,8 +79,24 @@ extension _PlayerServerPolls on _PlayerScreenState {
     }
   }
 
+  /// Tells the server a player opened on the torrent played by media id
+  /// [id], once per id; see [_reportPlayerOpened]. Called when the id has
+  /// resolved ([_resolveMedia]), which is the first moment the server
+  /// knows which torrent it is.
+  Future<void> _reportMediaOpened(String id) async {
+    if (_mediaOpenedReported == id) return;
+    _mediaOpenedReported = id;
+    try {
+      await _playbackHints?.noteMediaPlayerOpened(id: id);
+    } catch (_) {
+      // A hint; see [_reportDuration].
+    }
+  }
+
   /// Tells the server a player opened on the torrent, so the stalls it goes
-  /// on to report are counted for this video; see [_reportStall].
+  /// on to report are counted for this video; see [_reportStall]. Only for
+  /// a torrent not played by id; one that is reports by id
+  /// ([_reportMediaOpened]).
   Future<void> _reportPlayerOpened(String infoHash) async {
     try {
       await _playbackHints?.notePlayerOpened(infoHash: infoHash);
@@ -82,7 +114,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
   Future<void> _reportStall() async {
     final request = _torrentStatsRequest;
     if (request == null || !_playingNormally) return;
+    final id = _playingMediaId;
     try {
+      if (id != null) {
+        await _playbackHints?.noteMediaPlayerStalled(id: id);
+        return;
+      }
       await _playbackHints?.notePlayerStalled(infoHash: request.infoHash);
     } catch (_) {
       // A hint; see [_reportDuration].
@@ -109,7 +146,7 @@ extension _PlayerServerPolls on _PlayerScreenState {
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
-    _reportPlayerOpened(request.infoHash);
+    if (_playingMediaId == null) _reportPlayerOpened(request.infoHash);
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
     _startStartupPolling();
@@ -288,10 +325,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// [_engineUrl], not [_opened]: the bytes are cached under the URL the
   /// engine was handed (a `/proxy` URL for anything not a torrent), and the
   /// server finds the store by path, so the bare origin would find nothing.
-  /// And only a URL on the embedded server: a loopback one
-  /// ([isEmbeddedServerHost]), which every stream the engine is handed is
-  /// unless this build started no embedded server ([_serverBase] null).
-  /// `buffer=` stays on: the server ignores every query key but `f=`.
+  /// A torrent played by id is asked about by its id instead
+  /// ([_pollStreamNumbers]), and has no URL here. Otherwise only a URL on
+  /// the embedded server: a loopback one ([isEmbeddedServerHost]), which
+  /// every stream the engine is handed is unless this build started no
+  /// embedded server ([_serverBase] null). `buffer=` stays on: the server
+  /// ignores every query key but `f=`.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
     if (url == null || _serverBase == null) return null;
@@ -339,7 +378,8 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _streamNumbers = null;
   }
 
-  /// One ask, for [_heldStreamUrl], and nothing when there is no such URL.
+  /// One ask, for the media id the engine reads or else [_heldStreamUrl],
+  /// and nothing when there is neither.
   /// Decided per ask because what the engine was handed can change under an
   /// open panel (a re-open for a new buffer window).
   ///
@@ -348,14 +388,21 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// Every failure is no rows: the server not running and a stream it does
   /// not hold both mean there is nothing to draw.
   Future<void> _pollStreamNumbers() async {
+    final id = _serverBase == null ? null : _playingMediaId;
     final url = _heldStreamUrl;
     final playing = _opened;
     final reader = _streamNumbersReader;
-    if (url == null || reader == null || _streamNumbersFetching) return;
+    if ((id == null && url == null) ||
+        reader == null ||
+        _streamNumbersFetching) {
+      return;
+    }
     _streamNumbersFetching = true;
     StreamNumbers? numbers;
     try {
-      numbers = await reader.streamNumbers(url);
+      numbers = id != null
+          ? await reader.mediaStreamNumbers(id)
+          : await reader.streamNumbers(url!);
     } on Object {
       numbers = null;
     } finally {

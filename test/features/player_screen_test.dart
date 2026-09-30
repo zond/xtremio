@@ -8,12 +8,16 @@ import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
 import '../support/diagnostics_capture.dart';
 import '../support/fake_core_client.dart';
+import '../support/fake_media_ids.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
 import '../support/player_harness.dart';
 
 void main() {
+  late FakeMediaIds mediaIds;
+  setUp(() => mediaIds = FakeMediaIds());
+
   Widget harness(
     FakeCoreClient core,
     FakePlaybackEngine engine, {
@@ -33,6 +37,7 @@ void main() {
     child: PlaybackScope(
       createEngine: () => engine,
       torrentStats: FakeTorrentStatsClient(),
+      mediaIds: mediaIds,
       child: MaterialApp(
         home: PlayerScreen(
           stream: stream,
@@ -88,35 +93,30 @@ void main() {
         'filename': null,
       });
 
-      // The torrent resolved to the embedded server; that is what got
+      // The torrent resolved to the embedded server; that URL is what was
+      // registered with it, and the media id it answered is what got
       // opened, with the read-ahead choice this playback is on
-      // (`AppPrefs.bufferAhead`, `normal` by default) named on it -- see
+      // (`AppPrefs.bufferAhead`, `normal` by default) in its play -- see
       // player_buffer_test.dart.
-      final expectedUrl = withBufferAhead(
+      expect(mediaIds.registered, [
         Uri.parse(
           (fixture['stream']['content'][0]
                   as Map<String, dynamic>)['streaming_url']
               as String,
         ),
-        BufferAhead.normal,
-      );
-      // And this screen's player token, which is what makes the server
-      // treat the request as the viewer's play session (and so the only
-      // thing that may share): the install's viewer id, then the screen's
-      // own number.
+      ]);
       expect(engine.opened, hasLength(1));
       final (opened, at) = engine.opened.single;
       expect(at, Duration.zero);
-      expect(
-        opened.queryParameters['p'],
-        matches(RegExp(r'^[0-9a-f]{16}\.\d+$')),
-      );
-      expect(
-        opened.replace(
-          queryParameters: Map.of(opened.queryParametersAll)..remove('p'),
-        ),
-        expectedUrl,
-      );
+      expect(opened, mediaIdUrl('m1'));
+      // And this screen's player token, which is what makes the server
+      // treat the reads as the viewer's play session (and so the only
+      // thing that may share): the install's viewer id, then the screen's
+      // own number.
+      final play = mediaIds.plays.single;
+      expect(play.id, 'm1');
+      expect(play.buffer, BufferAhead.normal.wire);
+      expect(play.token, matches(RegExp(r'^[0-9a-f]{16}\.\d+$')));
       expect(find.text('video surface'), findsOneWidget);
       expect(find.text('Night of the Living Dead'), findsOneWidget);
       // A torrent shows its start-up overlay (not a bare spinner) until the
@@ -214,12 +214,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // What libmpv reads: a torrent's media id, which carries nothing an
+    // addon put in a URL.
     expect(
-      lines.singleWhere((line) => line.contains('open http')),
-      matches(RegExp(r'^info player open http://127\.0\.0\.1:\d+/\S+ ')),
+      lines.singleWhere((line) => line.contains('open xtremio')),
+      startsWith('info player open xtremio://m1 '),
     );
-    // The URL is the one libmpv fetches, with its query dropped: `buffer=`
-    // is harmless but an addon's own URL would carry a key there.
     expect(lines.join('\n'), isNot(contains('?tr=')));
 
     engine.emitDuration(const Duration(minutes: 10));
@@ -232,7 +232,7 @@ void main() {
     await tester.pump();
 
     expect(lines, [
-      anyOf(startsWith('info player open http')),
+      startsWith('info player open xtremio://m1 '),
       startsWith('info player media loaded'),
       startsWith('warn player stalled at 0s (stall 1)'),
       startsWith('info player playing again after'),

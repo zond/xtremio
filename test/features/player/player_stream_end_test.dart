@@ -130,7 +130,13 @@ void main() {
       'timeOffset': 720000,
       'duration': 5760000,
     };
-    final harness = PlayerHarness(player: fixture, prefs: prefs);
+    // A torrent read by URL: one played by id re-opens nothing for a
+    // buffer change (player_buffer_test.dart).
+    final harness = PlayerHarness(
+      player: fixture,
+      prefs: prefs,
+      embeddedServer: false,
+    );
     useWideViewport(tester);
     await harness.pump(tester);
     expect(harness.engine.opened.single.$2, const Duration(minutes: 12));

@@ -477,14 +477,16 @@ void main() {
       expect(request.torrentKey, 'torrent:$infoHash/Release/film.part1.rar');
       expect(request.kind, ArchiveKind.rar);
 
-      // And the member is opened exactly as it was named: a torrent's own
-      // URL always carries `buffer=`, and the member's never does. The
-      // archive routes read no such query, and the read-ahead is the one
+      // The torrent itself was played by id, and its start was read over
+      // HTTP at the torrent's own URL on the server -- the sniff has no
+      // way into an id.
+      expect(harness.engine.opened.first.$1, mediaIdUrl('m1'));
+      final sniffed = harness.archiveSniffs.single;
+      expect(sniffed.path, harness.mediaIds.registered.single.path);
+      expect(sniffed.queryParameters['buffer'], 'normal');
+      // And the member is opened exactly as it was named, as a URL: the
+      // archive routes read no `buffer=`, and the read-ahead is the one
       // the translator's source opens on the torrent underneath.
-      expect(
-        harness.engine.opened.first.$1.queryParameters,
-        contains('buffer'),
-      );
       expect(harness.engine.opened.last.$1, inside);
     });
   });

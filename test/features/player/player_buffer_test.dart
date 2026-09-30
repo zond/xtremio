@@ -5,7 +5,6 @@ import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/player/player_screen.dart';
-import 'package:xtremio/features/player/torrent_stall_overlay.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_downloads_client.dart';
@@ -17,9 +16,13 @@ import '../../support/player_harness.dart';
 /// file instead.
 ///
 /// The window itself lives in the streaming server; all the app does is
-/// name it on the stream URL (`?buffer=`), which is why every assertion here
-/// is about that URL, about the pin the last option takes, or about what the
-/// viewer is told when the pin is refused.
+/// name it: with the play it registers for a torrent's media id
+/// (`MediaIds.setPlay`), and on a change through the server
+/// (`MediaIds.setBuffer`), which re-opens nothing. So every assertion here
+/// is about what the server was told, about the pin the last option takes,
+/// or about what the viewer is told when the pin is refused. A torrent in a
+/// build with no embedded server still names it on its URL (`?buffer=`)
+/// and re-opens for a change; the tests of that re-open run there.
 void main() {
   /// [AppPrefs] over a file that already holds [choice].
   Future<AppPrefs> storedPrefs(BufferAhead choice) async {
@@ -30,9 +33,20 @@ void main() {
     return prefs;
   }
 
-  /// The `buffer=` value of the nth URL the engine was opened with.
+  /// The buffer the nth open of a torrent played by id carried.
   String? openedBuffer(PlayerHarness harness, int index) =>
+      harness.mediaIds.plays[index].buffer;
+
+  /// The `buffer=` value of the nth URL the engine was opened with: a
+  /// torrent in a build with no embedded server.
+  String? urlBuffer(PlayerHarness harness, int index) =>
       harness.engine.opened[index].$1.queryParameters['buffer'];
+
+  /// The buffer the server was last told for the stream on screen: the
+  /// last change, or the one its open carried.
+  String? bufferNow(PlayerHarness harness) => harness.mediaIds.buffers.isEmpty
+      ? harness.mediaIds.plays.last.buffer
+      : harness.mediaIds.buffers.last.$2;
 
   /// How many `Load Player` actions have been dispatched: re-opening a
   /// stream must add none.
@@ -51,7 +65,7 @@ void main() {
   }
 
   group('the stored choice', () {
-    testWidgets('reaches the stream URL', (tester) async {
+    testWidgets('goes with the torrent\'s play to the server', (tester) async {
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.large),
@@ -59,7 +73,23 @@ void main() {
       await harness.pump(tester);
 
       expect(harness.engine.opened, hasLength(1));
+      expect(harness.engine.opened.single.$1, mediaIdUrl('m1'));
+      expect(harness.mediaIds.plays.single.id, 'm1');
       expect(openedBuffer(harness, 0), 'large');
+    });
+
+    testWidgets('reaches the stream URL where there is no embedded server', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness(
+        prefs: await storedPrefs(BufferAhead.large),
+        embeddedServer: false,
+      );
+      await harness.pump(tester);
+
+      expect(harness.mediaIds.registered, isEmpty);
+      expect(urlBuffer(harness, 0), 'large');
     });
 
     testWidgets('is normal when nothing was ever chosen', (tester) async {
@@ -88,12 +118,35 @@ void main() {
   });
 
   group('the override for one playback', () {
-    testWidgets('re-opens the stream where it is, without restarting it', (
-      tester,
-    ) async {
+    testWidgets('is told to the server, and re-opens nothing', (tester) async {
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
+      );
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      harness.engine.emitPosition(const Duration(minutes: 12));
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+
+      final loadsBefore = loads(harness);
+      expect(loadsBefore, 1, reason: 'the playback was loaded once');
+      await openSheet(tester);
+      await chooseBuffer(tester, BufferAhead.maximum);
+
+      // The server's reader takes the window at its next seek: the film
+      // is not stopped for it, and the engine is not asked again.
+      expect(harness.mediaIds.buffers, [('m1', 'maximum')]);
+      expect(harness.engine.opened, hasLength(1));
+      expect(harness.engines, hasLength(1));
+      expect(loads(harness), loadsBefore);
+    });
+
+    testWidgets('re-opens a torrent read by URL where it is', (tester) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness(
+        prefs: await storedPrefs(BufferAhead.normal),
+        embeddedServer: false,
       );
       await harness.pump(tester);
       harness.engine.emitDuration(const Duration(minutes: 96));
@@ -111,7 +164,7 @@ void main() {
       // stream is re-opened rather than the playback restarted. No second
       // `Load Player`, and no second engine.
       expect(harness.engine.opened, hasLength(2));
-      expect(openedBuffer(harness, 1), 'maximum');
+      expect(urlBuffer(harness, 1), 'maximum');
       expect(harness.engine.opened[1].$2, const Duration(minutes: 12));
       expect(harness.engines, hasLength(1));
       expect(loads(harness), loadsBefore);
@@ -127,6 +180,7 @@ void main() {
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
+        embeddedServer: false,
       );
       await harness.pump(tester);
       harness.engine.emitDuration(const Duration(minutes: 96));
@@ -148,13 +202,12 @@ void main() {
       expect(harness.engine.opened[2].$2, const Duration(minutes: 12));
     });
 
-    testWidgets('a re-open after a failure is a playback again', (
+    testWidgets('after a failure, is told and is not an attempt', (
       tester,
     ) async {
-      // The failure card is about the attempt that failed. Changing the
-      // window is another attempt, and one that succeeds plays under a
-      // card that says it did not -- with the torrent the failure forgot
-      // still forgotten, so no stall card and no stats panel either.
+      // A torrent read by URL re-opened for a new window, and that re-open
+      // was a new attempt that took the failure card down. Played by id
+      // nothing re-opens, so the card stays: it is still what happened.
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
@@ -173,12 +226,8 @@ void main() {
       final opens = harness.engine.opened.length;
       await openSheet(tester);
       await chooseBuffer(tester, BufferAhead.maximum);
-      expect(harness.engine.opened, hasLength(opens + 1));
-      expect(find.textContaining('Playback failed'), findsNothing);
-
-      harness.engine.emitBuffering(true);
-      await pumpEvents(tester);
-      expect(find.byType(TorrentStallOverlay), findsOneWidget);
+      expect(harness.engine.opened, hasLength(opens));
+      expect(harness.mediaIds.buffers, [('m1', 'maximum')]);
     });
 
     testWidgets('reverts to the stored choice with the next playback', (
@@ -190,7 +239,7 @@ void main() {
       await first.pump(tester);
       await openSheet(tester);
       await chooseBuffer(tester, BufferAhead.large);
-      expect(openedBuffer(first, 1), 'large');
+      expect(bufferNow(first), 'large');
 
       // A different player, over the same preferences: the override went
       // with the screen it was made on.
@@ -271,10 +320,7 @@ void main() {
         find.textContaining('Buffering as far ahead as possible instead.'),
         findsOneWidget,
       );
-      expect(
-        openedBuffer(harness, harness.engine.opened.length - 1),
-        'maximum',
-      );
+      expect(bufferNow(harness), 'maximum');
       expect(
         tester
             .widget<ChoiceChip>(
@@ -303,14 +349,11 @@ void main() {
         find.textContaining('This stream cannot be kept on the device.'),
         findsOneWidget,
       );
-      expect(
-        openedBuffer(harness, harness.engine.opened.length - 1),
-        'maximum',
-      );
+      expect(bufferNow(harness), 'maximum');
       // Once: the refusal falls back to the window the pin already asked
-      // for on the URL (`wholeFile` and `maximum` share a `buffer=`), and
-      // re-opening the stream the engine is reading only interrupts it.
-      expect(harness.engine.opened, hasLength(2));
+      // for (`wholeFile` and `maximum` share a wire), and nothing re-opens.
+      expect(harness.mediaIds.buffers, [('m1', 'maximum')]);
+      expect(harness.engine.opened, hasLength(1));
     });
 
     testWidgets('a direct stream, which carries no window, is left alone', (

@@ -19,33 +19,81 @@ extension _PlayerOpen on _PlayerScreenState {
     // [_translatedUrl] stands in front of the stream's own URL when the
     // stream turned out to be a container: what plays is the film inside
     // it, at a URL on our own server, and every later re-open is of that.
-    final media = _mediaUrl(_translatedUrl ?? url);
+    final Uri media;
+    try {
+      media = _mediaUrl(_translatedUrl ?? url);
+    } catch (error) {
+      DiagnosticsLog.error('player', 'could not register the stream: $error');
+      _failPlayback('$error');
+      return;
+    }
     _engineUrl = media;
     _mediaIn = false;
+    final start = _openStart;
     DiagnosticsLog.info(
       'player',
       'open ${DiagnosticsLog.url(media)} '
-          'at ${_openStart.inSeconds}s ($reason)',
+          'at ${start.inSeconds}s ($reason)',
     );
-    _engine
-        ?.open(media, start: _openStart)
-        .then((_) {
-          if (state != null) _reportVideoParams(state, url);
-          // A re-open is a fresh `loadfile`, and a correction the viewer made
-          // belongs to the playback, not to the file re-read: write it again
-          // so it survives a re-open for a network error or a buffer change.
-          // The addon file goes back first, because `loadfile` dropped it
-          // ([_restoreExternalSubtitle]).
-          if (_stillOurs && _opened == url) {
-            _restoreExternalSubtitle();
-            _applySubtitleTiming();
-          }
+    final engine = _engine;
+    if (engine == null) return;
+    _resolveMedia(media)
+        .then((resolved) {
+          // Resolving can take as long as a magnet's metadata does, and
+          // the viewer may have left or moved on meanwhile.
+          if (!resolved || !_stillOurs || _engineUrl != media) return null;
+          final opening = engine.open(media, start: start);
+          // After the open is on its way, as a torrent read by URL reports
+          // it after its stream request ([_startTorrentStats]).
+          if (mediaIdOf(media) case final id?) _reportMediaOpened(id);
+          return opening.then((_) {
+            if (state != null) _reportVideoParams(state, url);
+            // A re-open is a fresh `loadfile`, and a correction the viewer
+            // made belongs to the playback, not to the file re-read: write
+            // it again so it survives a re-open for a network error. The
+            // addon file goes back first, because `loadfile` dropped it
+            // ([_restoreExternalSubtitle]).
+            if (_stillOurs && _opened == url) {
+              _restoreExternalSubtitle();
+              _applySubtitleTiming();
+            }
+          });
         })
         .catchError((Object error) {
           if (!_stillOurs || _opened != url) return;
           DiagnosticsLog.error('player', 'open rejected: $error');
           _failPlayback('$error');
         });
+  }
+
+  /// Has the server resolve [media] before mpv is handed it, when it is a
+  /// media id; answers whether it is still the one to open. Nothing to do
+  /// for a URL.
+  ///
+  /// **Here, and not in mpv's open.** Resolving a magnet waits for its
+  /// metadata, up to the server's metadata timeout, and a `stream_cb` open
+  /// cannot be cancelled -- mpv's core thread would sit in it through a
+  /// quit. Done here, it is a wait on a worker that the screen can walk
+  /// away from, and the reader mpv opens afterwards finds the answer
+  /// kept. A refusal is the server's own sentence, and fails the playback
+  /// the way a refused `open` does ([_failPlayback], which retries a
+  /// torrent still starting).
+  Future<bool> _resolveMedia(Uri media) async {
+    final id = mediaIdOf(media);
+    final ids = _mediaIds;
+    if (id == null || ids == null) return true;
+    final refusal = await ids.resolve(id);
+    if (refusal != null) {
+      DiagnosticsLog.warn(
+        'player',
+        'the server will not play it: ${refusal.kind}',
+      );
+      // An id the server let go (a restart, the cap) is registered again
+      // at the next attempt.
+      if (refusal.kind == 'unknownId' && _mediaId == id) _mediaIdSource = null;
+      throw refusal;
+    }
+    return true;
   }
 
   /// How far ahead this playback buffers: the viewer's override for the
@@ -62,33 +110,64 @@ extension _PlayerOpen on _PlayerScreenState {
     );
   }
 
-  /// Re-opens the stream at the position it is playing at, so a new
-  /// `buffer=` takes effect without restarting the playback -- and only
-  /// then. A re-open drops the demuxer's cache and stops the film for as
-  /// long as the new read takes, so a choice with the `buffer=` already in
-  /// force ([BufferAhead.wholeFile] and [BufferAhead.maximum] share a wire),
-  /// or a stream without the parameter ([_bufferOnUrlFor]), re-opens
-  /// nothing.
+  /// Puts a new buffer choice in force for the stream on screen.
+  ///
+  /// A torrent played by id ([_mediaUrl]) is told through the server
+  /// ([MediaIds.setBuffer]), which the reader takes at its next seek:
+  /// nothing is re-opened, and the film does not stop.
+  ///
+  /// Anything else carrying `buffer=` on its URL ([_bufferOnUrlFor]) is
+  /// re-opened at the position it is playing at, so the new parameter takes
+  /// effect -- and only then. A re-open drops the demuxer's cache and stops
+  /// the film for as long as the new read takes, so a choice with the
+  /// `buffer=` already in force ([BufferAhead.wholeFile] and
+  /// [BufferAhead.maximum] share a wire), or a stream without the
+  /// parameter, re-opens nothing.
   void _reopenForBuffer(String previousWire) {
-    if (_bufferAhead.wire == previousWire || !_bufferOnUrlFor(_opened)) return;
+    if (_bufferAhead.wire == previousWire) return;
+    final id = mediaIdOf(_engineUrl);
+    if (id != null) {
+      try {
+        _mediaIds?.setBuffer(id, _bufferAhead.wire);
+      } catch (error) {
+        // The next open carries it regardless ([MediaIds.setPlay]).
+        DiagnosticsLog.warn('player', 'buffer change not taken: $error');
+      }
+      return;
+    }
+    if (!_bufferOnUrlFor(_opened)) return;
     _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
   }
 
-  /// [url] as the engine should fetch it, which is always a URL on our own
-  /// server: the core's stream URL with `buffer=` added when it is a torrent
-  /// the server is serving, and the same stream wrapped in the server's
-  /// `/proxy` route when it is anybody else's host.
+  /// [url] as the engine should fetch it.
   ///
-  /// `buffer=` goes on the torrent alone: a remote host knows nothing of it,
-  /// and a kept download (a loopback URL, left alone by the proxy check too)
-  /// has nothing left to read ahead of. The torrent also carries this
-  /// screen's player token `p=` ([withPlayerToken]), which is what makes the
-  /// server treat it as the viewer's play session; a proxied URL carries the
-  /// same token inside the proxy address. The proxy makes the server's cache
-  /// the only one ([proxiedThroughServer]); the player keeps nothing on
-  /// disk.
+  /// **A torrent is played by id**: registered with the embedded server
+  /// ([MediaIds.register]) and handed to the engine as `xtremio://<id>`,
+  /// which libmpv reads through the server's reader and not over HTTP
+  /// ([mediaIdScheme]). What the torrent's URL used to carry for the server
+  /// goes with the id instead: this screen's player token ([_proxyToken],
+  /// `p=`), which makes the reads the viewer's play session, and the buffer
+  /// window (`buffer=`), both by [MediaIds.setPlay] -- and a later buffer
+  /// change by [MediaIds.setBuffer] ([_reopenForBuffer]).
+  ///
+  /// Only in a build with an embedded server ([_serverBase]); every other
+  /// stream is a URL on our own server as before: the same stream wrapped
+  /// in the server's `/proxy` route when it is anybody else's host, and a
+  /// loopback URL (a kept download, an archive member) left alone. The
+  /// proxy makes the server's cache the only one
+  /// ([proxiedThroughServer]); the player keeps nothing on disk.
   Uri _mediaUrl(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
+    final ids = _mediaIds;
+    if (_bufferOnUrlFor(url) && _serverBase != null && ids != null) {
+      if (_mediaIdSource != url || _mediaId == null) {
+        _mediaId = ids.register(url);
+        _mediaIdSource = url;
+      }
+      final id = _mediaId!;
+      ids.setPlay(id, token: _proxyToken, buffer: _bufferAhead.wire);
+      return mediaIdUrl(id);
+    }
     if (_bufferOnUrlFor(url)) {
       return withPlayerToken(withBufferAhead(url, _bufferAhead), _proxyToken);
     }
@@ -106,13 +185,29 @@ extension _PlayerOpen on _PlayerScreenState {
     return proxied;
   }
 
+  /// The media id the engine is reading, or null when it is reading a URL.
+  String? get _playingMediaId => mediaIdOf(_engineUrl);
+
+  /// The URL the start of a stream that failed is read through, to tell an
+  /// archive from a film ([_explainArchive]): the engine's own URL, or for
+  /// a torrent played by id the torrent's stream URL on the server, as it
+  /// was handed the engine before ids.
+  Uri? get _sniffUrl {
+    final url = _engineUrl;
+    if (mediaIdOf(url) == null) return url;
+    final source = _mediaIdSource;
+    if (source == null) return null;
+    return withPlayerToken(withBufferAhead(source, _bufferAhead), _proxyToken);
+  }
+
   /// The viewer changed the buffer for this playback.
   ///
-  /// The window itself only reaches the engine through the URL, and libmpv
-  /// is already fetching the old one, so a change of window re-opens the
-  /// stream at the position it is at -- one `open`, no reload of the
-  /// player, no `Load Player`, and the core's own idea of the stream
-  /// unchanged ([_opened] stays the URL the core published).
+  /// A torrent played by id is told so through the server and nothing
+  /// re-opens ([_reopenForBuffer]). Where the window reaches the engine
+  /// only through the URL, which libmpv is already fetching, a change of
+  /// window re-opens the stream at the position it is at -- one `open`, no
+  /// reload of the player, no `Load Player`, and the core's own idea of the
+  /// stream unchanged ([_opened] stays the URL the core published).
   /// [BufferAhead.wholeFile] additionally pins the stream as an offline
   /// download; the pin is what stores the file, so it outlives this
   /// playback and is deleted from the Downloads screen like any other.
@@ -295,7 +390,7 @@ extension _PlayerOpen on _PlayerScreenState {
       _engineError = error;
       _stopTorrentStats();
     });
-    final url = _engineUrl;
+    final url = _sniffUrl;
     // [_mediaIn], not [_mediaLoaded]: media_kit reports `playing: true` when
     // the `loadfile` is issued, before a byte is read, so [_mediaLoaded] is
     // true within a few hundred milliseconds of every open on Android and

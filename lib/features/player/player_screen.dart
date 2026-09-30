@@ -477,6 +477,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the viewer is: it works that out from what the reads do.
   PlaybackHints? _playbackHints;
 
+  /// How a torrent is registered with the server and played by id
+  /// ([PlaybackScope.mediaIdsOf]).
+  MediaIds? _mediaIds;
+
+  /// The media id the stream [_mediaIdSource] was registered as, which mpv
+  /// is handed as `xtremio://<id>` ([_mediaUrl]). Kept across re-opens of
+  /// the same stream -- a retry, a false end -- so the server's answer
+  /// about it is found again rather than asked again; a different stream
+  /// registers anew.
+  String? _mediaId;
+  Uri? _mediaIdSource;
+
+  /// The media id a player was last reported opened on
+  /// ([_reportMediaOpened]): once per id, after its first resolve, since
+  /// before that the server does not know which torrent the id is.
+  String? _mediaOpenedReported;
+
   /// What a stream that failed before it loaded is asked, to tell an
   /// archive from a film ([PlaybackScope.archiveSniffOf]).
   Future<ArchiveKind?> Function(Uri url) _archiveSniff = sniffArchive;
@@ -941,6 +958,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playbackHints = PlaybackScope.hintsOf(context);
+    _mediaIds = PlaybackScope.mediaIdsOf(context);
     _archiveSniff = PlaybackScope.archiveSniffOf(context);
     _archiveRoute = PlaybackScope.archiveRouteOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);

@@ -58,7 +58,8 @@ void main() {
     // The core writes `-1` when the addon gave no fileIdx and the server
     // picks the file, narrowed by the URL's `f=` filters. That is most
     // streams, and a report that treated `-1` as "no file" never reached
-    // the server for any of them.
+    // the server for any of them. Played by id, the server resolved the
+    // URL itself, and the length goes to the id it chose the file for.
     final harness = PlayerHarness(
       player: {
         'selected': {'stream': DevStreams.bigBuckBunnyTorrent},
@@ -81,17 +82,18 @@ void main() {
     harness.engine.emitDuration(const Duration(seconds: 6669));
     await pumpEvents(tester);
 
+    expect(harness.hints.mediaDurations, [
+      ('m1', 6669),
+    ], reason: 'the length was dropped because the URL says -1');
+    final registered = harness.mediaIds.registered.single;
     expect(
-      harness.hints.durations,
-      contains(6669),
-      reason: 'the length was dropped because the URL says -1',
-    );
-    final file = harness.hints.files.single;
-    expect(
-      file.fileIdx,
-      -1,
+      registered.pathSegments.last,
+      '-1',
       reason: "the URL's own spelling, for the server to resolve",
     );
-    expect(file.filters, ['mkv', 'mp4'], reason: 'and its filters, in order');
+    expect(registered.queryParametersAll['f'], [
+      'mkv',
+      'mp4',
+    ], reason: 'and its filters, in order');
   });
 }

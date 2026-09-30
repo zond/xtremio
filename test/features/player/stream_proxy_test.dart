@@ -296,6 +296,11 @@ void main() {
         contains(Uri.encodeComponent('https://rd.example')),
       );
       expect(opened.path, endsWith('/film.mkv'));
+      expect(
+        harness.mediaIds.registered,
+        isEmpty,
+        reason: 'only a torrent is played by id, for now',
+      );
     });
 
     testWidgets('plays direct when this build runs no server of its own', (
@@ -315,18 +320,42 @@ void main() {
       expect(harness.engine.opened.single.$1.toString(), remote);
     });
 
-    testWidgets('opens a torrent on the server exactly as it always did', (
+    testWidgets('plays a torrent by its media id, not by a URL', (
       tester,
     ) async {
-      // The other half: a stream the server already serves must not be
-      // wrapped in the server's proxy of itself.
+      // The other half: a stream the server already serves is registered
+      // with it and read through the `xtremio` protocol -- not wrapped in
+      // the server's proxy of itself, and not fetched over HTTP at all.
       useWideViewport(tester);
       final harness = PlayerHarness();
       await harness.pump(tester);
 
+      final published = PlayerState.fromJson(
+        harness.core.stateOf(CoreField.player) ?? const {},
+      ).streamingUrl;
+      expect(harness.mediaIds.registered, [published]);
+      expect(harness.mediaIds.resolved, ['m1']);
+      expect(harness.engine.opened.single.$1, Uri.parse('xtremio://m1'));
+      final play = harness.mediaIds.plays.single;
+      expect(play.id, 'm1');
+      expect(play.buffer, 'normal');
+      // This screen's player token, which makes the reads the viewer's
+      // play session: the install's viewer id, then the screen's number.
+      expect(play.token, matches(RegExp(r'^[0-9a-f]{16}\.\d+$')));
+    });
+
+    testWidgets('leaves a torrent on its URL in a build with no server', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness(embeddedServer: false);
+      await harness.pump(tester);
+
       final opened = harness.engine.opened.single.$1;
+      expect(opened.isScheme('http'), isTrue, reason: '$opened');
       expect(opened.pathSegments.first, isNot('proxy'));
       expect(opened.queryParameters['buffer'], 'normal');
+      expect(harness.mediaIds.registered, isEmpty);
     });
   });
 

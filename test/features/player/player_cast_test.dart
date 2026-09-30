@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart' show mediaIdUrl;
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
@@ -170,12 +171,12 @@ void main() {
       // With the player token the film was opened with here: the cast is
       // this screen's playback moved to the receiver, so the server keeps
       // the same play session and shares from it as it did before.
-      final openedHere = harness.engine.opened.last.$1;
+      expect(harness.engine.opened.last.$1, mediaIdUrl('m1'));
       expect(
         media.url.queryParameters['p'],
         matches(RegExp(r'^[0-9a-f]{16}\.\d+$')),
       );
-      expect(media.url.queryParameters['p'], openedHere.queryParameters['p']);
+      expect(media.url.queryParameters['p'], harness.mediaIds.plays.last.token);
       expect(media.contentType, 'video/mp4');
       expect(start, const Duration(minutes: 12));
       // Local playback stopped, so the film is not running twice.

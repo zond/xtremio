@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../src/rust/api/media.dart' as media;
 import '../src/rust/api/server.dart' as rust;
 import 'diagnostics_log.dart';
 import 'state/background_traffic.dart';
@@ -111,6 +112,11 @@ abstract interface class StreamNumbersReader {
   /// draws exactly like null: both mean there are no rows to show, but
   /// only one of them is worth writing down.
   Future<StreamNumbers?> streamNumbers(Uri url);
+
+  /// [streamNumbers] for a stream played by id ([MediaIds]): what the
+  /// server holds of what [id] resolved to. Null for an id not resolved
+  /// yet, and in the same cases as there.
+  Future<StreamNumbers?> mediaStreamNumbers(String id);
 }
 
 /// What the player tells the server about a playback that the server
@@ -155,6 +161,20 @@ abstract interface class PlaybackHints {
   /// for the rest of this video; see stream-server's
   /// `retention::deadline`.
   Future<void> notePlayerStalled({required String infoHash});
+
+  /// [noteDuration] for a stream played by id: the server knows which file
+  /// of which torrent [id] is, so nothing is taken apart from a URL.
+  Future<void> noteMediaDuration({
+    required String id,
+    required double durationSeconds,
+  });
+
+  /// [notePlayerOpened] for a stream played by id. Only after the id has
+  /// resolved: before that the server does not know which torrent it is.
+  Future<void> noteMediaPlayerOpened({required String id});
+
+  /// [notePlayerStalled] for a stream played by id.
+  Future<void> noteMediaPlayerStalled({required String id});
 }
 
 /// Changing something about the embedded server, which is one call: a
@@ -253,6 +273,20 @@ class ServerClient
   Future<void> notePlayerStalled({required String infoHash}) =>
       rust.serverNotePlayerStalled(infoHash: infoHash);
 
+  @override
+  Future<void> noteMediaDuration({
+    required String id,
+    required double durationSeconds,
+  }) => media.mediaNoteDuration(id: id, durationSeconds: durationSeconds);
+
+  @override
+  Future<void> noteMediaPlayerOpened({required String id}) =>
+      media.mediaNotePlayerOpened(id: id);
+
+  @override
+  Future<void> noteMediaPlayerStalled({required String id}) =>
+      media.mediaNotePlayerStalled(id: id);
+
   /// The server's settings (`GET /settings` → `values`: `cacheRoot`,
   /// `cacheSize`, `btMaxConnections`, ...). Throws when the server is not
   /// running.
@@ -349,6 +383,12 @@ class ServerClient
   @override
   Future<StreamNumbers?> streamNumbers(Uri url) async {
     final json = await rust.serverStreamNumbers(url: url.toString());
+    return json == null ? null : StreamNumbers.fromJson(jsonDecode(json));
+  }
+
+  @override
+  Future<StreamNumbers?> mediaStreamNumbers(String id) async {
+    final json = await media.mediaStreamNumbers(id: id);
     return json == null ? null : StreamNumbers.fromJson(jsonDecode(json));
   }
 

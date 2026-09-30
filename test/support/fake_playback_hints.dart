@@ -6,10 +6,10 @@ class FakePlaybackHints implements PlaybackHints {
   /// shared with the other fakes.
   List<String>? callLog;
 
-  /// Every duration-only report, in order: what a cast sends.
+  /// Every duration-only report, in order, by URL or by media id.
   final List<double> durations = [];
 
-  /// Which file each report named, as the player URL spelled it: the
+  /// Which file each report by URL named, as the player URL spelled it: the
   /// segment (`-1` for a file the server picks) and the `f=` filters.
   final List<({int fileIdx, List<String> filters})> files = [];
 
@@ -41,5 +41,37 @@ class FakePlaybackHints implements PlaybackHints {
   Future<void> notePlayerStalled({required String infoHash}) async {
     callLog?.add('stalled');
     stalls.add(infoHash);
+  }
+
+  /// Every duration reported by media id, as `(id, seconds)`. The seconds
+  /// also go to [durations], which is every length reported either way.
+  final List<(String, double)> mediaDurations = [];
+
+  /// Every media id a player was reported opened on, in order.
+  final List<String> mediaOpened = [];
+
+  /// Every stall reported by media id, in order.
+  final List<String> mediaStalls = [];
+
+  @override
+  Future<void> noteMediaDuration({
+    required String id,
+    required double durationSeconds,
+  }) async {
+    callLog?.add('duration');
+    durations.add(durationSeconds);
+    mediaDurations.add((id, durationSeconds));
+  }
+
+  @override
+  Future<void> noteMediaPlayerOpened({required String id}) async {
+    callLog?.add('opened');
+    mediaOpened.add(id);
+  }
+
+  @override
+  Future<void> noteMediaPlayerStalled({required String id}) async {
+    callLog?.add('stalled');
+    mediaStalls.add(id);
   }
 }

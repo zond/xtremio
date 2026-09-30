@@ -7,9 +7,16 @@ import 'package:ffi/ffi.dart' show StringUtf8Pointer, calloc;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
+// Where media_kit loaded libmpv from, which the `xtremio` protocol is
+// registered through ([MediaKitEngine.registerMediaIdProtocol]); the
+// package does not export it.
+// ignore: implementation_imports
+import 'package:media_kit/src/player/native/core/native_library.dart'
+    show NativeLibrary;
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
+import '../../src/rust/api/media.dart' as rust_media;
 import '../../shell/display_frame_rate.dart';
 import 'archive_route.dart';
 import 'archive_sniff.dart';
@@ -222,6 +229,13 @@ abstract interface class PlaybackEngine {
 
 typedef PlaybackEngineFactory = PlaybackEngine Function();
 
+/// Registers the `xtremio` protocol on the mpv handle at [ctx], from the
+/// libmpv at [libmpvPath]; answers whether this call registered it.
+typedef MediaIdProtocolRegistrar = Future<bool> Function({
+  required int ctx,
+  required String libmpvPath,
+});
+
 /// Puts the window (desktop) or the activity (Android: immersive, landscape)
 /// into and out of fullscreen. Injectable so widget tests record the calls
 /// instead of touching the platform.
@@ -264,6 +278,7 @@ class PlaybackScope extends InheritedWidget {
     this.proxyStreams,
     this.streamNumbers,
     this.hints,
+    this.mediaIds,
     this.archiveSniff,
     this.archiveRoute,
     required super.child,
@@ -307,6 +322,11 @@ class PlaybackScope extends InheritedWidget {
   /// without reaching FFI.
   final PlaybackHints? hints;
 
+  /// How a torrent is registered with the server and played by id
+  /// (`xtremio://<id>`) rather than by URL. Injectable so a test can say
+  /// what was registered and which buffer was set without reaching FFI.
+  final MediaIds? mediaIds;
+
   /// What a stream that failed to open is asked, to say whether it is an
   /// archive rather than a film (absent, [sniffArchive], which reads the
   /// start of it over HTTP). A function so a test can answer without a
@@ -349,6 +369,9 @@ class PlaybackScope extends InheritedWidget {
   static PlaybackHints hintsOf(BuildContext context) =>
       _maybeOf(context)?.hints ?? const ServerClient();
 
+  static MediaIds mediaIdsOf(BuildContext context) =>
+      _maybeOf(context)?.mediaIds ?? const RustMediaIds();
+
   static Future<ArchiveKind?> Function(Uri url) archiveSniffOf(
     BuildContext context,
   ) => _maybeOf(context)?.archiveSniff ?? sniffArchive;
@@ -367,6 +390,7 @@ class PlaybackScope extends InheritedWidget {
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
       hints != oldWidget.hints ||
+      mediaIds != oldWidget.mediaIds ||
       archiveSniff != oldWidget.archiveSniff ||
       archiveRoute != oldWidget.archiveRoute;
 }
@@ -378,15 +402,22 @@ class PlaybackScope extends InheritedWidget {
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine({bool hardwareDecoding = true, bool verboseLog = false})
-    : _verboseLog = verboseLog,
-      _player = Player(
-        configuration: playerConfigurationFor(verboseLog: verboseLog),
-      ) {
-    _overrides = _applyOverrides(
-      _player.platform,
-      overridesFor(verboseLog: verboseLog),
-    );
+  MediaKitEngine({
+    bool hardwareDecoding = true,
+    bool verboseLog = false,
+    MediaIdProtocolRegistrar? registerMediaIdProtocol,
+  }) : _verboseLog = verboseLog,
+       _player = Player(
+         configuration: playerConfigurationFor(verboseLog: verboseLog),
+       ) {
+    final platform = _player.platform;
+    _overrides = _applyOverrides(platform, overridesFor(verboseLog: verboseLog))
+        .then(
+          (_) => registerMediaIdProtocolOn(
+            platform,
+            registerMediaIdProtocol ?? rust_media.mpvStreamRegister,
+          ),
+        );
     _controller = VideoController(
       _player,
       configuration: configurationFor(hardwareDecoding: hardwareDecoding),
@@ -436,6 +467,16 @@ class MediaKitEngine implements PlaybackEngine {
   /// media_kit's `play()` seeks back to 0 ("it plays ten seconds and starts
   /// over"). Five minutes is long enough that no swarm trips it and short
   /// enough that a dead connection still ends in an error.
+  ///
+  /// **None of that reaches a torrent played by id** (`xtremio://<id>`): a
+  /// `stream_cb` read is not a network read to mpv and has no timeout. It
+  /// blocks until the bytes come or the stream is cancelled -- a seek, or
+  /// the `quit` of [quit], which mpv answers by calling the stream's cancel
+  /// -- so a stalled swarm parks the demuxer under the stall card rather
+  /// than ending in a false end of file, and the teardown does not wait on
+  /// a read. The one wait with no cancel, the open, is done before mpv is
+  /// involved (`PlayerScreen`'s resolve of the id). The timeout stays for
+  /// every stream that is still a URL.
   ///
   /// **`cache-on-disk=no` is the whole of the player's disk policy.**
   /// media_kit's default `yes` makes a cache file mpv unlinks as it creates
@@ -533,11 +574,15 @@ class MediaKitEngine implements PlaybackEngine {
   /// decides that from what it could read at open. A Matroska index is at
   /// the end of the file, the last thing a torrent delivers, so without this
   /// every seek past the buffered part is refused. The embedded server's
-  /// stream route answers any byte range and re-prioritises the swarm around
-  /// it: a cold offset waits (covered by `network-timeout`, and past that by
-  /// the false-end re-open), it is never refused.
+  /// stream route and its media reader answer any byte range and
+  /// re-prioritise the swarm around it: a cold offset waits (over HTTP
+  /// covered by `network-timeout`, and past that by the false-end re-open;
+  /// by id until it arrives or the read is cancelled), it is never
+  /// refused.
   ///
-  /// **Only for the embedded server's own streams on the loopback address.**
+  /// **Only for the embedded server's own streams**: `xtremio://<id>`
+  /// ([mediaIdScheme]), whose reader seeks as the stream route does, and
+  /// its URLs on the loopback address.
   /// An addon's own host (a live HLS playlist, a host that ignores `Range`)
   /// really cannot be seeked in, and forcing it turns a visible refusal into
   /// a bar sitting where no packets will arrive. A `/proxy` URL is on the
@@ -547,9 +592,46 @@ class MediaKitEngine implements PlaybackEngine {
   /// Forcing cannot invent an index; a demuxer with none may still refuse,
   /// which the stats OSD's `partially` and `ranges` rows tell apart.
   static bool forcesSeekable(Uri url) {
+    // Played by id: the server's reader answers any offset of every
+    // source it reads in process, as the stream route does.
+    if (url.isScheme(mediaIdScheme)) return true;
     if (!url.isScheme('http') && !url.isScheme('https')) return false;
     if (isProxiedByServer(url)) return false;
     return isEmbeddedServerHost(url.host);
+  }
+
+  /// Lets this player's mpv read `xtremio://<id>` ([mediaIdScheme]): the
+  /// protocol `rust/src/mpv_stream.rs` serves from the embedded server's
+  /// reader, registered on this player's own handle with [register], once,
+  /// after the player initialised and -- because [open] waits on
+  /// [_overrides], which ends with this -- before its first `loadfile`.
+  ///
+  /// The scheme also goes into media_kit's
+  /// [NativePlayer.streamCallbackSchemes] (the vendored patch,
+  /// `third_party/media_kit/PATCHES.md`): media_kit opens through a
+  /// playlist file, and mpv refuses a `stream_cb` URL named in one as an
+  /// unsafe origin, so such a URL has to be loaded with its own `loadfile`.
+  ///
+  /// A failure is logged and playback goes on: every stream that is not a
+  /// torrent is a URL, and a torrent's open then fails with mpv's own
+  /// words, which the screen shows.
+  @visibleForTesting
+  static Future<void> registerMediaIdProtocolOn(
+    PlatformPlayer? platform,
+    MediaIdProtocolRegistrar register,
+  ) async {
+    if (platform is! NativePlayer) return;
+    NativePlayer.streamCallbackSchemes.add(mediaIdScheme);
+    try {
+      await platform.waitForPlayerInitialization;
+      if (platform.disposed) return;
+      await register(ctx: platform.ctx.address, libmpvPath: NativeLibrary.path);
+    } catch (error) {
+      DiagnosticsLog.error(
+        'player',
+        'mpv cannot read $mediaIdScheme:// streams: $error',
+      );
+    }
   }
 
   /// Sets [overrides] ([overridesFor]) on the native backend. Only libmpv

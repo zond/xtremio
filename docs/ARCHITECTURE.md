@@ -309,24 +309,41 @@ interface over media_kit; widget tests swap in `FakePlaybackEngine` through
 
 ### Streams, the proxy and the cache
 
-**Every stream reaches mpv as a URL on our own server.** A torrent already
-is one; anything on another host -- a debrid link, an addon's HTTP URL -- is
+**A torrent reaches mpv as a media id, `xtremio://<id>`.** The player
+registers the core's torrent URL with the embedded server (`MediaIds`,
+`lib/core/media_ids.dart`; `media_register`), records the play the reads
+are -- its player token and buffer (`media_set_play`) -- and has the server
+resolve the id (`media_resolve`) before mpv is handed it: resolving waits
+for a magnet's metadata, and an open inside mpv cannot be cancelled. libmpv
+reads the id through a protocol registered on each player's handle
+(`mpv_stream_register`, `rust/src/mpv_stream.rs`, over libmpv's
+`stream_cb` API), whose callbacks are the server's blocking `MediaReader`
+on mpv's own threads: no HTTP, no URL of the server's. media_kit carries
+one vendored change for it (`third_party/media_kit/PATCHES.md`). Stream
+numbers and the duration, opened and stalled hints go by id too
+(stream-server `docs/design/media-pipeline.md` §2.4-2.5).
+
+**Every other stream reaches mpv as a URL on our own server.** Anything on
+another host -- a debrid link, an addon's HTTP URL -- is
 wrapped in the server's `/proxy` route (`lib/core/stream_proxy.dart`): the
 target's origin percent-encoded into a `d=` segment, its own path and query
 after it, so a signed link keeps its signature and the file name stays
 visible. The base comes from `CoreInitInfo`, settled before the first
 `open`. A loopback URL (already the server, including a kept download's) is
-left alone. `force-seekable` is set only for the server's own torrent
-routes, never for `/proxy`.
+left alone. `force-seekable` is set for `xtremio://` and the server's own
+loopback routes, never for `/proxy`.
 
-**How far ahead to buffer is the viewer's choice**, sent as
-`?buffer=normal|large|maximum` on a torrent URL (`withBufferAhead`,
+**How far ahead to buffer is the viewer's choice**, `normal`, `large` or
+`maximum`: with a torrent's play (`media_set_play`), or as `?buffer=` on a
+torrent URL where there is no embedded server (`withBufferAhead`,
 `lib/core/buffer_ahead.dart`): 90 s, four minutes, or a day of the film at
 its own bitrate. Seconds need the film's length, which the player reports
 (`server_note_duration`); until then every profile reads ahead the same
 small fallback, so start-up is equally fast. Settings → Player → "Buffer
 ahead" is the standing choice; the player's own sheet overrides it for the
-playback on screen, re-opening the stream at its position. **"Download the
+playback on screen: told to the server by id (`media_set_buffer`), which
+the reader takes at its next seek without re-opening anything (a URL is
+re-opened at its position). **"Download the
 whole file"** pins the stream as an offline download while it plays; a
 device that cannot fit it is told the numbers and keeps buffering.
 

@@ -880,7 +880,8 @@ void main() {
     next['stream'] = {...stream, 'content': content};
     harness.core.setState(CoreField.player, next);
     await pumpEvents(tester);
-    expect(engine.opened.last.$1.path, '/next/0');
+    expect(harness.mediaIds.registered.last.path, '/next/0');
+    expect(engine.opened.last.$1, mediaIdUrl('m2'));
     expect(engine.subtitleSpeed, 1);
     expect(engine.subtitleDelay, 0);
   });

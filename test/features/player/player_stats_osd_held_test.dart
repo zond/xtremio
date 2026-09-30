@@ -100,21 +100,16 @@ void main() {
     await tester.pump(PlayerScreen.streamNumbersInterval * 3);
     expect(server.requests, isEmpty);
 
-    // Up: asked at once, about the URL the *engine* was handed -- which is
-    // the whole of the question this server takes, because it is the URL
-    // the bytes are held under. Not the one the core published: the player
-    // rewrites that on the way to mpv (`buffer=` here, the `/proxy` route
-    // for anything that is not a torrent), and the server dispatches on
-    // the path and the `f=` filters of the URL it is asked with.
+    // Up: asked at once, about what the *engine* was handed. A torrent is
+    // played by its media id, and the server is asked about that id: it
+    // knows what the id resolved to, which the URL the core published no
+    // longer says to anyone (the fake records an ask by id as the URL
+    // mpv was handed for it).
     await openPanel(tester, harness);
     expect(overlay, findsOneWidget);
     expect(server.requests, hasLength(1));
     expect(server.requests.single, harness.engine.opened.last.$1);
-    final published = PlayerState.fromJson(
-      harness.core.stateOf(CoreField.player) ?? const {},
-    ).streamingUrl;
-    expect(server.requests.single, isNot(published));
-    expect(server.requests.single.queryParameters['buffer'], 'normal');
+    expect(server.requests.single, mediaIdUrl('m1'));
 
     expect(
       row('cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340 MB (5 min)'),
@@ -271,7 +266,8 @@ void main() {
     expect(find.textContaining('sharing'), findsNothing);
     expect(find.textContaining('behind'), findsNothing);
     // And the ask that is out is about the video now playing.
-    expect(server.requests.last.path, '/next/0');
+    expect(harness.mediaIds.registered.last.path, '/next/0');
+    expect(server.requests.last, mediaIdUrl('m2'));
   });
 
   testWidgets('a server that cannot be asked draws no rows and no error', (

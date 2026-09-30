@@ -1,8 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
-import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/player_harness.dart';
 
@@ -45,8 +43,12 @@ void main() {
     final harness = bunny();
     await harness.pump(tester);
 
-    expect(harness.hints.opened, [infoHash]);
-    expect(harness.hints.stalls, isEmpty);
+    // By the torrent's media id, once it has resolved: the server knows
+    // which torrent that is, and nothing is taken apart from a URL.
+    expect(harness.mediaIds.registered.single.pathSegments.first, infoHash);
+    expect(harness.hints.mediaOpened, ['m1']);
+    expect(harness.hints.opened, isEmpty);
+    expect(harness.hints.mediaStalls, isEmpty);
   });
 
   testWidgets('buffering counts as a stall only once the video has played', (
@@ -58,7 +60,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.hints.stalls,
+      harness.hints.mediaStalls,
       isEmpty,
       reason: "the open's own wait, before a frame, is not a stall",
     );
@@ -70,7 +72,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.hints.stalls,
+      harness.hints.mediaStalls,
       isEmpty,
       reason: 'a jump to the resume point is a load, not playback',
     );
@@ -79,7 +81,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.hints.stalls,
+      harness.hints.mediaStalls,
       isEmpty,
       reason: 'a quarter of a second of film is not yet watching',
     );
@@ -92,17 +94,17 @@ void main() {
 
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.hints.stalls, [
-      infoHash,
+    expect(harness.hints.mediaStalls, [
+      'm1',
     ], reason: 'the popup, after the film has actually been playing');
 
     harness.engine.emitBuffering(false);
     harness.engine.emitPosition(const Duration(milliseconds: 899_500));
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.hints.stalls, [
-      infoHash,
-      infoHash,
+    expect(harness.hints.mediaStalls, [
+      'm1',
+      'm1',
     ], reason: 'every stall is one report; the server counts them');
   });
 
@@ -122,7 +124,7 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(
-      harness.hints.stalls,
+      harness.hints.mediaStalls,
       isEmpty,
       reason: 'a seek deepens nothing, whatever it waits for',
     );
@@ -136,7 +138,7 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.hints.stalls, [infoHash]);
+    expect(harness.hints.mediaStalls, ['m1']);
   });
 
   testWidgets('a scrub back is not a run of stalls', (tester) async {
@@ -152,7 +154,11 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitPosition(const Duration(seconds: 6202));
     await pumpEvents(tester);
-    expect(harness.hints.stalls, isEmpty, reason: 'nothing has buffered yet');
+    expect(
+      harness.hints.mediaStalls,
+      isEmpty,
+      reason: 'nothing has buffered yet',
+    );
 
     for (final at in const [6190, 6180, 6170, 6157, 6145, 6133]) {
       // The rewind, seen only as the position moving back...
@@ -168,7 +174,7 @@ void main() {
       await pumpEvents(tester);
     }
     expect(
-      harness.hints.stalls,
+      harness.hints.mediaStalls,
       isEmpty,
       reason: 'a rewind is a seek, whoever asked mpv for it',
     );
@@ -180,37 +186,6 @@ void main() {
     await pumpEvents(tester);
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(harness.hints.stalls, [infoHash]);
-  });
-
-  testWidgets('buffering after a change of window is not a stall', (
-    tester,
-  ) async {
-    // The same rule as a seek, and for the same reason: a new `buffer=`
-    // re-opens the stream, and what fills afterwards is that window and
-    // not a playback the arithmetic was too shallow for.
-    useWideViewport(tester);
-    final harness = bunny();
-    await harness.pump(tester);
-    harness.engine.emitDuration(const Duration(minutes: 96));
-    harness.engine.emitPosition(const Duration(seconds: 897));
-    harness.engine.emitPosition(const Duration(milliseconds: 897_250));
-    await pumpEvents(tester);
-
-    await tester.tap(find.byTooltip('Playback settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(PlayerSettingsSheet.bufferChipKey(BufferAhead.maximum)),
-    );
-    await tester.pumpAndSettle();
-    expect(harness.engine.opened, hasLength(2));
-
-    harness.engine.emitBuffering(true);
-    await pumpEvents(tester);
-    expect(
-      harness.hints.stalls,
-      isEmpty,
-      reason: 'the new window filling, not a stall',
-    );
+    expect(harness.hints.mediaStalls, ['m1']);
   });
 }
