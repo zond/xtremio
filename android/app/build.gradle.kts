@@ -72,6 +72,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The launcher's name for the app; debug and profile override it
+        // (see buildTypes).
+        manifestPlaceholders["appLabel"] = "xtremio"
 
         // Prune plugins' prebuilt native libraries down to the ABI(s) this
         // build actually targets. `--target-platform` only controls what
@@ -130,6 +133,37 @@ android {
     }
 
     buildTypes {
+        // Debug and profile builds are a second app beside the release one:
+        // `com.zond.xtremio.debug`, labelled "Xtremio debug". A build signed
+        // with the debug key cannot update the release install (Android
+        // refuses the certificate), so without the suffix the only way to put
+        // one on a phone is to uninstall the release app and lose its login,
+        // settings and downloads. With it, an agent drives the profile build
+        // (docs/DRIVING.md) while the user's own install is never touched.
+        //
+        // What the suffix changes: the package's data directories (a fresh
+        // install, no login), and everything keyed on the package name
+        // rather than on anything in this repository -- the Drive pairing
+        // app link (verified per package and certificate, so the debug app
+        // never verifies and the link opens the browser) and the Google
+        // Sign-In OAuth client the native Drive picker uses (registered for
+        // the release package and SHA-1, so the picker refuses in this one).
+        // Everything else is per-package by construction: the downloads
+        // notification channel, the foreground service and every intent
+        // this app sends name their component explicitly.
+        //
+        // Both build types share the suffix, so a profile build replaces a
+        // debug one and the other way round: one side-by-side app, not two.
+        // Flutter's plugin creates `profile` with `initWith(debug)` before
+        // this block runs, so it does not inherit these and is set here too.
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "Xtremio debug"
+        }
+        maybeCreate("profile").apply {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "Xtremio debug"
+        }
         release {
             // The release key when this machine has it, the debug key
             // otherwise -- see [releaseSigning]. This matters because an

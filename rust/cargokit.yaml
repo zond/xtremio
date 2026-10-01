@@ -14,3 +14,8 @@ cargo:
     extra_flags: ["--config", "env.AWS_LC_SYS_CMAKE_BUILDER=\"0\""]
   release:
     extra_flags: ["--config", "env.AWS_LC_SYS_CMAKE_BUILDER=\"0\""]
+  # A Flutter profile build (tool/drive-start) is a cargo --release build;
+  # cargokit picks these options by Flutter's configuration name, so profile
+  # needs its own copy or the bindgen targets fall back to CMake.
+  profile:
+    extra_flags: ["--config", "env.AWS_LC_SYS_CMAKE_BUILDER=\"0\""]

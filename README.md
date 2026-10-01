@@ -185,6 +185,7 @@ What is genuinely not built:
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it works: the bridge and what crosses it, the wire conventions, the embedded server, the player, subtitles, downloads, Google Drive, the library, recommendations, and the pinned forks. |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Setting up, building and running, re-recording fixtures, server storage, diagnostics, the stats OSD, and what an iOS build needs. |
 | [docs/ANDROID.md](docs/ANDROID.md) | Android and Android TV: prerequisites, the APK, manifest and channels, display frame rate, downloads in the background, emulators, a real box. |
+| [docs/DRIVING.md](docs/DRIVING.md) | Driving a running app from a terminal or an agent: the side-by-side debug app, `tool/drive-start`, `tool/drive`. |
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |

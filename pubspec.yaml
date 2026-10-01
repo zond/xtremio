@@ -54,6 +54,12 @@ dev_dependencies:
   fake_async: ^1.3.3
 
   flutter_lints: ^6.0.0
+  # The driver extension lib/main_driver.dart installs, so an agent can
+  # drive a profile build on a device (docs/DRIVING.md). Only that
+  # entrypoint and lib/dev/ import it; lib/main.dart never does, so the
+  # release build does not carry it.
+  flutter_driver:
+    sdk: flutter
 
 # The Android libmpv, built with every decoder rather than the whitelist
 # media_kit publishes by default.

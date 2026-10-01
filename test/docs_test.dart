@@ -36,6 +36,7 @@ void main() {
         'docs/ADDONS.md',
         'docs/DEEP_LINKS.md',
         'docs/ANDROID.md',
+        'docs/DRIVING.md',
       ]) {
         expect(File(named).existsSync(), isTrue, reason: '$named is missing');
       }

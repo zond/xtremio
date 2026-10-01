@@ -363,6 +363,18 @@ the `ic_launcher_*` XML or `values*/ic_launcher_background.xml`. The
 adaptive icon's foreground keeps the mark inside the circle every launcher
 mask leaves; widening the X means checking that.
 
+## Driving the app on a device
+
+`tool/drive-start` runs a profile build of `lib/main_driver.dart` on a
+phone as the separate `com.zond.xtremio.debug` app, and `tool/drive`
+reads the screen and acts on it through the semantics tree and the app's
+own navigator -- see [docs/DRIVING.md](docs/DRIVING.md). Never install a
+debug or profile build in a way that touches the release app
+(`com.zond.xtremio`): never uninstall it, `pm clear` it or install over
+it. Nothing outside `lib/main_driver.dart` imports `lib/dev/driver/`, and
+`lib/main.dart` never imports `flutter_driver`. Tests:
+`test/dev/app_driver_test.dart`.
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving

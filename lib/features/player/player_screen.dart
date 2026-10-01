@@ -248,7 +248,41 @@ final class PlayerScreenResult {
   final String selectVideoId;
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+/// What a player screen says about its playback when asked from outside
+/// the widget tree: the app driver's `player` command
+/// (`lib/dev/driver/`, docs/DRIVING.md) and nothing else. It reads fields
+/// the screen already keeps and nothing in the app calls it; a release
+/// build keeps only the interface's name.
+abstract interface class PlayerProbe {
+  /// The screen's playback state as JSON-ready values. Every URL in it has
+  /// been through [DiagnosticsLog.url], the same rule as a log line.
+  Map<String, Object?> probe();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
+  @override
+  Map<String, Object?> probe() => {
+    'opened': _opened == null ? null : DiagnosticsLog.url(_opened!),
+    'engineUrl': _engineUrl == null ? null : DiagnosticsLog.url(_engineUrl!),
+    'mediaId': _playingMediaId,
+    'engine': _engine != null,
+    'mediaLoaded': _mediaLoaded,
+    'positionMs': _position.value.inMilliseconds,
+    'durationMs': _duration.inMilliseconds,
+    'bufferMs': _buffer.value.inMilliseconds,
+    'playing': _playing,
+    'buffering': _buffering,
+    'positionStuck': _positionStuck,
+    'casting': _casting,
+    'leaving': _leaving,
+    'engineError': _engineError == null
+        ? null
+        : DiagnosticsLog.redactUrls(_engineError!),
+    'openError': _openError == null
+        ? null
+        : DiagnosticsLog.redactUrls(_openError!),
+  };
+
   CoreClient? _client;
   CoreFieldNotifier? _player;
 

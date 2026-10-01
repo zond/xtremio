@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# One command to the driver session tool/drive-start put up; see
+# docs/DRIVING.md. `tool/drive --help` lists the commands.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+dir="${XTREMIO_DRIVE_DIR:-$root/build/drive}"
+url_file="$dir/vmservice-url"
+exe="$dir/drive"
+
+# Compiled once and again whenever the script changes: `dart run` would
+# spend seconds compiling on every command.
+if [ ! -x "$exe" ] || [ "$root/tool/drive.dart" -nt "$exe" ]; then
+  mkdir -p "$dir"
+  (cd "$root" && dart compile exe tool/drive.dart -o "$exe" >"$dir/compile.log" 2>&1) || {
+    cat "$dir/compile.log" >&2
+    exit 1
+  }
+fi
+
+case "${1:-}" in
+  "" | -h | --help) exec "$exe" --url none ;;
+esac
+
+if [ ! -s "$url_file" ]; then
+  echo "no driver session: run tool/drive-start first" >&2
+  exit 2
+fi
+exec "$exe" --url "$(cat "$url_file")" "$@"

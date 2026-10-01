@@ -47,7 +47,7 @@
          common in the Stremio ecosystem, so plain http is allowed, as in
          the official Stremio Android app. -->
     <application
-        android:label="xtremio"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

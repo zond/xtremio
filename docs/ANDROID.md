@@ -40,7 +40,9 @@ make apk-split                                                     # release, ar
 make apk-debug FLAGS="--target-platform android-arm64,android-x64" # phone/64-bit TV + emulator
 ```
 
-Debug builds always add x86_64 for the emulator (cargokit mirrors Flutter
+Debug and profile builds are the package `com.zond.xtremio.debug`
+("Xtremio debug"), installed beside a release build rather than over it
+([DRIVING.md](DRIVING.md#the-second-app)). Debug builds always add x86_64 for the emulator (cargokit mirrors Flutter
 here; the vendored copy is patched to stop also adding android-x86, which
 Flutter 3.47 cannot package). Output lands in
 `build/app/outputs/flutter-apk/`.
@@ -293,7 +295,7 @@ adb wait-for-device
 until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 5; done
 
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
-adb shell am start -n com.zond.xtremio/.MainActivity
+adb shell am start -n com.zond.xtremio.debug/com.zond.xtremio.MainActivity
 ```
 
 For **Android TV**, the same flow with `system-images;android-36;android-tv;x86_64`
@@ -366,6 +368,10 @@ curl -si http://127.0.0.1:$PORT/heartbeat
 Discover showing Cinemeta posters proves HTTPS end to end.
 
 ## Running on a physical device
+
+To drive the app from a terminal or an agent rather than by hand, see
+[DRIVING.md](DRIVING.md): debug and profile builds are a separate
+`com.zond.xtremio.debug` app that installs beside the release one.
 
 **Ask the device which ABI it wants**; do not infer it from the chip:
 
