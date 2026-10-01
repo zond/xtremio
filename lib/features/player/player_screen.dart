@@ -950,8 +950,26 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// The last position the engine reported, as against the one the seek
   /// bar shows -- [_seekTo] moves that one itself so the bar does not sit
   /// still under the press. Only this one is evidence about where playback
-  /// really is (see [_watchSeek]). Null until the engine has said.
+  /// really is (see [_watchSeek]). Null until the engine has said, and
+  /// again from every `open` until the file it asked for has: which is
+  /// what says a seek has to be held ([_seekEngineTo]).
   Duration? _reportedPosition;
+
+  /// A seek the viewer made that the engine may not have taken: one made
+  /// before the file was in, which mpv refuses -- and then applies the
+  /// open's `start`, the resume point, over it. Made again at the first
+  /// position the file reports ([_takeHeldSeek]), and until the engine
+  /// reports a position at it, every position it reports is from before
+  /// the viewer's seek and is not shown or told to the core. Null when
+  /// there is none.
+  Duration? _heldSeek;
+
+  /// Whether [_heldSeek] has been made again since the file came in, and
+  /// how long its positions are still not believed after that: no longer
+  /// than [PlayerScreen.seekCheckDelay], so a seek mpv will not make (an
+  /// unseekable file) gives the bar back.
+  bool _heldSeekRepeated = false;
+  Timer? _heldSeekExpiry;
 
   bool get _statsVisible => _statsPinned ?? _statsHover;
 
@@ -1228,6 +1246,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       if (position == Duration.zero) return;
       _mediaIn = true;
     }
+    if (_takeHeldSeek(position)) return;
     _positionSeen = true;
     if (position != _position.value) {
       final advanced = position - _position.value;
@@ -1593,7 +1612,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
     _openRetryTimer = Timer(wait, () {
       _openRetryTimer = null;
-      _reopenAt(position, reason: 'false-end $ends');
+      // Where playback is now, not where the end happened: the viewer may
+      // have sought while this waited.
+      _reopenAt(_position.value, reason: 'false-end $ends');
     });
   }
 
@@ -1863,10 +1884,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       // after it (a step back of 10 s from 2.586 s reports -7.414), and the
       // core, whose times are `u64`, throws the whole action out. So a step
       // off either end is asked for as the clamped position.
-      if (scanning != null && clamped == target) {
+      //
+      // And before the file is in, a step is a seek like any other: it is
+      // relative to where mpv is, and mpv is nowhere yet ([_seekEngineTo]).
+      if (scanning != null && clamped == target && !_seekMustBeHeld) {
         _engine?.scanBy(scanning);
       } else {
-        _engine?.seek(clamped);
+        _seekEngineTo(clamped);
       }
       _watchSeek(from: from, to: clamped);
     }
@@ -1885,6 +1909,68 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _lastReported = null;
     _dismissUpNext();
     _showControls();
+  }
+
+  /// Whether a seek made now may be dropped by the engine: the file the
+  /// last `open` asked for has not reported a position yet, or an earlier
+  /// seek is still held.
+  bool get _seekMustBeHeld => _reportedPosition == null || _heldSeek != null;
+
+  /// Seeks the local engine to [target], **which supersedes the resume
+  /// point** -- the viewer's, a cast handing the film back, anything that
+  /// is not the open's own start.
+  ///
+  /// The open's `start` is the only position mpv applies on its own, once
+  /// the file is open, and a `seek` before that is refused and dropped
+  /// (media_kit discards the answer). So until the file has reported a
+  /// position the seek is held ([_heldSeek]) and made again when it does,
+  /// and any later `open` -- a retry -- starts at it ([_openStart]).
+  void _seekEngineTo(Duration target) {
+    if (_seekMustBeHeld) {
+      _openStart = target;
+      _heldSeek = target;
+      _heldSeekRepeated = false;
+      _heldSeekExpiry?.cancel();
+      _heldSeekExpiry = null;
+    }
+    // Asked now as well: if the file is in and has not said so, this is
+    // the one that lands, and the repeat is never needed.
+    _engine?.seek(target);
+  }
+
+  /// The engine reported [position] while a seek is held: whether to drop
+  /// it, as a position from before the viewer's seek.
+  ///
+  /// The first such report is the file coming in -- at the resume point,
+  /// where mpv's `start` put it -- so the held seek is made again there.
+  /// A position at the target (within [PlayerScreen.seekTolerance]) is
+  /// the seek landing and lets it go; so does the repeat going unanswered
+  /// for [PlayerScreen.seekCheckDelay].
+  bool _takeHeldSeek(Duration position) {
+    final held = _heldSeek;
+    if (held == null) return false;
+    if ((position - held).abs() <= PlayerScreen.seekTolerance) {
+      _letHeldSeekGo();
+      return false;
+    }
+    if (!_heldSeekRepeated) {
+      _heldSeekRepeated = true;
+      DiagnosticsLog.info(
+        'player',
+        'the file came in at ${position.inSeconds}s; seeking again to '
+            '${held.inSeconds}s, where the viewer asked',
+      );
+      _engine?.seek(held);
+      _heldSeekExpiry = Timer(PlayerScreen.seekCheckDelay, _letHeldSeekGo);
+    }
+    return true;
+  }
+
+  void _letHeldSeekGo() {
+    _heldSeek = null;
+    _heldSeekRepeated = false;
+    _heldSeekExpiry?.cancel();
+    _heldSeekExpiry = null;
   }
 
   /// A step of [delta]: the seek keys, the bar's own left and right, the

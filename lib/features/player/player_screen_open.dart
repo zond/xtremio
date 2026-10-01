@@ -20,6 +20,13 @@ extension _PlayerOpen on _PlayerScreenState {
     final state = _openState;
     final attempt = ++_openAttempt;
     _mediaIn = false;
+    // A position reported before this open is not this file's; until one
+    // is, a seek has to be held ([_seekEngineTo]). And a seek held for the
+    // last open is not this one's: this open starts at it already
+    // ([_openStart]) when it was the viewer's, and a new stream is not
+    // where they sought at all.
+    _reportedPosition = null;
+    _letHeldSeekGo();
     final start = _openStart;
     final FutureOr<String?> registering;
     try {

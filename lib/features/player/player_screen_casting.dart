@@ -547,7 +547,9 @@ extension _PlayerCasting on _PlayerScreenState {
     _position.value = position;
     _playingNormally = false;
     _playedSinceSeek = Duration.zero;
-    await _engine?.seek(position);
+    // Through the hold: a cast started before the local file was in hands
+    // the film back to an engine that will drop a plain seek.
+    _seekEngineTo(position);
     await _engine?.play();
   }
 
