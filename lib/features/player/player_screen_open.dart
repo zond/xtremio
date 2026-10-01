@@ -393,9 +393,11 @@ extension _PlayerOpen on _PlayerScreenState {
 
   /// Whether a refusal from the server is a wait for bytes rather than an
   /// answer: a torrent whose metadata did not come in time
-  /// (`torrentUnavailable`). Every other refusal -- no such file, not a
-  /// URL it serves, a pipe it cannot seek, a pairing that is gone, an
-  /// origin that refused -- says the stream cannot be played.
+  /// (`torrentUnavailable`, which the server keeps for a swarm that has not
+  /// answered). Every other refusal -- a torrent the backend refused
+  /// (`torrentRefused`), no such file, not a URL it serves, a pipe it
+  /// cannot seek, a pairing that is gone, an origin that refused -- says
+  /// the stream cannot be played.
   static bool _isWaitingForBytes(Object error) =>
       error is MediaRefusal && error.kind == 'torrentUnavailable';
 

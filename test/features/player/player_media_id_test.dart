@@ -156,6 +156,33 @@ void main() {
     expect(find.textContaining('the torrent has no file 7'), findsOneWidget);
   });
 
+  testWidgets('a torrent the backend refused fails at once, whatever its '
+      'phase', (tester) async {
+    // Not the dead swarm that is waited for (`torrentUnavailable`): the
+    // server says asking again gets the same answer.
+    final harness = PlayerHarness();
+    harness.mediaIds.refusal = const MediaRefusal(
+      'torrentRefused',
+      'backend refused the torrent; see server logs',
+    );
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.error,
+      error: 'backend refused the torrent; see server logs',
+    );
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    await waitOutTheRetries(tester);
+
+    expect(harness.mediaIds.resolved, ['m1']);
+    expect(harness.engine.opened, isEmpty);
+    expect(find.textContaining('Playback failed'), findsOneWidget);
+    expect(
+      find.textContaining('backend refused the torrent; see server logs'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a screen left while the server resolves opens nothing', (
     tester,
   ) async {
