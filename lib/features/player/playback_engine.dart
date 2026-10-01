@@ -18,8 +18,6 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/core.dart';
 import '../../src/rust/api/media.dart' as rust_media;
 import '../../shell/display_frame_rate.dart';
-import 'archive_route.dart';
-import 'archive_sniff.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'subtitle_match.dart';
@@ -279,8 +277,6 @@ class PlaybackScope extends InheritedWidget {
     this.streamNumbers,
     this.hints,
     this.mediaIds,
-    this.archiveSniff,
-    this.archiveRoute,
     required super.child,
   });
 
@@ -322,22 +318,11 @@ class PlaybackScope extends InheritedWidget {
   /// without reaching FFI.
   final PlaybackHints? hints;
 
-  /// How a torrent is registered with the server and played by id
-  /// (`xtremio://<id>`) rather than by URL. Injectable so a test can say
-  /// what was registered and which buffer was set without reaching FFI.
+  /// How a stream is registered with the server and played by id
+  /// (`xtremio://<id>`) rather than by URL, and published for a cast.
+  /// Injectable so a test can say what was registered, which buffer was set
+  /// and what was published without reaching FFI.
   final MediaIds? mediaIds;
-
-  /// What a stream that failed to open is asked, to say whether it is an
-  /// archive rather than a film (absent, [sniffArchive], which reads the
-  /// start of it over HTTP). A function so a test can answer without a
-  /// server.
-  final Future<ArchiveKind?> Function(Uri url)? archiveSniff;
-
-  /// How a container the sniff named is sent to the streaming server, which
-  /// reads the film inside it as ranges of the container itself (absent,
-  /// [routeArchive]). A function for the same reason as [archiveSniff]: a
-  /// test answers what the server would without one running.
-  final ArchiveRouter? archiveRoute;
 
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
@@ -372,13 +357,6 @@ class PlaybackScope extends InheritedWidget {
   static MediaIds mediaIdsOf(BuildContext context) =>
       _maybeOf(context)?.mediaIds ?? const RustMediaIds();
 
-  static Future<ArchiveKind?> Function(Uri url) archiveSniffOf(
-    BuildContext context,
-  ) => _maybeOf(context)?.archiveSniff ?? sniffArchive;
-
-  static ArchiveRouter archiveRouteOf(BuildContext context) =>
-      _maybeOf(context)?.archiveRoute ?? routeArchive;
-
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -390,9 +368,7 @@ class PlaybackScope extends InheritedWidget {
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
       hints != oldWidget.hints ||
-      mediaIds != oldWidget.mediaIds ||
-      archiveSniff != oldWidget.archiveSniff ||
-      archiveRoute != oldWidget.archiveRoute;
+      mediaIds != oldWidget.mediaIds;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

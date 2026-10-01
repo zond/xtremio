@@ -119,9 +119,10 @@ impl ServerState {
 /// -- and takes it back on unlink or `pairAgain`. It is held in memory
 /// beside the server handle, exactly as long as the account is linked,
 /// and it is spent only inside the server's own process
-/// (`routes::drive`); it is in no log line and no registry file. Playing
-/// a Drive file still passes the token per call (`open_drive_file`) and
-/// does not read this.
+/// (`routes::drive`); it is in no log line and no registry file. A Drive
+/// media id reads it whenever the server resolves the file
+/// ([`ServerState::grant_supplier`]); the first open from a screen spends
+/// the token it was handed (`open_drive_file`) and reads this after.
 ///
 /// Answers whether a grant *arrived* -- `None` to `Some`, or a different
 /// token -- which is when the unfinished Drive downloads are worth pinning
@@ -652,8 +653,8 @@ pub enum DriveOpenFailure {
 #[serde(rename_all = "camelCase")]
 pub struct DriveOpenOutcome {
     pub ok: bool,
-    /// Where the player fetches the film: this server's own
-    /// `/drive/stream/{key}`, carrying a random key and no credential.
+    /// What the player is handed: `xtremio-drive:<fileId>`, which it plays
+    /// by media id. Carries no credential.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -679,16 +680,16 @@ impl DriveOpenOutcome {
     }
 }
 
-/// Open a file in the paired Google Drive and answer a URL the player can
-/// fetch (`ServerHandle::open_drive_file`; there is no HTTP route for it,
-/// because the argument is the account's grant).
+/// Open a file in the paired Google Drive for the player: registered and
+/// resolved by media id ([`crate::media::open_drive_in`]), which is the
+/// grant renewed, the file probed and its head read -- the I/O a play
+/// would do, done while the screen that asked can still say why not.
 ///
 /// **The token is an argument and never a request.** It crosses from Dart
-/// into this process, is handed to the server's library API, and is spent
-/// inside the server for an hourly access token; it is in no URL, no log
-/// line and no error. What comes back names a random key, so the string
-/// that reaches mpv -- and the diagnostics log, and a bug report -- says
-/// nothing about the account or even which file it is.
+/// into this process and is spent inside the server for an hourly access
+/// token, once; it is in no URL, no log line and no error. What comes back
+/// is `xtremio-drive:<fileId>` -- the file's id, which is no credential --
+/// and the player plays that by id.
 ///
 /// A server that is not running is [`DriveOpenFailure::Unavailable`]
 /// rather than an error, so that every way this can fail is one of four
@@ -698,72 +699,9 @@ pub fn open_drive_file(
     refresh_token: &str,
     name: Option<String>,
 ) -> DriveOpenOutcome {
-    outcome_of(with_handle(|handle| {
-        handle.open_drive_file(file_id, refresh_token, name)
-    }))
-}
-
-/// [`open_drive_file`] against a given state, which is how a test says
-/// "no server is running" without taking the process's embedded one away
-/// from another test (the same reason [`update_settings_in`] exists).
-#[cfg(test)]
-fn open_drive_file_in(
-    app: &AppState,
-    file_id: &str,
-    refresh_token: &str,
-    name: Option<String>,
-) -> DriveOpenOutcome {
-    outcome_of(with_handle_in(app, |handle| {
-        handle.open_drive_file(file_id, refresh_token, name)
-    }))
-}
-
-/// What the server answered, as one of the four words and a URL.
-///
-/// The whole of the mapping, shared by the two entry points above so that
-/// neither can answer differently: an `Err` at this level is a server that
-/// is not running or a runtime that is gone, which is `unavailable` and
-/// **not** the error's own sentence -- a caller that had to read one would
-/// be matching English.
-fn outcome_of(
-    opened: anyhow::Result<Result<stream_server::DriveFileOpened, stream_server::DriveOpenError>>,
-) -> DriveOpenOutcome {
-    let opened = match opened {
-        Ok(opened) => opened,
-        Err(_) => return DriveOpenOutcome::refused(DriveOpenFailure::Unavailable),
-    };
-    match opened {
-        Ok(file) => DriveOpenOutcome {
-            ok: true,
-            url: Some(file.url),
-            name: file.name,
-            content_type: Some(file.content_type),
-            length: Some(file.length),
-            reason: None,
-        },
-        Err(error) if error.is_pair_again() => {
-            DriveOpenOutcome::refused(DriveOpenFailure::PairAgain)
-        }
-        Err(error) if error.refused() == Some("noPairingService") => {
-            DriveOpenOutcome::refused(DriveOpenFailure::NoPairingService)
-        }
-        Err(error) => {
-            // The *kind*, never the sentence: a refusal's text is written
-            // in the server and says nothing secret, but a habit of
-            // logging what an error said is how the one that does gets
-            // filed. See `AGENTS.md`, "Never log auth material". The two
-            // refusals with a kind of their own are answered above, so the
-            // kind here is the variant's, and a status code is a number.
-            use stream_server::{DriveError, DriveOpenError};
-            let (kind, status) = match &error {
-                DriveOpenError::Drive(DriveError::Unreachable(_)) => ("unreachable", None),
-                DriveOpenError::Drive(DriveError::Refused(status)) => ("refused", Some(*status)),
-                DriveOpenError::Drive(DriveError::Source(_)) => ("source", None),
-                _ => ("other", None),
-            };
-            tracing::warn!(kind, status = ?status, "a linked Drive file could not be opened");
-            DriveOpenOutcome::refused(DriveOpenFailure::Unreachable)
-        }
+    match crate::state::current() {
+        Some(app) => crate::media::open_drive_in(&app, file_id, refresh_token, name),
+        None => DriveOpenOutcome::refused(DriveOpenFailure::Unavailable),
     }
 }
 
@@ -1711,81 +1649,6 @@ mod tests {
         );
     }
 
-    /// With no server running there is nothing to open, and that is an
-    /// *outcome* rather than an error -- so every way this call can fail is
-    /// one of the four words the app switches on, and none of them carries
-    /// the grant.
-    ///
-    /// Against a state of its own, with no server in it: the process's
-    /// embedded server belongs to whichever other test started it, and one
-    /// running would send this test's marker to the real pairing service.
-    #[test]
-    fn no_server_is_unavailable_and_says_nothing_about_the_grant() {
-        const TOKEN: &str = "not-a-token-only-a-marker-for-this-test";
-        let app = AppState::default();
-        let outcome = open_drive_file_in(&app, "a-file-id", TOKEN, Some("A Film.mkv".into()));
-        assert!(!outcome.ok);
-        assert_eq!(outcome.reason, Some(DriveOpenFailure::Unavailable));
-        assert!(outcome.url.is_none());
-        let answered = serde_json::to_string(&outcome).expect("the outcome serialises");
-        assert!(!answered.contains(TOKEN), "{answered}");
-        assert!(!answered.contains("a-file-id"), "{answered}");
-    }
-
-    /// **Every answer the server can give becomes the right word**, and
-    /// above all `pairAgain`: that one is terminal, the app's response to
-    /// it is a fresh QR, and it is the one thing nothing above the FFI may
-    /// have to read English to recognise.
-    ///
-    /// The server's own tests prove `DriveOpenError::is_pair_again` for a
-    /// grant that is gone (`server/tests/drive.rs`); this is the other
-    /// half, which is that the word survives the crossing.
-    #[test]
-    fn every_refusal_crosses_as_its_own_word() {
-        use stream_server::{DriveError, DriveOpenError};
-
-        for (error, expected) in [
-            (
-                DriveOpenError::Drive(DriveError::PairAgain),
-                DriveOpenFailure::PairAgain,
-            ),
-            (
-                DriveOpenError::NoPairingService,
-                DriveOpenFailure::NoPairingService,
-            ),
-            (
-                DriveOpenError::Drive(DriveError::Refused(503)),
-                DriveOpenFailure::Unreachable,
-            ),
-            (
-                DriveOpenError::Drive(DriveError::Unreachable("no route".into())),
-                DriveOpenFailure::Unreachable,
-            ),
-        ] {
-            let outcome = outcome_of(Ok(Err(error)));
-            assert!(!outcome.ok);
-            assert_eq!(outcome.reason, Some(expected));
-            assert!(outcome.url.is_none());
-        }
-
-        // And a file that opened is a URL with the three facts on it.
-        let outcome = outcome_of(Ok(Ok(stream_server::DriveFileOpened {
-            key: "a-key".into(),
-            url: "http://127.0.0.1:1/drive/stream/a-key".into(),
-            name: Some("A Film.mkv".into()),
-            content_type: "video/x-matroska".into(),
-            length: 4096,
-        })));
-        assert!(outcome.ok);
-        assert_eq!(
-            outcome.url.as_deref(),
-            Some("http://127.0.0.1:1/drive/stream/a-key")
-        );
-        assert_eq!(outcome.name.as_deref(), Some("A Film.mkv"));
-        assert_eq!(outcome.length, Some(4096));
-        assert_eq!(outcome.reason, None);
-    }
-
     /// **A Drive id's grant is whatever the app holds when the server
     /// asks**: one handed down after the id was registered is the one it
     /// gets, and an unlink takes it from every id at once.
@@ -1800,12 +1663,34 @@ mod tests {
         assert_eq!(supplier(), None);
     }
 
+    /// With no server running there is nothing to open, and that is an
+    /// *outcome* rather than an error -- so every way this call can fail is
+    /// one of the four words the app switches on, and none of them carries
+    /// the grant.
+    ///
+    /// Against a state of its own, with no server in it: the process's
+    /// embedded server belongs to whichever other test started it, and one
+    /// running would send this test's marker to the real pairing service.
+    #[test]
+    fn no_server_is_unavailable_and_says_nothing_about_the_grant() {
+        const TOKEN: &str = "not-a-token-only-a-marker-for-this-test";
+        let app = AppState::default();
+        let outcome =
+            crate::media::open_drive_in(&app, "a-file-id", TOKEN, Some("A Film.mkv".into()));
+        assert!(!outcome.ok);
+        assert_eq!(outcome.reason, Some(DriveOpenFailure::Unavailable));
+        assert!(outcome.url.is_none());
+        let answered = serde_json::to_string(&outcome).expect("the outcome serialises");
+        assert!(!answered.contains(TOKEN), "{answered}");
+        assert!(!answered.contains("a-file-id"), "{answered}");
+    }
+
     /// **Every answer the server can give becomes the right word**, and
     /// above all `pairAgain`: that one is terminal, the app's response to
     /// it is a fresh QR, and it is the one thing nothing above the FFI may
     /// have to read English to recognise.
     #[test]
-    fn every_refusal_of_a_drive_id_crosses_as_its_own_word() {
+    fn every_refusal_crosses_as_its_own_word() {
         use stream_server::Refusal;
 
         for (refusal, expected) in [

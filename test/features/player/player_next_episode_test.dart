@@ -342,7 +342,8 @@ void main() {
       final next = loadArgs(
         harness.core.dispatched.lastWhere((a) => a.action['action'] == 'Load'),
       );
-      expect(next['stream']['url'], startsWith('http://127.0.0.1:'));
+      // The file the server opened, which the next player registers by id.
+      expect(next['stream']['url'], 'xtremio-drive:drive-e2');
       expect(next['stream']['name'], 'S01E02.mkv');
       expect(
         next['streamRequest'],

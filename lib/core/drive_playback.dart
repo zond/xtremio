@@ -1,20 +1,20 @@
 /// Turning a linked Google Drive file into something the player can open.
 ///
-/// A [LinkedDriveFile] is a name and an id; a player wants a URL. The one
-/// thing that can make the second out of the first is the embedded
-/// streaming server, which holds the file as a byte source and renews the
-/// account's access token for itself -- so this is the ask, and
-/// [openLinkedDriveFile] is the whole of the flow.
+/// A [LinkedDriveFile] is a name and an id; the player plays it as a media
+/// id the embedded server issues for it, which holds the file as a byte
+/// source and renews the account's access token for itself. The press asks
+/// the server to open it first -- the grant renewed, the file probed -- so
+/// the screen that pressed can say why not, and [openLinkedDriveFile] is
+/// the whole of that flow.
 ///
 /// **The grant crosses one boundary and no more.** The refresh token comes
 /// out of the secure store through [DriveAccount.refreshToken], goes
 /// straight into the FFI call, and is spent inside the server's own
 /// process. It is in no URL, no log line and no exception here: what comes
-/// back is a loopback URL naming a random key -- not the account, and not
-/// even the file id -- which is why the string that reaches mpv, the
-/// diagnostics log and a copied bug report says nothing about either.
-/// [DriveOpenFailure] is a word rather than a sentence for the same
-/// reason.
+/// back is `xtremio-drive:<fileId>` -- the file's id, which is no
+/// credential and is in the preferences file already -- and the player
+/// registers that and finds it opened. [DriveOpenFailure] is a word rather
+/// than a sentence for the same reason.
 ///
 /// **A dead pairing is written down here, once.** The server answers
 /// `pairAgain` when the grant is gone, which is terminal -- no retry brings
@@ -76,9 +76,8 @@ sealed class DriveOpened {
 final class DriveFilePlayable extends DriveOpened {
   const DriveFilePlayable({required this.url, this.name});
 
-  /// Where the player fetches the film: the embedded server's
-  /// `/drive/stream/{key}`. **Carries no credential**, which is why it is
-  /// safe to hand to mpv, to a log and to a bug report.
+  /// What the player is handed: `xtremio-drive:<fileId>`, which it plays
+  /// by media id. **Carries no credential**.
   final Uri url;
 
   /// What Drive calls the file, as the server echoed it back.
@@ -225,9 +224,10 @@ Future<DriveOpened> openLinkedDriveFile({
 ///
 /// The shape stremio-core's `Stream` parses, hand-built, exactly as the
 /// developer play tiles are (`DevStreams`): a `url`, which is what makes it
-/// a `StreamKind.url` the engine plays directly. It is on the embedded
-/// server already, so `proxiedThroughServer` leaves it alone and nothing
-/// wraps a loopback URL in a second hop.
+/// a `StreamKind.url`, and the core passes it through untouched. It is
+/// `xtremio-drive:<fileId>`, which the player registers as a Drive media
+/// id -- the same string a Drive download's row keeps, so a finished
+/// download of the file plays off the disk.
 ///
 /// **What the player is given as a title is the file's own name**, because
 /// it is the only true thing anybody knows. A Drive file has no addon, no
@@ -241,9 +241,10 @@ Future<DriveOpened> openLinkedDriveFile({
 /// leave five linked files looking identical on screen.
 ///
 /// `behaviorHints.filename` is the same name and is not decoration: the
-/// stream URL is `/drive/stream/{key}` with no extension on it, and the
-/// cast check reads the container off a filename or refuses the cast
-/// outright (`castFilename`, `CastCompatibility`). The name is Drive's own
+/// stream URL has no extension on it, the cast check reads the container
+/// off a filename or refuses the cast outright (`castFilename`,
+/// `CastCompatibility`), and it is the name the player registers the file
+/// under. The name is Drive's own
 /// and carries the real suffix.
 Map<String, dynamic> driveStreamJson({
   required LinkedDriveFile file,

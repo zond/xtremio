@@ -1,13 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
-import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/diagnostics_capture.dart';
-import '../../support/fake_prefs_client.dart';
-import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// What the player does when the stream stops instead of ending.
@@ -115,43 +111,5 @@ void main() {
       lines,
       contains('warn mpv ffmpeg/demuxer: tcp: Connection timed out'),
     );
-  });
-
-  testWidgets('a re-open before the media loaded keeps the resume point', (
-    tester,
-  ) async {
-    // media_kit reports `position: 0` as soon as an open is issued, so the
-    // position means nothing until the media is in: a buffer change while
-    // the start-up card is still up must not restart the film.
-    final prefs = AppPrefs(client: FakePrefsClient());
-    await prefs.load();
-    final fixture = loadPlayerFixture();
-    (fixture['libraryItem'] as Map<String, dynamic>)['state'] = {
-      'timeOffset': 720000,
-      'duration': 5760000,
-    };
-    // A torrent read by URL: one played by id re-opens nothing for a
-    // buffer change (player_buffer_test.dart).
-    final harness = PlayerHarness(
-      player: fixture,
-      prefs: prefs,
-      embeddedServer: false,
-    );
-    useWideViewport(tester);
-    await harness.pump(tester);
-    expect(harness.engine.opened.single.$2, const Duration(minutes: 12));
-
-    // No duration yet: the torrent is still starting up. media_kit says 0.
-    harness.engine.emitPosition(Duration.zero);
-    await pumpEvents(tester);
-    await tester.tap(find.byTooltip('Playback settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(PlayerSettingsSheet.bufferChipKey(BufferAhead.maximum)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(harness.engine.opened, hasLength(2));
-    expect(harness.engine.opened[1].$2, const Duration(minutes: 12));
   });
 }

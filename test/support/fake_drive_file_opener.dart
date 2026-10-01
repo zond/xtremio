@@ -12,7 +12,7 @@ class FakeDriveFileOpener implements DriveFileOpener {
 
   /// What each call answers, in order; the **last** one repeats forever, so
   /// a test can say "this is what opening a file does" without counting the
-  /// presses. Empty answers a URL on the loopback server.
+  /// presses. Empty answers the file's own source URL, as the server does.
   final List<DriveOpened> answers;
 
   /// Every open that was asked for, in order.
@@ -32,7 +32,7 @@ class FakeDriveFileOpener implements DriveFileOpener {
       DriveOpenRequest(fileId: fileId, refreshToken: refreshToken, name: name),
     );
     if (pending != null) await pending;
-    if (answers.isEmpty) return fakeDrivePlayable(name: name);
+    if (answers.isEmpty) return fakeDrivePlayable(fileId: fileId, name: name);
     return answers.length == 1 ? answers.first : answers.removeAt(0);
   }
 }
@@ -50,12 +50,9 @@ class DriveOpenRequest {
   final String? name;
 }
 
-/// A URL the server would answer with: loopback, a random key, and nothing
-/// in it about the account or the file.
+/// What the server would answer with: the file's own source URL, which
+/// the player plays by media id, and nothing about the account.
 DriveFilePlayable fakeDrivePlayable({
-  String key = '7f1c2e64-0a31-4f9b-9c2d-5b8e0a9d3c11',
+  String fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz',
   String? name,
-}) => DriveFilePlayable(
-  url: Uri.parse('http://127.0.0.1:41871/drive/stream/$key'),
-  name: name,
-);
+}) => DriveFilePlayable(url: Uri.parse('xtremio-drive:$fileId'), name: name);

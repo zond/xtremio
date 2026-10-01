@@ -95,9 +95,11 @@ Works from a torrent: the server finds the sibling volumes in the
 torrent's own file list. Behind a debrid link the app is handed one URL,
 and a set needs all of them, each separately signed.
 
-**But the server half is already built for it**: `/rar/create` takes
-`urls`, a list of volumes in order, and it is only the app that sends a
-list of one (`archive_route.dart`). So this works the day an addon lists
+**But the server half is mostly built for it**: `/rar/create` takes
+`urls`, a list of volumes in order, while a link the server sniffs as a RAR
+is one volume (stream-server `docs/design/media-pipeline.md` §2.9: an
+explicit volume list is a `MediaSpec` field when something supplies one,
+not built yet). So this works the day an addon lists
 every volume of a set as its own stream -- the app would gather the
 siblings from the stream list it already has, by infohash and by the
 volume numbering in the names, and hand the server all of them. No URL

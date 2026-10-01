@@ -288,19 +288,42 @@ void main() {
       final harness = PlayerHarness(player: remoteStreamFixture(remote));
       await harness.pump(tester);
 
-      final opened = harness.engine.opened.single.$1;
-      expect(opened.host, '127.0.0.1', reason: 'our own server, not theirs');
-      expect(opened.pathSegments.first, 'proxy');
+      // Registered as the server's `/proxy` of it -- the one cache on this
+      // device -- with this screen's token in the proxy's own half, and
+      // read by id.
+      final registered = harness.mediaIds.registered.single;
+      expect(registered.host, '127.0.0.1', reason: 'our own server');
+      expect(registered.pathSegments.first, 'proxy');
       expect(
-        opened.toString(),
+        registered.toString(),
         contains(Uri.encodeComponent('https://rd.example')),
       );
-      expect(opened.path, endsWith('/film.mkv'));
-      expect(
-        harness.mediaIds.registered,
-        isEmpty,
-        reason: 'only a torrent is played by id, for now',
+      expect(registered.path, endsWith('/film.mkv'));
+      final token = harness.mediaIds.plays.single.token;
+      expect(registered.toString(), contains('&p=$token/'));
+      expect(harness.engine.opened.single.$1, mediaIdUrl('m1'));
+    });
+
+    testWidgets('a link the server reads only forward is its /proxy URL', (
+      tester,
+    ) async {
+      // An origin that answers a range with the whole file (a live
+      // playlist): nothing in process can seek it, so the server hands back
+      // the `/proxy` URL and mpv reads that over HTTP, unforced.
+      useWideViewport(tester);
+      const remote = 'https://live.example/channel.m3u8';
+      final harness = PlayerHarness(player: remoteStreamFixture(remote));
+      final forward = Uri.parse(
+        'http://127.0.0.1:39661/proxy/d=https%3A%2F%2Flive.example&p=v.1/channel.m3u8',
       );
+      harness.mediaIds.resolution = MediaResolution(
+        inProcess: false,
+        proxyUrl: forward,
+      );
+      await harness.pump(tester);
+
+      expect(harness.engine.opened.single.$1, forward);
+      expect(MediaKitEngine.forcesSeekable(forward), isFalse);
     });
 
     testWidgets('plays direct when this build runs no server of its own', (
@@ -351,10 +374,10 @@ void main() {
       final harness = PlayerHarness(embeddedServer: false);
       await harness.pump(tester);
 
-      final opened = harness.engine.opened.single.$1;
-      expect(opened.isScheme('http'), isTrue, reason: '$opened');
-      expect(opened.pathSegments.first, isNot('proxy'));
-      expect(opened.queryParameters['buffer'], 'normal');
+      final published = PlayerState.fromJson(
+        harness.core.stateOf(CoreField.player) ?? const {},
+      ).streamingUrl;
+      expect(harness.engine.opened.single.$1, published);
       expect(harness.mediaIds.registered, isEmpty);
     });
   });

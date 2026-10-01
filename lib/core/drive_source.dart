@@ -25,19 +25,18 @@ import 'state/stream.dart';
 /// The scheme of [driveSourceUrl].
 ///
 /// **Nothing ever fetches it**, and it is spelled so that nothing could: no
-/// resolver in this app or in stremio-core knows this scheme, and a Drive
-/// file's real URL is a loopback `/drive/stream/{key}` that does not exist
-/// until the press. The URL is here to give the row the one thing a sources
-/// list needs of every row and cannot invent -- a stable identity, so that
+/// resolver in stremio-core knows this scheme. The player registers it as a
+/// Drive media id (`media_register_drive`), and the embedded server reads
+/// the file. The URL gives the row the one thing a sources list needs of
+/// every row and cannot invent -- a stable identity, so that
 /// [StreamInfo.sourceKey] tells two linked files apart and never folds one
-/// into an addon's answer -- and to make [StreamInfo.kind] say `url`, which
-/// is what this file becomes the moment it is opened.
+/// into an addon's answer -- and makes [StreamInfo.kind] say `url`.
 ///
-/// The press goes to `openLinkedDriveFile` and [driveStreamJson] instead
-/// (see `_MetaDetailsScreenState._playRow`), so this string reaches no
-/// player, no log line and no request. It carries the file id, which is not
-/// a credential -- it is already in the preferences file -- and carries
-/// nothing else.
+/// The press goes to `openLinkedDriveFile` and [driveStreamJson] (see
+/// `_MetaDetailsScreenState._playRow`), which hands the player this same
+/// string once the server has opened the file. It carries the file id,
+/// which is not a credential -- it is already in the preferences file --
+/// and carries nothing else.
 const String driveSourceScheme = 'xtremio-drive';
 
 /// The identity of [file] as a sources list keys a row on. See

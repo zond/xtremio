@@ -12,8 +12,8 @@ import 'state/stream_numbers.dart';
 /// session needs and the only thing that ever turns it on.
 ///
 /// A second HTTP listener serving media bytes to the local network -- a
-/// Chromecast cannot fetch from the loopback one -- with no control routes
-/// on it at all, and deliberately not `/proxy` or `/ftp`. It exists for the
+/// Chromecast cannot fetch from the loopback one -- serving the streams the
+/// player published for a cast (`/cast/<token>`) and nothing else. It exists for the
 /// length of a cast session and no longer.
 ///
 /// Behind an interface so the cast tests can assert that it is turned off
@@ -43,6 +43,14 @@ abstract interface class LanMediaControl {
   /// receiver that is filling a buffer from one that cannot decode what it
   /// fetched.
   int get lanMediaRequestsServed;
+
+  /// How many `/cast` bodies the listener has begun since it started: a
+  /// `GET` under a published token that started sending bytes, never a
+  /// `HEAD`, an unknown token's `404` or a refusal. Reset where
+  /// [lanMediaRequestsServed] is. Beside it, the cast watchdog's second
+  /// reading: requests and no body is a receiver that reached this device
+  /// and has been sent nothing yet.
+  int get lanMediaBodiesServed;
 
   /// The base URL to give a receiver at [peerIp], so a media URL built on it
   /// names an interface that receiver can connect back to. [peerIp] null
@@ -418,6 +426,9 @@ class ServerClient
 
   @override
   int get lanMediaRequestsServed => rust.serverLanMediaRequestsServed();
+
+  @override
+  int get lanMediaBodiesServed => rust.serverLanMediaBodiesServed();
 
   /// Ends every proxied stream carrying [token]
   /// (`ServerHandle::close_proxy_streams`) and answers how many that was.

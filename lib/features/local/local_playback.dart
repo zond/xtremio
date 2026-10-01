@@ -22,9 +22,9 @@ const String localTrackingManifestUrl =
     'http://127.0.0.1:11470/local-addon/manifest.json';
 
 /// The stream JSON the player is handed for [file]: its own address, which
-/// libmpv opens as it is -- a `content://` one through a file descriptor
-/// media_kit opens for it, a `file://` one directly. Never proxied: only
-/// `http(s)` goes through the embedded server.
+/// the player registers with the embedded server as a media id -- a
+/// `file://` one by its path, a `content://` one by a descriptor the
+/// platform opens for it -- and the server reads where it is.
 ///
 /// `behaviorHints.filename` carries the extension, which is how a cast
 /// check reads the container off a stream.

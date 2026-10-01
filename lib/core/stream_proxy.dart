@@ -1,14 +1,15 @@
 /// Sending a stream through our own server instead of straight at its host.
 ///
 /// There is one cache on this device and it is the server's, so every
-/// stream has to reach the player as a URL on the server: a torrent
-/// already is one, and a remote stream becomes one here. See
-/// docs/ARCHITECTURE.md, "Streams, the proxy and the cache".
+/// stream has to be registered with the server as a URL on it: a torrent
+/// already is one, and a remote stream becomes one here, before the player
+/// registers it as a media id. See docs/ARCHITECTURE.md, "Streams, the
+/// proxy and the cache".
 library;
 
 import 'dart:io';
 
-/// [url] as the player should fetch it -- through the streaming server at
+/// [url] as the player registers it -- through the streaming server at
 /// [serverBase] when it points anywhere else, and unchanged when it is
 /// already the server's own.
 ///
@@ -45,9 +46,9 @@ import 'dart:io';
 /// - Anything that is not `http` or `https` -- a `magnet:` the core has not
 ///   resolved. There is nothing for a proxy to fetch.
 /// - A loopback URL ([isEmbeddedServerHost]). That is the embedded server
-///   itself -- a torrent, a `/proxy` URL the core built, a Drive file, a
-///   kept download, an archive member -- and proxying it would be the
-///   server fetching from itself.
+///   itself -- a torrent, a `/proxy` URL the core built, a kept torrent
+///   download, an archive member -- and proxying it would be the server
+///   fetching from itself.
 /// - Everything, when [serverBase] is null -- a build that started no
 ///   embedded server. No server means no proxy, and a stream that plays
 ///   direct is better than one that does not play.
@@ -130,8 +131,8 @@ bool isProxiedByServer(Uri url) {
 
 /// Whether [host] names this device, and so the embedded server: every
 /// loopback URL the app meets is the embedded server's -- a torrent route,
-/// a `/proxy` URL the core built, `/drive/stream`, `/downloads/{key}/stream`,
-/// an archive route.
+/// a `/proxy` URL the core built, an archive route, a route it serves by
+/// URL alone (`/ftp`, YouTube).
 ///
 /// There is no other server on this device as far as the app is concerned.
 /// The core's streaming server URL is pinned to the embedded one

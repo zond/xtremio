@@ -86,12 +86,17 @@ class CastRemotePanel extends StatelessWidget {
     required this.onPlayPause,
     required this.onSeek,
     required this.onStop,
+    this.note,
     this.playPauseFocusNode,
   });
 
   final String deviceName;
   final String title;
   final CastStatus status;
+
+  /// A sentence about the session that is not the receiver's to say: the
+  /// receiver reached this device and has not been sent the film yet.
+  final String? note;
 
   final VoidCallback onPlayPause;
   final ValueChanged<Duration> onSeek;
@@ -129,6 +134,15 @@ class CastRemotePanel extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: textTheme.titleLarge?.copyWith(color: Colors.white),
               ),
+              if (note case final note?) ...[
+                const SizedBox(height: 12),
+                Text(
+                  note,
+                  key: const ValueKey('cast-note'),
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                ),
+              ],
               const SizedBox(height: 24),
               SeekBar(
                 position: status.position,

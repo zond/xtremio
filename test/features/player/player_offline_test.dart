@@ -5,10 +5,11 @@ import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
-/// Playing a download off the device: the player is handed a `file://`
-/// stream, which stremio-core passes through untouched, and everything that
-/// keeps continue-watching moving has to keep working with no server and no
-/// network in the picture.
+/// Playing a file on this device: the player is handed a `file://` stream,
+/// which stremio-core passes through untouched, registers it with the
+/// embedded server as a local media id and reads it where it is -- and
+/// everything that keeps continue-watching moving has to keep working with
+/// no torrent and no network in the picture.
 void main() {
   const url = 'file:///downloads/abc/Night%20of%20the%20Living%20Dead.mkv';
 
@@ -60,15 +61,18 @@ void main() {
     metaRequest: metaRequest,
   );
 
-  testWidgets('opens the file itself, with no server in between', (
-    tester,
-  ) async {
+  testWidgets('opens the file by id, read where it is', (tester) async {
     final player = harness();
     await player.pump(tester);
 
-    expect(player.engine.opened.single.$1, Uri.parse(url));
+    // By its path, under the name the stream gives it -- a path's own
+    // name would do too, and a `content:` document has none.
+    expect(player.mediaIds.registered, [Uri.parse(url)]);
+    expect(player.mediaIds.names, ['Night of the Living Dead.mkv']);
+    expect(player.engine.opened.single.$1, mediaIdUrl('m1'));
     expect(player.calls, [
       'open',
+      'opened',
     ], reason: 'nothing polls a torrent for a file that is already whole');
     expect(find.byType(TorrentStartupOverlay), findsNothing);
   });

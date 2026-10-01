@@ -1,10 +1,13 @@
 /// Playing a download from the device instead of fetching it from peers.
 ///
 /// **A finished download is not a file.** Torrent data is stored one file
-/// per piece, for the streaming cache and a kept download alike, and the
-/// only reader of those pieces is the embedded server. So the player is
-/// handed a `url` stream naming that server's media route for this torrent
-/// and file, which is served off the pieces already here: no peer, no
+/// per piece, for the streaming cache and a kept download alike, and a link
+/// or Drive download is chunks in the server's proxy cache; the only reader
+/// of either is the embedded server. So the player is handed a `url` stream
+/// that names the download's source -- the server's media route for this
+/// torrent and file, the link, or the Drive file's `xtremio-drive:<fileId>`
+/// -- and registers it as a media id; the server resolves a finished
+/// download of it off the disk before it asks any origin: no peer, no
 /// tracker and no network. That is the better source even with a
 /// connection, so it is preferred whenever there is one.
 library;
@@ -13,9 +16,12 @@ import '../../core/core.dart';
 
 /// The stream JSON that plays [view]'s download at [url].
 ///
-/// stremio-core passes a non-`magnet:` `Url` stream through untouched
-/// (`Stream::convert`), so `player.stream`'s `streaming_url` *is* this URL
-/// and the engine fetches it with nothing in between. It is deliberately a
+/// stremio-core passes a non-`magnet:` `Url` stream through
+/// (`Stream::convert`), so `player.stream`'s `streaming_url` *is* this URL,
+/// or for a link with request headers the server's `/proxy` URL carrying
+/// them -- which is why `behaviorHints.proxyHeaders` comes along: the
+/// server keys a link's download on the link and its headers, and finds it
+/// only when asked with both. It is deliberately a
 /// `url` stream rather than the torrent it was downloaded from, even though
 /// the URL now names the same server: a torrent stream sends the player
 /// through the engine's own start-up, and the overlay keys on `infoHash`,
@@ -39,9 +45,11 @@ Map<String, dynamic> offlineStream(DownloadView view, String url) {
   final filename = name == null || name.isEmpty ? stream.filename : name;
   final subtitles = stream.subtitlesJson;
   final bingeGroup = stream.behaviorHints['bingeGroup'];
+  final proxyHeaders = stream.behaviorHints['proxyHeaders'];
   final hints = <String, dynamic>{
     'filename': ?filename,
     'bingeGroup': ?bingeGroup,
+    'proxyHeaders': ?proxyHeaders,
   };
   return {
     'url': url,

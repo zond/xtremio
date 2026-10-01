@@ -208,6 +208,11 @@ class FakeLanMediaControl implements LanMediaControl {
   /// taking the reset away is something a test can now see.
   int requestsServed = 0;
 
+  /// What bodies the listener has begun: zero with requests is a receiver
+  /// that reached this device and has been sent nothing. Reset with
+  /// [requestsServed].
+  int bodiesServed = 0;
+
   /// Holds a start open until it completes, as the round trip to the
   /// server does: what a Stop pressed during it finds is the test.
   Future<void>? enablePending;
@@ -217,6 +222,7 @@ class FakeLanMediaControl implements LanMediaControl {
     toggles.add(enabled);
     if (enabled && enablePending != null) await enablePending;
     requestsServed = 0;
+    bodiesServed = 0;
     running = enabled;
     return enabled ? address : null;
   }
@@ -226,6 +232,9 @@ class FakeLanMediaControl implements LanMediaControl {
 
   @override
   int get lanMediaRequestsServed => running ? requestsServed : 0;
+
+  @override
+  int get lanMediaBodiesServed => running ? bodiesServed : 0;
 
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {

@@ -96,37 +96,3 @@ enum BufferAhead {
     return null;
   }
 }
-
-/// [url] with the `buffer=` parameter set to [choice].
-///
-/// Every other parameter survives, repeats included — a torrent URL carries
-/// one `tr=` per tracker and one `f=` per file filter, and dropping any of
-/// them would change which file plays and which trackers the engine gets.
-/// An empty query (`…/0?`, which is what stremio-core writes for a torrent
-/// with no trackers) contributes nothing rather than an empty pair.
-Uri withBufferAhead(Uri url, BufferAhead choice) {
-  final params = <String, List<String>>{};
-  url.queryParametersAll.forEach((key, values) {
-    if (key.isNotEmpty) params[key] = values;
-  });
-  params['buffer'] = [choice.wire];
-  return url.replace(queryParameters: params);
-}
-
-/// [url] with the player token `p=` set to [token]: the name of the player
-/// screen this stream is for, `<viewer>.<screen>` (the install's
-/// `AppPrefs.viewerId` and the screen's number).
-///
-/// It is what tells the server that a request is the viewer's playback and
-/// not a subtitle, a side file or another client: only a request carrying it
-/// starts or moves a play session, and only a play session shares anything
-/// (stream-server `docs/storage.md`, "Sharing"). Every other parameter
-/// survives, as in [withBufferAhead].
-Uri withPlayerToken(Uri url, String token) {
-  final params = <String, List<String>>{};
-  url.queryParametersAll.forEach((key, values) {
-    if (key.isNotEmpty) params[key] = values;
-  });
-  params['p'] = [token];
-  return url.replace(queryParameters: params);
-}

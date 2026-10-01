@@ -16,8 +16,6 @@ import '../details/stream_facts.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
-import 'archive_route.dart';
-import 'archive_sniff.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
@@ -303,7 +301,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// and `profile.settings.streamingServerUrl` arrives with a `ctx` pull that
   /// may land after the player state. The two name the same server: the
   /// profile's URL is pinned to this one (`core::pin_to_embedded`), so a
-  /// torrent's URL is on it already and [_mediaUrl] only adds `buffer=`.
+  /// torrent's URL is on it already and is registered as it is
+  /// ([_register]).
   ///
   /// Null only in a build that started no embedded server (nothing the app
   /// ships: a server that will not start fails the boot); the stream then
@@ -311,11 +310,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Uri? _serverBase;
 
   /// This player screen's token, `<viewer>.<screen>`: the install's viewer
-  /// id ([AppPrefs.viewerId]) and this screen's number. Written into every
-  /// URL this screen hands the engine -- the `/proxy` URLs (`p=`, where it
-  /// is also the only thing that says which of the server's live streams
-  /// are this screen's, [_closeProxiedStreams]) and the torrent's own
-  /// ([withPlayerToken]) -- and what tells the server a request is the
+  /// id ([AppPrefs.viewerId]) and this screen's number. The play every id
+  /// this screen registers carries ([MediaIds.setPlay]), and a cast of it
+  /// too, and written into the `/proxy` URL of a link (`p=`, the only thing
+  /// that says which of the server's live HTTP streams are this screen's,
+  /// [_closeProxiedStreams]) -- and what tells the server a read is the
   /// viewer's playback: the viewer's play session follows the newest screen
   /// of the viewer, so the next episode's screen moves it, and a request
   /// from an older screen (its player still reconnecting as this one takes
@@ -455,14 +454,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Uri? _opened;
 
   /// The URL the engine was actually handed for [_opened], recorded by
-  /// [_open] rather than derived again: [_mediaUrl] is not a pure function
-  /// of the core's URL, and for every stream that is not a torrent it wraps
-  /// the origin in this server's `/proxy` route. The server finds a stream's
-  /// store by the path it is asked with, so [_heldStreamUrl] must ask with
-  /// this URL and not the core's bare origin.
+  /// [_open] once the server has answered: `xtremio://<id>` for a stream
+  /// played by id, the server's `/proxy` URL for an origin it reads only
+  /// forward, and otherwise [_opened] itself. Null until the first answer.
   ///
-  /// Not an identity: a re-open for a new buffer window writes a different
-  /// one for the same video. [_opened] says which video is playing.
+  /// Not an identity: a re-registration after the server let an id go
+  /// writes a different one for the same video. [_opened] says which video
+  /// is playing.
   Uri? _engineUrl;
 
   Duration _duration = Duration.zero;
@@ -522,37 +520,28 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([PlaybackScope.mediaIdsOf]).
   MediaIds? _mediaIds;
 
-  /// The media id the stream [_mediaIdSource] was registered as, which mpv
-  /// is handed as `xtremio://<id>` ([_mediaUrl]). Kept across re-opens of
-  /// the same stream -- a retry, a false end -- so the server's answer
-  /// about it is found again rather than asked again; a different stream
-  /// registers anew.
+  /// The media id the stream [_mediaIdSource] was registered as
+  /// ([_register]), which mpv is handed as `xtremio://<id>`. Kept across
+  /// re-opens of the same stream -- a retry, a false end -- so the server's
+  /// answer about it is found again rather than asked again; a different
+  /// stream registers anew.
   String? _mediaId;
   Uri? _mediaIdSource;
+
+  /// What the server found the stream on the engine to be ([_playable]):
+  /// its name, and the film inside it when it was a container -- what a
+  /// cast is judged by. Null until the first resolve of a stream answers.
+  MediaResolution? _mediaResolution;
+
+  /// Which call to [_open] is the current one. An answer that comes back
+  /// for an earlier one -- a resolve outlived by a re-open, a stream the
+  /// core replaced -- opens nothing.
+  int _openAttempt = 0;
 
   /// The media id a player was last reported opened on
   /// ([_reportMediaOpened]): once per id, after its first resolve, since
   /// before that the server does not know which torrent the id is.
   String? _mediaOpenedReported;
-
-  /// What a stream that failed before it loaded is asked, to tell an
-  /// archive from a film ([PlaybackScope.archiveSniffOf]).
-  Future<ArchiveKind?> Function(Uri url) _archiveSniff = sniffArchive;
-
-  /// How a container that turned out to be one is handed to the server, to
-  /// be read as ranges of itself ([PlaybackScope.archiveRouteOf]).
-  ArchiveRouter _archiveRoute = routeArchive;
-
-  /// The film inside the container [_opened] turned out to be, as a URL on
-  /// the streaming server ([_explainArchive]). Null for every ordinary
-  /// stream, which is almost all of them.
-  ///
-  /// It stands *in place of* [_opened] at every `open` from the moment it
-  /// is set, so a re-open for a new buffer window or after a network error
-  /// goes back to the film and not to the archive around it; [_opened]
-  /// itself stays the URL the core published, because that is what the
-  /// core's next state is compared against. Cleared with the stream.
-  Uri? _translatedUrl;
 
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
@@ -853,10 +842,22 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// Runs [PlayerScreen.castFetchTimeout] after a load served off this
   /// device and asks whether the receiver ever reached us
-  /// ([_castFetchCheck]). Nothing the receiver says cancels it (the receiver
-  /// this exists to catch reports a healthy session); only the ways out of a
-  /// session do, picking another receiver among them.
+  /// ([_castFetchCheck]), and again every as long while it has reached us
+  /// and been sent nothing. Nothing the receiver says cancels it (the
+  /// receiver this exists to catch reports a healthy session); only the
+  /// ways out of a session do, picking another receiver among them.
   Timer? _castFetchTimer;
+
+  /// The token the stream on the receiver is published under
+  /// ([MediaIds.publish]), or null when nothing is. **Never logged**: it is
+  /// a URL into this device for as long as it is published.
+  String? _castToken;
+
+  /// What the remote says under the title while the receiver has reached
+  /// this device and been sent nothing yet ([_castFetchCheck]); null
+  /// otherwise. A note and not an ending: a stream that is not here yet is
+  /// waited for, never given up on.
+  String? _castNote;
 
   /// The last sample mpv gave for the open media, taken while the cast
   /// sheet is up: the one place the compatibility check can hear what the
@@ -1000,8 +1001,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playbackHints = PlaybackScope.hintsOf(context);
     _mediaIds = PlaybackScope.mediaIdsOf(context);
-    _archiveSniff = PlaybackScope.archiveSniffOf(context);
-    _archiveRoute = PlaybackScope.archiveRouteOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
@@ -1151,9 +1150,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       return;
     }
     _opened = url;
-    // Another stream, so whatever the last one turned out to hold is not
-    // this one's to play.
-    _translatedUrl = null;
+    // Another stream, so what the server said of the last one is not this
+    // one's, and a receiver handed the last one is not handed this one.
+    _mediaResolution = null;
+    unawaited(_unpublishCast());
     _autoPickedSubtitles = false;
     _autoPickRank = null;
     _subtitlesChosenByHand = false;
@@ -2222,6 +2222,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                         deviceName: _castingTo!.name,
                         title: state?.title ?? '',
                         status: _castStatus,
+                        note: _castNote,
                         onPlayPause: _togglePlay,
                         onSeek: _seekTo,
                         onStop: () => unawaited(_stopCast()),

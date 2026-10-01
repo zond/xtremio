@@ -166,6 +166,11 @@ abstract final class DiagnosticsLog {
       final target = segments.length > 1 ? _proxyTargetHost(segments[1]) : '';
       return '$origin/proxy/d=$target/…';
     }
+    // A published cast token is a URL into this device for as long as it
+    // is published, whoever's address it is on.
+    if (segments.isNotEmpty && segments.first == 'cast') {
+      return '$origin/cast/…';
+    }
     final query = url.hasQuery ? '?…' : '';
     if (!_isOurs(url)) {
       return '$origin${url.path.isEmpty ? '' : '/…'}$query';

@@ -47,6 +47,30 @@ void main() {
     /// names nothing. Reading the filename off it would hand the player
     /// "1" as the file it is playing, which is what the video parameters
     /// and every subtitle match are taken from.
+    test('keeps a link\'s request headers, which its download is keyed on', () {
+      // A link download is the link *and* the headers stremio-core sends
+      // it with (`behaviorHints.proxyHeaders`): played without them, the
+      // server would look for a download of another request and ask the
+      // origin instead.
+      const link = 'https://debrid.example/dl/film.mkv';
+      final headers = {
+        'request': {'Referer': 'https://addon.example/'},
+      };
+      final json = offlineStream(
+        viewOf({
+          'url': link,
+          'behaviorHints': {'proxyHeaders': headers, 'filename': 'film.mkv'},
+        }),
+        link,
+      );
+
+      expect(json['url'], link);
+      expect(json['behaviorHints'], {
+        'filename': 'film.mkv',
+        'proxyHeaders': headers,
+      });
+    });
+
     test('the filename comes from the entry, not from the URL', () {
       final json = offlineStream(
         viewOf(const {

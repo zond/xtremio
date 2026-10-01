@@ -238,9 +238,11 @@ handful stremio-core calls (`/settings`, `/network-info`, `/device-info`,
 `/{infoHash}/{fileIdx}/stats.json`) -- answers 401 without it. stremio-core
 reaches the server only through `Env::fetch`, which adds the header when
 the request's scheme, host and effective port are the embedded server's
-(`server::token_for`). The media routes libmpv fetches
-(`/{infoHash}/{fileIdx}`, the archive routes, `/proxy`, `/drive/stream`,
-`/downloads/{key}/stream`) and the `/local-addon` stubs stay open.
+(`server::token_for`). The media routes (`/{infoHash}/{fileIdx}`, the
+archive routes, `/proxy`, `/drive/stream`, `/downloads/{key}/stream`) and
+the `/local-addon` stubs stay open; libmpv reads every stream by media id
+instead, and fetches only the `/proxy` of an origin that will not range and
+the routes the server serves by URL alone.
 
 Everything the app asks is a `ServerHandle` call over FFI (the table in
 [The bridge](#the-bridge)), wrapped by `ServerClient`
@@ -309,43 +311,49 @@ interface over media_kit; widget tests swap in `FakePlaybackEngine` through
 
 ### Streams, the proxy and the cache
 
-**A torrent reaches mpv as a media id, `xtremio://<id>`.** The player
-registers the core's torrent URL with the embedded server (`MediaIds`,
-`lib/core/media_ids.dart`; `media_register`), records the play the reads
-are -- its player token and buffer (`media_set_play`) -- and has the server
-resolve the id (`media_resolve`) before mpv is handed it: resolving waits
-for a magnet's metadata, and an open inside mpv cannot be cancelled. libmpv
-reads the id through a protocol registered on each player's handle
+**Every stream reaches mpv as a media id, `xtremio://<id>`.** The player
+registers what it was handed with the embedded server (`MediaIds`,
+`lib/core/media_ids.dart`) -- a URL on the server as the core built it (a
+torrent, a `/proxy` link, an archive's `/create`, a kept torrent download:
+`media_register`), a link on another host wrapped in the server's `/proxy`
+first, a linked Drive file by its `xtremio-drive:<fileId>`
+(`media_register_drive`), a file on this device by its path
+(`media_register_local_path`) or, for an Android `content://` document, by
+a descriptor the `xtremio/local_media` channel opens and detaches
+(`openFd` → `media_register_local_fd`) -- records the play the reads are,
+its player token and buffer (`media_set_play`), and has the server resolve
+the id (`media_resolve`) before mpv is handed it: resolving waits for a
+magnet's metadata, probes a link, renews a Drive grant and reads the head
+for a container, and an open inside mpv cannot be cancelled. libmpv reads
+the id through a protocol registered on each player's handle
 (`mpv_stream_register`, `rust/src/mpv_stream.rs`, over libmpv's
 `stream_cb` API), whose callbacks are the server's blocking `MediaReader`
 on mpv's own threads: no HTTP, no URL of the server's. media_kit carries
 one vendored change for it (`third_party/media_kit/PATCHES.md`). Stream
 numbers and the duration, opened and stalled hints go by id too
-(stream-server `docs/design/media-pipeline.md` §2.4-2.5).
+(stream-server `docs/design/media-pipeline.md` §2.4-2.5). An id the server
+let go is registered again once.
 
-**Every other stream reaches mpv as a URL on our own server.** Anything on
-another host -- a debrid link, an addon's HTTP URL -- is
-wrapped in the server's `/proxy` route (`lib/core/stream_proxy.dart`): the
-target's origin percent-encoded into a `d=` segment, its own path and query
-after it, so a signed link keeps its signature and the file name stays
-visible. The base comes from `CoreInitInfo`, settled before the first
-`open`. A loopback URL (already the server, including a kept download's) is
-left alone. `force-seekable` is set for `xtremio://` and the server's own
-loopback routes, never for `/proxy`.
+**Two kinds of stream are still a URL.** An origin that will not serve
+ranges (a live playlist) resolves `inProcess: false`, and mpv is handed the
+`/proxy` URL the server answers with and reads it forward. A route the
+server serves but names no id for yet (`/ftp`, YouTube) is refused
+`notYet`/`unrecognisedUrl` and handed to mpv as it is. `force-seekable` is
+set for `xtremio://` and the server's own loopback routes, never for
+`/proxy`. With no embedded server at all, the stream is played as the core
+published it.
 
 **How far ahead to buffer is the viewer's choice**, `normal`, `large` or
-`maximum`: with a torrent's play (`media_set_play`), or as `?buffer=` on a
-torrent URL where there is no embedded server (`withBufferAhead`,
-`lib/core/buffer_ahead.dart`): 90 s, four minutes, or a day of the film at
-its own bitrate. Seconds need the film's length, which the player reports
-(`server_note_duration`); until then every profile reads ahead the same
-small fallback, so start-up is equally fast. Settings → Player → "Buffer
-ahead" is the standing choice; the player's own sheet overrides it for the
-playback on screen: told to the server by id (`media_set_buffer`), which
-the reader takes at its next seek without re-opening anything (a URL is
-re-opened at its position). **"Download the
-whole file"** pins the stream as an offline download while it plays; a
-device that cannot fit it is told the numbers and keeps buffering.
+`maximum`, carried with the play (`media_set_play`): 90 s, four minutes, or
+a day of the film at its own bitrate. Seconds need the film's length,
+which the player reports (`media_note_duration`); until then every profile
+reads ahead the same small fallback, so start-up is equally fast. Settings
+→ Player → "Buffer ahead" is the standing choice; the player's own sheet
+overrides it for the playback on screen: told to the server by id
+(`media_set_buffer`), which the reader takes at its next seek without
+re-opening anything. **"Download the whole file"** pins the stream as an
+offline download while it plays; a device that cannot fit it is told the
+numbers and keeps buffering.
 
 **There is one cache on the device and it is the server's.** The player is
 started with `cache-on-disk=no` and never writes it again: media_kit's
@@ -363,38 +371,36 @@ reasoning is on the constants. A seek outside is a range request answered
 from the server's cache. A television has 2 GB of RAM for everything, and
 the cushion belongs in the server's bounded cache.
 
-**A player that is left ends its own reads.** Each player screen mints a
-token (`player-1`, ...), writes it into its `/proxy` URLs as `p=`, and on
-the way out calls `server_close_proxy_streams` (`ProxyStreamControl`): the
-server ends those reads and answers `410 Gone` to the token afterwards, so
-ffmpeg's reconnect cannot revive them. The token is a name, not a
-credential: the route is on the loopback control API only, and the token is
-stripped before the origin is asked.
+**A player that is left ends its own reads.** A read by id ends with the
+quit, which cancels mpv's `stream_cb` read. For a link read forward over
+HTTP, each player screen's token (`<viewer>.<screen>`) rides in its
+`/proxy` URL as `p=`, and on the way out the screen calls
+`server_close_proxy_streams` (`ProxyStreamControl`): the server ends those
+reads and answers `410 Gone` to the token afterwards, so ffmpeg's reconnect
+cannot revive them. The token is a name, not a credential: the route is on
+the loopback control API only, and the token is stripped before the origin
+is asked.
 
 ### Archives and disc images
 
 Some sources serve a container rather than the film: a debrid `.rar`, a
-torrent whose one file is a `.zip` or an ISO. When a stream fails before it
-loads, the player reads its start and names the container by signature
-(`lib/features/player/archive_sniff.dart`: RAR, ZIP, 7-Zip, ISO 9660), then
-hands it to the server, which serves the member as ranges of the container
--- nothing extracted, nothing written (`docs/design/translated-sources.md`
-in stream-server). `lib/features/player/archive_route.dart` is that half: for a
-stream on another host, `POST /{rar|zip|7zip|iso}/create` with the `/proxy`
-URL the engine was handed, then `GET /{fmt}/stream/{key}`, whose redirect
-names the member; for a torrent file, `GET
-/{fmt}/stream/torrent:<info hash>/<file name>` with no create. The member URL
-(`_translatedUrl`) stands in front of the core's URL at every later `open`,
-while `_opened` stays what the core published; it is also what a cast sends
-(see [CASTING.md](CASTING.md)).
+torrent whose one file is a `.zip` or an ISO. **The server finds out when it
+resolves the id**: it reads the head of the file for a container signature
+and, on a hit, indexes it and resolves the id to the member the archive
+routes' rule picks (`Resolved.member`; stream-server
+`docs/design/media-pipeline.md` §2.9). mpv reads the member as ranges of
+the container -- nothing extracted, nothing written -- and the player keeps
+the member's name (`MediaResolution.memberName`) for the cast check, which
+judges the film and not the container (see [CASTING.md](CASTING.md)).
+Addon-declared archives (`rarUrls`/`zipUrls`) come as stremio-core's own
+`/create` URL, which registers as an id the same way.
 
-A container that cannot be played is said honestly: the server answers
-`415` (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
-`unsupported`), `422` (`malformed`) or `501` (`noRanges`, `noReader`), and
-`archiveRefusal` shows the app's wording or the server's sentence where it
-names something concrete. `noReader` names a cargo feature and so is never
-shown. Addon-declared archives (`rarUrls`/`zipUrls`) are untouched by this:
-stremio-core builds their `/create` URL itself.
+A container that cannot be played is the server's refusal, with its
+sentence (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
+`unsupported`, `malformed`, `noRanges`, `noReader`), shown as the playback's
+failure. A head that did not arrive within the server's bound is answered
+as the plain file (`sniffed: false`), which then fails in mpv like any file
+it cannot read.
 
 ### Leaving the player
 
@@ -733,14 +739,17 @@ through one `DownloadsClient` (`lib/core/downloads_client.dart`) and
 
 **A finished download plays off this device, and there is no file.**
 Torrent data is one file per piece, so the `path` the server reports is a
-name. `downloads_open(key)` answers the server's own media route
-(`{base}/{infoHash}/{fileIdx}`), or the `playUrl` it reports for a link or
-Drive download (`/downloads/{key}/stream`), and stamps `lastPlayedAt` -- but
+name. `downloads_open(key)` answers what the download is of -- the
+server's own media route (`{base}/{infoHash}/{fileIdx}`) for a torrent, the
+link or `xtremio-drive:<fileId>` for a link or Drive download -- which the
+player registers as a media id and the server resolves off the disk before
+it asks any origin; and it stamps `lastPlayedAt` -- but
 only when the row says `complete` *and* the server says it holds the file
 whole now. Otherwise it refuses: `unknown`, `incomplete`, `unavailable` (no
 server) or `notHeld`. Details and the Downloads screen hand the player that
-URL as a plain `url` stream (`lib/features/downloads/offline_play.dart`),
-with the *original* stream and meta requests, which is what keeps
+URL as a plain `url` stream (`lib/features/downloads/offline_play.dart`,
+which carries a link's `proxyHeaders` along, since the server keys a link's
+download on its headers too), with the *original* stream and meta requests, which is what keeps
 continue-watching moving offline. The kept copy wins over the addon's
 stream only for the release that was downloaded, and binge-advance asks the
 same of the next episode, so a downloaded season plays through offline.
@@ -830,15 +839,18 @@ partial one deletes nothing.
 (`lib/features/drive/drive_match.dart`): a loose title plus a strict check,
 since a real poster for the wrong film is worse than none. A matched file
 is listed as a source on that title's details screen as an
-`xtremio-drive:<fileId>` row (`lib/core/drive_source.dart`) that nothing
-ever fetches; an unmatched one is played from the library's Remote list.
+`xtremio-drive:<fileId>` row (`lib/core/drive_source.dart`), which is also
+what the player plays by id; an unmatched one is played from the library's
+Remote list.
 
-**Playback.** `server_drive_open(file_id, refresh_token, name)` opens the
-file as a `DriveSource` in the server and answers `{ok, url, name?,
-contentType, length}` or `{ok: false, reason}`; the URL is
-`http://127.0.0.1:<port>/drive/stream/<random key>`, an open media route
-carrying no credential. The grant is an in-process argument, which is why
-this is not an HTTP request. `openLinkedDriveFile`
+**Playback.** `server_drive_open(file_id, refresh_token, name)` registers
+the file as a Drive media id and resolves it -- the grant renewed, the file
+probed, its head read -- and answers `{ok, url, name, contentType, length}`
+or `{ok: false, reason}`; the URL is `xtremio-drive:<fileId>`, which the
+player registers (`media_register_drive`) and finds already resolved. The
+token is spent once, in-process, which is why this is not an HTTP request;
+later resolves read the grant `server_drive_grant` left in Rust memory, and
+a finished Drive download resolves off the disk with none. `openLinkedDriveFile`
 (`lib/core/drive_playback.dart`) turns `pairAgain` into
 `DriveAccount.notePairAgain`, and the player gets a hand-built stream
 (`driveStreamJson`) named after the file, with the name in
@@ -936,10 +948,14 @@ download of it and before a linked Drive file
 (`player_screen_next.dart`): the engine cannot find it, because the Local
 Files addon answers every stream query empty.
 
-**Playing.** `localStreamJson` hands the player the file's own address:
-libmpv opens `content://` through the file descriptor media_kit opens for
-it, and `file://` directly; only `http(s)` is ever proxied, so neither
-touches the embedded server, and the download controls refuse both. A
+**Playing.** `localStreamJson` hands the player the file's own address,
+which it plays by media id like any stream: a `file://` path is registered
+as it is (`media_register_local_path`), and a `content://` document is
+opened by the `xtremio/local_media` channel (`openFd`, which detaches the
+descriptor) and handed to the server (`media_register_local_fd`), which
+reads it where it is -- positionally, so it seeks -- and refuses a pipe a
+cloud provider may hand out rather than read it forward. Nothing is copied
+or cached, and the download controls refuse both. A
 matched play carries `localStreamRequest`, naming the profile's Local Files
 addon (`http://127.0.0.1:11470/local-addon/manifest.json`), for the reason
 Drive's carries `driveStreamRequest`. That address is not this app's

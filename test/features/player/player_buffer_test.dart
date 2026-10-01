@@ -37,11 +37,6 @@ void main() {
   String? openedBuffer(PlayerHarness harness, int index) =>
       harness.mediaIds.plays[index].buffer;
 
-  /// The `buffer=` value of the nth URL the engine was opened with: a
-  /// torrent in a build with no embedded server.
-  String? urlBuffer(PlayerHarness harness, int index) =>
-      harness.engine.opened[index].$1.queryParameters['buffer'];
-
   /// The buffer the server was last told for the stream on screen: the
   /// last change, or the one its open carried.
   String? bufferNow(PlayerHarness harness) => harness.mediaIds.buffers.isEmpty
@@ -78,9 +73,11 @@ void main() {
       expect(openedBuffer(harness, 0), 'large');
     });
 
-    testWidgets('reaches the stream URL where there is no embedded server', (
+    testWidgets('has nothing to reach where there is no embedded server', (
       tester,
     ) async {
+      // The window is the server's read-ahead; a build that started no
+      // server plays the stream as the core published it.
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.large),
@@ -89,7 +86,7 @@ void main() {
       await harness.pump(tester);
 
       expect(harness.mediaIds.registered, isEmpty);
-      expect(urlBuffer(harness, 0), 'large');
+      expect(harness.engine.opened.single.$1.queryParameters['buffer'], isNull);
     });
 
     testWidgets('is normal when nothing was ever chosen', (tester) async {
@@ -142,41 +139,9 @@ void main() {
       expect(loads(harness), loadsBefore);
     });
 
-    testWidgets('re-opens a torrent read by URL where it is', (tester) async {
-      useWideViewport(tester);
-      final harness = PlayerHarness(
-        prefs: await storedPrefs(BufferAhead.normal),
-        embeddedServer: false,
-      );
-      await harness.pump(tester);
-      harness.engine.emitDuration(const Duration(minutes: 96));
-      harness.engine.emitPosition(const Duration(minutes: 12));
-      harness.engine.emitPlaying(true);
-      await pumpEvents(tester);
-
-      final loadsBefore = loads(harness);
-      expect(loadsBefore, 1, reason: 'the playback was loaded once');
-      await openSheet(tester);
-      await chooseBuffer(tester, BufferAhead.maximum);
-
-      // One more `open`, on the same engine, at the position it had
-      // reached: the window only reaches libmpv through the URL, so the
-      // stream is re-opened rather than the playback restarted. No second
-      // `Load Player`, and no second engine.
-      expect(harness.engine.opened, hasLength(2));
-      expect(urlBuffer(harness, 1), 'maximum');
-      expect(harness.engine.opened[1].$2, const Duration(minutes: 12));
-      expect(harness.engines, hasLength(1));
-      expect(loads(harness), loadsBefore);
-    });
-
-    testWidgets('the re-open\'s own zero is not reported as the viewer', (
+    testWidgets('re-opens nothing where there is no embedded server', (
       tester,
     ) async {
-      // media_kit's `open` stops the player first, and the stop pushes
-      // `position: 0` while the duration this screen holds is still the
-      // film's -- which, believed, is "the viewer is at the start" to the
-      // core, and continue-watching went back to the beginning.
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
@@ -187,19 +152,12 @@ void main() {
       harness.engine.emitPosition(const Duration(minutes: 12));
       harness.engine.emitPlaying(true);
       await pumpEvents(tester);
-      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 12 * 60 * 1000);
 
       await openSheet(tester);
-      await chooseBuffer(tester, BufferAhead.large);
-      expect(harness.engine.opened, hasLength(2));
-      await pumpEvents(tester);
-      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 12 * 60 * 1000);
-
-      // And a second change before the first re-open has started resumes
-      // where the viewer was, not at that zero.
       await chooseBuffer(tester, BufferAhead.maximum);
-      expect(harness.engine.opened, hasLength(3));
-      expect(harness.engine.opened[2].$2, const Duration(minutes: 12));
+
+      expect(harness.engine.opened, hasLength(1));
+      expect(harness.mediaIds.buffers, isEmpty);
     });
 
     testWidgets('after a failure, is told and is not an attempt', (
@@ -356,13 +314,12 @@ void main() {
       expect(harness.engine.opened, hasLength(1));
     });
 
-    testWidgets('a direct stream, which carries no window, is left alone', (
+    testWidgets('a direct stream is told by id, and nothing re-opens', (
       tester,
     ) async {
-      // `buffer=` goes on a torrent this server streams and nowhere else
-      // (a remote host knows nothing about it), so a change of window has
-      // nothing to say to the engine about a direct HTTP stream -- and a
-      // re-open would only stop the picture.
+      // A link is played by id like a torrent, so the change goes to the
+      // server the same way (which has a read-ahead to change only for a
+      // torrent) -- and a re-open would only stop the picture.
       useWideViewport(tester);
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
@@ -387,6 +344,7 @@ void main() {
       await openSheet(tester);
       await chooseBuffer(tester, BufferAhead.maximum);
       expect(harness.engine.opened, hasLength(1));
+      expect(harness.mediaIds.buffers, [('m1', 'maximum')]);
     });
   });
 }

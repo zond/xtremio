@@ -76,7 +76,7 @@ does; the bar itself takes a tap at a place, which semantics cannot aim.
 
 `player` reads the player screen's own state (`PlayerProbe` in
 `lib/features/player/player_screen.dart`): the core's URL, what the engine
-was handed (a torrent is `xtremio://<media id>`), position, duration,
+was handed (`xtremio://<media id>` for a stream played by id), position, duration,
 buffer, playing, buffering, a stuck position and the last engine and open
 errors. Every URL in it, and every `log` line unless Verbose logging is on,
 goes through the same redaction as the diagnostics report.

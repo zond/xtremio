@@ -146,7 +146,10 @@ extension _PlayerServerPolls on _PlayerScreenState {
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
-    if (_playingMediaId == null) _reportPlayerOpened(request.infoHash);
+    // A torrent registered as a media id ([_register], which ran first)
+    // is reported opened by id once the engine has it; only one played by
+    // its URL is reported by its hash.
+    if (_mediaIdSource != _opened) _reportPlayerOpened(request.infoHash);
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
     _startStartupPolling();
@@ -388,7 +391,9 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// Every failure is no rows: the server not running and a stream it does
   /// not hold both mean there is nothing to draw.
   Future<void> _pollStreamNumbers() async {
-    final id = _serverBase == null ? null : _playingMediaId;
+    final id = _serverBase == null
+        ? null
+        : (_registeredMediaId ?? _playingMediaId);
     final url = _heldStreamUrl;
     final playing = _opened;
     final reader = _streamNumbersReader;

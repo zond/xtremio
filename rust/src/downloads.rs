@@ -1610,8 +1610,8 @@ fn add_with(
     // again only for the case where it did not (metadata just landed).
     let path = match info.path.clone() {
         Some(path) => Some(path),
-        // A proxy download has no file: it is played from the server's
-        // media route (`DownloadInfo::play_url`), never opened by path.
+        // A proxy download has no file: it is played by its source's media
+        // id (`stream_url`), never opened by path.
         None if source.proxy.is_some() => None,
         None => crate::server::download_path(&info_hash, file_idx).unwrap_or_default(),
     };
@@ -2406,16 +2406,20 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
         // is the honest answer and the one that says "ask again in a moment".
         Held::Unknown => return Err(OpenFailure::Unavailable),
     }
-    // A proxy download plays from the route the server names for it; a
-    // torrent from its media route, which this side has always built.
-    if let Some(play) = live
-        .iter()
-        .find(|info| {
-            info.file_idx == entry.file_idx && info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
-        })
-        .and_then(|info| info.play_url.clone())
-    {
-        return Ok(play);
+    // A link or Drive download plays by what it is a download of: the
+    // link, or the Drive file's `xtremio-drive:<fileId>`. The player
+    // registers that as a media id, and the server resolves a finished
+    // download of it off the disk before it asks any origin -- which is
+    // what plays it offline. A torrent plays from its media route, which
+    // the player registers the same way.
+    if is_proxy_key(&entry.info_hash) {
+        return entry
+            .stream
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .filter(|url| !url.is_empty())
+            .map(str::to_owned)
+            .ok_or(OpenFailure::Unavailable);
     }
     let base = crate::server::base_url().ok_or(OpenFailure::Unavailable)?;
     base.join(&format!("{}/{}", entry.info_hash, entry.file_idx))
@@ -4744,6 +4748,35 @@ mod tests {
         // And what `open` does with that answer: a refusal naming the pin
         // rather than the server, since the server is what answered.
         assert_eq!(stream_url(&entry, Some(&[])), Err(OpenFailure::NotHeld));
+    }
+
+    /// **A link or Drive download plays by what it is a download of**: the
+    /// link, or `xtremio-drive:<fileId>`, which the player registers as a
+    /// media id and the server resolves off the disk when the download is
+    /// whole. Never a route of the server's own, which no id names.
+    #[test]
+    fn a_link_or_drive_download_opens_as_its_own_source() {
+        let key = "a".repeat(64);
+        for url in [
+            "https://debrid.example/dl/A%20Film.mkv?token=x",
+            "xtremio-drive:a-file-id",
+        ] {
+            let mut entry = entry("tt1", "tt1");
+            entry.info_hash = key.clone();
+            entry.file_idx = 0;
+            entry.state = State::Complete;
+            entry.stream = serde_json::json!({ "url": url });
+            assert_eq!(
+                stream_url(&entry, Some(&[pinned(&key, 0, true)])),
+                Ok(url.to_owned())
+            );
+            // A row with no stream to name has nothing to play.
+            entry.stream = serde_json::json!({});
+            assert_eq!(
+                stream_url(&entry, Some(&[pinned(&key, 0, true)])),
+                Err(OpenFailure::Unavailable)
+            );
+        }
     }
 
     /// The wire shape the Dart side reads: a refusal names its reason and

@@ -32,23 +32,18 @@ import '../player/playback_stats.dart';
 ///   that something is right: a codec nothing mentions passes the gate on
 ///   the container's strength alone.
 ///
-/// And whatever the file is, a stream stremio-core plays through the
-/// server's `/proxy` (or `/ftp`) route cannot be cast at all: those routes
-/// are deliberately not mounted on the LAN media listener, because each is
-/// an open proxy and the local network is not the loopback interface. That
-/// refusal is about the URL and comes first.
+/// And whatever the file is, a stream this device reads by URL through the
+/// server's `/proxy` (or `/ftp`) route cannot be cast: an origin that will
+/// not serve ranges, read forward, or a route the server names no media id
+/// for. The LAN media listener serves published ids and nothing else, and
+/// nothing here could seek such a stream for a receiver. That refusal is
+/// about the URL and comes first. A stream played by id is judged on
+/// `xtremio://<id>`, which names no route, and is cast by publishing it.
 ///
-/// **What is judged is the film, not the container it arrived in.** When a
-/// stream turns out to be an archive or a disc image the player plays the
-/// member inside it, on the server's archive stream routes, and that member
-/// URL and that member's name are what reach this check (`_castSource` and
-/// `_castFilename` in the player). So a `.rar` holding an MP4 is judged as
-/// the MP4 it holds, and an `.iso` behind a `/proxy` link is judged on
-/// `/iso/stream/...` rather than refused as proxied -- rightly, because
-/// that is the URL the receiver would fetch, the LAN listener does serve
-/// it (`archive_stream_routes` is on the allow-list), and the credentials
-/// the container needed stay on the loopback side in the session the
-/// `/create` made.
+/// **What is judged is the film, not the container it arrived in.** When the
+/// server resolved a stream to the member of an archive or a disc image,
+/// that member's name is what reaches this check (`_castFilename` in the
+/// player). So a `.rar` holding an MP4 is judged as the MP4 it holds.
 sealed class CastCompatibility {
   const CastCompatibility();
 

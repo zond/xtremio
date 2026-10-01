@@ -44,8 +44,8 @@ Future<DriveAccount> _account({
 
 void main() {
   group('opening a linked file', () {
-    test('a linked file produces a URL, and the grant goes only to the '
-        'server', () async {
+    test('a linked file is played by its own source URL, and the grant goes '
+        'only to the server', () async {
       final account = await _account();
       final opener = FakeDriveFileOpener();
 
@@ -56,8 +56,9 @@ void main() {
       );
 
       final playable = opened as DriveFilePlayable;
-      expect(playable.url.host, '127.0.0.1');
-      expect(playable.url.path, startsWith('/drive/stream/'));
+      // What the player registers as a Drive media id, and what a Drive
+      // download's row keeps: the file, and nothing about the account.
+      expect(playable.url, Uri.parse(driveSourceUrl(_file)));
       // The one call the grant reaches, with the file it was asked for.
       expect(opener.asked, hasLength(1));
       expect(opener.asked.single.fileId, _file.fileId);
@@ -81,14 +82,10 @@ void main() {
       // shape this feature exists to avoid (`/proxy`'s `h=` rides in the
       // path, which is why it was not reused).
       expect(opened.url.toString(), isNot(contains(_token)));
-      // And not the file id either, so nothing about the account is
-      // recoverable from a line in a log.
-      expect(opened.url.toString(), isNot(contains(_file.fileId)));
 
       // Nor anywhere in what the player is given.
       final stream = driveStreamJson(file: _file, playable: opened);
       expect(jsonEncode(stream), isNot(contains(_token)));
-      expect(jsonEncode(stream), isNot(contains(_file.fileId)));
     });
 
     test('a dead pairing surfaces as pairAgain and the account records '
@@ -189,12 +186,12 @@ void main() {
       final opened = parseDriveOpenAnswer(
         jsonEncode({
           'ok': true,
-          'url': 'http://127.0.0.1:1234/drive/stream/k',
+          'url': 'xtremio-drive:a-file-id',
           'name': 'A Film.mkv',
         }),
       );
       final playable = opened as DriveFilePlayable;
-      expect(playable.url.toString(), 'http://127.0.0.1:1234/drive/stream/k');
+      expect(playable.url.toString(), 'xtremio-drive:a-file-id');
       expect(playable.name, 'A Film.mkv');
     });
 
@@ -244,8 +241,8 @@ void main() {
       // five linked files draw identically.
       expect(stream['name'], _file.name);
       expect(stream['description'], driveSourceLabel);
-      // The URL is what makes it a `StreamKind.url` the engine plays
-      // directly, and it is the server's own, so nothing proxies it again.
+      // The URL is what makes it a `StreamKind.url`, which the core passes
+      // through for the player to register.
       expect(StreamInfo(stream).kind, StreamKind.url);
       expect(StreamInfo(stream).isPlayable, isTrue);
       // And the title the overlay draws really is the file's name.
@@ -258,8 +255,8 @@ void main() {
         file: _file,
         playable: fakeDrivePlayable(name: _file.name),
       );
-      // `/drive/stream/{key}` ends in a uuid, so the cast check has nothing
-      // to read a container off but this.
+      // `xtremio-drive:<fileId>` has no extension, so the cast check has
+      // nothing to read a container off but this.
       expect((stream['behaviorHints'] as Map)['filename'], _file.name);
     });
 

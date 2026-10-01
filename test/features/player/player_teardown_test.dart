@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/media_ids.dart';
 import 'package:xtremio/core/prefs_client.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -67,6 +68,8 @@ void main() {
       player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
       configureEngine: (engine) => engine.disposeGate = wedged,
     );
+    // Read forward over HTTP, through `/proxy`: the stream a token closes.
+    harness.mediaIds.readsForward = true;
     await pumpPushed(tester, harness);
     final engine = harness.engine;
     harness.calls.clear();
@@ -364,6 +367,8 @@ void main() {
       configureEngine: (engine) =>
           engine.disposeError = StateError('mpv refused to stop'),
     );
+    // Read forward over HTTP, through `/proxy`: the stream a token closes.
+    harness.mediaIds.readsForward = true;
     await pumpPushed(tester, harness);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -465,6 +470,8 @@ void main() {
       final harness = PlayerHarness(
         player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
       );
+      // Read forward over HTTP, through `/proxy`: the stream a token closes.
+      harness.mediaIds.readsForward = true;
       await pumpPushed(tester, harness);
       final token = tokenOf(harness.engine.opened.single.$1);
 
@@ -490,6 +497,8 @@ void main() {
         player: remoteStreamFixture('https://rd.example/dl/tok/e1.mkv'),
         prefs: prefs,
       );
+      // Read forward over HTTP, through `/proxy`: the stream a token closes.
+      harness.mediaIds.readsForward = true;
       harness.fixture['nextVideo'] = const {
         'id': 'tt0063350:1:2',
         'title': 'The Cellar',
@@ -539,6 +548,24 @@ void main() {
       expect(harness.proxyStreams.closed, isEmpty);
     });
 
+    testWidgets('a link read by id has nothing to close, and is not asked', (
+      tester,
+    ) async {
+      // Read in process (`xtremio://<id>`): the quit cancels mpv's read,
+      // and no `/proxy` stream was opened under this player's name.
+      final harness = PlayerHarness(
+        player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
+      );
+      await pumpPushed(tester, harness);
+      expect(harness.engine.opened.single.$1, mediaIdUrl('m1'));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(harness.engine.disposed, isTrue);
+      expect(harness.proxyStreams.closed, isEmpty);
+    });
+
     testWidgets('a close that throws still releases the player', (
       tester,
     ) async {
@@ -550,6 +577,8 @@ void main() {
       final harness = PlayerHarness(
         player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
       );
+      // Read forward over HTTP, through `/proxy`: the stream a token closes.
+      harness.mediaIds.readsForward = true;
       await pumpPushed(tester, harness);
       harness.proxyStreams.failure = StateError('the bridge is not up');
 
@@ -578,6 +607,8 @@ void main() {
       final harness = PlayerHarness(
         player: remoteStreamFixture('https://rd.example/dl/tok/e1.mkv'),
       );
+      // Read forward over HTTP, through `/proxy`: the stream a token closes.
+      harness.mediaIds.readsForward = true;
       harness.fixture['nextVideo'] = const {
         'id': 'tt0063350:1:2',
         'title': 'The Cellar',

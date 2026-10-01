@@ -51,7 +51,9 @@ void main() {
       final target = Uri.encodeComponent('http://127.0.0.1:${origin.port}');
       final id = ids.register(base.resolve('proxy/d=$target/tone.wav'));
       ids.setPlay(id, token: 'test.1', buffer: 'normal');
-      expect(await ids.resolve(id), isNull);
+      final resolution = await ids.resolve(id);
+      expect(resolution.refusal, isNull);
+      expect(resolution.inProcess, isTrue);
 
       final player = Player(
         configuration: const PlayerConfiguration(vo: 'null'),

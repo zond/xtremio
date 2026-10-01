@@ -147,30 +147,27 @@ extension _PlayerCasting on _PlayerScreenState {
   StreamFacts get _streamFacts =>
       StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
 
-  /// **What a receiver is sent and what the cast is judged by: the film, not
-  /// the container it came in.** For an archive or disc image this is the
-  /// member URL the server serves ([_translatedUrl]), which mpv is playing;
-  /// judging the container would refuse a `.rar` whose one member is an MP4
-  /// the receiver plays fine. Otherwise it is [_opened].
-  Uri? get _castSource => _translatedUrl ?? _opened;
+  /// **What a receiver is sent and what the cast is judged by.** A stream
+  /// played by id is cast by id ([_castUrl] publishes it), so this is the
+  /// `xtremio://<id>` the engine reads; a stream read over HTTP is the URL
+  /// as the core published it ([_opened]).
+  Uri? get _castSource => _playingMediaId != null ? _engineUrl : _opened;
 
-  /// The name the compatibility check reads, which has to be the name of
-  /// whatever [_castSource] is.
-  ///
-  /// For a member, the last segment of the URL the archive route redirected
-  /// to, which ends in the film's own file name (see `routeArchive`).
-  /// [castFilename] would name the container there (`streamName` and the
-  /// addon's `behaviorHints.filename` are the `.rar`), so it is not
-  /// consulted at all once there is a member. A member name with no
-  /// extension yields null and the check refuses an unknown container, which
-  /// is a real answer, not a "not yet".
+  /// The name the compatibility check reads: **the film, not the container
+  /// it came in.** For an id the server found to be an archive or a disc
+  /// image, the member's own name ([MediaResolution.memberName]); judging
+  /// the container would refuse a `.rar` whose one member is an MP4 the
+  /// receiver plays fine. Otherwise [castFilename], and failing that the
+  /// name the server resolved the stream to (a torrent file's, a link's
+  /// last segment). A name with no extension yields no container, and the
+  /// check refuses an unknown one, which is a real answer, not a "not
+  /// yet".
   String? get _castFilename {
-    final member = _translatedUrl;
-    if (member == null) {
-      return castFilename(_state, serverFilename: _serverFilename);
-    }
-    final segments = member.pathSegments;
-    return segments.isEmpty ? null : segments.last;
+    final resolution = _mediaResolution;
+    final member = resolution?.memberName;
+    if (member != null) return member.split('/').last;
+    return castFilename(_state, serverFilename: _serverFilename) ??
+        resolution?.name;
   }
 
   /// Hands the stream to [device], or explains why it cannot be.
@@ -188,9 +185,8 @@ extension _PlayerCasting on _PlayerScreenState {
   /// and until the last line nothing else knows they exist.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
-    // The film, which for a container is the member inside it; see
-    // [_castSource]. Every step below -- the check, the LAN address, the
-    // load -- is about this URL and no longer about the archive around it.
+    // The id the engine reads, or the URL; see [_castSource]. Every step
+    // below -- the check, the publication, the load -- is about this.
     final local = _castSource;
     if (cast == null || local == null || !_stillOurs) return;
     final state = _state;
@@ -277,7 +273,22 @@ extension _PlayerCasting on _PlayerScreenState {
       await _teardownCast();
       return null;
     }
-    final url = await _castUrl(local, receiver);
+    final Uri? url;
+    try {
+      url = await _castUrl(local, receiver);
+    } catch (error) {
+      // The server would not publish the stream: an id it let go, a
+      // listener that stopped under the switch. The kind, never a token.
+      DiagnosticsLog.warn(
+        'player',
+        'the stream could not be published for a receiver: '
+            '${error is MediaRefusal ? error.kind : error.runtimeType}',
+      );
+      await _endLanMedia();
+      await cast.disconnect();
+      await _stopCast(disconnect: false);
+      return 'This device could not hand the stream to ${device.name}.';
+    }
     if (url == null) {
       DiagnosticsLog.warn(
         'player',
@@ -314,6 +325,7 @@ extension _PlayerCasting on _PlayerScreenState {
     }
     setState(() {
       _castingTo = device;
+      _castNote = null;
       _castEnded = false;
       _castHandedAt = position;
       _castReported = false;
@@ -324,10 +336,12 @@ extension _PlayerCasting on _PlayerScreenState {
       );
     });
     // What we handed the receiver, and which address it was picked for. Not
-    // the receiver's name, which is as often a person's as a room's.
+    // the receiver's name, which is as often a person's as a room's, and
+    // never a published token's URL, which is a way into this device.
     DiagnosticsLog.info(
       'player',
-      'casting ${DiagnosticsLog.url(url)} to a receiver at '
+      'casting ${_castToken != null ? 'a published stream from ${url.host}:${url.port}' : DiagnosticsLog.url(url)} '
+          'to a receiver at '
           '${receiver.address ?? 'an address it did not report'}',
     );
     try {
@@ -369,8 +383,8 @@ extension _PlayerCasting on _PlayerScreenState {
     return null;
   }
 
-  /// Starts the wait that asks, once, whether the receiver ever came back
-  /// for the stream ([_castFetchCheck]).
+  /// Starts the wait that asks whether the receiver ever came back for the
+  /// stream ([_castFetchCheck]).
   ///
   /// Only for a stream served off this device: a receiver fetching from a
   /// host on the internet owes our listener nothing, and its count would
@@ -393,58 +407,89 @@ extension _PlayerCasting on _PlayerScreenState {
     _castFetchTimer = null;
   }
 
-  /// Whether the receiver ever reached this device, which is all the
-  /// listener's count says.
+  /// **Three readings of the listener's two counts** (stream-server
+  /// `docs/lan-media.md`):
   ///
-  /// Nothing reached it: the address is one it cannot route to, and a
-  /// hanging connect never fails on its own, so the session ends as Stop
-  /// ends it and the film comes back here, with the reason said. Something
-  /// did: the viewer hears nothing, since twenty seconds cannot tell slow
-  /// buffering from a decode failure; the log gets it.
+  /// - **Nothing reached this device.** The address is one the receiver
+  ///   cannot route to, and a hanging connect never fails on its own, so
+  ///   the session ends as Stop ends it and the film comes back here, with
+  ///   the reason said.
+  /// - **It reached this device and has been sent nothing yet** -- requests,
+  ///   no body. A refusal (which the server logged), or a stream whose
+  ///   bytes are not here yet. Said on the remote ([_castNote]), and asked
+  ///   again after as long: **never an ending.** A stream that is slow to
+  ///   come is waited for; the viewer is the one who gives up.
+  /// - **A body began.** The network and the server did their part, and
+  ///   the rest is the media's: the viewer hears nothing, since a receiver
+  ///   that is buffering and one that cannot decode look alike from here.
   Future<void> _castFetchCheck() async {
     _castFetchTimer = null;
     if (!mounted || !_casting) return;
-    final served = _lanMedia?.lanMediaRequestsServed ?? 0;
-    if (served > 0) {
-      DiagnosticsLog.info(
+    final requests = _lanMedia?.lanMediaRequestsServed ?? 0;
+    if (requests == 0) {
+      final device = _castingTo;
+      DiagnosticsLog.warn(
         'player',
-        'receiver has asked the LAN listener for $served request(s)',
+        'receiver asked the LAN listener for nothing; ending the session',
+      );
+      await _stopCast();
+      await _explainCast(
+        '${device?.name ?? 'The receiver'} never asked for the stream, so it '
+        'could not reach this device at the address it was given. The film '
+        'is back on this screen.',
       );
       return;
     }
-    final device = _castingTo;
-    DiagnosticsLog.warn(
-      'player',
-      'receiver asked the LAN listener for nothing; ending the session',
-    );
-    await _stopCast();
-    await _explainCast(
-      '${device?.name ?? 'The receiver'} never asked for the stream, so it '
-      'could not reach this device at the address it was given. The film is '
-      'back on this screen.',
+    final bodies = _lanMedia?.lanMediaBodiesServed ?? 0;
+    if (bodies > 0) {
+      DiagnosticsLog.info(
+        'player',
+        'receiver asked the LAN listener for $requests request(s) and was '
+            'sent $bodies bod${bodies == 1 ? 'y' : 'ies'}',
+      );
+      if (_castNote != null) setState(() => _castNote = null);
+      return;
+    }
+    if (_castNote == null) {
+      DiagnosticsLog.warn(
+        'player',
+        'receiver asked the LAN listener for $requests request(s) and has '
+            'been sent nothing yet',
+      );
+      setState(
+        () => _castNote =
+            '${_castingTo?.name ?? 'The receiver'} has reached this device '
+            'and has not been sent any of the film yet.',
+      );
+    }
+    _castFetchTimer = Timer(
+      PlayerScreen.castFetchTimeout,
+      () => unawaited(_castFetchCheck()),
     );
   }
 
   /// The URL to give [device] for the stream this player has open, or null
   /// when there is none it could fetch.
   ///
-  /// A stream on another internet host is handed over as it is. Only a URL
-  /// on the embedded server needs the LAN media listener, which is the only
-  /// case that starts one. For a container [local] is the member's URL on
-  /// the archive stream routes, which the listener serves
-  /// (`lan_media_routes()` mounts `archive_stream_routes()`); it does not
-  /// mount the archive `/create` half, which fetches a caller-named URL, so
-  /// the member is rebuilt on the LAN base rather than re-created there, and
-  /// the receiver's reads keep its session leased.
+  /// **A stream played by id is published** ([MediaIds.publish]): the LAN
+  /// media listener goes up, and the receiver is handed
+  /// `<lan base>/cast/<token>` -- one random token for this one stream,
+  /// served with the play this screen's player had, so a torrent shares as
+  /// it does on this device. The listener serves published tokens and
+  /// nothing else, so every kind casts the same way: a torrent, a link
+  /// through the server's cache, a Drive file, a download, a file on this
+  /// device, the film inside an archive. Throws when the server will not
+  /// publish it.
+  ///
+  /// A stream read over HTTP -- an origin that will not serve ranges -- is
+  /// handed over as it is when it is on another internet host, and has no
+  /// address a receiver could use when it is on this device.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
-    if (!isEmbeddedServerHost(local.host)) return local;
-    // Every loopback URL is the embedded server's ([isEmbeddedServerHost]),
-    // and the LAN listener serves its routes, so any of them is rebuilt on
-    // the listener -- unless this build started no server of its own, when
-    // nothing here serves it at all.
-    if (_serverBase == null) return null;
+    final id = mediaIdOf(local);
+    if (id == null) return isEmbeddedServerHost(local.host) ? null : local;
+    final ids = _mediaIds;
     final lan = _lanMedia;
-    if (lan == null) return null;
+    if (_serverBase == null || ids == null || lan == null) return null;
     try {
       await lan.setLanMedia(enabled: true);
     } catch (error) {
@@ -454,17 +499,30 @@ extension _PlayerCasting on _PlayerScreenState {
     _lanMediaOn = true;
     final base = await lan.lanMediaBaseUrl(peerIp: device.address);
     if (base == null) return null;
-    final onLan = local.replace(
-      scheme: base.scheme,
-      host: base.host,
-      port: base.hasPort ? base.port : null,
-    );
-    // A torrent cast is this screen's playback moved to the receiver, so it
-    // carries the same player token ([withPlayerToken]): the server keeps
-    // the same play session, and shares from it exactly as it does while
-    // the film plays here. An archive member does not ([_bufferOnUrlFor]):
-    // archive playback shares nothing, cast or not.
-    return _bufferOnUrlFor(local) ? withPlayerToken(onLan, _proxyToken) : onLan;
+    // A switch of receivers: the last one's token goes before this one's
+    // is handed out, so one stream is published once.
+    await _unpublishCast();
+    final token = await ids.publish(id);
+    _castToken = token;
+    return base.resolve('cast/$token');
+  }
+
+  /// Withdraws the publication the receiver was handed, if there is one:
+  /// nothing more is served under its token, and a body in flight is cut.
+  /// Every way out of a session comes through here ([_endLanMedia]), and so
+  /// does a switch of receivers and a new stream on this screen.
+  Future<void> _unpublishCast() async {
+    final token = _castToken;
+    _castToken = null;
+    if (token == null) return;
+    try {
+      await _mediaIds?.unpublish(token);
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'player',
+        'could not withdraw the published stream: ${error.runtimeType}',
+      );
+    }
   }
 
   /// Ends the session and brings playback back to this device, at the point
@@ -478,6 +536,7 @@ extension _PlayerCasting on _PlayerScreenState {
     _cancelCastFetch();
     final position = _castStatus.position;
     _castingTo = null;
+    _castNote = null;
     if (mounted) setState(() {});
     if (disconnect) await _cast?.disconnect();
     await _endLanMedia();
@@ -492,12 +551,14 @@ extension _PlayerCasting on _PlayerScreenState {
     await _engine?.play();
   }
 
-  /// Closes the LAN media listener, if this screen is what opened it. The
-  /// listener exists for the length of a session and no longer, so every
+  /// Withdraws the publication and closes the LAN media listener, if this
+  /// screen is what opened it. The listener exists for the length of a
+  /// session and no longer, so every
   /// way out of one comes through here: Stop, a session that ended
   /// elsewhere, a failed start, and [dispose].
   Future<void> _endLanMedia() async {
     _cancelCastFetch();
+    await _unpublishCast();
     if (!_lanMediaOn) return;
     _lanMediaOn = false;
     try {

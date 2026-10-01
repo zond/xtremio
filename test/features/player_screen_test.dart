@@ -343,13 +343,15 @@ void main() {
       },
     });
     await tester.pumpAndSettle();
-    // Opened at last -- and through this build's own `/proxy` route, since
-    // the stream is on somebody else's host, which is what that route is
-    // for (stream_proxy_test). What this test is about is that nothing was
-    // opened before the core had resolved something to open.
-    final opened = engine.opened.single.$1;
-    expect(opened.host, PlayerHarness.recordedServerBaseUrl.host);
-    expect(opened.toString(), contains('test-videos.co.uk'));
+    // Opened at last -- by id, registered through this build's own
+    // `/proxy` route, since the stream is on somebody else's host, which is
+    // what that route is for (stream_proxy_test). What this test is about
+    // is that nothing was opened before the core had resolved something to
+    // open.
+    final registered = mediaIds.registered.single;
+    expect(registered.host, PlayerHarness.recordedServerBaseUrl.host);
+    expect(registered.toString(), contains('test-videos.co.uk'));
+    expect(engine.opened.single.$1, mediaIdUrl('m1'));
     expect(find.text('Big Buck Bunny (HTTP, 720p 10s)'), findsOneWidget);
   });
 }

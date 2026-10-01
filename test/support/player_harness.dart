@@ -5,8 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
-import 'package:xtremio/features/player/archive_route.dart';
-import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -127,44 +125,6 @@ class PlayerHarness {
   /// [FakeMediaIds].
   final FakeMediaIds mediaIds = FakeMediaIds();
 
-  /// What a stream that failed before loading turns out to be, as the
-  /// screen's archive check hears it: nothing, until a test says otherwise.
-  ArchiveKind? archiveKind;
-
-  /// The URLs the screen asked that of, in order.
-  final List<Uri> archiveSniffs = [];
-
-  /// Holds the check open until a test completes it: reading the start of
-  /// a stream is a request over the network, and what the screen does with
-  /// an answer that comes back late -- after another failure, or after the
-  /// core resolved a different stream -- is the question.
-  Future<void>? archiveSniffPending;
-
-  Future<ArchiveKind?> _archiveSniff(Uri url) async {
-    archiveSniffs.add(url);
-    if (archiveSniffPending != null) await archiveSniffPending;
-    return archiveKind;
-  }
-
-  /// What the server answers about a container the screen sent it: nothing
-  /// it could be asked ([ArchiveRouting] null) until a test says otherwise,
-  /// which leaves the viewer the plain "can't be played" message.
-  ArchiveRouting? archiveRouting;
-
-  /// The requests the screen made of it, in order: what it named, how, and
-  /// on which server.
-  final List<ArchiveRouteRequest> archiveRoutes = [];
-
-  /// Holds the ask open until a test completes it, like
-  /// [archiveSniffPending].
-  Future<void>? archiveRoutePending;
-
-  Future<ArchiveRouting?> _archiveRoute(ArchiveRouteRequest request) async {
-    archiveRoutes.add(request);
-    if (archiveRoutePending != null) await archiveRoutePending;
-    return archiveRouting;
-  }
-
   /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
   /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
   /// `'close-streams'`, `'dispose'`), in the order they happened.
@@ -249,8 +209,6 @@ class PlayerHarness {
         streamNumbers: streamNumbers,
         hints: hints,
         mediaIds: mediaIds,
-        archiveSniff: _archiveSniff,
-        archiveRoute: _archiveRoute,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and

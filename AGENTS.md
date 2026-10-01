@@ -93,7 +93,7 @@ stashing the `lib/` (or `rust/src`) change and running the new test
 
 ## Never log auth material
 
-Four things are never logged, printed, put in a URL, a fixture, a test, a
+Five things are never logged, printed, put in a URL, a fixture, a test, a
 bug report or the text of a logged exception (log the exception's *type*):
 
 - **The Stremio password and session key.** `Authenticate` actions and the
@@ -110,7 +110,12 @@ bug report or the text of a logged exception (log the exception's *type*):
   `DriveAccount`; never in `xtremio_prefs.json`. The one copy outside it is
   Rust memory while linked (`DriveAccount.grantSink` →
   `server_drive_grant`, `null` on unlink and `pairAgain`), for the Drive
-  pins nobody presses a button for. Rust writes it nowhere.
+  pins nobody presses a button for and the Drive media ids the player
+  resolves. Rust writes it nowhere.
+- **A published cast token** (`media_publish`): `<lan base>/cast/<token>` is
+  a URL into this device for as long as it is published. The player logs
+  the listener's address and never the URL (`_handToReceiver`), and
+  `DiagnosticsLog.url` writes any `/cast/…` path without it.
 - **Addon, debrid and subtitle URLs**, which carry keys in the path as well
   as the query. `DiagnosticsLog.write` (`lib/core/diagnostics_log.dart`)
   rewrites every `http(s)` URL through `DiagnosticsLog.url` before the line
@@ -126,24 +131,25 @@ bug report or the text of a logged exception (log the exception's *type*):
   before it becomes a message.
 
 Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
-`test/core/actions_test.dart`.
+`test/core/actions_test.dart`, `test/features/player/player_cast_test.dart`.
 
 ## The app never speaks HTTP to the embedded server
 
-libmpv fetches the open media routes -- or, for a torrent, reads a media id
-through the `xtremio://` protocol (`rust/src/mpv_stream.rs`), which is no
-HTTP at all -- and stremio-core's `StreamingServer`
+libmpv reads every stream by media id through the `xtremio://` protocol
+(`rust/src/mpv_stream.rs`), which is no HTTP at all -- the player registers
+what it plays over FFI (`rust/src/api/media.rs`) -- and fetches a media
+route only for a link the server reads forward (`/proxy`) or a route it
+names no id for; a cast receiver fetches a published token on the LAN
+listener. stremio-core's `StreamingServer`
 model calls its handful of control routes through `Env::fetch`, which adds
 the bearer token. Everything the app itself asks of the server -- settings,
-stats, storage, downloads, Drive, the LAN listener, the lean background
-footprint -- is an FFI function
-over `ServerHandle` in `rust/src/api/server.rs` or
-`rust/src/api/downloads.rs`, returning JSON. A new need is a new Rust
-function there: never a `dart:io` `HttpClient` call, and never a new route
-on the server (stream-server's `AGENTS.md`, "Routes"). The only HTTP the Dart side makes to it is on media routes:
-the player reading the start of a stream that failed
-(`archive_sniff.dart`) and handing the container to the archive routes
-(`archive_route.dart`). The player
+stats, storage, downloads, Drive, media ids, publishing a cast, the LAN
+listener, the lean background footprint -- is an FFI function over
+`ServerHandle` in `rust/src/api/server.rs`, `rust/src/api/media.rs` or
+`rust/src/api/downloads.rs`. A new need is a new Rust function there: never
+a `dart:io` `HttpClient` call, and never a new route on the server
+(stream-server's `AGENTS.md`, "Routes"). The Dart side makes no HTTP
+request to the server at all. The player
 keeps no disk cache of its own (`cache-on-disk=no`); every storage question
 is `server_storage_report`. See
 [The embedded server](docs/ARCHITECTURE.md#the-embedded-server).
@@ -184,8 +190,10 @@ Tests: `rust/tests/downloads.rs`, the unit tests in `rust/src/downloads.rs`,
   `cacheRoot`; a pin decides bytes are kept, never where. The registry
   records no destination. The only write the app makes to `cacheRoot` on
   its own is `moveOffPurgeableRoot` (`lib/main.dart`).
-- **A kept download is not a file.** `downloads_open` answers a URL on the
-  embedded server, never `entry.path`.
+- **A kept download is not a file.** `downloads_open` answers what the
+  download is of -- the server's media route for a torrent, the link or
+  `xtremio-drive:<fileId>` otherwise -- which the player plays by media id
+  and the server resolves off the disk; never `entry.path`.
 - **The row is not evidence; ask the server.** `downloads_open` hands back a
   URL only when the server also says it holds the file whole, and refuses
   with `notHeld` otherwise (a URL for a hash the session lacks would start

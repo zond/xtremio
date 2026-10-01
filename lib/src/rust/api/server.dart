@@ -123,20 +123,24 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
 Future<String> serverStorageReport() =>
     RustLib.instance.api.crateApiServerServerStorageReport();
 
-/// Opens a file in the paired Google Drive and answers, as JSON, a URL the
-/// player can fetch -- or the reason there is none:
-/// `{"ok":true,"url","name"?,"contentType","length"}`, else
-/// `{"ok":false,"reason":"pairAgain"|"noPairingService"|"unreachable"
+/// Opens a file in the paired Google Drive for a screen that wants to play
+/// it, and answers, as JSON, what the player is to be handed -- or the
+/// reason there is none: `{"ok":true,"url","name","contentType","length"}`,
+/// else `{"ok":false,"reason":"pairAgain"|"noPairingService"|"unreachable"
 /// |"unavailable"}`.
 ///
-/// **This is the only way a Drive file becomes playable, and the token
-/// goes no further than this call.** `refresh_token` is the viewer's
-/// long-lived grant, read out of the secure store by `DriveAccount` and
-/// handed straight down; the embedded server spends it for an hourly
-/// access token inside its own process. It is in no URL, no log line and
-/// no error, and the `url` that comes back names a random key -- not the
-/// account, and not even the file id -- so the string that reaches mpv and
-/// the diagnostics log says nothing about either.
+/// Registers the file as a media id and resolves it (`crate::media::
+/// open_drive_in`): the grant renewed, the file probed and its head read,
+/// which is the I/O a play would do, here where the screen that pressed
+/// can still say why not. The `url` is `xtremio-drive:<fileId>`, which the
+/// player registers and finds already resolved.
+///
+/// **The token goes no further than this process.** `refresh_token` is the
+/// viewer's long-lived grant, read out of the secure store by
+/// `DriveAccount` and handed straight down; the embedded server spends it
+/// once for an hourly access token. It is in no URL, no log line and no
+/// error; later resolves of the file read the grant `server_drive_grant`
+/// left in Rust memory.
 ///
 /// `reason: "pairAgain"` is terminal: the grant is gone and only a new
 /// pairing brings it back, which is `DriveAccount.notePairAgain` and a
@@ -144,10 +148,10 @@ Future<String> serverStorageReport() =>
 /// -- nothing above this may have to match English to tell it from "the
 /// network is having a moment".
 ///
-/// Blocks the FRB worker while the server renews a token and probes the
-/// file (one round trip each); never call it from the UI thread. It does
-/// not error for a server that is not running -- that is
-/// `reason: "unavailable"` -- so every failure is one of the four words.
+/// Blocks the FRB worker while the server renews a token, probes the file
+/// and reads its head; never call it from the UI thread. It does not error
+/// for a server that is not running -- that is `reason: "unavailable"` --
+/// so every failure is one of the four words.
 Future<String> serverDriveOpen({
   required String fileId,
   required String refreshToken,

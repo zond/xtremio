@@ -451,14 +451,12 @@ void main() {
       final args =
           (load.action['args'] as Map<String, dynamic>)['args']
               as Map<String, dynamic>;
+      // What the server answered once it had opened the file: the file's
+      // own source URL, which the player registers as a Drive media id.
       expect(
         args['stream']['url'],
-        startsWith('http://127.0.0.1:'),
-        reason:
-            'the URL the server minted, not the placeholder the row is '
-            'identified by',
+        '$driveSourceScheme:${opener.asked.single.fileId}',
       );
-      expect(args['stream']['url'], isNot(contains(driveSourceScheme)));
       expect(args['stream']['name'], driveFileName);
       expect(
         args['streamRequest'],

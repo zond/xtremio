@@ -312,6 +312,19 @@ void main() {
       );
     });
 
+    test('never writes a published cast token', () {
+      // The receiver's URL is a way into this device for as long as the
+      // token is published, on a loopback address or the LAN's.
+      for (final url in [
+        'http://192.168.1.20:39271/cast/0123456789abcdef0123456789abcdef',
+        'http://127.0.0.1:39271/cast/0123456789abcdef0123456789abcdef',
+      ]) {
+        final written = DiagnosticsLog.url(Uri.parse(url));
+        expect(written, isNot(contains('0123456789abcdef')), reason: url);
+        expect(written, endsWith('/cast/…'));
+      }
+    });
+
     test('writes a URL without its query or its credentials', () {
       // The embedded server's own URL is worth having whole; an addon's is
       // where a key rides, and it rides in the query -- or in the path,

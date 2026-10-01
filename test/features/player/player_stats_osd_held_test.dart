@@ -319,16 +319,16 @@ void main() {
 
     await openPanel(tester, harness);
     expect(harness.streamNumbers.requests, hasLength(1));
-    // Asked about the `/proxy/...` URL mpv was handed and not the addon's
-    // origin URL the core published. This is the whole of why the ask uses
-    // the engine's URL: the bytes of a proxied stream are in this server's
-    // cache under its own route, and the origin URL names a stream it has
-    // never heard of -- which is the answer it would give.
+    // Asked about by the id mpv reads, which the server registered from
+    // the `/proxy/...` URL and not the addon's origin URL the core
+    // published: the bytes of a link are in this server's cache under its
+    // own route, and the origin URL names a stream it has never heard of.
     final asked = harness.streamNumbers.requests.single;
     expect(asked, harness.engine.opened.last.$1);
-    expect(asked.host, PlayerHarness.recordedServerBaseUrl.host);
-    expect(asked.pathSegments.first, 'proxy');
-    expect(asked, isNot(Uri.parse(DevStreams.bigBuckBunnyHttp['url']!)));
+    expect(asked, mediaIdUrl('m1'));
+    final registered = harness.mediaIds.registered.single;
+    expect(registered.host, PlayerHarness.recordedServerBaseUrl.host);
+    expect(registered.pathSegments.first, 'proxy');
     expect(
       row('cache    12.0s mpv · behind 60.0 MB (1 min) · ahead 30.0 MB (30 s)'),
       findsOneWidget,

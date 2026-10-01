@@ -191,6 +191,9 @@ class ServerFootprint implements LanMediaControl {
   int get lanMediaRequestsServed => lanMedia.lanMediaRequestsServed;
 
   @override
+  int get lanMediaBodiesServed => lanMedia.lanMediaBodiesServed;
+
+  @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) =>
       lanMedia.lanMediaBaseUrl(peerIp: peerIp);
 }

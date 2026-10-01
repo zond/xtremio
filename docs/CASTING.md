@@ -24,7 +24,8 @@ fixing it means asking the session what the receiver supports.
 - **The container** comes from the name of the file the embedded server says
   it opened (`streamName` in the `stats.json` the player polls), then the
   converted stream's filename, then `behaviorHints.filename`, then a URL
-  path ending in a real file name. The server comes first because a
+  path ending in a real file name, then the name the server resolved the
+  media id to. The server comes first because a
   torrent's URL says nothing and the addon may be guessing. A container
   nothing identifies is a **refusal**, not a maybe.
 - **The codecs** come from mpv while the stream plays locally (`video-codec`
@@ -33,33 +34,21 @@ fixing it means asking the session what the receiver supports.
   A claim is believed when it says something is *wrong* and never taken as
   proof that something is right; mpv overrules a release name that
   disagrees.
-- **A `/proxy` or `/ftp` URL is refused** before any of that: those routes
-  are open proxies and are not mounted on the LAN listener.
+- **A stream this device reads only by URL is refused** before any of
+  that when it is on this device: an origin that will not serve ranges
+  (read forward through `/proxy`) or a route the server names no id for
+  (`/ftp`). The LAN listener serves published ids and nothing else, and
+  nothing here can seek such a stream for a receiver.
 
-**What is judged and sent is the film, not its container.** When a stream
-turns out to be an archive or disc image, the player plays the member on the
-server's archive stream routes (`_translatedUrl`), and the cast follows:
-`PlayerScreen._castSource` is `_translatedUrl ?? _opened`, and
-`_castFilename` is the member's own name (the last segment of the URL the
-archive route redirected to). So a `.rar` holding an MP4 casts, and a
-Matroska inside a `.rar` is refused as a Matroska. The `/proxy` rule is
-judged on the member URL, which is right, not an accident:
-
-- the LAN listener mounts the archive **stream** routes on purpose
-  (`lan_media_routes()` is `lan_stream_routes()` plus
-  `archive_stream_routes()`), which look a session up and fetch nothing a
-  caller named;
-- the `/create` half is deliberately not on it, since it fetches a
-  caller-supplied URL; the player rebuilds the member URL on the LAN base
-  rather than creating anything;
-- a link-borne container's credentials never cross the LAN: the session
-  holds its `ProxySource` for its life, so the receiver's request carries a
-  key. A torrent-borne container needs no session beforehand; the first LAN
-  request indexes it from a torrent this device already has;
-- **a session lasts until the viewer opens something else**, which is also
-  what ends the cast. The server's sessions follow the live entity like
-  everything else it keeps, and a reading receiver keeps its lease, so a
-  paused cast keeps its session.
+**What is judged is the film, not its container.** The server resolves an
+id that turns out to be an archive or disc image to the member inside it
+(`Resolved.member`), mpv plays the member, and the cast follows:
+`PlayerScreen._castFilename` is the member's own name
+(`MediaResolution.memberName`), and what is published is the same id. So a
+`.rar` holding an MP4 casts, and a Matroska inside a `.rar` is refused as a
+Matroska. A link-borne container's credentials never cross the LAN: the
+receiver is handed a token, and the session the server made for the
+container stays on this device.
 
 A refusal is a dialog saying what is wrong and that the conversion that
 would fix it does not exist yet; `CastRefusal` names the rule, which is the
@@ -73,14 +62,25 @@ never pending: a member whose name says nothing is an unknown file.
 
 ## The URL and the address the receiver is given
 
-**A Chromecast cannot fetch from `127.0.0.1`**, so a loopback URL is rebuilt
-on the server's **LAN media listener** (`server_set_lan_media`): a second
-HTTP listener with no control routes, no `/proxy`, no `/ftp` and no archive
-`/create`. Its stream route serves only torrents this device already holds
--- an unknown hash is a `404` at once -- so nothing on the network can make
-this device join a swarm; `rust/tests/lan_media.rs` pins that contract,
-including a timing assertion. A stream from elsewhere on the internet is
-handed over as it is, and no listener is started for it.
+**A cast is a published media id.** A Chromecast cannot fetch from
+`127.0.0.1`, so the stream mpv reads by id is **published**
+(`media_publish`, stream-server's `ServerHandle::publish`) on the server's
+**LAN media listener** (`server_set_lan_media`), and the receiver is
+handed `<lan base>/cast/<token>`: 128 random bits naming that one stream,
+never derived from the id, served with the play the screen's own player had
+(so a torrent shares as it does here). The listener serves published tokens
+and nothing else -- no control route, no `/proxy`, no torrent or archive
+route -- so nothing on the network can make this device fetch, add or open
+anything; `rust/tests/lan_media.rs` pins that contract. Every kind casts
+this way: a torrent, a link through the server's cache, a Drive file, a
+download, a file on this device, the film inside an archive. **The token is
+withdrawn** (`media_unpublish`, which also cuts a body being served) when
+the session ends from any side, when another receiver is picked (which is
+handed a token of its own), when a start fails, when the screen moves to
+another stream and when the player is left; stopping the listener withdraws
+every token besides. A token is never logged. A link the server reads only
+forward is handed over as it is when it is on another internet host, and
+no listener is started for it.
 
 **Which address of this device** depends on where the receiver is, and
 Android is asked: `MainActivity.castDeviceAddress` reads the receiver's
@@ -95,21 +95,32 @@ receiver, the app says so rather than casting an unfetchable URL, and a
 receiver picked while another had the stream gives the film back to this
 device.
 
-**What was handed over is written down**: the player logs the URL and the
-address it was chosen for, or the refusal; the receiver reports nothing
-useful, so this is the only account.
+**What was handed over is written down**: the player logs the listener's
+address (never the token) and the receiver address it was chosen for, or
+the refusal; the receiver reports nothing useful, so this is the only
+account.
 
-**A receiver that never fetches** is not left looking merely slow.
-`PlayerScreen.castFetchTimeout` (20 s) after a load, the listener's count of
-requests (`server_lan_media_requests_served`, reset by every start and stop)
-is asked once. Zero means the receiver could not route to the address: the
-session ends as Stop ends it, the film comes back, and the dialog says why.
-Anything else is logged and nothing is said, since twenty seconds cannot
-tell a filling buffer from an undecodable file. What the receiver reports
-about itself is never consulted -- the receiver this exists for reports a
-healthy session and an unknown player state -- so only the ways out of a
-session (`_cancelCastFetch`) cancel the wait, and picking a second receiver
-is one of them.
+**The watchdog reads two counts** (stream-server `docs/lan-media.md`):
+`PlayerScreen.castFetchTimeout` (20 s) after a load, the listener's
+requests (`server_lan_media_requests_served`) and bodies
+(`server_lan_media_bodies_served`, a `/cast` `GET` that began sending
+bytes), both reset by every start and stop, give three readings:
+
+- **No requests**: the receiver could not route to the address. The session
+  ends as Stop ends it, the film comes back, and the dialog says why.
+- **Requests and no body**: the receiver reached this device and has been
+  sent nothing yet -- a refusal the server logged, or a stream whose bytes
+  are not here (a dead swarm). The remote says so under the title, and the
+  check runs again every as long until a body has begun, when the note
+  goes. **It never ends the cast**: a stream that is slow to come is waited
+  for, and the viewer is the one who stops it.
+- **A body**: the network and the server did their part; the rest is the
+  media's, and nothing is said.
+
+What the receiver reports about itself is never consulted -- the receiver
+this exists for reports a healthy session and an unknown player state -- so
+only the ways out of a session (`_cancelCastFetch`) cancel the wait, and
+picking a second receiver is one of them.
 
 **The listener lives exactly as long as a session**: closed when the session
 ends, from any side, when a start fails and on `dispose`. Nothing binds it
