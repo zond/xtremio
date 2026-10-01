@@ -39,26 +39,53 @@ class NoStreamsNotice extends StatelessWidget {
   const NoStreamsNotice({
     super.key,
     required this.isEpisode,
+    required this.hasStreamAddon,
     required this.onAddons,
   });
 
   /// Names what came up empty: an episode of a series, or the title.
   final bool isEpisode;
+
+  /// Whether an installed addon offers the `stream` resource for this
+  /// title's type at all. False is the fresh-install case this notice was
+  /// written for; true means an addon that could have answered (Torrentio,
+  /// say) simply had nothing for *this* title, which is a different and
+  /// much narrower thing to say -- naming it is wrong on a Swedish series
+  /// no addon covers, with a torrent addon installed and working fine on
+  /// everything else.
+  final bool hasStreamAddon;
+
   final VoidCallback onAddons;
 
   static const String addonsLabel = 'Add an addon';
 
-  /// Why the list is empty, in the one sentence that is worth saying: a
-  /// fresh install has no torrent addon and this is what that looks like.
-  static const String explanation =
+  /// Why the list is empty when [hasStreamAddon] is false: a fresh install
+  /// has no torrent addon and this is what that looks like.
+  static const String noAddonExplanation =
       'None of your sources had anything to play. xtremio comes with no '
       'torrent addon, so add one and its streams show up here.';
+
+  /// The sentence this notice says, which only claims there is no torrent
+  /// addon when that is true ([hasStreamAddon] false); otherwise it says
+  /// the narrower, true thing -- an installed addon answered and had
+  /// nothing for this one title.
+  static String explanationOf({
+    required bool isEpisode,
+    required bool hasStreamAddon,
+  }) {
+    if (!hasStreamAddon) return noAddonExplanation;
+    final what = isEpisode ? 'episode' : 'film';
+    return 'None of your addons had a stream for this $what.';
+  }
 
   /// What came up empty: an episode of a series, or the title.
   static String titleOf(bool isEpisode) =>
       isEpisode ? 'No streams for this episode' : 'No streams for this title';
 
   String get title => titleOf(isEpisode);
+
+  String get explanation =>
+      explanationOf(isEpisode: isEpisode, hasStreamAddon: hasStreamAddon);
 
   @override
   Widget build(BuildContext context) {
@@ -85,15 +112,17 @@ class NoStreamsNotice extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonalIcon(
-              onPressed: onAddons,
-              icon: const Icon(Icons.extension_outlined),
-              label: const Text(addonsLabel),
+          if (!hasStreamAddon) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: onAddons,
+                icon: const Icon(Icons.extension_outlined),
+                label: const Text(addonsLabel),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

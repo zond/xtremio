@@ -769,11 +769,13 @@ void main() {
       WidgetTester tester, {
       String? videoId,
       Map<String, dynamic>? fixture,
+      Map<String, dynamic>? ctx,
     }) async {
       final core = FakeCoreClient(
         state: {
           CoreField.metaDetails: fixture ?? loadSeriesMetaDetailsFixture(),
           CoreField.player: loadPlayerFixture(),
+          CoreField.ctx: ?ctx,
         },
       );
       await tester.pumpWidget(
@@ -948,6 +950,36 @@ void main() {
         reason: 'the flow that installs one by manifest URL',
       );
     });
+
+    testWidgets(
+      'a stream addon that is installed and had nothing for this episode '
+      'says so without the no-torrent-addon line, and offers no addons '
+      'screen',
+      (tester) async {
+        useWideViewport(tester);
+        // The same recorded state (WatchHub answered with nothing, the
+        // local addon failed), but this time the profile has WatchHub
+        // installed and it serves `stream` for `series` -- a Torrentio
+        // stand-in that is there and working, just not for this title
+        // (the bug seen on Svenska slut S1E1).
+        await mountSeries(
+          tester,
+          fixture: loadSeriesEpisodeMetaDetailsFixture(),
+          ctx: loadCtxLoggedOutFixture(),
+        );
+
+        expect(find.text('No streams for this episode'), findsOneWidget);
+        expect(
+          find.text('None of your addons had a stream for this episode.'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('comes with no torrent addon'),
+          findsNothing,
+        );
+        expect(find.text('Add an addon'), findsNothing);
+      },
+    );
 
     testWidgets('an addon still answering is not an empty answer', (
       tester,
@@ -1388,21 +1420,67 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
     });
 
-    testWidgets('everything empty still offers the Addons screen', (
-      tester,
-    ) async {
-      await mount(tester, [
-        emptyGroup(youTubeUrl),
-        emptyGroup(strangerUrl),
-        failedGroup(localAddonUrl),
-      ]);
+    testWidgets(
+      'everything empty says so without the no-torrent-addon line, since '
+      'the profile already has a stream addon installed',
+      (tester) async {
+        await mount(tester, [
+          emptyGroup(youTubeUrl),
+          emptyGroup(strangerUrl),
+          failedGroup(localAddonUrl),
+        ]);
 
-      // The notice is what it always was; neither the addon that failed
-      // nor the ones that had nothing are named or counted any more.
-      expect(find.text('No streams for this title'), findsOneWidget);
-      expect(find.text('Add an addon'), findsOneWidget);
-      expect(find.textContaining('had nothing for this'), findsNothing);
-      expect(find.textContaining('Failed to fetch'), findsNothing);
-    });
+        // The profile this harness loads (`loadCtxLoggedOutFixture`) has
+        // WatchHub installed, which serves `stream` for `movie` -- so the
+        // notice says the narrower, true thing rather than claiming there
+        // is no torrent addon at all. Neither the addon that failed nor
+        // the ones that had nothing are named or counted any more.
+        expect(find.text('No streams for this title'), findsOneWidget);
+        expect(
+          find.text('None of your addons had a stream for this film.'),
+          findsOneWidget,
+        );
+        expect(find.text('Add an addon'), findsNothing);
+        expect(
+          find.textContaining('comes with no torrent addon'),
+          findsNothing,
+        );
+        expect(find.textContaining('had nothing for this'), findsNothing);
+        expect(find.textContaining('Failed to fetch'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a fresh profile with no stream addon says so and offers the Addons '
+      'screen',
+      (tester) async {
+        useWideViewport(tester);
+        final core = FakeCoreClient(
+          state: {
+            CoreField.metaDetails: loadMetaDetailsFixture()
+              ..['streams'] = [
+                emptyGroup(youTubeUrl),
+                emptyGroup(strangerUrl),
+                failedGroup(localAddonUrl),
+              ],
+          },
+        );
+        await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('No streams for this title'), findsOneWidget);
+        expect(
+          find.textContaining('comes with no torrent addon'),
+          findsOneWidget,
+        );
+        expect(find.text('Add an addon'), findsOneWidget);
+
+        await tester.tap(find.text('Add an addon'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(AddonsScreen), findsOneWidget);
+      },
+    );
   });
 }

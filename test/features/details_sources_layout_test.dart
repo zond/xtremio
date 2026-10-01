@@ -1186,15 +1186,50 @@ void main() {
       expect(find.textContaining('Failed to fetch'), findsNothing);
     });
 
-    testWidgets('the notice when every addon came up empty', (tester) async {
+    testWidgets(
+      'the notice when every addon came up empty, with a stream addon '
+      'installed (the profile `coreWith` loads has WatchHub)',
+      (tester) async {
+        useWideViewport(tester);
+        final core = coreWith([
+          emptyGroup(youTubeUrl),
+          emptyGroup(strangerUrl),
+        ]);
+        await tester.pumpWidget(harness(core));
+        await tester.pumpAndSettle();
+
+        // WatchHub is installed and serves `stream` for `movie`, so the
+        // notice says the narrower, true thing rather than claiming there
+        // is no torrent addon.
+        expect(find.text('No streams for this title'), findsOneWidget);
+        expect(
+          find.text('None of your addons had a stream for this film.'),
+          findsOneWidget,
+        );
+        expect(find.text('Add an addon'), findsNothing);
+        expect(find.textContaining('had nothing for this'), findsNothing);
+      },
+    );
+
+    testWidgets('the notice when no installed addon serves streams at all', (
+      tester,
+    ) async {
       useWideViewport(tester);
-      final core = coreWith([emptyGroup(youTubeUrl), emptyGroup(strangerUrl)]);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture()
+            ..['streams'] = [emptyGroup(youTubeUrl), emptyGroup(strangerUrl)],
+        },
+      );
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
 
       expect(find.text('No streams for this title'), findsOneWidget);
+      expect(
+        find.textContaining('comes with no torrent addon'),
+        findsOneWidget,
+      );
       expect(find.text('Add an addon'), findsOneWidget);
-      expect(find.textContaining('had nothing for this'), findsNothing);
     });
   });
 

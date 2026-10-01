@@ -39,6 +39,13 @@ final class ProfileState {
 
   AddonDescriptor? installedAddon(String transportUrl) =>
       addons.where((addon) => addon.transportUrl == transportUrl).firstOrNull;
+
+  /// Whether any installed addon offers [resource] for [type] -- what
+  /// decides whether an empty streams list means "install an addon" or
+  /// "none of them had one this time" ([NoStreamsNotice]).
+  bool hasAddonFor(String resource, String type) => addons.any(
+    (addon) => addon.manifest.offersResourceForType(resource, type),
+  );
 }
 
 /// View over `Auth.user` (`User`; camelCase except `_id`, `premium_expire`

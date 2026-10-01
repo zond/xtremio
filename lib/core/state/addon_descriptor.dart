@@ -72,6 +72,26 @@ final class AddonManifest {
         resource['name'] as String,
   ];
 
+  /// Whether [resources] offers [resourceName] for [type], mirroring
+  /// stremio-core's `Manifest::is_resource_supported` (minus the id-prefix
+  /// half, which needs an id this call has none of): a short-form entry
+  /// (`"stream"`) falls back to [types]; a long-form entry
+  /// (`{name, types}`) answers for its own `types` list alone -- one
+  /// declared with no `types` of its own supports nothing, same as the
+  /// Rust side.
+  bool offersResourceForType(String resourceName, String type) {
+    for (final resource in (json['resources'] as List<dynamic>? ?? const [])) {
+      if (resource is String) {
+        if (resource == resourceName) return types.contains(type);
+      } else if (resource is Map<String, dynamic> &&
+          resource['name'] == resourceName) {
+        final declared = resource['types'] as List<dynamic>?;
+        return declared != null && declared.whereType<String>().contains(type);
+      }
+    }
+    return false;
+  }
+
   List<ManifestCatalog> get catalogs =>
       ManifestCatalog.listFromJson(json['catalogs']);
 

@@ -10,7 +10,7 @@ TvSource _accountingCard({
   required IconData icon,
   required String title,
   required List<String> lines,
-  required VoidCallback onSelect,
+  VoidCallback? onSelect,
   VoidCallback? onHold,
 }) => (
   icon: icon,
@@ -63,6 +63,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     /// The same for this device's own videos.
     required int localCount,
     required StreamDownloads? downloads,
+
+    /// Whether an installed addon offers `stream` for this title's type at
+    /// all -- see [NoStreamsNotice.hasStreamAddon].
+    required bool hasStreamAddon,
   }) {
     TvSource source(SourceRow row) => _tvSource(
       state,
@@ -101,7 +105,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     // pills will fill gets a spinner in its middle instead.
     final waiting = groups.isEmpty && state.isLoadingStreams;
     final nothing = foundNothing
-        ? _tvNothingFound(isEpisode: state.hasVideos)
+        ? _tvNothingFound(
+            isEpisode: state.hasVideos,
+            hasStreamAddon: hasStreamAddon,
+          )
         : null;
     // A rung with nothing behind its header is not drawn at all, so the
     // walk steps over it rather than stopping on a line that opens
@@ -386,17 +393,31 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// Addons screen's health verdict instead.
   ({String label, List<TvSource> sources}) _tvNothingFound({
     required bool isEpisode,
-  }) => (
-    label: NoStreamsNotice.titleOf(isEpisode),
-    sources: [
-      _accountingCard(
-        icon: Icons.extension_outlined,
-        title: NoStreamsNotice.addonsLabel,
-        lines: [NoStreamsNotice.explanation],
-        onSelect: _openAddons,
-      ),
-    ],
-  );
+    required bool hasStreamAddon,
+  }) {
+    final explanation = NoStreamsNotice.explanationOf(
+      isEpisode: isEpisode,
+      hasStreamAddon: hasStreamAddon,
+    );
+    return (
+      label: NoStreamsNotice.titleOf(isEpisode),
+      sources: [
+        if (hasStreamAddon)
+          _accountingCard(
+            icon: Icons.search_off,
+            title: explanation,
+            lines: const [],
+          )
+        else
+          _accountingCard(
+            icon: Icons.extension_outlined,
+            title: NoStreamsNotice.addonsLabel,
+            lines: [explanation],
+            onSelect: _openAddons,
+          ),
+      ],
+    );
+  }
 
   /// One row of the sources list as a television card draws it: the whole
   /// of what the addon sent, the parse of it as pills, and a quiet line of

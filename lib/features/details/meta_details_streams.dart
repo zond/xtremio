@@ -92,6 +92,9 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
       localFiles: localFiles,
     );
     final profile = derived.profile;
+    // Whether an installed addon could have answered this title's type at
+    // all -- what decides which of the two things [NoStreamsNotice] says.
+    final hasStreamAddon = profile?.hasAddonFor('stream', meta.type) ?? false;
     final sources = derived.sources;
     final sections = derived.sections;
     final grouped = derived.grouped;
@@ -129,6 +132,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         driveCount: derived.driveRows.length,
         localCount: derived.localRows.length,
         downloads: downloads,
+        hasStreamAddon: hasStreamAddon,
       );
     }
     return [
@@ -146,6 +150,7 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         SliverToBoxAdapter(
           child: NoStreamsNotice(
             isEpisode: state.hasVideos,
+            hasStreamAddon: hasStreamAddon,
             onAddons: _openAddons,
           ),
         ),

@@ -878,6 +878,25 @@ void main() {
     expect(find.byType(AddonsScreen), findsOneWidget);
   });
 
+  testWidgets('nobody having anything, with a stream addon installed, says so '
+      'without naming a missing torrent addon', (tester) async {
+    await mount(
+      tester,
+      movieWith([emptyGroup('quiet.example'), emptyGroup('silent.example')]),
+      // WatchHub (and others) are installed and serve `stream` for
+      // `movie`, same as the bug on a title no installed addon covers.
+      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
+    );
+
+    expect(groupLabels(tester), isEmpty);
+    expect(find.text('No streams for this title'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tv-nothing-found')), findsOneWidget);
+    expect(sourceTitles(tester), [
+      'None of your addons had a stream for this film.',
+    ]);
+    expect(find.text('Add an addon'), findsNothing);
+  });
+
   testWidgets('off a television the sources are the vertical list they '
       'always were', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
