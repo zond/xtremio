@@ -119,6 +119,8 @@ final class CastMedia {
     required this.contentType,
     required this.title,
     this.subtitle,
+    this.fmp4Hls = false,
+    this.duration,
   });
 
   /// The URL the *receiver* fetches, which is never a loopback one: it comes
@@ -130,6 +132,15 @@ final class CastMedia {
 
   final String title;
   final String? subtitle;
+
+  /// Whether [url] is an HLS playlist of fragmented-MP4 segments (a
+  /// rendition). The default receiver has to be told: it assumes MPEG-TS
+  /// segments otherwise, and an fMP4 stream then never leaves loading.
+  final bool fmp4Hls;
+
+  /// How long the film is, for a stream whose length the receiver cannot
+  /// read off a file (a rendition's playlist).
+  final Duration? duration;
 }
 
 /// What the app needs from a Cast sender. `flutter_chrome_cast` is the real

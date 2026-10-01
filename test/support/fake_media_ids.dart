@@ -30,6 +30,14 @@ class FakeMediaIds implements MediaIds {
   /// Every token unpublished, in order.
   final List<String> unpublished = [];
 
+  /// Whether this "device" can make renditions: false unless a test says.
+  @override
+  bool renditionsAvailable = false;
+
+  /// Every rendition published, in order, as the id and the spec; their
+  /// tokens are handed out from the same count as [published]'s.
+  final List<({String id, RenditionSpec spec})> renditions = [];
+
   /// What every resolve answers when [refusal] is null: playable, read in
   /// process, unless a test says otherwise.
   MediaResolution resolution = const MediaResolution();
@@ -117,6 +125,15 @@ class FakeMediaIds implements MediaIds {
   Future<String> publish(String id) async {
     final failure = publishFailure;
     if (failure != null) throw failure;
+    published.add(id);
+    return 't${published.length}';
+  }
+
+  @override
+  Future<String> publishRendition(String id, RenditionSpec spec) async {
+    final failure = publishFailure;
+    if (failure != null) throw failure;
+    renditions.add((id: id, spec: spec));
     published.add(id);
     return 't${published.length}';
   }

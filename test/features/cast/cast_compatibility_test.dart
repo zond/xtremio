@@ -25,12 +25,14 @@ CastCompatibility check({
   String? filename,
   PlaybackStats? stats,
   bool containerPending = false,
+  bool canRepackage = false,
 }) => CastCompatibility.of(
   url: url ?? torrentUrl,
   facts: facts,
   filename: filename,
   stats: stats,
   containerPending: containerPending,
+  canRepackage: canRepackage,
 );
 
 /// A `player` state whose selected stream carries [claimed] as the addon's
@@ -121,6 +123,82 @@ void main() {
         filename: 'Sintel.mkv',
       );
       expect(refusalOf(result), CastRefusal.container);
+    });
+  });
+
+  group('a Matroska H.264 + AAC film played by id is a rendition', () {
+    final byId = mediaIdUrl('0123456789abcdef0123456789abcdef');
+    const h264Aac = PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'aac');
+
+    test('when this device can repackage, and mpv says H.264 and AAC', () {
+      final result = check(
+        url: byId,
+        filename: 'Night.of.the.Living.Dead.1080p.mkv',
+        stats: h264Aac,
+        canRepackage: true,
+      );
+      expect(result, isA<CastRendition>());
+    });
+
+    test('a device that cannot repackage still refuses the container', () {
+      final result = check(url: byId, filename: 'film.mkv', stats: h264Aac);
+      expect(refusalOf(result), CastRefusal.container);
+    });
+
+    test('a release claiming H.264 and AAC is not enough: mpv must say', () {
+      final result = check(
+        url: byId,
+        filename: 'film.1080p.x264.AAC.mkv',
+        facts: factsFor('film 1080p x264 AAC'),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.container);
+    });
+
+    test('any other codec mpv reports keeps the refusal', () {
+      for (final stats in const [
+        PlaybackStats(videoCodec: 'hevc (Main 10)', audioCodec: 'aac'),
+        PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'eac3'),
+      ]) {
+        final result = check(
+          url: byId,
+          filename: 'film.mkv',
+          stats: stats,
+          canRepackage: true,
+        );
+        expect(refusalOf(result), CastRefusal.container, reason: '$stats');
+      }
+    });
+
+    test('only Matroska, and only a stream played by id', () {
+      expect(
+        refusalOf(
+          check(
+            url: byId,
+            filename: 'film.avi',
+            stats: h264Aac,
+            canRepackage: true,
+          ),
+        ),
+        CastRefusal.container,
+      );
+      expect(
+        refusalOf(
+          check(filename: 'film.mkv', stats: h264Aac, canRepackage: true),
+        ),
+        CastRefusal.container,
+        reason: 'a URL the server serves is not an id it reads',
+      );
+    });
+
+    test('an MP4 the receiver takes as it is stays as it is', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mp4',
+        stats: h264Aac,
+        canRepackage: true,
+      );
+      expect(result, isA<CastReady>());
     });
   });
 

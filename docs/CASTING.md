@@ -5,11 +5,13 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
-already serves, with no processing anywhere -- and turns the player screen
-into a remote while the television plays. Media3 remuxing, which would let
-most other streams be cast, is not built. Because nothing is converted, the
-honest part of this is the refusal. The button is never built on Android TV:
-a TV is a receiver, not a sender.
+already serves, with no processing anywhere -- or, for an H.264 + AAC film
+in a Matroska file, **repackaged**: the same samples as fragmented-MP4 HLS,
+made on demand ([Renditions](#renditions-a-matroska-film-repackaged)). It
+turns the player screen into a remote while the television plays. Nothing
+is decoded or encoded for a receiver yet, so the honest part of this is
+still the refusal. The button is never built on Android TV: a TV is a
+receiver, not a sender.
 
 ## What can be cast
 
@@ -45,20 +47,66 @@ id that turns out to be an archive or disc image to the member inside it
 (`Resolved.member`), mpv plays the member, and the cast follows:
 `PlayerScreen._castFilename` is the member's own name
 (`MediaResolution.memberName`), and what is published is the same id. So a
-`.rar` holding an MP4 casts, and a Matroska inside a `.rar` is refused as a
+`.rar` holding an MP4 casts, and a Matroska inside a `.rar` is judged as a
 Matroska. A link-borne container's credentials never cross the LAN: the
 receiver is handed a token, and the session the server made for the
 container stays on this device.
 
 A refusal is a dialog saying what is wrong and that the conversion that
 would fix it does not exist yet; `CastRefusal` names the rule, which is the
-seam Media3 would fill. **One refusal is not a verdict**: in the first
+seam the rest of the renditions fill. **One refusal is not a verdict**: in the first
 seconds of a torrent the server has not opened a file yet, which is
 `CastRefusal.containerPending` ("Still working out what this file is"), and
 the poll that names the file makes the same button work. The name is kept
 while the player is on that stream, and taken only from an answer about the
 file being streamed, never the torrent-level fallback's guess. A member is
 never pending: a member whose name says nothing is an unknown file.
+
+## Renditions: a Matroska film, repackaged
+
+A Chromecast will not open a Matroska file, and most films are one. When
+the film inside is H.264 with AAC sound -- **as mpv reports it**, since a
+copy is only as right as the codecs it copies, and a release's claim is
+not enough -- `CastCompatibility.of` answers `CastRendition` instead of the
+container refusal, provided the stream is played by id and this device can
+make one (`media_renditions_available`). The player then publishes a
+**rendition** (`media_publish_rendition`, stream-server's
+`ServerHandle::publish_rendition`) with this player's duration, position and
+audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
+receiver `<lan base>/cast/<token>/hls/index.m3u8` as
+`application/x-mpegurl`, told the segments are fragmented MP4
+(`CastMedia.fmp4Hls`) and how long the film is. Same token rules, same
+listener, same watchdog: the init segment and every segment `GET` count as
+bodies.
+
+The server writes the playlist, cuts six-second segments at the film's own
+keyframes, muxes them and keeps a few in memory -- nothing on disk (its
+`docs/design/renditions.md`). What it asks of the app is the **producer**,
+`rust/src/rendition.rs`, installed at every server start: per run a thread
+of its own, reading the media id's `MediaReader` through **libavformat from
+the libmpv media_kit ships** (`rust/src/libav.rs` -- the vendored libmpv
+exports FFmpeg 6.0's whole API; Android's `MediaExtractor` drops Dolby and
+DTS tracks and opens no AVI, measured on zond's phone). It picks the film's
+video and the audio track playing here, seeks to the run's segment, and
+hands the server every packet's presentation time on mpv's clock (less the
+container's start), the H.264 parameter sets and samples in Annex-B, and the
+AAC frames as they are. A seek on the television is a new run; Stop and
+every other way out unpublish, which ends the run wherever it is blocked.
+There is no timer: a stalled torrent is waited for.
+
+**Bound to one FFmpeg**: `rust/src/libav.rs` reads FFmpeg's structs by
+layout, asserted at compile time for 64- and 32-bit targets against what
+`tool/libav_offsets.sh` measures, and refuses at load a library whose
+FFmpeg majors are not 6.x's (libavformat 60, libavcodec 60, libavutil 58).
+A bump of the vendored libs package to another FFmpeg re-runs the tool.
+On a desktop the system libmpv's FFmpeg is found through it; casting is not
+offered there anyway (`CastClient.isSupported`), but `rust/tests/rendition.rs`
+runs the whole path against it: an `ffmpeg`-made film published, fetched
+off the LAN listener, checked by `ffprobe` and decoded by `ffmpeg`.
+
+Sound that is not AAC, video that is not H.264 and every other container
+are still refused; converting them is the rest of step F of the renditions
+design.
 
 ## The URL and the address the receiver is given
 
@@ -158,5 +206,8 @@ types), `google_cast_client.dart` (over
 **Not verified against a real Chromecast**: there is no receiver here. What
 is verified: the LAN listener over real HTTP (it serves media routes,
 answers `/proxy` and `/settings` with 404, counts requests, and is gone
-after a stop and a shutdown), the Android manifest merge, and every decision
-the app makes around a fake sender.
+after a stop and a shutdown), the Android manifest merge, every decision
+the app makes around a fake sender, and a rendition fetched over that
+listener and decoded by `ffmpeg` on a desktop (`rust/tests/rendition.rs`).
+Whether the default receiver plays the muxed fMP4 HLS is the device proof
+still owed.

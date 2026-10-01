@@ -99,6 +99,47 @@ class MediaResolution {
   final bool sniffed;
 }
 
+/// What a rendition is to be: stream-server's `RenditionSpec`, the HLS
+/// stream the server makes from a film for a receiver that cannot take it
+/// as it is (stream-server `docs/design/renditions.md`).
+///
+/// The one plan built is a repackage -- the film's own H.264 and AAC
+/// samples, moved into fragmented MP4 -- so the plan is not a field yet:
+/// [toJson] always asks for `copy`/`copy`.
+final class RenditionSpec {
+  const RenditionSpec({
+    required this.duration,
+    required this.start,
+    this.audioTrack = 0,
+    this.segment = defaultSegment,
+  });
+
+  /// The segment length the design settled on (§6): long enough that a
+  /// copied video's keyframes rarely leave a segment empty.
+  static const Duration defaultSegment = Duration(seconds: 6);
+
+  /// The film's length as mpv reports it: the playlist is written from it.
+  final Duration duration;
+
+  /// Where the receiver starts: the first segment produced is this one's.
+  final Duration start;
+
+  /// The audio track to carry, by its position among the film's audio
+  /// tracks -- the order mpv lists them in, which is the file's.
+  final int audioTrack;
+
+  final Duration segment;
+
+  Map<String, Object> toJson() => {
+    'durationMs': duration.inMilliseconds,
+    'segmentMs': segment.inMilliseconds,
+    'startMs': start.inMilliseconds,
+    'video': 'copy',
+    'audio': 'copy',
+    'audioTrack': audioTrack,
+  };
+}
+
 /// Playing a stream by id: what the player asks of the embedded server so
 /// that mpv reads `xtremio://<id>` rather than a URL on the server
 /// (stream-server `docs/design/media-pipeline.md` §2.5), and what a cast
@@ -147,6 +188,16 @@ abstract interface class MediaIds {
   /// this device while it is published. Throws while the LAN listener is
   /// down or for an id the server does not hold.
   Future<String> publish(String id);
+
+  /// Whether this device can make a rendition ([publishRendition]): a
+  /// player has loaded libmpv and its FFmpeg is the one the app is built
+  /// for. Asked when a cast is decided, never cached.
+  bool get renditionsAvailable;
+
+  /// Publishes a rendition of [id] for a cast and answers the token its
+  /// playlist is under (`<lan base>/cast/<token>/hls/index.m3u8`). **Never
+  /// log it.** Throws as [publish] does.
+  Future<String> publishRendition(String id, RenditionSpec spec);
 
   /// Ends the publication [token]; a body being served under it is cut.
   Future<bool> unpublish(String token);
@@ -203,6 +254,13 @@ class RustMediaIds implements MediaIds {
 
   @override
   Future<String> publish(String id) => rust.mediaPublish(id: id);
+
+  @override
+  bool get renditionsAvailable => rust.mediaRenditionsAvailable();
+
+  @override
+  Future<String> publishRendition(String id, RenditionSpec spec) =>
+      rust.mediaPublishRendition(id: id, spec: jsonEncode(spec.toJson()));
 
   @override
   Future<bool> unpublish(String token) => rust.mediaUnpublish(token: token);

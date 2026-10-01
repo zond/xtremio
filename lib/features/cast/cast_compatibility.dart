@@ -2,10 +2,12 @@ import '../../core/core.dart';
 import '../details/stream_facts.dart';
 import '../player/playback_stats.dart';
 
-/// Whether a stream can be handed to a receiver as it is, and if not, why.
+/// Whether a stream can be handed to a receiver as it is, repackaged, or
+/// not at all, and why.
 ///
-/// **There is no conversion.** This step of casting sends the bytes the
-/// server already serves, so a file the receiver cannot decode is not a
+/// **Nothing is decoded or encoded.** A cast sends the bytes the server
+/// already serves, or the same samples in another container
+/// ([CastRendition]), so a codec the receiver cannot decode is not a
 /// slower cast, it is a black screen. The gate therefore has to answer
 /// honestly, and a refusal has to say what is wrong rather than let the
 /// cast fail on the television.
@@ -40,6 +42,15 @@ import '../player/playback_stats.dart';
 /// about the URL and comes first. A stream played by id is judged on
 /// `xtremio://<id>`, which names no route, and is cast by publishing it.
 ///
+/// **One stream the receiver will not take is cast anyway: as a
+/// rendition.** An H.264 + AAC film in a Matroska file, played by id, is
+/// [CastRendition] when this device can make one (`canRepackage`): the
+/// server repackages the film's own samples into fragmented-MP4 HLS as the
+/// receiver asks for it (stream-server `docs/design/renditions.md`, step
+/// F2). Only mpv's word on the codecs counts for it -- a copy carries the
+/// codecs as they are, so a release's claim is not enough -- and only for a
+/// stream played by id, since the server reads the film through its id.
+///
 /// **What is judged is the film, not the container it arrived in.** When the
 /// server resolved a stream to the member of an archive or a disc image,
 /// that member's name is what reaches this check (`_castFilename` in the
@@ -61,6 +72,7 @@ sealed class CastCompatibility {
     String? filename,
     PlaybackStats? stats,
     bool containerPending = false,
+    bool canRepackage = false,
   }) {
     final proxied = _proxyPrefix(url);
     if (proxied != null) return CastRefused._proxy(proxied);
@@ -73,6 +85,9 @@ sealed class CastCompatibility {
     }
     final format = _castableContainers[container];
     if (format == null) {
+      if (canRepackage && _repackages(container, url, stats)) {
+        return const CastRendition();
+      }
       return CastRefused._container(_describeContainer(container));
     }
 
@@ -97,6 +112,16 @@ final class CastReady extends CastCompatibility {
 
   /// The MIME type to tell the receiver, e.g. `video/mp4`.
   final String contentType;
+}
+
+/// The stream goes to a receiver as a rendition: the same H.264 and AAC,
+/// repackaged by the server into HLS the receiver plays
+/// (`MediaIds.publishRendition`).
+final class CastRendition extends CastCompatibility {
+  const CastRendition();
+
+  /// The MIME type of what the receiver is handed: an HLS playlist.
+  static const String contentType = 'application/x-mpegurl';
 }
 
 /// The stream cannot go to a receiver as it is, with the sentence to show.
@@ -238,6 +263,21 @@ const Map<String, String> _knownContainers = {
 /// no media type for. A file that does not exist in practice, left alone
 /// and named here rather than rediscovered.
 const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
+
+/// The containers a rendition repackages out of. Matroska only: the one
+/// case step F2 of the renditions design builds and proves.
+const Set<String> _repackagedContainers = {'mkv'};
+
+/// Whether a stream in [container] at [url] is one the server can
+/// repackage for a receiver: Matroska, played by id, with mpv reporting
+/// H.264 video and AAC sound. A codec mpv has not reported is a no -- the
+/// container refusal stands -- because a copy is only as right as the
+/// codecs it copies.
+bool _repackages(String container, Uri url, PlaybackStats? stats) =>
+    _repackagedContainers.contains(container) &&
+    mediaIdOf(url) != null &&
+    _canonicalVideo(stats?.videoCodec) == 'H.264' &&
+    _canonicalAudio(stats?.audioCodec) == 'AAC';
 
 /// The `/proxy` or `/ftp` prefix [url] is served under, or null.
 ///

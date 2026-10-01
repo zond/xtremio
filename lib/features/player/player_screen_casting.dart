@@ -207,6 +207,12 @@ extension _PlayerCasting on _PlayerScreenState {
       // [_failPlayback] cleared, so a member of a torrent is pending until a
       // poll names the file.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
+      // A rendition needs the film's length for its playlist, and a device
+      // that can make one; asked now, since a player registering libmpv is
+      // what makes it so.
+      canRepackage:
+          _duration > Duration.zero &&
+          (_mediaIds?.renditionsAvailable ?? false),
     );
     if (compatibility is CastRefused) {
       await _explainCast(compatibility.explanation, title: compatibility.title);
@@ -231,7 +237,7 @@ extension _PlayerCasting on _PlayerScreenState {
         device,
         local,
         state,
-        compatibility as CastReady,
+        compatibility,
       );
     } finally {
       _castStarts--;
@@ -241,13 +247,16 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// [_startCast] from the session on: the steps a switch of receivers
   /// runs through, answering why the cast did not happen when it did not.
+  /// [compatibility] is [CastReady] or [CastRendition]: the stream as it
+  /// is, or the server's repackaging of it.
   Future<String?> _handToReceiver(
     CastClient cast,
     CastDevice device,
     Uri local,
     PlayerState? state,
-    CastReady compatibility,
+    CastCompatibility compatibility,
   ) async {
+    final rendition = compatibility is CastRendition;
     // Stop stays on the bar while a second receiver is being picked, and
     // pressing it ends the cast, so every step below that finds a Stop has
     // happened unwinds like a leave. The unwinding also settles the
@@ -275,7 +284,7 @@ extension _PlayerCasting on _PlayerScreenState {
     }
     final Uri? url;
     try {
-      url = await _castUrl(local, receiver);
+      url = await _castUrl(local, receiver, rendition: rendition);
     } catch (error) {
       // The server would not publish the stream: an id it let go, a
       // listener that stopped under the switch. The kind, never a token.
@@ -348,8 +357,13 @@ extension _PlayerCasting on _PlayerScreenState {
       await cast.load(
         CastMedia(
           url: url,
-          contentType: compatibility.contentType,
+          contentType: switch (compatibility) {
+            CastReady(:final contentType) => contentType,
+            _ => CastRendition.contentType,
+          },
           title: state?.title ?? '',
+          fmp4Hls: rendition,
+          duration: rendition ? _duration : null,
         ),
         start: position,
       );
@@ -481,10 +495,20 @@ extension _PlayerCasting on _PlayerScreenState {
   /// device, the film inside an archive. Throws when the server will not
   /// publish it.
   ///
+  /// **A [rendition] is published as one** ([MediaIds.publishRendition]):
+  /// the same listener and token rules, and the receiver is handed the
+  /// token's playlist, `<lan base>/cast/<token>/hls/index.m3u8`, written
+  /// from this player's duration and starting at its position, with the
+  /// audio track it is playing.
+  ///
   /// A stream read over HTTP -- an origin that will not serve ranges -- is
   /// handed over as it is when it is on another internet host, and has no
   /// address a receiver could use when it is on this device.
-  Future<Uri?> _castUrl(Uri local, CastDevice device) async {
+  Future<Uri?> _castUrl(
+    Uri local,
+    CastDevice device, {
+    bool rendition = false,
+  }) async {
     final id = mediaIdOf(local);
     if (id == null) return isEmbeddedServerHost(local.host) ? null : local;
     final ids = _mediaIds;
@@ -502,9 +526,32 @@ extension _PlayerCasting on _PlayerScreenState {
     // A switch of receivers: the last one's token goes before this one's
     // is handed out, so one stream is published once.
     await _unpublishCast();
+    if (rendition) {
+      final token = await ids.publishRendition(
+        id,
+        RenditionSpec(
+          duration: _duration,
+          start: _position.value,
+          audioTrack: _castAudioTrack,
+        ),
+      );
+      _castToken = token;
+      return base.resolve('cast/$token/hls/index.m3u8');
+    }
     final token = await ids.publish(id);
     _castToken = token;
     return base.resolve('cast/$token');
+  }
+
+  /// The audio track playing here, by its place among the film's audio
+  /// tracks -- mpv lists them in the file's order, which is how the server
+  /// counts them. The first when none is said to be selected.
+  int get _castAudioTrack {
+    final tracks = _tracks.value;
+    final at = tracks.audio.indexWhere(
+      (track) => track.id == tracks.activeAudioId,
+    );
+    return at < 0 ? 0 : at;
   }
 
   /// Withdraws the publication the receiver was handed, if there is one:

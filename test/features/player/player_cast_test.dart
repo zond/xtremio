@@ -179,6 +179,117 @@ void main() {
       expect(find.text('Casting to Living Room TV'), findsOneWidget);
     });
 
+    group('an H.264 + AAC Matroska film', () {
+      const mkv = 'Night.of.the.Living.Dead.1080p.x264.AAC.mkv';
+      const h264Aac = PlaybackStats(
+        videoCodec: 'h264 (High)',
+        audioCodec: 'aac',
+      );
+
+      /// [castTo], with mpv reporting [stats] while the list is up -- the
+      /// only time the screen samples it.
+      Future<void> castWithStats(
+        WidgetTester tester,
+        PlayerHarness harness,
+      ) async {
+        await tester.tap(castButton);
+        await tester.pumpAndSettle();
+        harness.engine.emitStats(h264Aac);
+        await tester.pump();
+        await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('is cast as a rendition, from where it is playing', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        harness.mediaIds.renditionsAvailable = true;
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        harness.engine.emitPosition(const Duration(minutes: 12));
+        // The second of two audio tracks is the one playing.
+        harness.engine.emitTracks(
+          const PlaybackTracks(
+            audio: [
+              TrackInfo(id: '1', language: 'eng'),
+              TrackInfo(id: '2', language: 'fre'),
+            ],
+            activeAudioId: '2',
+          ),
+        );
+        await pumpEvents(tester);
+
+        await castWithStats(tester, harness);
+
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        // A rendition of the id mpv reads, published with this player's
+        // length, position and audio track, and nothing published as is.
+        expect(harness.mediaIds.renditions, hasLength(1));
+        final published = harness.mediaIds.renditions.single;
+        expect(published.id, 'm1');
+        expect(published.spec.toJson(), {
+          'durationMs': const Duration(minutes: 90).inMilliseconds,
+          'segmentMs': 6000,
+          'startMs': const Duration(minutes: 12).inMilliseconds,
+          'video': 'copy',
+          'audio': 'copy',
+          'audioTrack': 1,
+        });
+        expect(harness.mediaIds.published, ['m1']);
+        // The receiver is handed the token's playlist, told it is HLS of
+        // fragmented MP4 and how long the film is.
+        final (media, start) = cast.loads.single;
+        expect(media.url, lanBase.resolve('cast/t1/hls/index.m3u8'));
+        expect(media.contentType, 'application/x-mpegurl');
+        expect(media.fmp4Hls, isTrue);
+        expect(media.duration, const Duration(minutes: 90));
+        expect(start, const Duration(minutes: 12));
+        expect(find.byType(CastRemotePanel), findsOneWidget);
+      });
+
+      testWidgets('is refused while mpv has not said how long it is', (
+        tester,
+      ) async {
+        // The playlist is written from the length: without one there is
+        // nothing to publish, and the container's refusal stands.
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        harness.mediaIds.renditionsAvailable = true;
+        await harness.pump(tester);
+
+        await castWithStats(tester, harness);
+
+        expect(find.byType(CastRefusedDialog), findsOneWidget);
+        expect(harness.mediaIds.renditions, isEmpty);
+        expect(cast.loads, isEmpty);
+      });
+
+      testWidgets('is refused where this device cannot repackage', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+
+        await castWithStats(tester, harness);
+
+        expect(find.byType(CastRefusedDialog), findsOneWidget);
+        expect(find.textContaining('Matroska'), findsOneWidget);
+        expect(harness.mediaIds.renditions, isEmpty);
+        expect(cast.loads, isEmpty);
+      });
+    });
+
     testWidgets('a stream the server will not publish is said so', (
       tester,
     ) async {
