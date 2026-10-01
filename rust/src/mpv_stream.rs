@@ -331,8 +331,10 @@ impl AddRo for Libmpv {
 
 /// The libmpv at `path`, loaded once per process. A later call naming
 /// another path is refused: one process has one libmpv.
+/// The libmpv [`libmpv`] loaded, and the path it was loaded from.
+static LIBMPV: OnceLock<(String, Result<Libmpv, String>)> = OnceLock::new();
+
 fn libmpv(path: &str) -> anyhow::Result<&'static Libmpv> {
-    static LIBMPV: OnceLock<(String, Result<Libmpv, String>)> = OnceLock::new();
     let (loaded_from, loaded) = LIBMPV.get_or_init(|| {
         let loaded = (|| {
             // SAFETY: media_kit has already loaded this library, so this
@@ -355,6 +357,14 @@ fn libmpv(path: &str) -> anyhow::Result<&'static Libmpv> {
     loaded
         .as_ref()
         .map_err(|error| anyhow::anyhow!("could not load libmpv's stream_cb API: {error}"))
+}
+
+/// The path of the libmpv a player registered the protocol through, once
+/// one has and the library loaded: what [`crate::libav::Libav::registered`]
+/// resolves FFmpeg from. `None` before the first player.
+pub fn registered_libmpv() -> Option<&'static str> {
+    let (path, loaded) = LIBMPV.get()?;
+    loaded.is_ok().then_some(path.as_str())
 }
 
 /// Registers [`PROTOCOL`] on the mpv handle at `ctx`, with the embedded

@@ -104,6 +104,10 @@ serde = { version = "1", features = ["derive"] }
 # clang-sys's, for the armv7 aws-lc-sys bindings), so nothing new is
 # fetched; it is small and has no dependencies on these targets.
 libloading = "0.8"
+# The sample bytes a rendition's producer hands the server
+# (`stream_server::Sample::data`, `src/rendition.rs`). Already in the graph
+# (stream-server, reqwest, hyper all take it), so nothing new is compiled.
+bytes = "1"
 # Digests the addon transport URL that keys the health record, so the URL --
 # which can carry a debrid API key -- is never written down. Already in the
 # graph (stream-server's tree pulls it), so nothing new is compiled.

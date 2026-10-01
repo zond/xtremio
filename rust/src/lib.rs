@@ -19,6 +19,8 @@
 //! - `subtitles`: when each subtitle file has text on screen, and the
 //!   line that maps one file's clock onto another's
 //! - `diagnostics`: what this binary was built from (the pinned revisions)
+//! - `libav`: libavformat, from the libmpv media_kit loaded, bound to one
+//!   FFmpeg ABI
 //!
 //! The crate also owns the process's allocator, below.
 
@@ -55,6 +57,7 @@ pub mod downloads;
 pub mod env;
 mod frb_generated;
 pub mod guard;
+pub mod libav;
 pub mod logging;
 pub mod media;
 pub mod model;
