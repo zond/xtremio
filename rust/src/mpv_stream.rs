@@ -375,11 +375,20 @@ pub fn register(ctx: i64, libmpv_path: &str) -> anyhow::Result<Registration> {
     register_with(library, ctx, &ServerOpener)
 }
 
+/// The address Dart's `Pointer.address` handed over, as a pointer.
+///
+/// **Its bits, not its value.** Dart's `int` is signed 64-bit, and on
+/// Android arm64 heap pointers are *tagged*: the top byte carries a tag
+/// (`0xB4…`), so a perfectly good `mpv_handle` arrives negative --
+/// `-5476376649114951840` on zond's phone, the first device run. A range
+/// check refused every handle there and mpv had no `xtremio://` protocol.
+/// On a 32-bit process (the television) the address fits in the low half.
 fn handle_address(ctx: i64) -> anyhow::Result<usize> {
-    match usize::try_from(ctx) {
+    let bits = u64::from_ne_bytes(ctx.to_ne_bytes());
+    match usize::try_from(bits) {
         Ok(0) => anyhow::bail!("no mpv handle: the player has not initialised"),
         Ok(ctx) => Ok(ctx),
-        Err(_) => anyhow::bail!("{ctx} is not an mpv handle's address"),
+        Err(_) => anyhow::bail!("{bits:#x} does not fit this process's pointers"),
     }
 }
 
@@ -698,6 +707,19 @@ mod tests {
             2
         );
         assert!(register(0, "/nonexistent/libmpv.so").is_err());
-        assert!(handle_address(-1).is_err());
+    }
+
+    /// A tagged Android pointer arrives as a negative Dart `int` and is the
+    /// same bits as an address; zero is still no handle.
+    #[test]
+    fn a_tagged_pointer_is_its_bits() {
+        const FROM_THE_PHONE: i64 = -5476376649114951840;
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(
+            handle_address(FROM_THE_PHONE).expect("a tagged pointer"),
+            0xb400_0073_e542_5f60_usize
+        );
+        assert_eq!(handle_address(0x7f00_1000).unwrap(), 0x7f00_1000);
+        assert!(handle_address(0).is_err());
     }
 }
