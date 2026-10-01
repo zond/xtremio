@@ -94,11 +94,31 @@ DTS tracks and opens no AVI, measured on zond's phone). It picks the film's
 video and the audio track playing here, seeks to the run's segment, and
 hands the server every packet's presentation time on mpv's clock (less the
 container's start), the H.264 parameter sets and samples in Annex-B, and the
-AAC frames as they are. **A seek is a new stream** (`stream.mp4?from=<ms>`,
-a new run there): the receiver cannot seek in a file it reads forward.
-Mapping the receiver's and this screen's seeks to that is not built yet.
-Stop and every other way out unpublish, which ends the run wherever it is
-blocked. There is no timer: a stalled torrent is waited for.
+AAC frames as they are. Stop and every other way out unpublish, which
+ends the run wherever it is blocked. There is no timer: a stalled torrent
+is waited for.
+
+**Seeks are this screen's.** The receiver knows the film's length from the
+first byte (the server writes it into each track's `mdhd`, where its
+demuxer reads it), but it cannot seek in a stream with no ranges: asked to
+-- by its remote, or a sender's SEEK -- it fetches the stream again from
+its start and plays from there, and its status never says where it was
+asked to go (measured on zond's TV). So:
+
+- A seek here (the remote's bar and buttons) loads the stream again from
+  the target, `stream.mp4?from=<ms>` with the receiver told to start there
+  (`PlayerScreen._reloadRendition`), which plays from it within seconds.
+- A seek on the receiver is undone: the server counts a fetch of the
+  stream from a start it had already sent three segments of
+  (`media_rendition_restarts`), and the player, seeing the count move,
+  loads the stream again where the receiver was (`_followRendition`).
+  "Where it was" is the position the receiver reported while playing on
+  from the last; a move back is believed once three reports agree, and
+  after a load nothing it says counts until it reports a position near the
+  target. The remote shows that position, and the core is told it.
+- The film's length on this screen stays mpv's: the receiver's is only
+  what has arrived. The stream stays `BUFFERED`, so the television keeps
+  its seek bar; using it costs a moment and changes nothing.
 
 To try a rendition without the app: `cargo test --test rendition serve --
 --ignored --nocapture` with `XTREMIO_RENDITION_FILE` and

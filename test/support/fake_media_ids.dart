@@ -34,6 +34,10 @@ class FakeMediaIds implements MediaIds {
   @override
   bool renditionsAvailable = false;
 
+  /// What [renditionRestarts] answers, by token: a test moves it to be the
+  /// receiver restarting a rendition's stream.
+  final Map<String, int> restarts = {};
+
   /// Every rendition published, in order, as the id and the spec; their
   /// tokens are handed out from the same count as [published]'s.
   final List<({String id, RenditionSpec spec})> renditions = [];
@@ -137,6 +141,9 @@ class FakeMediaIds implements MediaIds {
     published.add(id);
     return 't${published.length}';
   }
+
+  @override
+  int renditionRestarts(String token) => restarts[token] ?? 0;
 
   @override
   Future<bool> unpublish(String token) async {

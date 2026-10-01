@@ -905,6 +905,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Duration _castHandedAt = Duration.zero;
   bool _castReported = false;
 
+  /// The rendition on the receiver, while the cast is one
+  /// ([_PlayerCasting._followRendition]); null for a stream cast as it is.
+  _RenditionCast? _rendition;
+
   bool get _casting => _castingTo != null;
 
   /// How many [_startCast]s are between asking for a session and handing the
@@ -1904,7 +1908,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       // The receiver will report the new position itself; showing it at
       // once keeps the bar from snapping back while the round trip runs.
       setState(() => _castStatus = _castStatus.at(clamped));
-      _cast?.seek(clamped).ignore();
+      if (_rendition != null) {
+        // A rendition cannot be sought on the receiver: it is loaded again
+        // from there.
+        unawaited(_reloadRendition(clamped));
+      } else {
+        _cast?.seek(clamped).ignore();
+      }
     } else {
       // Relative, from where playback actually is, so a run of presses under
       // a held key adds up in libmpv as it does here.

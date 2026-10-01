@@ -391,6 +391,20 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
     }
     assert!(from == expected, "the stream from 7 s is not segments 2-4");
 
+    // **A receiver's restart is counted for the player**: the stream again
+    // from the start it was already read from end to end -- what a receiver
+    // does with a seek it cannot make -- and not the one from 7 s, a new
+    // start.
+    assert_eq!(
+        xtremio_core::api::media::media_rendition_restarts(token.clone())?,
+        0
+    );
+    get(&runtime, &lan, &stream);
+    assert_eq!(
+        xtremio_core::api::media::media_rendition_restarts(token.clone())?,
+        1
+    );
+
     // **Unpublishing ends a stream being read, and its run**: the thread
     // returns, whatever it was blocked in.
     let reading = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
