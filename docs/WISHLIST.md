@@ -49,6 +49,18 @@ already advertises HLS transcoding support, so this may be wiring rather
 than building; scope it before estimating. Wanted, and deferred every time
 because direct play covers what is actually watched.
 
+## Cast a link straight to the receiver
+
+Cast a link directly to the receiver when it needs no rendition
+(transcode), instead of relaying it through the phone. Today every stream
+played by id is published and the receiver fetches it from this device
+(`/cast/<token>`), which for a debrid link means every byte crosses the
+Wi-Fi twice and the phone has to stay awake for the length of the film.
+Handing the receiver the origin URL would spare both, but only where
+nothing has to be done to the bytes: no request headers the receiver
+cannot send, no container to unwrap, no rendition -- and it gives up the
+proxy cache and the sharing that a relay through the server keeps.
+
 ## A discover-only torrent state
 
 **Being scoped -- zond wants this built, not wished for.** What follows is

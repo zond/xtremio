@@ -65,7 +65,11 @@ extension _PlayerOpen on _PlayerScreenState {
         .catchError((Object error) {
           if (!_stillOurs || _opened != url || attempt != _openAttempt) return;
           DiagnosticsLog.error('player', 'open rejected: $error');
-          _failPlayback('$error');
+          _failPlayback(
+            '$error',
+            waitingForBytes: _isWaitingForBytes(error),
+            answered: error is MediaRefusal && !_isWaitingForBytes(error),
+          );
         });
   }
 
@@ -380,12 +384,31 @@ extension _PlayerOpen on _PlayerScreenState {
     _client?.dispatch(CoreActions.playerVideoParamsChanged(filename: filename));
   }
 
+  /// Whether a refusal from the server is a wait for bytes rather than an
+  /// answer: a torrent whose metadata did not come in time
+  /// (`torrentUnavailable`). Every other refusal -- no such file, not a
+  /// URL it serves, a pipe it cannot seek, a pairing that is gone, an
+  /// origin that refused -- says the stream cannot be played.
+  static bool _isWaitingForBytes(Object error) =>
+      error is MediaRefusal && error.kind == 'torrentUnavailable';
+
   /// Shows "Playback failed: [error]" in place of whatever was waiting for
   /// the media (the start-up overlay included, whose polling ends here) --
-  /// unless the torrent is still starting up, in which case the open is
-  /// simply tried again ([_scheduleOpenRetry]).
-  void _failPlayback(String error) {
-    if (_scheduleOpenRetry(error)) return;
+  /// unless the torrent is still starting up, or the server is waiting for
+  /// its bytes ([waitingForBytes]), in which case the open is simply tried
+  /// again ([_scheduleOpenRetry]), for as long as the viewer stays.
+  ///
+  /// [answered] is a refusal from the server that says the stream cannot be
+  /// played: it is shown at once, whatever phase the torrent is in.
+  void _failPlayback(
+    String error, {
+    bool waitingForBytes = false,
+    bool answered = false,
+  }) {
+    if (!answered &&
+        _scheduleOpenRetry(error, waitingForBytes: waitingForBytes)) {
+      return;
+    }
     DiagnosticsLog.error('player', 'playback failed: $error');
     _cancelOpenRetry();
     // Nothing is being presented any more, and this screen stays up: the
@@ -409,21 +432,29 @@ extension _PlayerOpen on _PlayerScreenState {
   /// gives up on the first refusal, when the server has nothing to serve
   /// yet.
   ///
-  /// A direct HTTP stream, a torrent the server has given up on, an unknown
+  /// A torrent in `error` is one whose metadata did not come in time -- a
+  /// dead swarm, which is waited for. A direct HTTP stream, an unknown
   /// phase, and a `ready` torrent that still would not open are real
   /// failures.
   bool get _retryableTorrentStart {
-    if (!mounted || _handedOver || _mediaLoaded) return false;
-    if (_openState?.selectedStream?.kind != StreamKind.torrent) return false;
+    if (!_torrentStarting) return false;
     final stats = _torrentStats;
     if (stats == null) return true;
     return switch (stats.phase) {
       TorrentPhase.resolvingMetadata ||
       TorrentPhase.checking ||
-      TorrentPhase.buffering => true,
-      TorrentPhase.ready || TorrentPhase.error || TorrentPhase.unknown => false,
+      TorrentPhase.buffering ||
+      TorrentPhase.error => true,
+      TorrentPhase.ready || TorrentPhase.unknown => false,
     };
   }
+
+  /// A torrent on screen whose media has not come in yet.
+  bool get _torrentStarting =>
+      mounted &&
+      !_handedOver &&
+      !_mediaLoaded &&
+      _openState?.selectedStream?.kind == StreamKind.torrent;
 
   /// Answers [error] with another attempt instead of a failure, and says so.
   ///
@@ -432,23 +463,20 @@ extension _PlayerOpen on _PlayerScreenState {
   /// starting, which is exactly what is happening. At most one attempt is
   /// ever waiting: `open`'s rejection and the engine's error stream both
   /// land here for the same failure.
-  bool _scheduleOpenRetry(String error) {
-    if (!_retryableTorrentStart ||
-        _openRetries >= PlayerScreen.torrentOpenRetries) {
-      return false;
-    }
+  bool _scheduleOpenRetry(String error, {bool waitingForBytes = false}) {
+    final waits = waitingForBytes ? _torrentStarting : _retryableTorrentStart;
+    if (!waits) return false;
     _openError = error;
+    _openWaitingForBytes = waitingForBytes;
     if (_openRetryTimer != null) return true;
     _openRetries++;
+    final wait = PlayerScreen.retryWait(_openRetries);
     DiagnosticsLog.warn(
       'player',
       'open refused while the torrent is ${_torrentStats?.phase.name ?? 'starting'}; '
-          'retry $_openRetries of ${PlayerScreen.torrentOpenRetries}',
+          'retry $_openRetries in ${wait.inMilliseconds}ms',
     );
-    _openRetryTimer = Timer(
-      PlayerScreen.torrentOpenRetryBackoff * _openRetries,
-      _retryOpen,
-    );
+    _openRetryTimer = Timer(wait, _retryOpen);
     return true;
   }
 
@@ -457,8 +485,12 @@ extension _PlayerOpen on _PlayerScreenState {
     final url = _opened;
     if (!mounted || _handedOver || url == null) return;
     // The wait is also how the server gets to change its mind: a torrent
-    // that failed while we were being patient is a failure after all.
-    if (!_retryableTorrentStart) {
+    // that turned out ready and still would not open is a failure after
+    // all.
+    final waits = _openWaitingForBytes
+        ? _torrentStarting
+        : _retryableTorrentStart;
+    if (!waits) {
       _failPlayback(_openError ?? 'the torrent could not be opened');
       return;
     }

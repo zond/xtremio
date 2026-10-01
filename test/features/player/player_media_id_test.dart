@@ -38,9 +38,9 @@ Map<String, dynamic> urlStreamFixture(String url, {String? filename}) {
 /// cancelled -- so what these hold is what the screen does with that wait
 /// and with the server's answer.
 void main() {
-  /// Long enough for every retry the player will make.
+  /// Half a minute of retries.
   Future<void> waitOutTheRetries(WidgetTester tester) async {
-    for (var i = 0; i < PlayerScreen.torrentOpenRetries + 2; i++) {
+    for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 5));
       await tester.pump();
     }
@@ -89,6 +89,71 @@ void main() {
     expect(harness.mediaIds.registered, hasLength(1));
     expect(harness.mediaIds.resolved, ['m1', 'm1']);
     expect(harness.hints.mediaOpened, ['m1']);
+  });
+
+  testWidgets('a metadata timeout is waited out for as long as it takes', (
+    tester,
+  ) async {
+    // The server gave up on the magnet's metadata for now (a dead swarm);
+    // the player asks again, and keeps asking, until the viewer leaves.
+    final harness = PlayerHarness();
+    harness.mediaIds.refusal = const MediaRefusal(
+      'torrentUnavailable',
+      'the torrent\'s metadata did not arrive',
+    );
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.error,
+      error: 'metadata not received in time',
+    );
+    await tester.pumpWidget(harness.build());
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(PlayerScreen.openRetryBackoffCap);
+      await tester.pump();
+    }
+
+    expect(harness.mediaIds.resolved.length, greaterThan(20));
+    expect(harness.mediaIds.registered, hasLength(1));
+    expect(find.textContaining('Playback failed'), findsNothing);
+  });
+
+  testWidgets('a wait for bytes goes on whatever phase the torrent reports', (
+    tester,
+  ) async {
+    final harness = PlayerHarness();
+    harness.mediaIds.refusal = const MediaRefusal(
+      'torrentUnavailable',
+      'the torrent\'s metadata did not arrive',
+    );
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.unknown,
+    );
+    await tester.pumpWidget(harness.build());
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(PlayerScreen.openRetryBackoffCap);
+      await tester.pump();
+    }
+
+    expect(harness.mediaIds.resolved.length, greaterThan(5));
+    expect(find.textContaining('Playback failed'), findsNothing);
+  });
+
+  testWidgets('a refusal that is an answer fails at once, even while the '
+      'torrent starts', (tester) async {
+    final harness = PlayerHarness();
+    harness.mediaIds.refusal = const MediaRefusal(
+      'noSuchFile',
+      'the torrent has no file 7',
+    );
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.resolvingMetadata,
+    );
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    await waitOutTheRetries(tester);
+
+    expect(harness.mediaIds.resolved, ['m1']);
+    expect(find.textContaining('the torrent has no file 7'), findsOneWidget);
   });
 
   testWidgets('a screen left while the server resolves opens nothing', (

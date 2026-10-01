@@ -36,9 +36,10 @@ void main() {
     return harness;
   }
 
-  /// Long enough for every retry the player will make.
+  /// Half a minute of retries: long enough that a retry with a count on
+  /// it would have run out.
   Future<void> waitOutTheRetries(WidgetTester tester) async {
-    for (var i = 0; i < PlayerScreen.torrentOpenRetries + 2; i++) {
+    for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 5));
       await tester.pump();
     }
@@ -116,9 +117,9 @@ void main() {
     expect(harness.engine.opened, hasLength(2));
   });
 
-  testWidgets('an open that keeps failing shows the failure in the end', (
-    tester,
-  ) async {
+  testWidgets('an open that keeps failing while the torrent starts is tried '
+      'for as long as it takes', (tester) async {
+    // A dead swarm: the viewer is the one who gives up, never a count.
     final harness = await failFirstOpen(
       tester,
       stats: const TorrentStats(
@@ -127,22 +128,44 @@ void main() {
         initialWindowBytes: 4194304,
       ),
     );
-    await waitOutTheRetries(tester);
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(PlayerScreen.openRetryBackoffCap);
+      await tester.pump();
+    }
 
-    expect(
-      harness.engine.opened,
-      hasLength(PlayerScreen.torrentOpenRetries + 1),
-      reason: 'the first attempt and a bounded number of retries',
-    );
-    expect(find.text('Playback failed: $openFailure'), findsOneWidget);
-    expect(overlay, findsNothing);
-    // The polling ends with the failure.
+    expect(harness.engine.opened.length, greaterThan(20));
+    expect(failure, findsNothing);
+    expect(overlay, findsOneWidget);
+    // Still polling: the card is still showing what is happening.
     final polled = harness.torrentStats.requests.length;
     await tester.pump(PlayerScreen.torrentStatsInterval * 4);
-    expect(harness.torrentStats.requests, hasLength(polled));
+    expect(harness.torrentStats.requests.length, greaterThan(polled));
   });
 
-  testWidgets('a torrent the server has given up on is not retried', (
+  testWidgets('the wait between attempts grows, and stops growing', (
+    tester,
+  ) async {
+    final harness = await failFirstOpen(
+      tester,
+      stats: const TorrentStats(phase: TorrentPhase.resolvingMetadata),
+    );
+    // Each wait is one more multiple of the backoff, to the cap.
+    for (var n = 1; n <= 30; n++) {
+      final wait = PlayerScreen.torrentOpenRetryBackoff * n;
+      final expected = wait < PlayerScreen.openRetryBackoffCap
+          ? wait
+          : PlayerScreen.openRetryBackoffCap;
+      final before = harness.engine.opened.length;
+      await tester.pump(expected - const Duration(milliseconds: 1));
+      await tester.pump();
+      expect(harness.engine.opened, hasLength(before), reason: 'wait $n');
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump();
+      expect(harness.engine.opened, hasLength(before + 1), reason: 'wait $n');
+    }
+  });
+
+  testWidgets('a torrent whose metadata did not come is still waited for', (
     tester,
   ) async {
     final harness = await failFirstOpen(
@@ -152,13 +175,23 @@ void main() {
         error: 'metadata not received in time',
       ),
     );
-    // The first refusal came before the server had said anything, so it
-    // bought one wait; the answer that arrives during it ends the matter.
+    await waitOutTheRetries(tester);
+    expect(harness.engine.opened.length, greaterThan(5));
+    expect(failure, findsNothing);
+  });
+
+  testWidgets('a torrent that is ready and still will not open fails', (
+    tester,
+  ) async {
+    // The bytes are there and mpv cannot read them: an answer, not a wait.
+    final harness = await failFirstOpen(
+      tester,
+      stats: const TorrentStats(phase: TorrentPhase.ready),
+    );
     await tester.pump(PlayerScreen.torrentStatsInterval);
     await tester.pump();
-    await tester.pump(PlayerScreen.torrentOpenRetryBackoff * 2);
-    await tester.pump();
-    expect(harness.engine.opened, hasLength(1));
+    await waitOutTheRetries(tester);
+    expect(harness.engine.opened, hasLength(lessThanOrEqualTo(2)));
     expect(find.text('Playback failed: $openFailure'), findsOneWidget);
   });
 

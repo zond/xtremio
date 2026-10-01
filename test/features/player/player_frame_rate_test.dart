@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 
 import 'package:xtremio/features/player/player_screen.dart';
 
@@ -79,22 +80,21 @@ void main() {
     useScreen(tester, tvSize);
     final harness = PlayerHarness(device: tv);
     await harness.pump(tester);
+    // A torrent that is there and that mpv cannot read: an answer, not a
+    // wait, so it fails.
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
+    );
+    await tester.pump(PlayerScreen.torrentStatsInterval);
     harness.engine.emitVideoFrameRate(filmRate);
-    harness.engine.emitDuration(const Duration(hours: 2));
-    harness.engine.emitPosition(const Duration(minutes: 20));
-    harness.engine.emitPlaying(true);
     await pumpEvents(tester);
 
     // The failure card replaces the picture and this screen stays up, so
     // nothing else on the way out runs: without the release here the
     // panel sits at the film's rate under a static card, and under every
-    // menu the viewer opens over it, until they press Back. A stream that
-    // keeps ending early is the failure a loaded film has: an engine
-    // error by then is a line in a log.
-    for (var i = 0; i <= PlayerScreen.falseEndRecoveries; i++) {
-      harness.engine.emitCompleted();
-      await pumpEvents(tester);
-    }
+    // menu the viewer opens over it, until they press Back.
+    harness.engine.emitError('Failed to recognize file format.');
+    await pumpEvents(tester);
 
     expect(find.textContaining('Playback failed'), findsOneWidget);
     expect(harness.displayFrameRate.clears, 1);

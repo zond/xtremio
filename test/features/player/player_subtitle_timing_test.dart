@@ -455,6 +455,9 @@ void main() {
     engine.emitPosition(const Duration(seconds: 20));
     engine.emitCompleted();
     await pumpEvents(tester);
+    // A second early end is re-opened after a wait, not at once.
+    await tester.pump(PlayerScreen.retryWait(1));
+    await pumpEvents(tester);
     expect(engine.opened, hasLength(3));
     expect(engine.externalSubtitles, hasLength(2));
   });

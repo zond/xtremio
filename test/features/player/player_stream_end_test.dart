@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -78,7 +79,38 @@ void main() {
     expect(harness.engine.opened, hasLength(1));
   });
 
-  testWidgets('a stream that ends early every time is a failure in the end', (
+  testWidgets('a stream that keeps ending early is re-opened for as long '
+      'as it takes, waiting longer each time', (tester) async {
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(hours: 2));
+    harness.engine.emitPosition(const Duration(seconds: 10));
+    await pumpEvents(tester);
+
+    // The first at once; then one more multiple of the backoff each, to
+    // the cap -- never a spin, and never a give-up.
+    for (var n = 1; n <= 25; n++) {
+      final before = harness.engine.opened.length;
+      harness.engine.emitCompleted();
+      await pumpEvents(tester);
+      if (n > 1) {
+        final wait = PlayerScreen.torrentOpenRetryBackoff * (n - 1);
+        final expected = wait < PlayerScreen.openRetryBackoffCap
+            ? wait
+            : PlayerScreen.openRetryBackoffCap;
+        await tester.pump(expected - const Duration(milliseconds: 1));
+        expect(harness.engine.opened, hasLength(before), reason: 'end $n');
+        await tester.pump(const Duration(milliseconds: 1));
+        await pumpEvents(tester);
+      }
+      expect(harness.engine.opened, hasLength(before + 1), reason: 'end $n');
+      expect(harness.engine.opened.last.$2, const Duration(seconds: 10));
+    }
+    expect(endings(harness), 0);
+    expect(find.textContaining('Playback failed'), findsNothing);
+  });
+
+  testWidgets('a re-open still waiting is dropped when the screen goes', (
     tester,
   ) async {
     final harness = PlayerHarness();
@@ -86,17 +118,17 @@ void main() {
     harness.engine.emitDuration(const Duration(hours: 2));
     harness.engine.emitPosition(const Duration(seconds: 10));
     await pumpEvents(tester);
+    harness.engine.emitCompleted();
+    await pumpEvents(tester);
+    harness.engine.emitCompleted();
+    await pumpEvents(tester);
+    final opens = harness.engine.opened.length;
 
-    for (var i = 0; i <= PlayerScreen.falseEndRecoveries; i++) {
-      harness.engine.emitCompleted();
-      await pumpEvents(tester);
-    }
-    expect(endings(harness), 0);
-    expect(
-      harness.engine.opened,
-      hasLength(1 + PlayerScreen.falseEndRecoveries),
-    );
-    expect(find.textContaining('stopped sending data'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(harness.engine.opened, hasLength(opens));
+    // Ended here, with the wait not run out: a timer still pending at the
+    // end of a test fails it, so this is the proof the wait was dropped.
   });
 
   testWidgets('mpv\'s own error log is captured for the report', (

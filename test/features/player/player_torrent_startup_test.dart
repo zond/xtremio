@@ -42,10 +42,10 @@ void main() {
   }
 
   /// Long enough for every retry a torrent's open gets while the server
-  /// says it is still starting up (see player_open_retry_test): what is
-  /// still failing after this is a failure.
+  /// says it is still starting up (see player_open_retry_test); only a
+  /// torrent that is ready and still fails is a failure.
   Future<void> exhaustOpenRetries(WidgetTester tester) async {
-    for (var i = 0; i < PlayerScreen.torrentOpenRetries + 2; i++) {
+    for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 5));
       await tester.pump();
     }
@@ -1247,8 +1247,12 @@ void main() {
     final harness = PlayerHarness();
     await harness.pump(tester);
     expect(overlay, findsOneWidget);
-    // A torrent the server is still starting up buys a few more attempts
-    // first, so what ends the overlay is a failure that survives them.
+    // A torrent the server is still starting up is waited for, so what
+    // ends the overlay is a torrent that is ready and still fails.
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
+    );
+    await tester.pump(PlayerScreen.torrentStatsInterval);
     harness.engine.openError = 'no stream';
     harness.engine.emitError('no stream');
     await pumpEvents(tester);
@@ -1263,6 +1267,9 @@ void main() {
   testWidgets('a rejected open replaces it too', (tester) async {
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.openError = 'unsupported URL',
+    );
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
     );
     await harness.pump(tester);
     await exhaustOpenRetries(tester);

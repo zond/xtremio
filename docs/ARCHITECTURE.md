@@ -488,8 +488,13 @@ those out rather than printing 0.
 **An engine error is not a failed playback.** media_kit turns mpv's error
 log lines into `errors` events, so "Playback failed" is shown only until the
 file has loaded (a duration or a position past zero); after that an error is
-a log line, and what gives up is a false end of file (re-opened) or a
-position that stands still. An addon subtitle mpv could not fetch is passed
+a log line. A false end of file is re-opened where it stopped, at once and
+then after a growing wait capped at ten seconds, and a torrent still
+starting -- or a magnet whose metadata did not come -- is opened again on
+the same backoff: **nothing gives up on a stream whose bytes have not
+come** (a dead swarm waits under the start-up and stall cards until the
+viewer leaves). Only an answer is a failure: a refusal that says the stream
+cannot be played, or a torrent that is ready and still will not open. An addon subtitle mpv could not fetch is passed
 over by the auto-pick, the previous selection is restored, and the viewer is
 told for six seconds.
 

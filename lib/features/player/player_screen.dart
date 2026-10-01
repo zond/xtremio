@@ -144,10 +144,6 @@ class PlayerScreen extends StatefulWidget {
   /// up (from `open` until the engine reports the media loaded).
   static const Duration torrentStatsInterval = Duration(milliseconds: 500);
 
-  /// How many times an `open` that failed while the torrent was still
-  /// starting up is tried again before the failure is shown.
-  static const int torrentOpenRetries = 4;
-
   /// How close to the duration a position has to be for an `Ended` from
   /// the engine to be the media actually ending, and the fraction of the
   /// duration that counts as the end regardless (a film whose last frames
@@ -155,14 +151,28 @@ class PlayerScreen extends StatefulWidget {
   static const Duration endTolerance = Duration(seconds: 30);
   static const double endFraction = 0.98;
 
-  /// How many times a stream that ended early is re-opened where it
-  /// stopped before that is called a failure.
-  static const int falseEndRecoveries = 3;
-
-  /// The wait before the first of those retries; each further attempt waits
-  /// one more multiple of it (0.7s, 1.4s, 2.1s, 2.8s: about seven seconds
-  /// of patience in all, which is the order of a slow metadata fetch).
+  /// The wait before the first retry of an `open` that failed while the
+  /// torrent was still starting up (and before the second re-open of a
+  /// stream that ended early); each further attempt waits one more multiple
+  /// of it, up to [openRetryBackoffCap].
+  ///
+  /// **There is no count.** A torrent whose bytes have not come -- a dead
+  /// swarm, a magnet whose metadata nobody has -- is waited for under the
+  /// start-up and stall cards for as long as the viewer stays; the viewer
+  /// is the one who gives up. Only an answer that the stream cannot be
+  /// played (a file that is not there, a torrent that is ready and still
+  /// will not open) is a failure.
   static const Duration torrentOpenRetryBackoff = Duration(milliseconds: 700);
+
+  /// The longest wait between two of those attempts: patient without
+  /// spinning, and short enough that a swarm that wakes up is noticed.
+  static const Duration openRetryBackoffCap = Duration(seconds: 10);
+
+  /// The wait before the [attempt]th retry (from 1).
+  static Duration retryWait(int attempt) {
+    final wait = torrentOpenRetryBackoff * attempt;
+    return wait < openRetryBackoffCap ? wait : openRetryBackoffCap;
+  }
 
   /// How often it is polled once playback has begun and then stalled.
   /// Slower: nothing is waiting on the first frame any more, and a stall
@@ -813,6 +823,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   static const int _stallsLogged = 10;
   Timer? _openRetryTimer;
   String? _openError;
+
+  /// Whether the failure being retried was the server waiting for bytes
+  /// ([_PlayerOpen._isWaitingForBytes]) rather than mpv refusing a torrent
+  /// still starting: such a retry goes on whatever the torrent's phase.
+  bool _openWaitingForBytes = false;
 
   /// Casting: the sender, the LAN media listener a cast URL is served from,
   /// the receivers found so far and the one that has the stream.
@@ -1554,28 +1569,32 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   ///
   /// mpv sits at the end of the file with `keep-open=yes` and will not go
   /// on by itself, so the stream is re-opened where playback stopped, which
-  /// is what recovers it. [PlayerScreen.falseEndRecoveries] of those and it
-  /// is a failure like any other: a stream that ends instantly every time
-  /// is broken, not slow.
+  /// is what recovers it, for as long as it takes (dead-swarm rule: the
+  /// viewer gives up, nothing here does).
   void _onFalseEnd(Duration position) {
     _falseEnds++;
-    if (_falseEnds > PlayerScreen.falseEndRecoveries) {
-      DiagnosticsLog.error(
-        'player',
-        'stream ended early $_falseEnds times; giving up',
-      );
-      _failPlayback('the stream stopped sending data');
-      return;
-    }
+    final ends = _falseEnds;
+    // The first at once; after that one more multiple of the backoff each,
+    // to its cap, so a stream that ends at once every time is waited on
+    // rather than spun on -- and never given up on: the viewer leaves.
+    final wait = ends == 1 ? Duration.zero : PlayerScreen.retryWait(ends - 1);
     DiagnosticsLog.warn(
       'player',
       'end of file at ${position.inSeconds}s is not the end of the media; '
-          're-opening ($_falseEnds of ${PlayerScreen.falseEndRecoveries})',
+          're-opening (end $ends, in ${wait.inMilliseconds}ms)',
     );
     setState(() => _buffering = true);
     _syncStatsPolls();
     _showControls();
-    _reopenAt(position, reason: 'false-end $_falseEnds');
+    _cancelOpenRetry();
+    if (wait == Duration.zero) {
+      _reopenAt(position, reason: 'false-end $ends');
+      return;
+    }
+    _openRetryTimer = Timer(wait, () {
+      _openRetryTimer = null;
+      _reopenAt(position, reason: 'false-end $ends');
+    });
   }
 
   void _onTracks(PlaybackTracks tracks) {

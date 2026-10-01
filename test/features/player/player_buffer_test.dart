@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
@@ -170,15 +171,13 @@ void main() {
       final harness = PlayerHarness(
         prefs: await storedPrefs(BufferAhead.normal),
       );
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.ready,
+      );
       await harness.pump(tester);
-      harness.engine.emitDuration(const Duration(minutes: 96));
-      harness.engine.emitPosition(const Duration(minutes: 12));
-      harness.engine.emitPlaying(true);
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      harness.engine.emitError('Failed to recognize file format.');
       await pumpEvents(tester);
-      for (var i = 0; i <= PlayerScreen.falseEndRecoveries; i++) {
-        harness.engine.emitCompleted();
-        await pumpEvents(tester);
-      }
       expect(find.textContaining('Playback failed'), findsOneWidget);
 
       final opens = harness.engine.opened.length;
