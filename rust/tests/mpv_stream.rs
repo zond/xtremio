@@ -161,12 +161,12 @@ fn real_torrent(film: &Path) -> (Vec<u8>, String) {
 }
 
 /// The pieces of `film` that `keep` says to, where the server keeps
-/// torrent data: `<root>/rqbit-downloads/.pieces/<info hash>/<piece /
+/// torrent data: `<root>/media-cache/.pieces/<info hash>/<piece /
 /// 1000>/<piece>`, the last one as long as what is left.
 fn place_pieces(root: &Path, info_hash: &str, film: &Path, keep: impl Fn(usize, usize) -> bool) {
     let bytes = std::fs::read(film).expect("read the film");
     let dir = root
-        .join("rqbit-downloads")
+        .join(enginefs::CACHE_DIR_NAME)
         .join(".pieces")
         .join(info_hash.to_ascii_lowercase());
     let pieces = bytes.len().div_ceil(PIECE);

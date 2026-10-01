@@ -117,7 +117,7 @@ fn piece_range(files: &[(String, u64)], name: &str) -> std::ops::Range<u32> {
 /// are here" means with a piece store: there is no file to stat.
 fn pieces_on_disk(root: &std::path::Path, info_hash: &str, pieces: std::ops::Range<u32>) -> usize {
     let dir = root
-        .join("rqbit-downloads")
+        .join(enginefs::CACHE_DIR_NAME)
         .join(".pieces")
         .join(info_hash.to_ascii_lowercase());
     pieces
@@ -130,7 +130,7 @@ fn pieces_on_disk(root: &std::path::Path, info_hash: &str, pieces: std::ops::Ran
 }
 
 /// Puts the pieces of `name` on disk where the server keeps torrent data:
-/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece / 1000>/<piece>`, one
+/// `<root>/media-cache/.pieces/<info hash>/<piece / 1000>/<piece>`, one
 /// file per whole piece, which is the one layout there is -- the streaming
 /// cache and a kept download are the same pieces in the same store.
 ///
@@ -153,7 +153,7 @@ fn place_pieces(
             continue;
         }
         let dir = root
-            .join("rqbit-downloads")
+            .join(enginefs::CACHE_DIR_NAME)
             .join(".pieces")
             .join(info_hash.to_ascii_lowercase());
         let first = (offset / PIECE as u64) as u32;
@@ -311,7 +311,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     // What the backend *calls* each file. A name, not a file: nothing is
     // ever written there, and the entry carries it so a listing can show
     // one. The bytes are the pieces placed above.
-    let named = cache_root.join("rqbit-downloads").join("Test Show");
+    let named = cache_root.join(enginefs::CACHE_DIR_NAME).join("Test Show");
     let have_pieces = piece_range(&files, "have.bin");
 
     let base_url = url::Url::parse(&server_start(ServerConfig {
@@ -991,8 +991,8 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "and the pin went with it: {pins:?}"
     );
     assert_eq!(
-        xtremio_core::downloads::pins_in(&xtremio_core::downloads::load()?),
-        Some(stream_server::PinSet::default()),
+        xtremio_core::downloads::pin_keys_in(&xtremio_core::downloads::load()?),
+        Some(vec![]),
         "nor is the next launch told to pin it"
     );
     // Unless another row still wants the file: the pin is that row's too,

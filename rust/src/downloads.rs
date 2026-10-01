@@ -838,7 +838,7 @@ fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
     Some(named)
 }
 
-/// The proxy downloads to keep, for `ServerConfig::proxy_pins`: what every
+/// The proxy downloads to keep, [`pin_keys_in`]'s link half: what every
 /// row that is a link download and wants its pin names, rebuilt from the
 /// stream the row stores. `None` under the same rule as [`pins_in`]: an
 /// unreadable row that might be a link download this build cannot tell
@@ -884,24 +884,41 @@ pub fn proxy_pins_in(registry: &Registry) -> Option<Vec<stream_server::ProxyPinK
     Some(pins)
 }
 
-/// [`proxy_pins_in`] over the registry on disk, for the boot. See [`pins`].
-pub fn proxy_pins() -> Option<Vec<stream_server::ProxyPinKey>> {
-    match load() {
-        Ok(registry) => proxy_pins_in(&registry),
-        Err(error) => {
-            tracing::warn!(%error, "the downloads registry would not read; proxy pins unknown");
-            None
-        }
-    }
+/// The launch's whole pin set, for `ServerConfig::pins`: the torrent files
+/// [`pins_in`] names and the link and Drive downloads [`proxy_pins_in`]
+/// names, one [`stream_server::PinKey`] each.
+///
+/// **`Some` only when both halves are known.** The server takes one set and
+/// sweeps, in both its stores, everything that set does not claim; there is
+/// no handing it the torrent half alone. So a link half this build cannot
+/// read is not "no link downloads" -- passing the torrent keys by
+/// themselves would delete every link download -- and the answer is `None`,
+/// which keeps everything for this boot. The same holds the other way round.
+pub fn pin_keys_in(registry: &Registry) -> Option<Vec<stream_server::PinKey>> {
+    let torrents = pins_in(registry)?;
+    let proxies = proxy_pins_in(registry)?;
+    let mut keys: Vec<stream_server::PinKey> = torrents
+        .into_iter()
+        .flat_map(|(info_hash, indices)| {
+            indices
+                .into_iter()
+                .map(move |file_idx| stream_server::PinKey::Torrent {
+                    info_hash: info_hash.clone(),
+                    file_idx,
+                })
+        })
+        .collect();
+    keys.extend(proxies.into_iter().map(stream_server::PinKey::from));
+    Some(keys)
 }
 
-/// [`pins_in`] of the registry on disk, or `None` when it would not read --
-/// see [`read_registry`] -- or names something this build cannot place.
+/// [`pin_keys_in`] of the registry on disk, or `None` when it would not read
+/// -- see [`read_registry`] -- or names something this build cannot place.
 /// Called once, by [`crate::server::start`], before the server opens its
 /// session.
-pub fn pins() -> Option<stream_server::PinSet> {
+pub fn pins() -> Option<Vec<stream_server::PinKey>> {
     let pins = match load() {
-        Ok(registry) => pins_in(&registry),
+        Ok(registry) => pin_keys_in(&registry),
         Err(error) => {
             tracing::warn!(%error, "the downloads registry would not read");
             None
@@ -909,7 +926,7 @@ pub fn pins() -> Option<stream_server::PinSet> {
     };
     if pins.is_none() {
         tracing::warn!(
-            "cannot say what is pinned; the server will keep every torrent's data this boot"
+            "cannot say what is pinned; the server will keep every download's data this boot"
         );
     }
     pins
@@ -3310,6 +3327,49 @@ mod tests {
         }
     }
 
+    /// The launch is handed one set, torrent files and links together, and
+    /// only when both halves are known: either half unreadable makes the
+    /// whole set unknown, since the other half alone would sweep it.
+    #[test]
+    fn the_launch_pin_set_is_unknown_when_either_half_is() {
+        let link = "ab".repeat(32);
+        let registry = |items: String| {
+            let bytes = format!(r#"{{"version":1,"items":{{{items}}}}}"#);
+            Registry::parse(bytes.as_bytes()).expect("a registry")
+        };
+        let torrent = r#""tt1:tt1":{"metaId":"tt1","videoId":"tt1","infoHash":"ABC","fileIdx":2}"#;
+        let linked = format!(
+            r#""tt2:tt2":{{"metaId":"tt2","videoId":"tt2","infoHash":"{link}","fileIdx":0,
+               "stream":{{"url":"http://example/x.mkv"}}}}"#
+        );
+        assert_eq!(
+            pin_keys_in(&registry(format!("{torrent},{linked}"))),
+            Some(vec![
+                stream_server::PinKey::Torrent {
+                    info_hash: "abc".into(),
+                    file_idx: 2
+                },
+                stream_server::PinKey::Url {
+                    target: "http://example/x.mkv".into(),
+                    headers: Default::default(),
+                },
+            ])
+        );
+        // A link row that stores no link: the torrent half is plain, the
+        // link half is not.
+        let unlinked = registry(format!(
+            r#"{torrent},"tt2:tt2":{{"metaId":"tt2","videoId":"tt2","infoHash":"{link}","fileIdx":0}}"#
+        ));
+        assert!(pins_in(&unlinked).is_some());
+        assert_eq!(proxy_pins_in(&unlinked), None);
+        assert_eq!(pin_keys_in(&unlinked), None, "the link half is unknown");
+        // An unreadable entry naming no file: the other way round.
+        let unplaced = registry(format!(r#"{linked},"new:new":{{"videoId":"new"}}"#));
+        assert!(proxy_pins_in(&unplaced).is_some());
+        assert_eq!(pins_in(&unplaced), None);
+        assert_eq!(pin_keys_in(&unplaced), None, "the torrent half is unknown");
+    }
+
     /// A link is a source too: keyed by the server, one file, its `h=`
     /// headers carried; a stream that is neither a torrent nor a link is
     /// refused, and so is a link the server cannot key.
@@ -4568,7 +4628,7 @@ mod tests {
     #[test]
     fn only_a_finished_download_is_playable_and_only_through_the_server() {
         let mut entry = entry("tt1", "tt1");
-        entry.path = Some("/data/rqbit-downloads/A Film/A Film 1080p.mkv".into());
+        entry.path = Some("/data/media-cache/A Film/A Film 1080p.mkv".into());
 
         entry.state = State::Downloading;
         assert_eq!(stream_url(&entry, None), Err(OpenFailure::Incomplete));
@@ -4584,7 +4644,7 @@ mod tests {
         serde_json::from_value(serde_json::json!({
             "infoHash": info_hash,
             "fileIdx": file_idx,
-            "path": "/data/rqbit-downloads/A Film/A Film 1080p.mkv",
+            "path": "/data/media-cache/A Film/A Film 1080p.mkv",
             "name": "A Film 1080p.mkv",
             "length": 100,
             "downloaded": if complete { 100 } else { 40 },

@@ -30,7 +30,7 @@ void main() {
           'infoHash': 'bb',
           'fileIdx': 1,
           'behaviorHints': {'bingeGroup': 'pdm-1080p', 'filename': 'x.mkv'},
-        }, path: '/data/rqbit-downloads/Show S01/pilot.mkv'),
+        }, path: '/data/media-cache/Show S01/pilot.mkv'),
         url,
       );
 

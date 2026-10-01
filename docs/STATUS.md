@@ -117,6 +117,9 @@ fails while the torrent is still starting is retried behind it. A stream
 that turns out to be an archive or a disc image is played from inside the
 container, or refused in a sentence when the film is compressed. A cast
 button appears once a receiver answers ([CASTING.md](CASTING.md)).
+**Known issue:** casting a torrent does not play on the receiver in this
+build -- the embedded server's LAN listener now serves only published cast
+tokens, and the app's switch to publishing them is the next step.
 
 ## Library
 
@@ -160,6 +163,12 @@ no network, and offline the player still records watch progress. There is
 no downloads folder to choose: torrent data has one root, named in Settings
 → Server storage. On Android a foreground service with a notification
 (progress, **Cancel all**) keeps downloads going after the app is left.
+
+**Known issue, decided:** the first start of a build on the `media-cache`
+storage layout deletes the previous `rqbit-downloads` directory, and every
+download's bytes with it -- there is no migration. A finished download then
+says **Not on this device** and can be fetched again; an unfinished one
+starts over from nothing.
 
 ## Google Drive
 

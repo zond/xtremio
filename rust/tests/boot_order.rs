@@ -35,7 +35,7 @@ fn the_server_is_handed_the_pins_the_registry_names() -> anyhow::Result<()> {
     )?;
     // Piece data of a torrent nothing claims, left by a previous process.
     let orphan = cache_root
-        .join("rqbit-downloads")
+        .join(enginefs::CACHE_DIR_NAME)
         .join(".pieces")
         .join(ORPHAN)
         .join("0");

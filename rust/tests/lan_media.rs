@@ -75,13 +75,20 @@ async fn lan_media_allowed() -> anyhow::Result<bool> {
     Ok(settings["lanMediaEnabled"] == serde_json::Value::Bool(true))
 }
 
-/// The LAN listener serves the bytes of torrents this device already has
-/// and can be made to arrange nothing: a `GET` for a hash the server does
-/// not hold is a `404` at once, and the create routes are not there --
-/// without this, any host on the network could make this device join a
-/// swarm of its choosing for the length of a cast. The timing assertion is
-/// what tells the two apart: a lookup answers at once, a creation waits on
-/// metadata.
+/// The LAN listener can be made to arrange nothing: a `GET` for a torrent
+/// is a `404` at once, and the create routes are not there -- without this,
+/// any host on the network could make this device join a swarm of its
+/// choosing for the length of a cast. The timing assertion is what tells
+/// the two apart: a refusal answers at once, a creation waits on metadata.
+///
+/// Since stream-server's cast publish step (`ServerHandle::publish`,
+/// `/cast/{token}`) the listener has no torrent route at all, so the
+/// torrent paths below are a `404` whether or not the device holds the
+/// torrent -- including the URL the app's cast still builds on the LAN
+/// base, which therefore does not play on a receiver yet.
+// TODO(cast publish step): switch the app's cast to `publish` and assert
+// here that a published token serves a held torrent's bytes, and that the
+// old `/{infoHash}/{fileIdx}` path stays a 404 for it.
 #[tokio::test]
 async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::Result<()> {
     let _serial = SERVER.lock().await;
@@ -97,8 +104,8 @@ async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::R
     let socket = loopback(&addr)?;
 
     // An invented hash with an attacker's tracker on it: nothing about the
-    // request may reach the network, so it has to be answered from what the
-    // server holds, which is nothing.
+    // request may reach the network. The listener has no torrent route to
+    // hand it to, so it is a plain 404 (see the TODO above).
     let unknown = "0123456789abcdef0123456789abcdef01234567";
     let started = std::time::Instant::now();
     let status = tokio::time::timeout(
@@ -257,8 +264,8 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
 
     // Media routes only. `/settings` is a control route and is not mounted
     // on this listener at all; `/proxy` is a media route deliberately left
-    // off it, and answers a plain 404 rather than being reinterpreted as a
-    // torrent path.
+    // off it, and answers a plain 404 like every path but a published
+    // `/cast/{token}`.
     assert_eq!(status_of(socket, "/settings").await?, StatusCode::NOT_FOUND);
     assert_eq!(
         status_of(socket, "/proxy/d/http/example.com/a.mp4").await?,

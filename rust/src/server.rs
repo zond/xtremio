@@ -199,11 +199,10 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
         // before its session opens, which is the one moment early enough to
         // spare it hash-checking data that is about to go. `None` -- a
         // registry that would not read -- names nothing and is not an empty
-        // set: the server then keeps every torrent's data for that boot.
-        // See `crate::downloads::pins`.
+        // set: the server then keeps every download's data for that boot.
+        // Torrent files and link downloads are one set, known only when
+        // both halves are. See `crate::downloads::pin_keys_in`.
         pins: crate::downloads::pins(),
-        // And the link downloads, under the same rule (`downloads::proxy_pins`).
-        proxy_pins: crate::downloads::proxy_pins(),
         // Where a Drive refresh token is turned into an access token. The
         // server holds no client secret and must not guess an endpoint --
         // a wrong one is a refresh token posted to somebody else's host --

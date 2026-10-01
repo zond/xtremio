@@ -38,7 +38,7 @@ const UNNAMED: &str = "2222222222222222222222222222222222222222";
 /// A piece of `info_hash` in the store, the way the server lays one out.
 fn place_piece(cache_root: &std::path::Path, info_hash: &str) -> std::path::PathBuf {
     let piece = cache_root
-        .join("rqbit-downloads")
+        .join(enginefs::CACHE_DIR_NAME)
         .join(".pieces")
         .join(info_hash)
         .join("0")

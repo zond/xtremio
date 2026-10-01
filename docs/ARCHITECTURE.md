@@ -762,7 +762,7 @@ foreground service (`DownloadsForegroundService`,
 
 Everything a torrent puts on the device is under the server's `cacheRoot`:
 the piece store the streaming cache and kept downloads share
-(`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`), the
+(`<cacheRoot>/media-cache/.pieces/<infoHash>/<bucket>/<piece>`), the
 session's records, and the proxy cache. There is no downloads folder and
 nothing to move a download to.
 

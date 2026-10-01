@@ -222,7 +222,7 @@ The root and its rules are in
   `/storage/emulated/0/Android/data/com.zond.xtremio/files`, not
   `getCacheDir()`, which the system may reclaim mid-download. It is readable
   over adb without `run-as` (`adb shell ls
-  /sdcard/Android/data/com.zond.xtremio/files/rqbit-downloads/.pieces`);
+  /sdcard/Android/data/com.zond.xtremio/files/media-cache/.pieces`);
   the internal directories (`files/core`, `files/server`) need `run-as`.
 - **No permission is involved, and none may be added.** An app's own
   external files directory needs none on `minSdk` 24, and the Server storage
