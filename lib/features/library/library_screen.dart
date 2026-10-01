@@ -9,6 +9,7 @@ import '../../widgets/content_type_label.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
+import '../../widgets/library_item_actions_sheet.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/tv_ladder.dart';
@@ -742,24 +743,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
 
   Future<void> _showActions(LibraryItemView item) async {
-    final action = await showModalBottomSheet<_ItemAction>(
+    final action = await showModalBottomSheet<LibraryItemAction>(
       context: context,
-      builder: (_) => _ItemActionsSheet(item: item),
+      builder: (_) => LibraryItemActionsSheet(item: item),
     );
     if (action == null) return;
-    _client?.dispatch(switch (action) {
-      _ItemAction.remove => CoreActions.removeFromLibrary(item.id),
-      _ItemAction.markWatched => CoreActions.libraryItemMarkAsWatched(
-        item.id,
-        watched: !item.isWatched,
-      ),
-      _ItemAction.rewind => CoreActions.rewindLibraryItem(item.id),
-      _ItemAction.toggleNotifications =>
-        CoreActions.toggleLibraryItemNotifications(
-          item.id,
-          disabled: !item.notificationsDisabled,
-        ),
-    });
+    _client?.dispatch(libraryItemActionFor(action, item));
   }
 
   /// The matched linked files that belong in the body being drawn, after the
@@ -1564,9 +1553,6 @@ class _FilterRow extends StatelessWidget {
   }
 }
 
-enum _ItemAction { remove, markWatched, rewind, toggleNotifications }
-
-/// The long-press menu of one item.
 /// The long press on a card nothing matched: the file's name and the one
 /// thing to do about it.
 class _FileActionSheet extends StatelessWidget {
@@ -1596,7 +1582,8 @@ class _FileActionSheet extends StatelessWidget {
           ),
         ),
         ListTile(
-          // A remote has nothing to point with, as in [_ItemActionsSheet].
+          // A remote has nothing to point with, as in
+          // [LibraryItemActionsSheet].
           autofocus: DeviceScope.isTv(context),
           leading: Icon(icon),
           title: Text(label),
@@ -1606,70 +1593,6 @@ class _FileActionSheet extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _ItemActionsSheet extends StatelessWidget {
-  const _ItemActionsSheet({required this.item});
-
-  final LibraryItemView item;
-
-  @override
-  Widget build(BuildContext context) {
-    void pick(_ItemAction action) => Navigator.of(context).pop(action);
-    // A remote has nothing to point with: the first action takes focus so
-    // up, down and select work from the start.
-    final isTv = DeviceScope.isTv(context);
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          ListTile(
-            autofocus: isTv,
-            leading: Icon(
-              item.isWatched
-                  ? Icons.remove_done_outlined
-                  : Icons.done_all_outlined,
-            ),
-            title: Text(
-              item.isWatched ? 'Mark as not watched' : 'Mark as watched',
-            ),
-            onTap: () => pick(_ItemAction.markWatched),
-          ),
-          ListTile(
-            leading: const Icon(Icons.replay_outlined),
-            title: const Text('Rewind'),
-            onTap: () => pick(_ItemAction.rewind),
-          ),
-          ListTile(
-            leading: Icon(
-              item.notificationsDisabled
-                  ? Icons.notifications_outlined
-                  : Icons.notifications_off_outlined,
-            ),
-            title: Text(
-              item.notificationsDisabled
-                  ? 'Enable notifications'
-                  : 'Disable notifications',
-            ),
-            onTap: () => pick(_ItemAction.toggleNotifications),
-          ),
-          ListTile(
-            leading: const Icon(Icons.bookmark_remove_outlined),
-            title: const Text('Remove from library'),
-            onTap: () => pick(_ItemAction.remove),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Shown above a non-empty anonymous library.

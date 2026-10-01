@@ -76,6 +76,11 @@ void main() {
         action,
   ];
 
+  List<CoreAction> ctxActions(FakeCoreClient core) => [
+    for (final action in core.dispatched)
+      if (action.action['action'] == 'Ctx') action,
+  ];
+
   ({int start, int end}) rangeOf(CoreAction action) {
     final args = action.action['args']['args'] as Map<String, dynamic>;
     return (start: args['start'] as int, end: args['end'] as int);
@@ -192,6 +197,73 @@ void main() {
     expect(find.text('Night of the Living Dead'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.byIcon(Icons.check), findsNothing);
+  });
+
+  group('a long press on a continue-watching tile', () {
+    // The default fixture's one item (`continue_watching_preview.json`) is
+    // exactly today's bug: `removed: true, temp: true` -- never added to
+    // the library.
+    testWidgets(
+      'for a title not in the library offers only "Remove from Continue '
+      'watching", and that rewinds it',
+      (tester) async {
+        final core = fakeCore();
+        await tester.pumpWidget(harness(core));
+        await tester.pumpAndSettle();
+
+        await tester.longPress(find.text('Night of the Living Dead'));
+        await tester.pumpAndSettle();
+
+        // Not the full library menu: nothing here could add the title to
+        // the library or mark it watched by surprise.
+        expect(find.text('Remove from Continue watching'), findsOneWidget);
+        expect(find.text('Remove from library'), findsNothing);
+        expect(find.text('Mark as watched'), findsNothing);
+        expect(find.text('Rewind'), findsNothing);
+
+        await tester.tap(find.text('Remove from Continue watching'));
+        await tester.pumpAndSettle();
+
+        expect(ctxActions(core), hasLength(1));
+        expect(
+          ctxActions(core).single.action,
+          CoreActions.rewindLibraryItem('tt0063350').action,
+        );
+        expect(find.byType(BottomSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'for a title in the library offers the same menu the Library screen '
+      'does',
+      (tester) async {
+        final preview = loadContinueWatchingFixture();
+        final item =
+            (preview['items'] as List<dynamic>).single as Map<String, dynamic>;
+        item['removed'] = false;
+        item['temp'] = false;
+        final core = fakeCore(continueWatching: preview);
+        await tester.pumpWidget(harness(core));
+        await tester.pumpAndSettle();
+
+        await tester.longPress(find.text('Night of the Living Dead'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Remove from Continue watching'), findsNothing);
+        expect(find.text('Mark as watched'), findsOneWidget);
+        expect(find.text('Rewind'), findsOneWidget);
+        expect(find.text('Remove from library'), findsOneWidget);
+
+        await tester.tap(find.text('Remove from library'));
+        await tester.pumpAndSettle();
+
+        expect(ctxActions(core), hasLength(1));
+        expect(
+          ctxActions(core).single.action,
+          CoreActions.removeFromLibrary('tt0063350').action,
+        );
+      },
+    );
   });
 
   testWidgets('the continue watching row disappears when the list empties', (

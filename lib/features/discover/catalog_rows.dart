@@ -7,6 +7,7 @@ import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
+import '../../widgets/library_item_actions_sheet.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../addons/addons_screen.dart';
@@ -283,6 +284,10 @@ class _CatalogRowsState extends State<CatalogRows> {
     );
   }
 
+  void _continueWatchingLongPress(LibraryItemView item) {
+    unawaited(showContinueWatchingActions(context, _client, item));
+  }
+
   @override
   Widget build(BuildContext context) => _body(_RowLayout.of(context));
 
@@ -317,6 +322,7 @@ class _CatalogRowsState extends State<CatalogRows> {
                 isFirstRow: widget.defaultFocus && index == 0,
                 onOpen: (item) =>
                     _openDetails(item.type, item.id, videoId: item.videoId),
+                onLongPress: _continueWatchingLongPress,
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
@@ -502,6 +508,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
     required this.layout,
     required this.isFirstRow,
     required this.onOpen,
+    required this.onLongPress,
   });
 
   final List<LibraryItemView> items;
@@ -511,6 +518,11 @@ class _ContinueWatchingRowView extends StatelessWidget {
   final bool isFirstRow;
 
   final ValueChanged<LibraryItemView> onOpen;
+
+  /// The long-press menu ([showContinueWatchingActions]): a title never
+  /// added to the library has no other way off this row (today's
+  /// workaround was add to library, Rewind, remove from library).
+  final ValueChanged<LibraryItemView> onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -528,6 +540,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
                 child: LibraryItemTile(
                   item: item,
                   onTap: () => onOpen(item),
+                  onLongPress: () => onLongPress(item),
                   showWatchedMark: false,
                   memoryId: 'continue-watching/${item.id}',
                   defaultFocus: isFirstRow && index == 0,
