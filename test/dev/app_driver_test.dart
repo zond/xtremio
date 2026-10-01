@@ -255,6 +255,31 @@ void main() {
     driver.dispose();
   });
 
+  testWidgets('seek moves the engine to a time or a share of the duration', (
+    tester,
+  ) async {
+    final driver = AppDriver(settle: () => tester.pumpAndSettle());
+    expect(() => driver.seek('1:00'), throwsStateError);
+
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine
+      ..emitDuration(const Duration(minutes: 40))
+      ..emitPlaying(true);
+    await tester.pump();
+
+    driver.seek('0:12:03');
+    driver.seek('90');
+    driver.seek('60%');
+    await tester.pump();
+    expect(harness.engine.seeks, [
+      const Duration(minutes: 12, seconds: 3),
+      const Duration(seconds: 90),
+      const Duration(minutes: 24),
+    ]);
+    driver.dispose();
+  });
+
   test('log answers the last n lines, scrubbed of URLs', () {
     final driver = AppDriver(
       logLines: () => [

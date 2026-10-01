@@ -257,9 +257,16 @@ abstract interface class PlayerProbe {
   /// The screen's playback state as JSON-ready values. Every URL in it has
   /// been through [DiagnosticsLog.url], the same rule as a log line.
   Map<String, Object?> probe();
+
+  /// Seeks as the seek bar does ([_PlayerScreenState._seekTo]): the
+  /// driver's `seek` command, since the bar takes taps at a place.
+  void seekTo(Duration target);
 }
 
 class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
+  @override
+  void seekTo(Duration target) => _seekTo(target);
+
   @override
   Map<String, Object?> probe() => {
     'opened': _opened == null ? null : DiagnosticsLog.url(_opened!),

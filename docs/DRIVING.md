@@ -71,6 +71,9 @@ scrollUp`) to reach rows further down. `act`, `tap` and `go` wait for the
 screen to settle (at most three seconds, so a spinner does not hang them)
 and answer the new screen.
 
+`seek <h:mm:ss|m:ss|seconds|N%>` moves the player the way its seek bar
+does; the bar itself takes a tap at a place, which semantics cannot aim.
+
 `player` reads the player screen's own state (`PlayerProbe` in
 `lib/features/player/player_screen.dart`): the core's URL, what the engine
 was handed (a torrent is `xtremio://<media id>`), position, duration,

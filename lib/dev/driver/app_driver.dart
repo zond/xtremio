@@ -97,6 +97,8 @@ class AppDriver {
         return go(_strings(message['args']));
       case 'player':
         return player();
+      case 'seek':
+        return seek('${message['to']}');
       case 'log':
         return log(message['n'] as int? ?? 50);
       default:
@@ -540,6 +542,40 @@ class AppDriver {
 
     WidgetsBinding.instance.rootElement?.visitChildren(visit);
     return {'players': players};
+  }
+
+  /// Seeks the one player screen up to [to]: `h:mm:ss`, `m:ss`, plain
+  /// seconds, or a percentage of the duration (`60%`). Answers [player]
+  /// as it stands right after, so a script polls for where it lands.
+  Map<String, Object?> seek(String to) {
+    final probes = <PlayerProbe>[];
+    void visit(Element element) {
+      if (element is StatefulElement && element.state is PlayerProbe) {
+        probes.add(element.state as PlayerProbe);
+      }
+      element.visitChildren(visit);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(visit);
+    if (probes.length != 1) {
+      throw StateError('${probes.length} player screens are up, not one');
+    }
+    final probe = probes.single;
+    final Duration target;
+    if (to.endsWith('%')) {
+      final percent = double.parse(to.substring(0, to.length - 1));
+      final durationMs = probe.probe()['durationMs']! as int;
+      if (durationMs <= 0) throw StateError('no duration known yet');
+      target = Duration(milliseconds: (durationMs * percent / 100).round());
+    } else {
+      var seconds = 0;
+      for (final part in to.split(':')) {
+        seconds = seconds * 60 + int.parse(part);
+      }
+      target = Duration(seconds: seconds);
+    }
+    probe.seekTo(target);
+    return {'seekedTo': target.inMilliseconds, ...player()};
   }
 
   // ------------------------------------------------------------------- log

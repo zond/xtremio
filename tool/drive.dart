@@ -22,6 +22,7 @@ usage: tool/drive [--json] <command>
   go details <type> <id> [videoId]
   go back                         Android's back button
   player                          what the player screen opened, and how it is doing
+  seek <h:mm:ss|m:ss|s|N%>        seek the player as its seek bar does
   log [n]                         the last n diagnostics lines (default 50)
 
 --json prints the raw answer.''';
@@ -118,6 +119,9 @@ Map<String, Object?> _message(List<String> args) {
       return {'cmd': 'go', 'args': rest};
     case 'log':
       return {'cmd': 'log', 'n': rest.isEmpty ? 50 : int.parse(rest.first)};
+    case 'seek':
+      if (rest.length != 1) throw const FormatException('seek <h:mm:ss|s|N%>');
+      return {'cmd': 'seek', 'to': rest.single};
     default:
       throw FormatException('unknown command: $cmd');
   }
