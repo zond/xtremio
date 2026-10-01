@@ -51,9 +51,9 @@ String mediaRegisterLocalFd({required PlatformInt64 fd, String? name}) =>
 Future<String> mediaPublish({required String id}) =>
     RustLib.instance.api.crateApiMediaMediaPublish(id: id);
 
-/// Publishes a rendition of `id` for a cast -- an HLS stream the server
-/// makes from the film as the receiver asks for it -- and answers the token
-/// its playlist is under (`<lan base>/cast/<token>/hls/index.m3u8`); the
+/// Publishes a rendition of `id` for a cast -- one fragmented MP4 the
+/// server makes from the film as the receiver reads it -- and answers the
+/// token its stream is under (`<lan base>/cast/<token>/stream.mp4`); the
 /// play `media_set_play` recorded for the id goes with it. `spec` is the
 /// server's `RenditionSpec` as JSON (`durationMs`, `segmentMs`, `startMs`,
 /// `video`, `audio`, `audioTrack`). **A URL into this device while

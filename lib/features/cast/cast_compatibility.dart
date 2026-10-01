@@ -45,7 +45,7 @@ import '../player/playback_stats.dart';
 /// **One stream the receiver will not take is cast anyway: as a
 /// rendition.** An H.264 + AAC film in a Matroska file, played by id, is
 /// [CastRendition] when this device can make one (`canRepackage`): the
-/// server repackages the film's own samples into fragmented-MP4 HLS as the
+/// server repackages the film's own samples into one fragmented MP4 as the
 /// receiver asks for it (stream-server `docs/design/renditions.md`, step
 /// F2). Only mpv's word on the codecs counts for it -- a copy carries the
 /// codecs as they are, so a release's claim is not enough -- and only for a
@@ -115,13 +115,16 @@ final class CastReady extends CastCompatibility {
 }
 
 /// The stream goes to a receiver as a rendition: the same H.264 and AAC,
-/// repackaged by the server into HLS the receiver plays
+/// repackaged by the server into one fragmented MP4 the receiver plays as a
+/// file
 /// (`MediaIds.publishRendition`).
 final class CastRendition extends CastCompatibility {
   const CastRendition();
 
-  /// The MIME type of what the receiver is handed: an HLS playlist.
-  static const String contentType = 'application/x-mpegurl';
+  /// The MIME type of what the receiver is handed: an MP4, which it plays
+  /// as a file -- not HLS, which zond's Chromecast with Google TV cannot
+  /// play above 720p (stream-server `docs/design/renditions.md`, F2).
+  static const String contentType = 'video/mp4';
 }
 
 /// The stream cannot go to a receiver as it is, with the sentence to show.

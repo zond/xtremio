@@ -362,7 +362,6 @@ extension _PlayerCasting on _PlayerScreenState {
             _ => CastRendition.contentType,
           },
           title: state?.title ?? '',
-          fmp4Hls: rendition,
           duration: rendition ? _duration : null,
         ),
         start: position,
@@ -497,9 +496,12 @@ extension _PlayerCasting on _PlayerScreenState {
   ///
   /// **A [rendition] is published as one** ([MediaIds.publishRendition]):
   /// the same listener and token rules, and the receiver is handed the
-  /// token's playlist, `<lan base>/cast/<token>/hls/index.m3u8`, written
-  /// from this player's duration and starting at its position, with the
-  /// audio track it is playing.
+  /// token's stream, `<lan base>/cast/<token>/stream.mp4`: one fragmented
+  /// MP4 the server makes as it is read, from this player's position, with
+  /// the audio track it is playing. Its timestamps are the film's, so the
+  /// receiver reports the film's position. A seek on the receiver is not
+  /// mapped to a new stream yet (`?from=`; stream-server
+  /// `docs/design/renditions.md`, F2).
   ///
   /// A stream read over HTTP -- an origin that will not serve ranges -- is
   /// handed over as it is when it is on another internet host, and has no
@@ -536,7 +538,7 @@ extension _PlayerCasting on _PlayerScreenState {
         ),
       );
       _castToken = token;
-      return base.resolve('cast/$token/hls/index.m3u8');
+      return base.resolve('cast/$token/stream.mp4');
     }
     final token = await ids.publish(id);
     _castToken = token;

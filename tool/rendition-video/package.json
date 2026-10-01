@@ -1,0 +1,9 @@
+{
+  "name": "rendition-video",
+  "private": true,
+  "description": "Plays a served rendition in a plain <video src> in headless Chrome (see drive.mjs).",
+  "type": "module",
+  "dependencies": {
+    "puppeteer-core": "^24"
+  }
+}

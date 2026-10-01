@@ -181,6 +181,23 @@ fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
     }
 }
 
+/// A rendition's stream as its parts: the init segment (`ftyp` + `moov`)
+/// and each media segment (`styp` + `moof` + `mdat`).
+fn split_stream(stream: &[u8]) -> (&[u8], Vec<&[u8]>) {
+    let size = |at: usize| u32::from_be_bytes(stream[at..at + 4].try_into().unwrap()) as usize;
+    let init = size(0) + size(size(0));
+    let mut segments = Vec::new();
+    let mut at = init;
+    while at < stream.len() {
+        let start = at;
+        for _ in 0..3 {
+            at += size(at);
+        }
+        segments.push(&stream[start..at]);
+    }
+    (&stream[..init], segments)
+}
+
 /// GETs `path` off the LAN listener at `addr`, expecting a 200.
 fn get(runtime: &tokio::runtime::Runtime, addr: &str, path: &str) -> Vec<u8> {
     let client = xtremio_core::env::http_client_builder()
@@ -211,7 +228,8 @@ fn spec(start_ms: u64) -> String {
 }
 
 #[test]
-fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> anyhow::Result<()> {
+fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() -> anyhow::Result<()>
+{
     let name = libmpv_name();
     let Some(mpv) = load_mpv(&name) else {
         eprintln!("SKIPPED: no libmpv to load as {name} (set XTREMIO_LIBMPV)");
@@ -247,30 +265,14 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
 
     let id = xtremio_core::api::media::media_register_local_path(film.display().to_string(), None)?;
     let token = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
-    let base = format!("/cast/{token}/hls");
+    let stream = format!("/cast/{token}/stream.mp4");
 
-    // The master playlist names the one variant's codecs -- the film's
-    // H.264 profile and level and AAC-LC, read off what the producer
-    // reported -- and the media playlist, which has ceil(d / T) segments.
-    let master = String::from_utf8(get(&runtime, &lan, &format!("{base}/index.m3u8")))?;
-    assert!(
-        master.contains("CODECS=\"avc1.64000D,mp4a.40.2\",RESOLUTION=320x240\nmedia.m3u8\n"),
-        "{master}"
-    );
-    let playlist = String::from_utf8(get(&runtime, &lan, &format!("{base}/media.m3u8")))?;
-    let count = DURATION_MS.div_ceil(SEGMENT_MS);
-    assert_eq!(playlist.matches(".m4s").count() as u64, count, "{playlist}");
-
-    // The init segment, then every segment in order, as a receiver plays.
-    let init = get(&runtime, &lan, &format!("{base}/init.mp4"));
-    let segments: Vec<Vec<u8>> = (0..count)
-        .map(|n| get(&runtime, &lan, &format!("{base}/{n}.m4s")))
-        .collect();
+    // The stream, as a receiver reads it: the init segment, then every
+    // segment in order to the film's end -- ceil(d / T) of them.
+    let whole = get(&runtime, &lan, &stream);
+    let (init, segments) = split_stream(&whole);
+    assert_eq!(segments.len() as u64, DURATION_MS.div_ceil(SEGMENT_MS));
     let out = tmp.path().join("out.mp4");
-    let mut whole = init.clone();
-    for segment in &segments {
-        whole.extend_from_slice(segment);
-    }
     std::fs::write(&out, &whole)?;
 
     // **The same samples, on the film's clock.** Every packet of the
@@ -357,7 +359,7 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
         assert_eq!(video_tfdt(segment), Some(cut as u64 * 90), "segment {n}");
     }
 
-    // **And it decodes**: every packet, no error.
+    // **And it decodes**: every packet, no error, read as the one file it is.
     let decoded = run(
         "ffmpeg",
         &[
@@ -378,28 +380,50 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
         "decode errors"
     );
 
-    // **A run that starts partway seeks, and makes the same segments**: a
-    // receiver handed the film at 7 s asks for the init segment (the first
-    // run starts at segment 2, a seek to 6 s), then segment 2; and then
-    // segment 0 -- behind the ring, a seek back to the start. The cut rule
-    // is a function of N and the film alone, so the bytes are the ones the
-    // run from the start made.
-    let later = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(7000))?;
-    let later_base = format!("/cast/{later}/hls");
-    assert_eq!(get(&runtime, &lan, &format!("{later_base}/init.mp4")), init);
-    assert_eq!(
-        get(&runtime, &lan, &format!("{later_base}/2.m4s")),
-        segments[2]
-    );
-    assert_eq!(
-        get(&runtime, &lan, &format!("{later_base}/0.m4s")),
-        segments[0]
-    );
+    // **A stream from a time is the same segments from there**: the
+    // receiver's seek is a new stream from 7 s, made by a run that seeks
+    // to 6 s (segment 2's time). The cut rule is a function of N and the
+    // film alone, so the bytes are the ones the run from the start made.
+    let from = get(&runtime, &lan, &format!("{stream}?from=7000"));
+    let mut expected = init.to_vec();
+    for segment in &segments[2..] {
+        expected.extend_from_slice(segment);
+    }
+    assert!(from == expected, "the stream from 7 s is not segments 2-4");
 
-    // **Unpublishing ends the runs**: their threads return, whatever they
-    // were blocked in.
+    // **Unpublishing ends a stream being read, and its run**: the thread
+    // returns, whatever it was blocked in.
+    let reading = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
+    let body_broke = runtime.block_on(async {
+        let client = xtremio_core::env::http_client_builder()
+            .no_proxy()
+            .build()
+            .unwrap();
+        let mut response = client
+            .get(format!("http://{lan}/cast/{reading}/stream.mp4"))
+            .send()
+            .await
+            .expect("the listener answered");
+        assert_eq!(response.status(), 200);
+        response.chunk().await.expect("a first chunk");
+        let unpublished = tokio::task::spawn_blocking({
+            let reading = reading.clone();
+            move || xtremio_core::api::media::media_unpublish(reading)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(unpublished);
+        loop {
+            match response.chunk().await {
+                Ok(Some(_)) => continue,
+                Ok(None) => return false,
+                Err(_) => return true,
+            }
+        }
+    });
+    assert!(body_broke, "a cut stream ended cleanly");
     assert!(xtremio_core::api::media::media_unpublish(token)?);
-    assert!(xtremio_core::api::media::media_unpublish(later)?);
     wait_for("every rendition run to end", || {
         xtremio_core::rendition::live_runs() == 0
     });
@@ -410,15 +434,20 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
     Ok(())
 }
 
-/// **Not a test: a rendition served for a browser to play**, for chasing
-/// what a receiver makes of one (`docs/CASTING.md`). Publishes a rendition
-/// of `XTREMIO_RENDITION_FILE` (an H.264 + AAC film), writes its URL and
-/// the playlist, init segment and first segment the receiver would fetch
-/// into `XTREMIO_RENDITION_OUT`, and serves it until a file named `stop`
+/// **Not a test: a rendition served from this machine**, for playing it
+/// in a browser or on a television before the app casts it
+/// (`docs/CASTING.md`). Publishes a rendition of `XTREMIO_RENDITION_FILE`
+/// (an H.264 + AAC film) on the LAN listener -- loopback, so a television
+/// reaches it through `adb reverse` -- writes the stream's path and the
+/// listener's port into `XTREMIO_RENDITION_OUT` (`path`, `port`, and `url`,
+/// the whole URL on this machine), and serves until a file named `stop`
 /// appears there:
 ///
 /// `XTREMIO_RENDITION_FILE=film.mkv XTREMIO_RENDITION_OUT=/tmp/r cargo
 /// test --test rendition serve -- --ignored --nocapture`
+///
+/// The stream starts at the film's start; `?from=<ms>` on the path starts
+/// it elsewhere, which is what a seek is.
 #[test]
 #[ignore]
 fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
@@ -453,21 +482,24 @@ fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
         "video": "copy", "audio": "copy", "audioTrack": 0,
     });
     let token = xtremio_core::api::media::media_publish_rendition(id, spec.to_string())?;
-    let base = format!("/cast/{token}/hls");
-    std::fs::write(out.join("url"), format!("http://{lan}{base}/index.m3u8"))?;
-    for (path, name) in [
-        ("index.m3u8", "index.m3u8"),
-        ("media.m3u8", "media.m3u8"),
-        ("init.mp4", "init.mp4"),
-        ("0.m4s", "0.m4s"),
-    ] {
-        std::fs::write(
-            out.join(name),
-            get(&runtime, &lan, &format!("{base}/{path}")),
-        )?;
-    }
+    let path = format!("/cast/{token}/stream.mp4");
+    let port = lan.rsplit(':').next().unwrap_or_default().to_owned();
+    // A HEAD, so a stream that would not answer says so here.
+    let head = runtime.block_on(async {
+        xtremio_core::env::http_client_builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .head(format!("http://{lan}{path}"))
+            .send()
+            .await
+    })?;
+    assert_eq!(head.status(), 200);
+    std::fs::write(out.join("path"), &path)?;
+    std::fs::write(out.join("port"), &port)?;
+    std::fs::write(out.join("url"), format!("http://{lan}{path}"))?;
     eprintln!(
-        "serving http://{lan}{base}/index.m3u8 until {}",
+        "serving http://{lan}{path} ({duration_ms} ms) until {} exists",
         out.join("stop").display()
     );
     while !out.join("stop").exists() {

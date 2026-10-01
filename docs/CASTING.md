@@ -6,8 +6,8 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
 already serves, with no processing anywhere -- or, for an H.264 + AAC film
-in a Matroska file, **repackaged**: the same samples as fragmented-MP4 HLS,
-made on demand ([Renditions](#renditions-a-matroska-film-repackaged)). It
+in a Matroska file, **repackaged**: the same samples as one fragmented MP4,
+made as the receiver reads it ([Renditions](#renditions-a-matroska-film-repackaged)). It
 turns the player screen into a remote while the television plays. Nothing
 is decoded or encoded for a receiver yet, so the honest part of this is
 still the refusal. The button is never built on Android TV: a TV is a
@@ -73,22 +73,19 @@ make one (`media_renditions_available`). The player then publishes a
 **rendition** (`media_publish_rendition`, stream-server's
 `ServerHandle::publish_rendition`) with this player's duration, position and
 audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
-receiver `<lan base>/cast/<token>/hls/index.m3u8` as
-`application/x-mpegurl`, told the segments are fragmented MP4
-(`CastMedia.fmp4Hls`) and how long the film is. That URL is a **master
-playlist** naming the one muxed variant's `CODECS` and `RESOLUTION`: the
-Shaka Player the Cast receiver loads for HLS (4.15) fails the first append
-of a muxed stream handed to it as a bare media playlist -- measured on
-zond's TV as a receiver that fetched segment 0 and gave up, and
-reproduced on a desktop by `tool/rendition-shaka`, which plays a served
-rendition in headless Chrome with that Shaka and the receiver's
-configuration (`cargo test --test rendition serve -- --ignored` serves
-one). Same token rules, same listener, same watchdog: the init segment
-and every segment `GET` count as bodies.
+receiver `<lan base>/cast/<token>/stream.mp4` as `video/mp4`, with the
+film's length: **one progressive fragmented MP4**, starting at this
+player's position, which the receiver plays as a file (`<video src>`). Not
+HLS: zond's Chromecast with Google TV plays no HLS above 720p through its
+Media Source path -- anyone's, measured -- and plays the same 1080p film as
+a fragmented MP4 file (stream-server `docs/design/renditions.md`, F2). The
+stream has no length and offers no ranges; its timestamps are the film's,
+so the receiver reports the film's position from wherever it starts. Same
+token rules, same listener, same watchdog: the stream counts as a body.
 
-The server writes the playlist, cuts six-second segments at the film's own
-keyframes, muxes them and keeps a few in memory -- nothing on disk (its
-`docs/design/renditions.md`). What it asks of the app is the **producer**,
+The server cuts six-second segments at the film's own keyframes, muxes
+them, keeps a few in memory and sends them one after another as the
+receiver reads -- nothing on disk (its `docs/design/renditions.md`). What it asks of the app is the **producer**,
 `rust/src/rendition.rs`, installed at every server start: per run a thread
 of its own, reading the media id's `MediaReader` through **libavformat from
 the libmpv media_kit ships** (`rust/src/libav.rs` -- the vendored libmpv
@@ -97,9 +94,17 @@ DTS tracks and opens no AVI, measured on zond's phone). It picks the film's
 video and the audio track playing here, seeks to the run's segment, and
 hands the server every packet's presentation time on mpv's clock (less the
 container's start), the H.264 parameter sets and samples in Annex-B, and the
-AAC frames as they are. A seek on the television is a new run; Stop and
-every other way out unpublish, which ends the run wherever it is blocked.
-There is no timer: a stalled torrent is waited for.
+AAC frames as they are. **A seek is a new stream** (`stream.mp4?from=<ms>`,
+a new run there): the receiver cannot seek in a file it reads forward.
+Mapping the receiver's and this screen's seeks to that is not built yet.
+Stop and every other way out unpublish, which ends the run wherever it is
+blocked. There is no timer: a stalled torrent is waited for.
+
+To try a rendition without the app: `cargo test --test rendition serve --
+--ignored --nocapture` with `XTREMIO_RENDITION_FILE` and
+`XTREMIO_RENDITION_OUT` serves one on loopback (a television reaches it
+through `adb reverse`), and `tool/rendition-video` plays it in headless
+Chrome as a `<video src>`, the way the receiver plays a file.
 
 **Bound to one FFmpeg**: `rust/src/libav.rs` reads FFmpeg's structs by
 layout, asserted at compile time for 64- and 32-bit targets against what
@@ -216,5 +221,5 @@ answers `/proxy` and `/settings` with 404, counts requests, and is gone
 after a stop and a shutdown), the Android manifest merge, every decision
 the app makes around a fake sender, and a rendition fetched over that
 listener and decoded by `ffmpeg` on a desktop (`rust/tests/rendition.rs`).
-Whether the default receiver plays the muxed fMP4 HLS is the device proof
-still owed.
+Whether the default receiver plays the rendition stream is the device
+proof still owed.

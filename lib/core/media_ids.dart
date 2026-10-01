@@ -99,7 +99,7 @@ class MediaResolution {
   final bool sniffed;
 }
 
-/// What a rendition is to be: stream-server's `RenditionSpec`, the HLS
+/// What a rendition is to be: stream-server's `RenditionSpec`, the
 /// stream the server makes from a film for a receiver that cannot take it
 /// as it is (stream-server `docs/design/renditions.md`).
 ///
@@ -195,7 +195,7 @@ abstract interface class MediaIds {
   bool get renditionsAvailable;
 
   /// Publishes a rendition of [id] for a cast and answers the token its
-  /// playlist is under (`<lan base>/cast/<token>/hls/index.m3u8`). **Never
+  /// stream is under (`<lan base>/cast/<token>/stream.mp4`). **Never
   /// log it.** Throws as [publish] does.
   Future<String> publishRendition(String id, RenditionSpec spec);
 

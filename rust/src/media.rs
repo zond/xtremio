@@ -233,8 +233,8 @@ pub fn publish_in(app: &AppState, id: &str) -> anyhow::Result<String> {
 }
 
 /// **Publishes a rendition of `id` for a cast** and answers the token the
-/// receiver's playlist URL is built on (`<lan
-/// base>/cast/<token>/hls/index.m3u8`), with the play [`set_play_in`]
+/// receiver's stream URL is built on (`<lan
+/// base>/cast/<token>/stream.mp4`), with the play [`set_play_in`]
 /// recorded for the id. `spec` is a `stream_server::RenditionSpec` as JSON
 /// (camelCase). The producer making it is [`crate::rendition::Repackager`],
 /// installed at every server start. Refused as [`publish_in`] is, and for a

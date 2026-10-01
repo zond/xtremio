@@ -409,10 +409,6 @@ class GoogleCastClient implements CastClient {
       title: media.title,
       subtitle: media.subtitle,
     );
-    // A rendition's segments are fragmented MP4, which the default receiver
-    // has to be told or it waits for MPEG-TS that never comes.
-    final hlsSegments = media.fmp4Hls ? CastHlsSegmentFormat.fmp4 : null;
-    final hlsVideoSegments = media.fmp4Hls ? HlsVideoSegmentFormat.fmp4 : null;
     // The two differ only in how the platform channel decodes them; the
     // fields are the base class's either way.
     final information = Platform.isAndroid
@@ -423,8 +419,6 @@ class GoogleCastClient implements CastClient {
             streamType: CastMediaStreamType.buffered,
             metadata: metadata,
             duration: media.duration,
-            hlsSegmentFormat: hlsSegments,
-            hlsVideoSegmentFormat: hlsVideoSegments,
           )
         : GoogleCastMediaInformationIOS(
             contentId: url,
@@ -433,8 +427,6 @@ class GoogleCastClient implements CastClient {
             streamType: CastMediaStreamType.buffered,
             metadata: metadata,
             duration: media.duration,
-            hlsSegmentFormat: hlsSegments,
-            hlsVideoSegmentFormat: hlsVideoSegments,
           );
     await GoogleCastRemoteMediaClient.instance.loadMedia(
       information,

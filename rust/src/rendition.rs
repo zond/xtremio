@@ -1,7 +1,7 @@
 //! **The rendition producer: repackaging, nothing decoded** (stream-server
 //! `docs/design/renditions.md`, step F2).
 //!
-//! The server owns a rendition's routes, playlist, cut rule, fMP4 muxer and
+//! The server owns a rendition's route, its stream, cut rule, fMP4 muxer and
 //! ring; what it asks of the embedder is a [`Producer`]: given a reader over
 //! the media id, a plan and a time, hand encoded samples to a
 //! [`SampleSink`]. This is that producer for the one plan F2 builds,
@@ -25,7 +25,7 @@
 //! - **Timestamps**: a packet's presentation time, rescaled from its
 //!   stream's time base to microseconds, **less the container's start**
 //!   (`AVFormatContext.start_time`), so the film begins at zero as mpv
-//!   shows it and as the playlist is written. A packet with no
+//!   shows it and as the stream's segments are counted. A packet with no
 //!   presentation time takes its decode time, and failing that the last
 //!   one's plus its duration (laced Matroska audio). The server derives
 //!   decode times itself (`mux.rs`), so only presentation times cross.

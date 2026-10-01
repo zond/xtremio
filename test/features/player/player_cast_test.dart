@@ -240,12 +240,11 @@ void main() {
           'audioTrack': 1,
         });
         expect(harness.mediaIds.published, ['m1']);
-        // The receiver is handed the token's playlist, told it is HLS of
-        // fragmented MP4 and how long the film is.
+        // The receiver is handed the token's stream -- one MP4, starting
+        // where this player is -- and how long the film is.
         final (media, start) = cast.loads.single;
-        expect(media.url, lanBase.resolve('cast/t1/hls/index.m3u8'));
-        expect(media.contentType, 'application/x-mpegurl');
-        expect(media.fmp4Hls, isTrue);
+        expect(media.url, lanBase.resolve('cast/t1/stream.mp4'));
+        expect(media.contentType, 'video/mp4');
         expect(media.duration, const Duration(minutes: 90));
         expect(start, const Duration(minutes: 12));
         expect(find.byType(CastRemotePanel), findsOneWidget);
