@@ -1,0 +1,9 @@
+{
+  "name": "rendition-shaka",
+  "private": true,
+  "description": "Plays a served rendition in headless Chrome with the Shaka Player the Cast receiver framework loads (see drive.mjs).",
+  "type": "module",
+  "dependencies": {
+    "puppeteer-core": "^24"
+  }
+}

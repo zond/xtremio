@@ -75,9 +75,16 @@ make one (`media_renditions_available`). The player then publishes a
 audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
 receiver `<lan base>/cast/<token>/hls/index.m3u8` as
 `application/x-mpegurl`, told the segments are fragmented MP4
-(`CastMedia.fmp4Hls`) and how long the film is. Same token rules, same
-listener, same watchdog: the init segment and every segment `GET` count as
-bodies.
+(`CastMedia.fmp4Hls`) and how long the film is. That URL is a **master
+playlist** naming the one muxed variant's `CODECS` and `RESOLUTION`: the
+Shaka Player the Cast receiver loads for HLS (4.15) fails the first append
+of a muxed stream handed to it as a bare media playlist -- measured on
+zond's TV as a receiver that fetched segment 0 and gave up, and
+reproduced on a desktop by `tool/rendition-shaka`, which plays a served
+rendition in headless Chrome with that Shaka and the receiver's
+configuration (`cargo test --test rendition serve -- --ignored` serves
+one). Same token rules, same listener, same watchdog: the init segment
+and every segment `GET` count as bodies.
 
 The server writes the playlist, cuts six-second segments at the film's own
 keyframes, muxes them and keeps a few in memory -- nothing on disk (its

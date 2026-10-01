@@ -249,8 +249,15 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
     let token = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
     let base = format!("/cast/{token}/hls");
 
-    // The playlist: ceil(d / T) segments.
-    let playlist = String::from_utf8(get(&runtime, &lan, &format!("{base}/index.m3u8")))?;
+    // The master playlist names the one variant's codecs -- the film's
+    // H.264 profile and level and AAC-LC, read off what the producer
+    // reported -- and the media playlist, which has ceil(d / T) segments.
+    let master = String::from_utf8(get(&runtime, &lan, &format!("{base}/index.m3u8")))?;
+    assert!(
+        master.contains("CODECS=\"avc1.64000D,mp4a.40.2\",RESOLUTION=320x240\nmedia.m3u8\n"),
+        "{master}"
+    );
+    let playlist = String::from_utf8(get(&runtime, &lan, &format!("{base}/media.m3u8")))?;
     let count = DURATION_MS.div_ceil(SEGMENT_MS);
     assert_eq!(playlist.matches(".m4s").count() as u64, count, "{playlist}");
 
@@ -400,5 +407,71 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_hls_a_receiver_fetches() -> 
     // SAFETY: the handle, destroyed once.
     unsafe { (mpv.terminate_destroy)(ctx) };
     xtremio_core::api::server::server_stop()?;
+    Ok(())
+}
+
+/// **Not a test: a rendition served for a browser to play**, for chasing
+/// what a receiver makes of one (`docs/CASTING.md`). Publishes a rendition
+/// of `XTREMIO_RENDITION_FILE` (an H.264 + AAC film), writes its URL and
+/// the playlist, init segment and first segment the receiver would fetch
+/// into `XTREMIO_RENDITION_OUT`, and serves it until a file named `stop`
+/// appears there:
+///
+/// `XTREMIO_RENDITION_FILE=film.mkv XTREMIO_RENDITION_OUT=/tmp/r cargo
+/// test --test rendition serve -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
+    let file = std::path::PathBuf::from(std::env::var("XTREMIO_RENDITION_FILE")?);
+    let out = std::path::PathBuf::from(std::env::var("XTREMIO_RENDITION_OUT")?);
+    std::fs::create_dir_all(&out)?;
+    let name = libmpv_name();
+    let mpv = load_mpv(&name).expect("a libmpv");
+    let runtime = tokio::runtime::Runtime::new()?;
+    let tmp = tempfile::tempdir()?;
+    xtremio_core::server::start(StartConfig {
+        config_dir: tmp.path().join("server"),
+        cache_dir: tmp.path().join("cache"),
+        offline: true,
+    })?;
+    let lan = xtremio_core::api::server::server_set_lan_media(true)?.expect("an address");
+    let lan = format!("127.0.0.1:{}", lan.parse::<std::net::SocketAddr>()?.port());
+    let ctx = mpv.player();
+    xtremio_core::api::media::mpv_stream_register(ctx as i64, name)?;
+    let libav = xtremio_core::libav::Libav::registered().map_err(anyhow::Error::msg)?;
+    let duration_ms = xtremio_core::libav::Demuxer::open(
+        libav,
+        std::io::Cursor::new(bytes::Bytes::from(std::fs::read(&file)?)),
+    )
+    .map_err(anyhow::Error::msg)?
+    .duration_us()
+    .expect("a duration")
+        / 1000;
+    let id = xtremio_core::api::media::media_register_local_path(file.display().to_string(), None)?;
+    let spec = serde_json::json!({
+        "durationMs": duration_ms, "segmentMs": 6000, "startMs": 0,
+        "video": "copy", "audio": "copy", "audioTrack": 0,
+    });
+    let token = xtremio_core::api::media::media_publish_rendition(id, spec.to_string())?;
+    let base = format!("/cast/{token}/hls");
+    std::fs::write(out.join("url"), format!("http://{lan}{base}/index.m3u8"))?;
+    for (path, name) in [
+        ("index.m3u8", "index.m3u8"),
+        ("media.m3u8", "media.m3u8"),
+        ("init.mp4", "init.mp4"),
+        ("0.m4s", "0.m4s"),
+    ] {
+        std::fs::write(
+            out.join(name),
+            get(&runtime, &lan, &format!("{base}/{path}")),
+        )?;
+    }
+    eprintln!(
+        "serving http://{lan}{base}/index.m3u8 until {}",
+        out.join("stop").display()
+    );
+    while !out.join("stop").exists() {
+        std::thread::sleep(Duration::from_millis(200));
+    }
     Ok(())
 }

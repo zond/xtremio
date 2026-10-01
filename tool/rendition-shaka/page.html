@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<body>
+<video id="v" muted width="640"></video>
+<script>
+// The Shaka Player the Cast receiver framework loads for HLS: CAF's own
+// default (`Zm.Yh` in cast_receiver_framework.js, 4.15.56 on 2026-10-01),
+// from the same host it loads it from, unless the query names another.
+const version = new URLSearchParams(location.search).get('shaka') || '4.15.56';
+const script = document.createElement('script');
+script.src = `https://ajax.googleapis.com/ajax/libs/shaka-player/${version}/shaka-player.compiled.debug.js`;
+window.ready = new Promise((resolve) => (script.onload = resolve));
+document.body.appendChild(script);
+window.result = { events: [] };
+// The player as CAF configures it for a load with no playback config.
+async function run(url, start) {
+  await window.ready;
+  shaka.polyfill.installAll();
+  const video = document.getElementById('v');
+  const player = new shaka.Player();
+  await player.attach(video);
+  player.configure({
+    abr: { defaultBandwidthEstimate: 2e6 },
+    streaming: { rebufferingGoal: 10, stallThreshold: 5 },
+  });
+  player.addEventListener('error', (e) => window.result.events.push('error ' + JSON.stringify(e.detail)));
+  try {
+    await player.load(url, start);
+    window.result.events.push('loaded');
+  } catch (e) {
+    window.result.events.push('load failed ' + JSON.stringify(e));
+    return;
+  }
+  window.result.tracks = player.getVariantTracks().map((t) => [t.mimeType, t.codecs, t.width, t.height]);
+  await video.play().catch((e) => window.result.events.push('play ' + e));
+}
+</script>
+</body>
+</html>
