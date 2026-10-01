@@ -61,6 +61,27 @@ pub fn media_publish(id: String) -> anyhow::Result<String> {
     guarded(|| crate::media::publish_in(&crate::state::state(), &id))
 }
 
+/// Publishes a rendition of `id` for a cast -- an HLS stream the server
+/// makes from the film as the receiver asks for it -- and answers the token
+/// its playlist is under (`<lan base>/cast/<token>/hls/index.m3u8`); the
+/// play `media_set_play` recorded for the id goes with it. `spec` is the
+/// server's `RenditionSpec` as JSON (`durationMs`, `segmentMs`, `startMs`,
+/// `video`, `audio`, `audioTrack`). **A URL into this device while
+/// published: never log it.** Errors as `media_publish` does, and for a
+/// spec that is not one.
+pub fn media_publish_rendition(id: String, spec: String) -> anyhow::Result<String> {
+    guarded(|| crate::media::publish_rendition_in(&crate::state::state(), &id, &spec))
+}
+
+/// Whether this device can make a rendition: a player has loaded libmpv,
+/// and the FFmpeg in it is the one this build is bound to. False until the
+/// first player has registered (`mpv_stream_register`), and on a desktop
+/// whose system FFmpeg is another major. Cheap after the first ask.
+#[frb(sync)]
+pub fn media_renditions_available() -> anyhow::Result<bool> {
+    guarded_ok(crate::rendition::available)
+}
+
 /// Ends the publication `token`: nothing more is served under it, and a
 /// body in flight is cut. Whether it was published.
 pub fn media_unpublish(token: String) -> anyhow::Result<bool> {

@@ -18,7 +18,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use enginefs::backend::priorities::BufferProfile;
-use stream_server::{CastToken, LocalFile, MediaId, MediaReader, MediaSpec, PlayToken, Refusal};
+use stream_server::{
+    CastToken, LocalFile, MediaId, MediaReader, MediaSpec, PlayToken, Refusal, RenditionSpec,
+};
 use url::Url;
 
 use crate::state::AppState;
@@ -230,6 +232,26 @@ pub fn publish_in(app: &AppState, id: &str) -> anyhow::Result<String> {
     })
 }
 
+/// **Publishes a rendition of `id` for a cast** and answers the token the
+/// receiver's playlist URL is built on (`<lan
+/// base>/cast/<token>/hls/index.m3u8`), with the play [`set_play_in`]
+/// recorded for the id. `spec` is a `stream_server::RenditionSpec` as JSON
+/// (camelCase). The producer making it is [`crate::rendition::Repackager`],
+/// installed at every server start. Refused as [`publish_in`] is, and for a
+/// spec that is not one. Never log the token.
+pub fn publish_rendition_in(app: &AppState, id: &str, spec: &str) -> anyhow::Result<String> {
+    let spec: RenditionSpec =
+        serde_json::from_str(spec).map_err(|error| anyhow::anyhow!("not a rendition: {error}"))?;
+    let play = app.media.plays().by_id.get(id).cloned();
+    let id = MediaId::from(id.to_owned());
+    crate::server::with_handle_in(app, |handle| {
+        Ok(handle
+            .publish_rendition(&id, spec, play)?
+            .as_str()
+            .to_owned())
+    })
+}
+
 /// Ends a publication: nothing more is served under `token`, and a body
 /// being served under it is cut. Whether it was published. `false` when
 /// the server is not running, which stopped the listener and every token
@@ -392,6 +414,8 @@ mod tests {
         assert!(open_for_player_in(&app, "abc").is_err());
         assert!(resolve_in(&app, "abc").is_err());
         assert!(publish_in(&app, "abc").is_err());
+        let spec = r#"{"durationMs":1,"segmentMs":1,"startMs":0,"video":"copy","audio":"copy","audioTrack":0}"#;
+        assert!(publish_rendition_in(&app, "abc", spec).is_err());
         assert!(!unpublish_in(&app, "a-token"));
     }
 

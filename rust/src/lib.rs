@@ -21,6 +21,8 @@
 //! - `diagnostics`: what this binary was built from (the pinned revisions)
 //! - `libav`: libavformat, from the libmpv media_kit loaded, bound to one
 //!   FFmpeg ABI
+//! - `rendition`: the producer behind a cast the receiver cannot take as
+//!   it is: the film's samples, repackaged for the server's HLS
 //!
 //! The crate also owns the process's allocator, below.
 
@@ -63,6 +65,7 @@ pub mod media;
 pub mod model;
 pub mod mpv_stream;
 pub mod prefs;
+pub mod rendition;
 pub mod serde_fault;
 pub mod server;
 pub mod state;

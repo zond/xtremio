@@ -330,6 +330,11 @@ fn start_with(
         }
         Err(error) => tracing::warn!(%error, "could not read the diagnostics setting"),
     }
+    // Renditions (a cast the receiver cannot take as it is) are produced
+    // by this crate, from the FFmpeg in the player's libmpv. Installed
+    // whatever the platform: a run asks for the library when it starts,
+    // and refuses with a sentence where there is none.
+    handle.install_producer(crate::rendition::Repackager::registered());
     tracing::info!(%url, "embedded stream-server started");
     *app.server.write() = Some(Arc::new(handle));
     Ok(url)

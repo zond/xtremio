@@ -51,6 +51,27 @@ String mediaRegisterLocalFd({required PlatformInt64 fd, String? name}) =>
 Future<String> mediaPublish({required String id}) =>
     RustLib.instance.api.crateApiMediaMediaPublish(id: id);
 
+/// Publishes a rendition of `id` for a cast -- an HLS stream the server
+/// makes from the film as the receiver asks for it -- and answers the token
+/// its playlist is under (`<lan base>/cast/<token>/hls/index.m3u8`); the
+/// play `media_set_play` recorded for the id goes with it. `spec` is the
+/// server's `RenditionSpec` as JSON (`durationMs`, `segmentMs`, `startMs`,
+/// `video`, `audio`, `audioTrack`). **A URL into this device while
+/// published: never log it.** Errors as `media_publish` does, and for a
+/// spec that is not one.
+Future<String> mediaPublishRendition({
+  required String id,
+  required String spec,
+}) =>
+    RustLib.instance.api.crateApiMediaMediaPublishRendition(id: id, spec: spec);
+
+/// Whether this device can make a rendition: a player has loaded libmpv,
+/// and the FFmpeg in it is the one this build is bound to. False until the
+/// first player has registered (`mpv_stream_register`), and on a desktop
+/// whose system FFmpeg is another major. Cheap after the first ask.
+bool mediaRenditionsAvailable() =>
+    RustLib.instance.api.crateApiMediaMediaRenditionsAvailable();
+
 /// Ends the publication `token`: nothing more is served under it, and a
 /// body in flight is cut. Whether it was published.
 Future<bool> mediaUnpublish({required String token}) =>
