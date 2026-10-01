@@ -119,6 +119,34 @@ class _SeekBarState extends State<SeekBar> {
   double _fractionAt(Offset local, double width) =>
       (local.dx / width).clamp(0.0, 1.0);
 
+  /// Moves by [step], the signed distance a D-pad press or a screen
+  /// reader's increase/decrease gesture asks for -- the scan path
+  /// ([SeekBar.onStep]) when the owner has one, else a named position
+  /// ([SeekBar.onSeek]) at the old position plus the step. The same
+  /// choice [_onKeyEvent] made for the D-pad.
+  void _step(Duration step) {
+    final onStep = widget.onStep;
+    if (onStep != null) {
+      onStep(step);
+    } else {
+      widget.onSeek(widget.position + step);
+    }
+  }
+
+  /// [value], clamped to the playable range -- what a label reads for a
+  /// step that would otherwise claim a moment before the start or past
+  /// the end.
+  Duration _clamp(Duration value) {
+    if (value < Duration.zero) return Duration.zero;
+    if (value > widget.duration) return widget.duration;
+    return value;
+  }
+
+  /// What a screen reader reads for the position [value] is at: "15:48 of
+  /// 1:48:40".
+  String _valueLabel(Duration value) =>
+      '${formatTime(_clamp(value))} of ${formatTime(widget.duration)}';
+
   /// Left and right seek by [SeekBar.seekStep] while the bar holds focus,
   /// on the press and on every repeat of a held key -- further with each
   /// repeat, which is [SeekHold]'s business rather than this widget's.
@@ -132,12 +160,7 @@ class _SeekBarState extends State<SeekBar> {
     }
     final held = _hold.stepFor(event, widget.seekStep);
     final step = key == LogicalKeyboardKey.arrowLeft ? -held : held;
-    final onStep = widget.onStep;
-    if (onStep != null) {
-      onStep(step);
-    } else {
-      widget.onSeek(widget.position + step);
-    }
+    _step(step);
     return KeyEventResult.handled;
   }
 
@@ -149,68 +172,97 @@ class _SeekBarState extends State<SeekBar> {
         final width = constraints.maxWidth;
         final drag = _drag;
         final progress = drag ?? _fraction(widget.position);
-        return FocusMarked(
-          treatment: FocusTreatment.readout,
-          child: Focus(
-            focusNode: widget.focusNode,
-            canRequestFocus: widget.focusable,
-            skipTraversal: !widget.focusable,
-            onKeyEvent: _onKeyEvent,
-            onFocusChange: (focused) => setState(() => _focused = focused),
-            child: MouseRegion(
-              cursor: _enabled
-                  ? SystemMouseCursors.click
-                  : SystemMouseCursors.basic,
-              onEnter: (_) => setState(() => _hover = true),
-              onExit: (_) => setState(() => _hover = false),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: _enabled
-                    ? (details) => widget.onSeek(
-                        _at(_fractionAt(details.localPosition, width)),
-                      )
-                    : null,
-                onHorizontalDragStart: _enabled
-                    ? (details) {
-                        widget.onScrubStart?.call();
-                        setState(
-                          () =>
-                              _drag = _fractionAt(details.localPosition, width),
-                        );
-                      }
-                    : null,
-                onHorizontalDragUpdate: _enabled
-                    ? (details) => setState(
-                        () => _drag = _fractionAt(details.localPosition, width),
-                      )
-                    : null,
-                onHorizontalDragEnd: _enabled ? (_) => _endDrag() : null,
-                onHorizontalDragCancel: _enabled ? _endDrag : null,
-                child: SizedBox(
-                  height: SeekBar.height,
-                  width: double.infinity,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _SeekBarPainter(
-                            progress: progress,
-                            buffered: _fraction(widget.buffered),
-                            active: drag != null || _hover || _focused,
-                            color: scheme.primary,
-                            bufferColor: Colors.white.withValues(alpha: 0.45),
-                            trackColor: Colors.white.withValues(alpha: 0.25),
+        // A slider to a screen reader: a value it reads ("15:48 of
+        // 1:48:40"), and increase/decrease in place of the raw
+        // tap/scroll semantics [GestureDetector] would otherwise expose
+        // (a TalkBack user could feel the bar but not move it). The step
+        // is [_step], the same path the ±10 s buttons seek by, so a
+        // screen reader moves the position exactly as far as they do.
+        // [ExcludeSemantics] drops that raw gesture semantics without
+        // touching the gestures themselves -- nothing here changes what a
+        // tap or a drag does.
+        return Semantics(
+          slider: true,
+          label: 'Seek',
+          value: _valueLabel(widget.position),
+          increasedValue: _valueLabel(widget.position + widget.seekStep),
+          decreasedValue: _valueLabel(widget.position - widget.seekStep),
+          onIncrease: _enabled ? () => _step(widget.seekStep) : null,
+          onDecrease: _enabled ? () => _step(-widget.seekStep) : null,
+          child: ExcludeSemantics(
+            child: FocusMarked(
+              treatment: FocusTreatment.readout,
+              child: Focus(
+                focusNode: widget.focusNode,
+                canRequestFocus: widget.focusable,
+                skipTraversal: !widget.focusable,
+                onKeyEvent: _onKeyEvent,
+                onFocusChange: (focused) => setState(() => _focused = focused),
+                child: MouseRegion(
+                  cursor: _enabled
+                      ? SystemMouseCursors.click
+                      : SystemMouseCursors.basic,
+                  onEnter: (_) => setState(() => _hover = true),
+                  onExit: (_) => setState(() => _hover = false),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: _enabled
+                        ? (details) => widget.onSeek(
+                            _at(_fractionAt(details.localPosition, width)),
+                          )
+                        : null,
+                    onHorizontalDragStart: _enabled
+                        ? (details) {
+                            widget.onScrubStart?.call();
+                            setState(
+                              () => _drag = _fractionAt(
+                                details.localPosition,
+                                width,
+                              ),
+                            );
+                          }
+                        : null,
+                    onHorizontalDragUpdate: _enabled
+                        ? (details) => setState(
+                            () => _drag = _fractionAt(
+                              details.localPosition,
+                              width,
+                            ),
+                          )
+                        : null,
+                    onHorizontalDragEnd: _enabled ? (_) => _endDrag() : null,
+                    onHorizontalDragCancel: _enabled ? _endDrag : null,
+                    child: SizedBox(
+                      height: SeekBar.height,
+                      width: double.infinity,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _SeekBarPainter(
+                                progress: progress,
+                                buffered: _fraction(widget.buffered),
+                                active: drag != null || _hover || _focused,
+                                color: scheme.primary,
+                                bufferColor: Colors.white.withValues(
+                                  alpha: 0.45,
+                                ),
+                                trackColor: Colors.white.withValues(
+                                  alpha: 0.25,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          if (drag != null)
+                            Positioned(
+                              left: (drag * width - 32).clamp(0.0, width - 64),
+                              bottom: SeekBar.height + 4,
+                              child: _TimeBubble(time: _at(drag)),
+                            ),
+                        ],
                       ),
-                      if (drag != null)
-                        Positioned(
-                          left: (drag * width - 32).clamp(0.0, width - 64),
-                          bottom: SeekBar.height + 4,
-                          child: _TimeBubble(time: _at(drag)),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
               ),
