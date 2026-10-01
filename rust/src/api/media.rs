@@ -13,7 +13,9 @@ use flutter_rust_bridge::frb;
 use crate::guard::{guarded, guarded_ok};
 
 /// Registers `streaming_url` -- a URL stremio-core built on the embedded
-/// server (a torrent's `/{infoHash}/{fileIdx}`) -- and answers the id mpv
+/// server (a torrent's `/{infoHash}/{fileIdx}`, a `/proxy` link, an
+/// archive member's `/{fmt}/create` or `/{fmt}/stream`) -- and answers the
+/// id mpv
 /// is handed as `xtremio://<id>`. No I/O. Errors when the server is not
 /// running.
 #[frb(sync)]
@@ -21,8 +23,52 @@ pub fn media_register(streaming_url: String) -> anyhow::Result<String> {
     guarded(|| crate::media::register_in(&crate::state::state(), &streaming_url))
 }
 
-/// What `id` is, as JSON: `{name, contentType, len, member, inProcess,
-/// proxyUrl}` once resolved, or `{refused, message}` when the server will
+/// Registers the linked Google Drive file `file_id` (what an
+/// `xtremio-drive:<fileId>` stream names) and answers its id. The grant is
+/// the one the app handed Rust (`server_drive_grant`), read when the
+/// server resolves; a finished download of the file needs none. No I/O.
+/// Errors when the server is not running.
+#[frb(sync)]
+pub fn media_register_drive(file_id: String, name: Option<String>) -> anyhow::Result<String> {
+    guarded(|| crate::media::register_drive_in(&crate::state::state(), &file_id, name))
+}
+
+/// Registers a file on this device by its `path` and answers its id;
+/// `name` is what to call it (the path's file name when null). No I/O.
+/// Errors when the server is not running.
+#[frb(sync)]
+pub fn media_register_local_path(path: String, name: Option<String>) -> anyhow::Result<String> {
+    guarded(|| crate::media::register_local_path_in(&crate::state::state(), &path, name))
+}
+
+/// Registers a file on this device by a descriptor the app has detached
+/// (Android's `ParcelFileDescriptor.detachFd()`) and answers its id. **The
+/// descriptor is Rust's from this call on**, answered or not: an error
+/// closes it. `name` is what to call it -- a descriptor has no name, and
+/// its extension is where the content type comes from. Errors when the
+/// server is not running, and on a platform with no descriptors.
+#[frb(sync)]
+pub fn media_register_local_fd(fd: i64, name: Option<String>) -> anyhow::Result<String> {
+    guarded(|| crate::media::register_local_fd_in(&crate::state::state(), fd, name))
+}
+
+/// Publishes `id` for a cast and answers the token the receiver's URL ends
+/// in (`<lan base>/cast/<token>`); the play `media_set_play` recorded for
+/// the id goes with it. **A URL into this device while published: never
+/// log it.** Errors while the LAN listener is not running, or for an id
+/// the server does not hold.
+pub fn media_publish(id: String) -> anyhow::Result<String> {
+    guarded(|| crate::media::publish_in(&crate::state::state(), &id))
+}
+
+/// Ends the publication `token`: nothing more is served under it, and a
+/// body in flight is cut. Whether it was published.
+pub fn media_unpublish(token: String) -> anyhow::Result<bool> {
+    guarded(|| Ok(crate::media::unpublish_in(&crate::state::state(), &token)))
+}
+
+/// What `id` is, as JSON: `{name, contentType, len, member, sniffed,
+/// inProcess, proxyUrl}` once resolved, or `{refused, message}` when the server will
 /// not play it -- a refusal is an answer. Waits while the server adds the
 /// torrent and chooses its file (up to the metadata timeout for a
 /// magnet), so it runs on a worker; the reader mpv opens afterwards finds

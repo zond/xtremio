@@ -24,14 +24,17 @@ import java.util.concurrent.Executors
  * (lib/features/local/android_local_media_source.dart).
  *
  * From Dart: `access` ("granted", "partial", "askable" or "unavailable"),
- * `requestAccess` (the same, after the system dialog), and `scan` (one map
- * per video: `uri`, `name`, `size`, `durationMillis`, `height`, `folder`).
+ * `requestAccess` (the same, after the system dialog), `scan` (one map
+ * per video: `uri`, `name`, `size`, `durationMillis`, `height`, `folder`),
+ * `thumbnail`, and `openFd` (a `content://` document's descriptor, detached,
+ * for the player to hand the embedded server).
  *
  * **The index, not the disk.** MediaStore already knows every video on the
  * device's storage and on a USB drive plugged into it, so nothing here
  * walks a directory; a `content://` address is what comes back, which the
- * player opens as a file descriptor. **The camera's own folders are left
- * out** -- `DCIM/` and `Pictures/` (screen recordings live there too): a
+ * player opens as a file descriptor (`openFd`) and plays by media id.
+ * **The camera's own folders are left out** -- `DCIM/` and `Pictures/`
+ * (screen recordings live there too): a
  * phone holds hundreds of its own clips, and a list of them is not a
  * library of films.
  *
@@ -77,6 +80,7 @@ class LocalMediaChannel(
                 call.argument<Int>("size") ?: 480,
                 result,
             )
+            "openFd" -> openFd(call.argument<String>("uri"), result)
             else -> result.notImplemented()
         }
     }
@@ -196,6 +200,29 @@ class LocalMediaChannel(
                 null
             }
             main.post { result.success(bytes) }
+        }
+    }
+
+    /**
+     * Opens a `content://` document for reading and answers its descriptor,
+     * **detached**: from here on it is the embedded server's, which reads
+     * it by media id (`media_register_local_fd`) and closes it when the id
+     * goes. Null when it cannot be opened -- gone since the scan, or a
+     * folder grant that was taken back. Not gated on the media permission:
+     * a folder picked through the system's picker carries its own grant.
+     */
+    private fun openFd(uri: String?, result: MethodChannel.Result) {
+        if (uri == null) {
+            result.success(null)
+            return
+        }
+        executor.execute {
+            val fd = try {
+                activity.contentResolver.openFileDescriptor(Uri.parse(uri), "r")?.detachFd()
+            } catch (error: Exception) {
+                null
+            }
+            main.post { result.success(fd) }
         }
     }
 

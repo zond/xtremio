@@ -425,6 +425,19 @@ bool serverLanMediaRunning() =>
 PlatformInt64 serverLanMediaRequestsServed() =>
     RustLib.instance.api.crateApiServerServerLanMediaRequestsServed();
 
+/// How many `/cast` bodies the LAN media listener has begun since it last
+/// started -- per cast session, reset where the requests count is. A body
+/// is a `GET` under a published token that started sending bytes; a
+/// `HEAD`, an unknown token's `404` and a refusal are not.
+///
+/// The cast watchdog's second reading (stream-server `docs/lan-media.md`):
+/// no requests is a receiver that cannot reach this device, requests but
+/// no body one that reached it and has been sent nothing yet, a body one
+/// the network and the server have done their part for. Signed for the
+/// reason the requests count is. One relaxed atomic load.
+PlatformInt64 serverLanMediaBodiesServed() =>
+    RustLib.instance.api.crateApiServerServerLanMediaBodiesServed();
+
 /// The base URL to give a receiver at `peer_ip` (`"http://192.168.1.20:39271/"`),
 /// so a media URL built on it names an interface that receiver can connect
 /// back to -- the one sharing the receiver's subnet, since the first

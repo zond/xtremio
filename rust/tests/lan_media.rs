@@ -17,9 +17,12 @@ use tokio::sync::Mutex;
 /// one test at a time. Tokio's, since it is held across the awaits.
 static SERVER: Mutex<()> = Mutex::const_new(());
 
+use xtremio_core::api::media::{
+    media_publish, media_register_local_path, media_resolve, media_set_play, media_unpublish,
+};
 use xtremio_core::api::server::{
-    server_lan_media_base_url, server_lan_media_requests_served, server_lan_media_running,
-    server_set_lan_media, server_settings, server_stop, ServerConfig,
+    server_lan_media_base_url, server_lan_media_bodies_served, server_lan_media_requests_served,
+    server_lan_media_running, server_set_lan_media, server_settings, server_stop, ServerConfig,
 };
 
 /// The embedded server, started the way the app starts it but **joining no
@@ -84,11 +87,8 @@ async fn lan_media_allowed() -> anyhow::Result<bool> {
 /// Since stream-server's cast publish step (`ServerHandle::publish`,
 /// `/cast/{token}`) the listener has no torrent route at all, so the
 /// torrent paths below are a `404` whether or not the device holds the
-/// torrent -- including the URL the app's cast still builds on the LAN
-/// base, which therefore does not play on a receiver yet.
-// TODO(cast publish step): switch the app's cast to `publish` and assert
-// here that a published token serves a held torrent's bytes, and that the
-// old `/{infoHash}/{fileIdx}` path stays a 404 for it.
+/// torrent; what a cast is served is a published token
+/// ([`a_published_id_is_served_by_its_token_and_nothing_else`]).
 #[tokio::test]
 async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::Result<()> {
     let _serial = SERVER.lock().await;
@@ -157,6 +157,92 @@ async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::R
     }
 
     tokio::task::spawn_blocking(|| server_set_lan_media(false)).await??;
+    tokio::task::spawn_blocking(server_stop).await??;
+    Ok(())
+}
+
+/// **A cast is a published id, served under its token and nothing else**
+/// (stream-server `docs/lan-media.md`): the receiver's `GET` of
+/// `/cast/<token>` is the file's bytes, and counts as a body; a `HEAD` is a
+/// request and not a body; an unpublished token is a `404`, as is the id
+/// itself on any path. A file on this device stands in for any id: the
+/// route is one for every kind.
+#[tokio::test]
+async fn a_published_id_is_served_by_its_token_and_nothing_else() -> anyhow::Result<()> {
+    let _serial = SERVER.lock().await;
+    let tmp = tempfile::tempdir()?;
+    tokio::task::spawn_blocking({
+        let cfg = config(tmp.path());
+        move || server_start(cfg)
+    })
+    .await??;
+    let film: Vec<u8> = (0..200_000u32).map(|n| (n % 251) as u8).collect();
+    let path = tmp.path().join("A Film.mp4");
+    std::fs::write(&path, &film)?;
+    let id = media_register_local_path(path.display().to_string(), None)?;
+    let resolved: serde_json::Value = serde_json::from_str(
+        &tokio::task::spawn_blocking({
+            let id = id.clone();
+            move || media_resolve(id)
+        })
+        .await??,
+    )?;
+    assert_eq!(resolved["len"], film.len() as u64, "{resolved}");
+    assert_eq!(resolved["inProcess"], true);
+
+    // No listener, nothing published.
+    assert!(media_publish(id.clone()).is_err());
+
+    let addr = tokio::task::spawn_blocking(|| server_set_lan_media(true))
+        .await??
+        .expect("an address after a start");
+    let socket = loopback(&addr)?;
+    media_set_play(id.clone(), "viewer.1".into(), "normal".into())?;
+    let token = tokio::task::spawn_blocking({
+        let id = id.clone();
+        move || media_publish(id)
+    })
+    .await??;
+    assert_ne!(token, id, "a token is never the id");
+
+    let client = xtremio_core::env::http_client_builder()
+        .no_proxy()
+        .build()?;
+    let head = client
+        .head(format!("http://{socket}/cast/{token}"))
+        .send()
+        .await?;
+    assert_eq!(head.status(), StatusCode::OK);
+    assert_eq!(server_lan_media_bodies_served()?, 0, "a HEAD is no body");
+    let body = client
+        .get(format!("http://{socket}/cast/{token}"))
+        .send()
+        .await?;
+    assert_eq!(body.status(), StatusCode::OK);
+    assert_eq!(body.bytes().await?.as_ref(), film.as_slice());
+    assert_eq!(server_lan_media_bodies_served()?, 1);
+    assert!(server_lan_media_requests_served()? >= 2);
+    assert_eq!(
+        status_of(socket, &format!("/cast/{id}")).await?,
+        StatusCode::NOT_FOUND,
+        "the id names nothing on the LAN"
+    );
+
+    assert!(
+        tokio::task::spawn_blocking({
+            let token = token.clone();
+            move || media_unpublish(token)
+        })
+        .await??
+    );
+    assert_eq!(
+        status_of(socket, &format!("/cast/{token}")).await?,
+        StatusCode::NOT_FOUND
+    );
+    assert!(!tokio::task::spawn_blocking(move || media_unpublish(token)).await??);
+
+    tokio::task::spawn_blocking(|| server_set_lan_media(false)).await??;
+    assert_eq!(server_lan_media_bodies_served()?, 0, "a stop resets it");
     tokio::task::spawn_blocking(server_stop).await??;
     Ok(())
 }

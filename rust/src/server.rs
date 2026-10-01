@@ -55,7 +55,10 @@ pub struct ServerState {
     /// linked -- see [`set_drive_grant`] for where it comes from and what
     /// it is for. In memory only: the secure store on the Dart side is
     /// its home, and this process never writes it anywhere.
-    drive_grant: Mutex<Option<String>>,
+    /// Shared, not owned: a Drive media id's grant supplier
+    /// ([`ServerState::grant_supplier`]) reads it at each resolve, so an
+    /// unlink takes the grant away from every id at once.
+    drive_grant: Arc<Mutex<Option<String>>>,
 }
 
 impl ServerState {
@@ -88,6 +91,19 @@ impl ServerState {
         self.drive_grant
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Where a Drive media id's grant comes from: whatever
+    /// [`set_drive_grant`] holds when the server asks, which is `None` once
+    /// the account is unlinked. A held download resolves without asking.
+    pub(crate) fn grant_supplier(&self) -> stream_server::GrantSupplier {
+        let grant = Arc::clone(&self.drive_grant);
+        Arc::new(move || {
+            grant
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone()
+        })
     }
 }
 
@@ -651,7 +667,7 @@ pub struct DriveOpenOutcome {
 }
 
 impl DriveOpenOutcome {
-    fn refused(reason: DriveOpenFailure) -> Self {
+    pub(crate) fn refused(reason: DriveOpenFailure) -> Self {
         Self {
             ok: false,
             url: None,
@@ -747,6 +763,48 @@ fn outcome_of(
             };
             tracing::warn!(kind, status = ?status, "a linked Drive file could not be opened");
             DriveOpenOutcome::refused(DriveOpenFailure::Unreachable)
+        }
+    }
+}
+
+impl DriveOpenOutcome {
+    /// What resolving a Drive id answered, as one of the four words and a
+    /// URL. `Err` is a server that is not running.
+    ///
+    /// The *kind* of a refusal is logged, never its sentence: a refusal's
+    /// text is written in the server and says nothing secret, but a habit
+    /// of logging what an error said is how the one that does gets filed
+    /// (`AGENTS.md`, "Never log auth material").
+    pub(crate) fn of_resolved(
+        file_id: &str,
+        resolved: anyhow::Result<Result<stream_server::Resolved, stream_server::Refusal>>,
+    ) -> Self {
+        use stream_server::Refusal;
+        let resolved = match resolved {
+            Ok(resolved) => resolved,
+            Err(_) => return Self::refused(DriveOpenFailure::Unavailable),
+        };
+        match resolved {
+            Ok(file) => Self {
+                ok: true,
+                url: Some(crate::media::drive_url(file_id)),
+                name: Some(file.name),
+                content_type: Some(file.content_type),
+                length: Some(file.len),
+                reason: None,
+            },
+            Err(Refusal::PairAgain) => Self::refused(DriveOpenFailure::PairAgain),
+            Err(Refusal::NoPairingService) => Self::refused(DriveOpenFailure::NoPairingService),
+            Err(Refusal::ServerStopped | Refusal::UnknownId) => {
+                Self::refused(DriveOpenFailure::Unavailable)
+            }
+            Err(refusal) => {
+                tracing::warn!(
+                    kind = refusal.kind(),
+                    "a linked Drive file could not be opened"
+                );
+                Self::refused(DriveOpenFailure::Unreachable)
+            }
         }
     }
 }
@@ -1058,6 +1116,17 @@ pub fn lan_media_running() -> bool {
 /// exactly like one that is buffering.
 pub fn lan_media_requests_served() -> u64 {
     with_handle(|handle| Ok(handle.lan_media_requests_served())).unwrap_or(0)
+}
+
+/// How many `/cast` bodies the LAN media listener has begun since it last
+/// started: a `GET` under a published token that started sending bytes,
+/// never a `HEAD`, a `404` or a refusal. Zero when nothing is listening.
+///
+/// Beside [`lan_media_requests_served`] it is the cast watchdog's second
+/// reading: requests but no body is a receiver that reached this device
+/// and has been sent nothing yet (stream-server `docs/lan-media.md`).
+pub fn lan_media_bodies_served() -> u64 {
+    with_handle(|handle| Ok(handle.lan_media_bodies_served())).unwrap_or(0)
 }
 
 /// The base URL to hand a receiver at `peer`, e.g.
@@ -1712,6 +1781,78 @@ mod tests {
             outcome.url.as_deref(),
             Some("http://127.0.0.1:1/drive/stream/a-key")
         );
+        assert_eq!(outcome.name.as_deref(), Some("A Film.mkv"));
+        assert_eq!(outcome.length, Some(4096));
+        assert_eq!(outcome.reason, None);
+    }
+
+    /// **A Drive id's grant is whatever the app holds when the server
+    /// asks**: one handed down after the id was registered is the one it
+    /// gets, and an unlink takes it from every id at once.
+    #[test]
+    fn a_drive_grant_supplier_reads_the_grant_held_now() {
+        let app = AppState::default();
+        let supplier = app.server.grant_supplier();
+        assert_eq!(supplier(), None);
+        set_drive_grant_in(&app, Some("a-grant".into()));
+        assert_eq!(supplier().as_deref(), Some("a-grant"));
+        set_drive_grant_in(&app, None);
+        assert_eq!(supplier(), None);
+    }
+
+    /// **Every answer the server can give becomes the right word**, and
+    /// above all `pairAgain`: that one is terminal, the app's response to
+    /// it is a fresh QR, and it is the one thing nothing above the FFI may
+    /// have to read English to recognise.
+    #[test]
+    fn every_refusal_of_a_drive_id_crosses_as_its_own_word() {
+        use stream_server::Refusal;
+
+        for (refusal, expected) in [
+            (Refusal::PairAgain, DriveOpenFailure::PairAgain),
+            (
+                Refusal::NoPairingService,
+                DriveOpenFailure::NoPairingService,
+            ),
+            (Refusal::ServerStopped, DriveOpenFailure::Unavailable),
+            (Refusal::UnknownId, DriveOpenFailure::Unavailable),
+            (
+                Refusal::DriveUnreadable("503".into()),
+                DriveOpenFailure::Unreachable,
+            ),
+            (
+                Refusal::Unreachable("no route".into()),
+                DriveOpenFailure::Unreachable,
+            ),
+            (Refusal::NoGrant, DriveOpenFailure::Unreachable),
+        ] {
+            let outcome = DriveOpenOutcome::of_resolved("a-file-id", Ok(Err(refusal)));
+            assert!(!outcome.ok);
+            assert_eq!(outcome.reason, Some(expected));
+            assert!(outcome.url.is_none());
+        }
+        let outcome = DriveOpenOutcome::of_resolved(
+            "a-file-id",
+            Err(anyhow::anyhow!("embedded server is not running")),
+        );
+        assert_eq!(outcome.reason, Some(DriveOpenFailure::Unavailable));
+
+        // And a file that opened is the URL the player plays it by, with
+        // the three facts on it.
+        let outcome = DriveOpenOutcome::of_resolved(
+            "a-file-id",
+            Ok(Ok(stream_server::Resolved {
+                name: "A Film.mkv".into(),
+                content_type: "video/x-matroska".into(),
+                len: 4096,
+                member: None,
+                sniffed: true,
+                in_process: true,
+                proxy_url: None,
+            })),
+        );
+        assert!(outcome.ok);
+        assert_eq!(outcome.url.as_deref(), Some("xtremio-drive:a-file-id"));
         assert_eq!(outcome.name.as_deref(), Some("A Film.mkv"));
         assert_eq!(outcome.length, Some(4096));
         assert_eq!(outcome.reason, None);
