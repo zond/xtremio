@@ -480,6 +480,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     const PlaybackTracks(),
   );
   Duration? _lastReported;
+
+  /// The time the core holds as this playback's offset, which is where
+  /// continue-watching resumes: the library's own at the open, then the
+  /// last `Seek` or `TimeChanged` this screen sent. The core moves it back
+  /// only for a `Seek` ([_reportTime]). Null with no stream.
+  Duration? _coreTime;
   bool? _lastPlaying;
   bool _playing = false;
   bool _buffering = false;
@@ -1204,6 +1210,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         : Duration.zero;
     _position.value = start;
     _reportedPosition = null;
+    _coreTime = Duration(milliseconds: progress?.timeOffset ?? 0);
     _cancelOpenRetry();
     _openState = state;
     _openStart = start;
@@ -1293,6 +1300,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// Tells the core where playback has got to, no more often than
   /// [PlayerScreen.timeReportInterval]. Shared by the local engine and the
   /// receiver, so continue-watching is kept the same way either way.
+  ///
+  /// **A position behind the one the core holds is said as a `Seek`.**
+  /// stremio-core takes a `TimeChanged` only when it is later than the
+  /// offset it has (`models/player.rs`: a seek back is the app's to say),
+  /// so a seek back it heard only as positions -- one made before the
+  /// duration was known, which no `Seek` can carry, or the remote's rewind
+  /// key, which reaches mpv without [_seekTo] -- left continue-watching on
+  /// the old timeline.
   void _reportTime(Duration position) {
     if (_opened == null || _duration == Duration.zero) return;
     final last = _lastReported;
@@ -1301,13 +1316,28 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       return;
     }
     _lastReported = position;
+    final core = _coreTime;
+    _coreTime = position;
     _client?.dispatch(
-      CoreActions.playerTimeChanged(
-        time: position.inMilliseconds,
-        duration: _duration.inMilliseconds,
-        device: _device,
-      ),
+      core != null && position < core
+          ? CoreActions.playerSeek(
+              time: position.inMilliseconds,
+              duration: _duration.inMilliseconds,
+              device: _device,
+            )
+          : CoreActions.playerTimeChanged(
+              time: position.inMilliseconds,
+              duration: _duration.inMilliseconds,
+              device: _device,
+            ),
     );
+  }
+
+  /// Tells the core the position now, throttle or not: the last report
+  /// before the screen lets go ([_leave]).
+  void _flushTime() {
+    _lastReported = null;
+    _reportTime(_position.value);
   }
 
   void _onDuration(Duration duration) {
@@ -1895,6 +1925,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _watchSeek(from: from, to: clamped);
     }
     if (_opened != null && _duration > Duration.zero) {
+      _coreTime = clamped;
       _client?.dispatch(
         CoreActions.playerSeek(
           time: clamped.inMilliseconds,

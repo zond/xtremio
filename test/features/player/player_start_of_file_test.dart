@@ -82,7 +82,9 @@ void main() {
     harness.engine.emitPosition(const Duration(milliseconds: -7414));
     await pumpEvents(tester);
 
-    expect(harness.lastPlayerArgs('TimeChanged')?['time'], 0);
+    // Behind what the core holds, so it goes as a `Seek`
+    // (`player_core_progress_test.dart`) -- clamped all the same.
+    expect(harness.lastPlayerArgs('Seek')?['time'], 0);
   });
 
   group('the builders are the last line before the bridge', () {

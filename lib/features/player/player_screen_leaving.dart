@@ -86,6 +86,9 @@ extension _PlayerLeaving on _PlayerScreenState {
   Future<void> _leave([PlayerScreenResult? result]) async {
     if (_leaving) return;
     setState(() => _leaving = true);
+    // Reports are a second apart; the viewer's last second is not lost to
+    // the throttle, and the stop that follows reports nothing ([_detach]).
+    _flushTime();
     // Nothing may act on the player from here on, and this is the line
     // that says so: it comes before the first `await` below, because what
     // it stops is precisely what would otherwise get a turn during one.

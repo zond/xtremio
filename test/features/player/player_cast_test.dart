@@ -1383,7 +1383,9 @@ void main() {
       );
       cast.emitStatus(const CastStatus(state: CastPlayerState.playing));
       await tester.pumpAndSettle();
-      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 0);
+      // Behind what the core holds, so said as a `Seek`, which is the only
+      // way the core moves back (`player_core_progress_test.dart`).
+      expect(harness.lastPlayerArgs('Seek')?['time'], 0);
     });
 
     testWidgets('the receiver keeps continue-watching moving', (tester) async {
