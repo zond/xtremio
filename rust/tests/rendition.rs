@@ -223,6 +223,23 @@ impl Layout {
     }
 }
 
+/// Each track's clock (its `mdhd` timescale), from a file's first bytes.
+fn clocks(head: &[u8]) -> Vec<u32> {
+    let (_, at, size) = *boxes(head)
+        .iter()
+        .find(|(kind, ..)| kind == b"moov")
+        .expect("a moov in the first bytes");
+    let moov = &head[at..at + size];
+    moov.windows(4)
+        .enumerate()
+        .filter(|(_, window)| *window == b"mdhd")
+        .map(|(at, _)| {
+            let clock = at + 8 + if moov[at + 4] == 1 { 16 } else { 8 };
+            u32::from_be_bytes(moov[clock..clock + 4].try_into().unwrap())
+        })
+        .collect()
+}
+
 /// The slot sizes a file's `sidx` gives, from its first bytes.
 fn sidx_sizes(head: &[u8]) -> Vec<u32> {
     let (_, sidx, _) = *boxes(head)
@@ -578,6 +595,18 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
         // index (no cues, a transport stream) they are estimated: equal, in
         // proportion to time, all but the last.
         let (_, _, head) = get(&runtime, &url, Some((0, 64 * 1024 - 1)));
+        // **Every track on the video's clock**: FFmpeg before 6.0 (the
+        // Chromecast with Google TV's) places the sound by the video's
+        // `sidx` times unscaled; on 48 kHz a seek to 85 s read on from 45.
+        assert_eq!(clocks(&head), [90_000, 90_000], "{file}");
+        // Estimated, the sound has a `sidx` of its own, labelled early, so
+        // its slot is never one before the picture's; mirrored, one.
+        let indexes = boxes(&head)
+            .iter()
+            .filter(|(kind, ..)| kind == b"sidx")
+            .count();
+        let mirrored = container == Container::Matroska;
+        assert_eq!(indexes, if mirrored { 1 } else { 2 }, "{file}");
         let sizes = sidx_sizes(&head);
         assert_eq!(sizes.len(), LONG_SECONDS as usize / 6, "{file}");
         let middle = &sizes[1..sizes.len() - 1];
@@ -610,7 +639,6 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
         // else; estimated (slots labelled a GOP late), on forward from the
         // slot before to the sync sample.
         let ranges = ffmpeg_seek_ranges(&url, 60);
-        let mirrored = container == Container::Matroska;
         assert!(
             ranges.windows(2).all(|pair| pair[1] > pair[0]) && (!mirrored || ranges.len() == 2),
             "{file}: ffmpeg -ss 60 asked {ranges:?}"
