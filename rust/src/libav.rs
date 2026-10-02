@@ -98,11 +98,31 @@ pub struct Rational {
     pub den: c_int,
 }
 
+/// `AVInputFormat`, n6.0, up to `name`.
+#[repr(C)]
+struct AVInputFormat {
+    name: *const c_char,
+}
+
+/// `AVIndexEntry`, n6.0, whole: `int flags:2; int size:30;` is one `int`
+/// whose two low bits -- on every little-endian ABI this is built for --
+/// are the flags.
+#[repr(C)]
+struct AVIndexEntry {
+    pos: i64,
+    timestamp: i64,
+    flags_and_size: c_int,
+    min_distance: c_int,
+}
+
+/// `AVINDEX_KEYFRAME`.
+const AVINDEX_KEYFRAME: c_int = 1;
+
 /// `AVFormatContext`, n6.0, up to `duration`.
 #[repr(C)]
 struct AVFormatContext {
     av_class: *const c_void,
-    iformat: *const c_void,
+    iformat: *const AVInputFormat,
     oformat: *const c_void,
     priv_data: *mut c_void,
     pb: *mut AVIOContext,
@@ -217,6 +237,7 @@ mod layout {
         };
     }
 
+    at!(AVFormatContext.iformat, 8, 4);
     at!(AVFormatContext.pb, 32, 16);
     at!(AVFormatContext.nb_streams, 44, 24);
     at!(AVFormatContext.streams, 48, 28);
@@ -243,6 +264,9 @@ mod layout {
     at!(AVPacket.flags, 40, 36);
     at!(AVPacket.duration, 64, 48);
     at!(AVIOContext.buffer, 8, 4);
+    at!(AVIndexEntry.timestamp, 8, 8);
+    at!(AVIndexEntry.flags_and_size, 16, 16);
+    const _: () = assert!(std::mem::size_of::<AVIndexEntry>() == 24);
 }
 
 type ReadFn = unsafe extern "C" fn(*mut c_void, *mut u8, c_int) -> c_int;
@@ -263,6 +287,8 @@ pub struct Libav {
         unsafe extern "C" fn(*mut AVFormatContext, *mut *mut c_void) -> c_int,
     av_read_frame: unsafe extern "C" fn(*mut AVFormatContext, *mut AVPacket) -> c_int,
     av_seek_frame: unsafe extern "C" fn(*mut AVFormatContext, c_int, i64, c_int) -> c_int,
+    avformat_index_get_entries_count: unsafe extern "C" fn(*const AVStream) -> c_int,
+    avformat_index_get_entry: unsafe extern "C" fn(*mut AVStream, c_int) -> *const AVIndexEntry,
     avio_alloc_context: unsafe extern "C" fn(
         *mut u8,
         c_int,
@@ -327,6 +353,8 @@ impl Libav {
                 avformat_find_stream_info: symbol!("avformat_find_stream_info"),
                 av_read_frame: symbol!("av_read_frame"),
                 av_seek_frame: symbol!("av_seek_frame"),
+                avformat_index_get_entries_count: symbol!("avformat_index_get_entries_count"),
+                avformat_index_get_entry: symbol!("avformat_index_get_entry"),
                 avio_alloc_context: symbol!("avio_alloc_context"),
                 avio_context_free: symbol!("avio_context_free"),
                 av_packet_alloc: symbol!("av_packet_alloc"),
@@ -523,8 +551,19 @@ pub struct Packet {
     pub data: Bytes,
 }
 
+/// One entry of a stream's index, as libavformat holds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IndexEntry {
+    /// Where in the file: the sample, or the container unit that holds it
+    /// (a Matroska cluster).
+    pub pos: i64,
+    /// In the stream's time base.
+    pub timestamp: i64,
+    pub keyframe: bool,
+}
+
 /// What the next read found.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Next {
     Packet(Packet),
     /// The film ended.
@@ -645,6 +684,76 @@ impl<S: Source> Demuxer<S> {
         // SAFETY: `ctx` is the open context.
         let duration = unsafe { (*self.ctx).duration };
         (duration != NOPTS && duration > 0).then_some(duration)
+    }
+
+    /// The demuxer's name, as libavformat calls it: `matroska,webm`,
+    /// `mov,mp4,m4a,3gp,3g2,mj2`, `avi`, `mpegts`, ...
+    pub fn format_name(&self) -> String {
+        // SAFETY: `ctx` is the open context; `iformat` and its name are
+        // static strings of the library's.
+        unsafe {
+            let format = (*self.ctx).iformat;
+            if format.is_null() || (*format).name.is_null() {
+                return String::new();
+            }
+            std::ffi::CStr::from_ptr((*format).name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
+    /// Stream `stream`'s index as libavformat holds it now: an MP4's every
+    /// sample (from its sample tables), an AVI's `idx1`, Matroska's cues
+    /// once a seek has made it read them, or the few entries a demuxer adds
+    /// as it reads a file with none.
+    pub fn index_entries(&self, stream: usize) -> Vec<IndexEntry> {
+        // SAFETY: `ctx` is the open context and `stream` one of its streams;
+        // each entry is read while the index is not changed (nothing reads
+        // or seeks meanwhile, on this one thread).
+        unsafe {
+            let ctx = &*self.ctx;
+            if ctx.streams.is_null() || stream >= ctx.nb_streams as usize {
+                return Vec::new();
+            }
+            let st = *ctx.streams.add(stream);
+            let count = (self.libav.avformat_index_get_entries_count)(st);
+            (0..count)
+                .filter_map(|at| {
+                    let entry = (self.libav.avformat_index_get_entry)(st, at).as_ref()?;
+                    Some(IndexEntry {
+                        pos: entry.pos,
+                        timestamp: entry.timestamp,
+                        keyframe: entry.flags_and_size & AVINDEX_KEYFRAME != 0,
+                    })
+                })
+                .collect()
+        }
+    }
+
+    /// Up to `len` bytes of the source at `offset`, read past libavformat,
+    /// which finds the source where it left it: what it reads next comes
+    /// from its own buffer or a seek of its own.
+    pub fn read_source_at(&mut self, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        let state = self.state.as_mut();
+        let len = len.min(usize::try_from(state.len.saturating_sub(offset)).unwrap_or(len));
+        let mut out = vec![0u8; len];
+        let read = (|| {
+            state.source.seek(offset)?;
+            let mut filled = 0;
+            while filled < len {
+                let n = state.source.read(&mut out[filled..])?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            Ok::<_, io::Error>(filled)
+        })();
+        let back = state.source.seek(state.pos);
+        let filled = read?;
+        back?;
+        out.truncate(filled);
+        Ok(out)
     }
 
     /// Moves to the sync point at or before `at_us` on the film's clock

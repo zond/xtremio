@@ -79,13 +79,13 @@ player's position, which the receiver plays as a file (`<video src>`). Not
 HLS: zond's Chromecast with Google TV plays no HLS above 720p through its
 Media Source path -- anyone's, measured -- and plays the same 1080p film as
 a fragmented MP4 file (stream-server `docs/design/renditions.md`, F2). The
-stream has no length and offers no ranges; its timestamps are the film's,
-so the receiver reports the film's position from wherever it starts. Same
-token rules, same listener, same watchdog: the stream counts as a body.
+file has a length and ranges, and its timestamps are the film's, so the
+receiver reports the film's position. Same token rules, same listener,
+same watchdog: each read of the file counts as a body.
 
 The server cuts six-second segments at the film's own keyframes, muxes
-them, keeps a few in memory and sends them one after another as the
-receiver reads -- nothing on disk (its `docs/design/renditions.md`). What it asks of the app is the **producer**,
+them, keeps a few in memory and answers the receiver's ranges from them --
+nothing on disk (its `docs/design/renditions.md`). What it asks of the app is the **producer**,
 `rust/src/rendition.rs`, installed at every server start: per run a thread
 of its own, reading the media id's `MediaReader` through **libavformat from
 the libmpv media_kit ships** (`rust/src/libav.rs` -- the vendored libmpv
@@ -98,33 +98,35 @@ AAC frames as they are. Stop and every other way out unpublish, which
 ends the run wherever it is blocked. There is no timer: a stalled torrent
 is waited for.
 
-**Seeks are this screen's.** The receiver knows the film's length from the
-first byte (the server writes it into each track's `mdhd`, where its
-demuxer reads it), but it cannot seek in a stream with no ranges: asked to
--- by its remote, or a sender's SEEK -- it fetches the stream again from
-its start and plays from there, and its status never says where it was
-asked to go (measured on zond's TV). So:
-
-- A seek here (the remote's bar and buttons) loads the stream again from
-  the target, `stream.mp4?from=<ms>` with the receiver told to start there
-  (`PlayerScreen._reloadRendition`), which plays from it within seconds.
-- A seek on the receiver is undone: the server counts a fetch of the
-  stream from a start it had already sent three segments of
-  (`media_rendition_restarts`), and the player, seeing the count move,
-  loads the stream again where the receiver was (`_followRendition`).
-  "Where it was" is the position the receiver reported while playing on
-  from the last; a move back is believed once three reports agree, and
-  after a load nothing it says counts until it reports a position near the
-  target. The remote shows that position, and the core is told it.
-- The film's length on this screen stays mpv's: the receiver's is only
-  what has arrived. The stream stays `BUFFERED`, so the television keeps
-  its seek bar; using it costs a moment and changes nothing.
+**The receiver seeks in it by bytes**, as in any file, so seeks are the
+receiver's again: the television's remote, and this screen's (a `SEEK`, as
+for a stream cast as it is). Measured on zond's TV (stream-server
+`docs/design/renditions.md` §2.8): with a length, exact ranges and a
+`sidx` -- an index of the file's segments by time and size, right after
+the `moov` -- a remote seek is one `Range` straight at the segment that
+holds the target. So the server lays the file out before it makes any of
+it: the header, then one slot per segment, each as long as that segment's
+share of the source -- **mirrored from the source's index** when it has
+one, estimated when it has none -- padded to the slot's end, every byte the
+same however often it is asked for. The producer hands it the index: the
+first run of a rendition (`Job::wants_index`) reports the video's sync
+samples, each with its byte position, from **libavformat's index**
+(`Demuxer::index_entries`: an MP4's sample tables, an AVI's `idx1`,
+Matroska's cues -- which libavformat reads at a first seek, so the run
+seeks to the start), with a Matroska cue's position moved from its
+cluster to its block by the cue's `CueRelativePosition`, which
+libavformat does not keep (`rust/src/matroska.rs` reads the cues for it).
+A transport stream, or a Matroska file with no cues, has no index and is
+estimated; a transport stream's AAC comes as ADTS, whose configuration is
+the first frame's header (`adts_config`).
 
 To try a rendition without the app: `cargo test --test rendition serve --
 --ignored --nocapture` with `XTREMIO_RENDITION_FILE` and
 `XTREMIO_RENDITION_OUT` serves one on loopback (a television reaches it
 through `adb reverse`), and `tool/rendition-video` plays it in headless
-Chrome as a `<video src>`, the way the receiver plays a file.
+Chrome as a `<video src>`, the way the receiver plays a file, and checks
+that it is seekable end to end and that a seek to 5:00 is one far
+`Range`.
 
 **Bound to one FFmpeg**: `rust/src/libav.rs` reads FFmpeg's structs by
 layout, asserted at compile time for 64- and 32-bit targets against what

@@ -61,6 +61,7 @@ mod frb_generated;
 pub mod guard;
 pub mod libav;
 pub mod logging;
+pub mod matroska;
 pub mod media;
 pub mod model;
 pub mod mpv_stream;

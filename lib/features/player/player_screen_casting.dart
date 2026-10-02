@@ -66,24 +66,13 @@ extension _PlayerCasting on _PlayerScreenState {
   /// notice which device the pixels were on.
   void _onCastStatus(CastStatus reported) {
     if (!mounted) return;
-    var status = _casting ? _trustedCastStatus(reported) : reported;
-    // A rendition's receiver is believed only where it plays on from where
-    // it was put; see [_followRendition].
-    final rendition = _casting ? _rendition : null;
-    if (rendition != null) {
-      status = status.at(_followRendition(rendition, reported));
-    }
+    final status = _casting ? _trustedCastStatus(reported) : reported;
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
     // Once per length, not per status: a receiver repeats its status every
-    // second or so, and a length does not go stale. **Not a rendition's**:
-    // its receiver knows only what has arrived of a stream made as it is
-    // read; the film's length is mpv's, and already here.
-    if (rendition == null &&
-        duration != null &&
-        duration > Duration.zero &&
-        duration != _duration) {
+    // second or so, and a length does not go stale.
+    if (duration != null && duration > Duration.zero && duration != _duration) {
       _duration = duration;
       // **All a cast can tell the server.** The receiver's position is in
       // seconds, which do not convert to a byte offset without a constant
@@ -104,106 +93,6 @@ extension _PlayerCasting on _PlayerScreenState {
     if (status.ended && !_castEnded) {
       _castEnded = true;
       _client?.dispatch(CoreActions.playerEnded());
-    }
-  }
-
-  /// **Where a rendition's receiver is**, from what it [reported], and the
-  /// one thing it cannot do itself: seek.
-  ///
-  /// A rendition is a stream with no ranges (stream-server
-  /// `docs/design/renditions.md`, F2), and a receiver asked to seek in it --
-  /// by its remote, say -- fetches it again from its start and plays from
-  /// there; its status never shows where it was asked to go. The server
-  /// counts those restarts ([MediaIds.renditionRestarts]), and one is
-  /// undone here: the stream is loaded again where the receiver was
-  /// ([_reloadRendition]). Seeks are this screen's ([_seekTo]).
-  ///
-  /// "Where the receiver was" is [_RenditionCast.at]: its position while it
-  /// plays on from the last, a jump back taken only once three reports in
-  /// a row agree (a restart's first reports would otherwise move it), and
-  /// after a load the target until the receiver reports a position near it
-  /// -- before that, what it says is the stream it was playing. Answers the
-  /// position to show and tell the core, which is that.
-  Duration _followRendition(_RenditionCast rendition, CastStatus reported) {
-    final token = _castToken;
-    final restarts = token == null
-        ? rendition.restarts
-        : _mediaIds?.renditionRestarts(token) ?? rendition.restarts;
-    if (restarts > rendition.restarts) {
-      rendition.restarts = restarts;
-      // A load of this screen's own is a stream from a new start, and is no
-      // restart; one counted while it lands is the receiver's first
-      // fetches, which the load already puts right.
-      if (rendition.loadingTo == null) {
-        DiagnosticsLog.info(
-          'player',
-          'the receiver fetched the rendition again from its start -- a seek '
-              'it cannot make; loading it again at '
-              '${rendition.at.inSeconds}s',
-        );
-        unawaited(_reloadRendition(rendition.at));
-        return rendition.at;
-      }
-    }
-    final at = reported.position;
-    final target = rendition.loadingTo;
-    if (target != null) {
-      if (at >= target - _RenditionCast.behindSlack &&
-          at <= target + _RenditionCast.aheadSlack) {
-        rendition
-          ..loadingTo = null
-          ..at = at
-          ..behind = 0;
-      }
-      return rendition.at;
-    }
-    if (at >= rendition.at - _RenditionCast.behindSlack) {
-      rendition
-        ..at = at
-        ..behind = 0;
-    } else if (++rendition.behind >= _RenditionCast.behindReports) {
-      rendition
-        ..at = at
-        ..behind = 0;
-    }
-    return rendition.at;
-  }
-
-  /// Loads the rendition on the receiver again from [at]: its stream from
-  /// there (`?from=<ms>`), with the receiver told to start at [at], which is
-  /// where the stream's own timestamps begin. A seek of this screen's, or a
-  /// receiver's restart undone.
-  Future<void> _reloadRendition(Duration at) async {
-    final rendition = _rendition;
-    final cast = _cast;
-    if (rendition == null || cast == null || !_casting) return;
-    rendition
-      ..loadingTo = at
-      ..at = at
-      ..behind = 0;
-    _castHandedAt = at;
-    _castReported = false;
-    final media = rendition.media;
-    try {
-      await cast.load(
-        CastMedia(
-          url: media.url.replace(
-            queryParameters: {'from': '${at.inMilliseconds}'},
-          ),
-          contentType: media.contentType,
-          title: media.title,
-          subtitle: media.subtitle,
-          duration: media.duration,
-        ),
-        start: at,
-      );
-    } catch (error) {
-      // The stream as it was keeps playing; the next seek tries again. The
-      // type, never the URL: it carries the token.
-      DiagnosticsLog.warn(
-        'player',
-        'the receiver did not take the rendition again: ${error.runtimeType}',
-      );
     }
   }
 
@@ -464,25 +353,19 @@ extension _PlayerCasting on _PlayerScreenState {
           'to a receiver at '
           '${receiver.address ?? 'an address it did not report'}',
     );
-    final media = CastMedia(
-      url: url,
-      contentType: switch (compatibility) {
-        CastReady(:final contentType) => contentType,
-        _ => CastRendition.contentType,
-      },
-      title: state?.title ?? '',
-      duration: rendition ? _duration : null,
-    );
-    final token = _castToken;
-    _rendition = rendition && token != null
-        ? _RenditionCast(
-            media: media,
-            at: position,
-            restarts: _mediaIds?.renditionRestarts(token) ?? 0,
-          )
-        : null;
     try {
-      await cast.load(media, start: position);
+      await cast.load(
+        CastMedia(
+          url: url,
+          contentType: switch (compatibility) {
+            CastReady(:final contentType) => contentType,
+            _ => CastRendition.contentType,
+          },
+          title: state?.title ?? '',
+          duration: rendition ? _duration : null,
+        ),
+        start: position,
+      );
     } catch (error) {
       // A receiver turning the media down does not come back this way (the
       // plugin answers at once and the refusal arrives later as a media
@@ -613,12 +496,12 @@ extension _PlayerCasting on _PlayerScreenState {
   ///
   /// **A [rendition] is published as one** ([MediaIds.publishRendition]):
   /// the same listener and token rules, and the receiver is handed the
-  /// token's stream, `<lan base>/cast/<token>/stream.mp4`: one fragmented
-  /// MP4 the server makes as it is read, from this player's position, with
-  /// the audio track it is playing. Its timestamps are the film's, so the
-  /// receiver reports the film's position. A seek on the receiver is not
-  /// mapped to a new stream yet (`?from=`; stream-server
-  /// `docs/design/renditions.md`, F2).
+  /// token's file, `<lan base>/cast/<token>/stream.mp4`: one fragmented MP4
+  /// the server makes as it is read, its first part from this player's
+  /// position, with the audio track it is playing. It has a length and
+  /// ranges and an index of its segments, so the receiver seeks in it by
+  /// bytes like any file -- its remote's seeks and this screen's `SEEK`s
+  /// alike (stream-server `docs/design/renditions.md` §2.8).
   ///
   /// A stream read over HTTP -- an origin that will not serve ranges -- is
   /// handed over as it is when it is on another internet host, and has no
@@ -680,7 +563,6 @@ extension _PlayerCasting on _PlayerScreenState {
   Future<void> _unpublishCast() async {
     final token = _castToken;
     _castToken = null;
-    _rendition = null;
     if (token == null) return;
     try {
       await _mediaIds?.unpublish(token);
@@ -759,42 +641,4 @@ extension _PlayerCasting on _PlayerScreenState {
       ),
     );
   }
-}
-
-/// A rendition on the receiver ([CastRendition]): what to load again, the
-/// restarts already seen, and where the receiver is believed to be
-/// ([_PlayerCasting._followRendition]).
-final class _RenditionCast {
-  _RenditionCast({
-    required this.media,
-    required this.at,
-    required this.restarts,
-  }) : loadingTo = at;
-
-  /// How far behind the believed position a report may be and still be the
-  /// receiver playing on (its reports are a second or so apart).
-  static const Duration behindSlack = Duration(seconds: 2);
-
-  /// How far ahead of a load's target a report may be and still be that
-  /// load playing.
-  static const Duration aheadSlack = Duration(seconds: 10);
-
-  /// Reports in a row behind the believed position that make it a move
-  /// back the receiver really made (one inside what it has buffered).
-  static const int behindReports = 3;
-
-  /// The media first loaded: the stream from where the cast began.
-  final CastMedia media;
-
-  /// Where the receiver is believed to be.
-  Duration at;
-
-  /// The target of a load not yet seen landing, or null.
-  Duration? loadingTo;
-
-  /// The server's count of the receiver's restarts, as last seen.
-  int restarts;
-
-  /// Reports in a row behind [at].
-  int behind = 0;
 }

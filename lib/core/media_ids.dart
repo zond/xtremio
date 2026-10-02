@@ -199,11 +199,6 @@ abstract interface class MediaIds {
   /// log it.** Throws as [publish] does.
   Future<String> publishRendition(String id, RenditionSpec spec);
 
-  /// How many times the receiver restarted the rendition published as
-  /// [token]: fetched its stream again from a start it had played past --
-  /// what it does with a seek it cannot make. 0 for anything else.
-  int renditionRestarts(String token);
-
   /// Ends the publication [token]; a body being served under it is cut.
   Future<bool> unpublish(String token);
 }
@@ -266,10 +261,6 @@ class RustMediaIds implements MediaIds {
   @override
   Future<String> publishRendition(String id, RenditionSpec spec) =>
       rust.mediaPublishRendition(id: id, spec: jsonEncode(spec.toJson()));
-
-  @override
-  int renditionRestarts(String token) =>
-      rust.mediaRenditionRestarts(token: token);
 
   @override
   Future<bool> unpublish(String token) => rust.mediaUnpublish(token: token);

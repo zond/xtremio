@@ -250,11 +250,8 @@ void main() {
         expect(find.byType(CastRemotePanel), findsOneWidget);
       });
 
-      /// A rendition cast from 12:00 of a 90-minute film, the receiver
-      /// reporting [positions] (minutes:seconds) as it plays, with the
-      /// length it knows -- only what has arrived of the stream.
-      Future<(PlayerHarness, FakeCastClient)> castRendition(
-        WidgetTester tester,
+      testWidgets('is sought on the receiver, which seeks in it by bytes', (
+        tester,
       ) async {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
@@ -266,143 +263,23 @@ void main() {
         harness.engine.emitPosition(const Duration(minutes: 12));
         await pumpEvents(tester);
         await castWithStats(tester, harness);
-        expect(cast.loads, hasLength(1));
-        return (harness, cast);
-      }
-
-      Future<void> receiverAt(
-        WidgetTester tester,
-        FakeCastClient cast,
-        Duration position, {
-        CastPlayerState state = CastPlayerState.playing,
-      }) async {
         cast.emitStatus(
-          CastStatus(
-            state: state,
-            position: position,
-            duration: const Duration(seconds: 48),
+          const CastStatus(
+            state: CastPlayerState.playing,
+            position: Duration(minutes: 12, seconds: 1),
+            duration: Duration(minutes: 90),
           ),
         );
         await tester.pumpAndSettle();
-      }
-
-      testWidgets('is sought here by loading its stream again from there', (
-        tester,
-      ) async {
-        final (harness, cast) = await castRendition(tester);
-        await receiverAt(tester, cast, const Duration(minutes: 12, seconds: 1));
 
         await tester.tap(find.byKey(const ValueKey('cast-forward')));
         await tester.pumpAndSettle();
 
-        // Not a seek on the receiver, which cannot make one: the stream from
-        // the target -- past the 48 s the receiver knows of, since the film's
-        // length is mpv's -- with the receiver told to start there.
-        expect(cast.seeks, isEmpty);
-        expect(cast.loads, hasLength(2));
-        final (media, start) = cast.loads.last;
-        const target = Duration(minutes: 12, seconds: 11);
-        expect(
-          media.url,
-          lanBase.resolve('cast/t1/stream.mp4?from=${target.inMilliseconds}'),
-        );
-        expect(media.contentType, 'video/mp4');
-        expect(media.duration, const Duration(minutes: 90));
-        expect(start, target);
-        expect(
-          harness.mediaIds.renditions,
-          hasLength(1),
-          reason: 'not republished',
-        );
-      });
-
-      testWidgets('a restart by the receiver is put back where it was', (
-        tester,
-      ) async {
-        final (harness, cast) = await castRendition(tester);
-        for (final second in [1, 2, 3]) {
-          await receiverAt(
-            tester,
-            cast,
-            Duration(minutes: 12, seconds: second),
-          );
-        }
-        // The remote's seek: the receiver plays the stream from its start,
-        // 12:00, again -- reporting it before the server has seen it fetch
-        // the stream again, and then the count moves.
-        await receiverAt(
-          tester,
-          cast,
-          const Duration(minutes: 12),
-          state: CastPlayerState.buffering,
-        );
+        // The file has a length, ranges and an index of its segments: a
+        // SEEK, as for any file, and nothing loaded or published again.
+        expect(cast.seeks, [const Duration(minutes: 12, seconds: 11)]);
         expect(cast.loads, hasLength(1));
-        harness.mediaIds.restarts['t1'] = 1;
-        await receiverAt(
-          tester,
-          cast,
-          const Duration(minutes: 12),
-          state: CastPlayerState.buffering,
-        );
-
-        expect(cast.loads, hasLength(2));
-        final (media, start) = cast.loads.last;
-        const was = Duration(minutes: 12, seconds: 3);
-        expect(
-          media.url,
-          lanBase.resolve('cast/t1/stream.mp4?from=${was.inMilliseconds}'),
-        );
-        expect(start, was);
-        // The remote shows where the film is, not the restart.
-        expect(find.text('12:03'), findsWidgets);
-
-        // Until the load lands the receiver reports the stream it was playing
-        // (here, a stale 12:40), and a restart counted meanwhile is the
-        // load's own fetches: none of it moves anything.
-        harness.mediaIds.restarts['t1'] = 2;
-        await receiverAt(
-          tester,
-          cast,
-          const Duration(minutes: 12, seconds: 40),
-        );
-        await receiverAt(tester, cast, const Duration(minutes: 12, seconds: 4));
-        await receiverAt(tester, cast, const Duration(minutes: 12, seconds: 5));
-        expect(cast.loads, hasLength(2));
-
-        // Landed, the next restart is undone where the load played to.
-        harness.mediaIds.restarts['t1'] = 3;
-        await receiverAt(
-          tester,
-          cast,
-          const Duration(minutes: 12, seconds: 3),
-          state: CastPlayerState.buffering,
-        );
-        expect(cast.loads, hasLength(3));
-        expect(cast.loads.last.$2, const Duration(minutes: 12, seconds: 5));
-      });
-
-      testWidgets('a move back the receiver makes itself is followed', (
-        tester,
-      ) async {
-        final (harness, cast) = await castRendition(tester);
-        for (final second in [1, 2, 20]) {
-          await receiverAt(
-            tester,
-            cast,
-            Duration(minutes: 12, seconds: second),
-          );
-        }
-        // Back inside what it has buffered: three reports agree.
-        for (final second in [5, 6, 7]) {
-          await receiverAt(
-            tester,
-            cast,
-            Duration(minutes: 12, seconds: second),
-          );
-        }
-        harness.mediaIds.restarts['t1'] = 1;
-        await receiverAt(tester, cast, const Duration(minutes: 12));
-        expect(cast.loads.last.$2, const Duration(minutes: 12, seconds: 7));
+        expect(harness.mediaIds.renditions, hasLength(1));
       });
 
       testWidgets('is refused while mpv has not said how long it is', (

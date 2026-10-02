@@ -252,15 +252,6 @@ pub fn publish_rendition_in(app: &AppState, id: &str, spec: &str) -> anyhow::Res
     })
 }
 
-/// How many times the receiver restarted the rendition published as
-/// `token`: fetched its stream again from a start it had played past,
-/// which is what it does with a seek it cannot make. `0` for a token that
-/// is not a rendition, and when the server is not running.
-pub fn rendition_restarts_in(app: &AppState, token: &str) -> u64 {
-    let token = CastToken::from(token.to_owned());
-    crate::server::with_handle_in(app, |handle| Ok(handle.rendition_restarts(&token))).unwrap_or(0)
-}
-
 /// Ends a publication: nothing more is served under `token`, and a body
 /// being served under it is cut. Whether it was published. `false` when
 /// the server is not running, which stopped the listener and every token
@@ -426,7 +417,6 @@ mod tests {
         let spec = r#"{"durationMs":1,"segmentMs":1,"startMs":0,"video":"copy","audio":"copy","audioTrack":0}"#;
         assert!(publish_rendition_in(&app, "abc", spec).is_err());
         assert!(!unpublish_in(&app, "a-token"));
-        assert_eq!(rendition_restarts_in(&app, "a-token"), 0);
     }
 
     /// **One press opens a Drive file once**: the id the screen's open

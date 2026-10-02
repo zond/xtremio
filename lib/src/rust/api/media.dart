@@ -65,14 +65,6 @@ Future<String> mediaPublishRendition({
 }) =>
     RustLib.instance.api.crateApiMediaMediaPublishRendition(id: id, spec: spec);
 
-/// How many times the receiver restarted the rendition published as `token`
-/// -- fetched its stream again from a start it had played past, which is
-/// what it does with a seek it cannot make -- so the player can load the
-/// stream again where the receiver was. `0` for a token that is not a
-/// rendition. Cheap: no runtime hop.
-int mediaRenditionRestarts({required String token}) =>
-    RustLib.instance.api.crateApiMediaMediaRenditionRestarts(token: token);
-
 /// Whether this device can make a rendition: a player has loaded libmpv,
 /// and the FFmpeg in it is the one this build is bound to. False until the
 /// first player has registered (`mpv_stream_register`), and on a desktop

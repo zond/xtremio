@@ -36,9 +36,18 @@
 //!   256 to 511 does (`00 00 01 xx`). So both are handed over in Annex-B
 //!   ([`H264Config`]); no bitstream filter is needed for that. AAC's
 //!   AudioSpecificConfig is the container's as it is.
-//! - **Seek and restart**: a run at segment N starts at N x T; the
-//!   demuxer is put on the sync point at or before it and the server
-//!   discards what precedes the cut. Segment 0 needs no seek.
+//! - **Seek and restart**: a run starts where the server says (two seconds
+//!   before the cut of the first segment it makes); the demuxer is put on
+//!   the sync point at or before it and the server discards what precedes
+//!   the cut. A run from the start needs no seek.
+//! - **The source's index**, for the run that fixes the rendition's byte
+//!   layout (`Job::wants_index`, stream-server `docs/design/renditions.md`
+//!   §2.8): the video's sync samples from libavformat's index -- an MP4's
+//!   sample tables, an AVI's `idx1`, Matroska's cues, which libavformat
+//!   reads only at a first seek, so a run from the start seeks to it --
+//!   each with its byte position, which for Matroska is moved from the
+//!   cluster to the block itself ([`crate::matroska`]). Before the first
+//!   sample.
 //! - **Stopping**: the sink answering [`Stopped`] (unpublished, superseded
 //!   by a seek, let go while idle) ends the run where it is; so does the
 //!   server cancelling the reader, which wakes a read parked on a missing
@@ -65,6 +74,8 @@ use stream_server::{
 };
 
 use crate::libav::{self, Demuxer, Kind, Libav, Next, StreamInfo};
+use std::collections::{HashMap, VecDeque};
+use stream_server::IndexEntry;
 
 /// What a viewer is told when this device has no FFmpeg to read with.
 pub const UNAVAILABLE: &str =
@@ -167,6 +178,7 @@ fn run(libav: &'static Libav, job: Job) {
         reader,
         spec,
         from,
+        wants_index,
         sink,
     } = job;
     tracing::info!(from_ms = from.as_millis() as u64, "rendition run reading");
@@ -178,7 +190,7 @@ fn run(libav: &'static Libav, job: Job) {
             return;
         }
     };
-    repackage(&mut demuxer, &spec, from, sink);
+    repackage(&mut demuxer, &spec, from, wants_index, sink);
 }
 
 // --- The run, over what it reads and where it writes -------------------------------
@@ -191,6 +203,9 @@ pub trait Packets {
     /// Move to the sync point at or before `at_us` on the film's clock.
     fn seek_us(&mut self, at_us: i64) -> Result<(), String>;
     fn read_packet(&mut self) -> Next;
+    /// `video`'s sync samples where the source's index puts them, on the
+    /// film's clock ([`film_index`]).
+    fn index(&mut self, video: &StreamInfo) -> Vec<IndexEntry>;
 }
 
 impl<S: libav::Source> Packets for Demuxer<S> {
@@ -209,11 +224,71 @@ impl<S: libav::Source> Packets for Demuxer<S> {
     fn read_packet(&mut self) -> Next {
         Demuxer::read_packet(self)
     }
+
+    fn index(&mut self, video: &StreamInfo) -> Vec<IndexEntry> {
+        let entries = self.index_entries(video.index);
+        let matroska = self.format_name().split(',').any(|name| name == "matroska");
+        let blocks = if matroska {
+            let mut read = |offset: u64, len: usize| self.read_source_at(offset, len);
+            let got = crate::matroska::read_cues(&mut read);
+            match got {
+                Ok(Some(cues)) => {
+                    let keys: Vec<(u64, u64)> = entries
+                        .iter()
+                        .filter_map(|entry| {
+                            Some((
+                                u64::try_from(entry.timestamp).ok()?,
+                                u64::try_from(entry.pos).ok()?,
+                            ))
+                        })
+                        .collect();
+                    cues.blocks(&keys)
+                }
+                Ok(None) => HashMap::new(),
+                Err(error) => {
+                    tracing::warn!(%error, "a rendition's Matroska cues could not be read");
+                    HashMap::new()
+                }
+            }
+        } else {
+            HashMap::new()
+        };
+        film_index(&entries, &blocks, video.time_base, self.start_us())
+    }
+}
+
+/// **The index a rendition's layout mirrors**: the sync samples of
+/// `entries` (one stream's, in its time base `time_base`), on the film's
+/// clock (less `start_us`), each at its block's position in `blocks` when
+/// the container's index put it at its cluster's (Matroska), else where
+/// the index put it.
+pub fn film_index(
+    entries: &[libav::IndexEntry],
+    blocks: &HashMap<(u64, u64), u64>,
+    time_base: libav::Rational,
+    start_us: i64,
+) -> Vec<IndexEntry> {
+    entries
+        .iter()
+        .filter(|entry| entry.keyframe)
+        .filter_map(|entry| {
+            let pos = u64::try_from(entry.pos).ok()?;
+            let at = u64::try_from(entry.timestamp).ok();
+            let pos = at
+                .and_then(|at| blocks.get(&(at, pos)).copied())
+                .unwrap_or(pos);
+            Some(IndexEntry {
+                pts_us: libav::to_us(entry.timestamp, time_base)? - start_us,
+                pos,
+            })
+        })
+        .collect()
 }
 
 /// Where a run writes: [`SampleSink`], or a fake in the tests.
 pub trait Sink {
     fn format(&self, track: TrackKind, format: TrackFormat) -> Result<(), Stopped>;
+    fn index(&self, entries: Vec<IndexEntry>) -> Result<(), Stopped>;
     fn sample(&self, sample: Sample) -> Result<(), Stopped>;
     fn end(self);
     fn fail(self, sentence: String);
@@ -222,6 +297,10 @@ pub trait Sink {
 impl Sink for SampleSink {
     fn format(&self, track: TrackKind, format: TrackFormat) -> Result<(), Stopped> {
         SampleSink::format(self, track, format)
+    }
+
+    fn index(&self, entries: Vec<IndexEntry>) -> Result<(), Stopped> {
+        SampleSink::index(self, entries)
     }
 
     fn sample(&self, sample: Sample) -> Result<(), Stopped> {
@@ -237,22 +316,51 @@ impl Sink for SampleSink {
     }
 }
 
-/// **A run**: formats, the seek, then every packet of the two chosen
-/// streams into `sink`, until the sink stops it, the film ends or the
-/// source fails.
+/// **A run**: formats, the seek, the source's index when `wants_index`,
+/// then every packet of the two chosen streams into `sink`, until the sink
+/// stops it, the film ends or the source fails.
 pub fn repackage<P: Packets, K: Sink>(
     packets: &mut P,
     spec: &RenditionSpec,
     from: Duration,
+    wants_index: bool,
     sink: K,
 ) {
-    let chosen = match Chosen::of(packets.streams(), spec.audio_track) {
+    let mut chosen = match Chosen::of(packets.streams(), spec.audio_track) {
         Ok(chosen) => chosen,
         Err(sentence) => {
             sink.fail(sentence);
             return;
         }
     };
+    // AAC in ADTS (a transport stream's) has no AudioSpecificConfig in the
+    // header: it is the first frame's ADTS header, so the run reads up to
+    // that frame first and hands what it read out again after.
+    let mut pending: VecDeque<Next> = VecDeque::new();
+    if chosen.adts {
+        loop {
+            let next = packets.read_packet();
+            let first_audio = match &next {
+                Next::Packet(packet) if packet.stream == chosen.audio.index => {
+                    Some(adts_config(&packet.data))
+                }
+                Next::Packet(_) => None,
+                Next::End | Next::Failed(_) => Some(None),
+            };
+            pending.push_back(next);
+            match first_audio {
+                None => continue,
+                Some(Some(config)) => {
+                    chosen.set_audio_config(config);
+                    break;
+                }
+                Some(None) => {
+                    sink.fail(UNREADABLE.to_owned());
+                    return;
+                }
+            }
+        }
+    }
     if sink
         .format(TrackKind::Video, chosen.video_format.clone())
         .is_err()
@@ -263,18 +371,33 @@ pub fn repackage<P: Packets, K: Sink>(
         return;
     }
     let from_us = i64::try_from(from.as_micros()).unwrap_or(i64::MAX);
+    if from_us > 0 || wants_index {
+        // What was read ahead is from before wherever the seek goes.
+        pending.clear();
+    }
     if from_us > 0 {
         if let Err(error) = packets.seek_us(from_us) {
             tracing::warn!(%error, "a rendition's source could not be sought in");
             sink.fail(UNSEEKABLE.to_owned());
             return;
         }
+    } else if wants_index {
+        // A Matroska file's cues are read at a first seek, so a run from
+        // the start that is asked for the index makes one; one that fails
+        // costs the index, not the run, which needs no seek.
+        if let Err(error) = packets.seek_us(0) {
+            tracing::warn!(%error, "a rendition's source could not be sought to its start");
+        }
+    }
+    if wants_index && sink.index(packets.index(&chosen.video)).is_err() {
+        return;
     }
     let start = packets.start_us();
     let mut video_clock = Clock::default();
     let mut audio_clock = Clock::default();
     loop {
-        let packet = match packets.read_packet() {
+        let next = pending.pop_front().unwrap_or_else(|| packets.read_packet());
+        let packet = match next {
             Next::Packet(packet) => packet,
             Next::End => {
                 sink.end();
@@ -298,6 +421,7 @@ pub fn repackage<P: Packets, K: Sink>(
         };
         let (key, data) = match track {
             TrackKind::Video => (packet.key, chosen.h264.sample(packet.data)),
+            TrackKind::Audio if chosen.adts => (true, strip_adts(packet.data)),
             TrackKind::Audio => (true, packet.data),
         };
         let sample = Sample {
@@ -343,6 +467,9 @@ struct Chosen {
     h264: H264Config,
     video_format: TrackFormat,
     audio_format: TrackFormat,
+    /// The audio comes in ADTS frames, and its configuration is the first
+    /// frame's header ([`adts_config`]).
+    adts: bool,
 }
 
 impl Chosen {
@@ -365,9 +492,6 @@ impl Chosen {
         if audio.codec != libav::AV_CODEC_ID_AAC {
             return Err(NOT_BUILT.to_owned());
         }
-        if audio.extradata.is_empty() {
-            return Err(UNREADABLE.to_owned());
-        }
         let h264 = H264Config::of(&video.extradata).ok_or(UNREADABLE)?;
         Ok(Self {
             video_format: TrackFormat::H264 {
@@ -381,11 +505,44 @@ impl Chosen {
                 channels: audio.channels.max(1),
                 csd0: audio.extradata.clone(),
             },
+            adts: audio.extradata.is_empty(),
             video: video.clone(),
             audio: audio.clone(),
             h264,
         })
     }
+
+    fn set_audio_config(&mut self, config: Bytes) {
+        if let TrackFormat::Aac { csd0, .. } = &mut self.audio_format {
+            *csd0 = config;
+        }
+    }
+}
+
+/// The AudioSpecificConfig an ADTS frame's header describes -- the object
+/// type (its profile plus one), the sampling frequency index, the channel
+/// configuration -- or `None` for a frame that is not ADTS.
+pub fn adts_config(frame: &[u8]) -> Option<Bytes> {
+    if frame.len() < 7 || frame[0] != 0xff || frame[1] & 0xf0 != 0xf0 {
+        return None;
+    }
+    let object = (frame[2] >> 6) + 1;
+    let frequency = (frame[2] >> 2) & 0x0f;
+    let channels = ((frame[2] & 0x01) << 2) | (frame[3] >> 6);
+    Some(Bytes::from(vec![
+        (object << 3) | (frequency >> 1),
+        ((frequency & 1) << 7) | (channels << 3),
+    ]))
+}
+
+/// An ADTS frame's payload: its header (seven bytes, nine with a CRC) off.
+/// A frame that is not ADTS is handed on as it is.
+pub fn strip_adts(frame: Bytes) -> Bytes {
+    if frame.len() < 7 || frame[0] != 0xff || frame[1] & 0xf0 != 0xf0 {
+        return frame;
+    }
+    let header = if frame[1] & 0x01 == 1 { 7 } else { 9 };
+    frame.slice(header.min(frame.len())..)
 }
 
 const START_CODE: [u8; 4] = [0, 0, 0, 1];
@@ -634,6 +791,12 @@ mod tests {
         queue: Vec<Next>,
         seeks: Vec<i64>,
         reads: usize,
+        /// What [`Packets::index`] answers, and the streams it was asked of.
+        index: Vec<IndexEntry>,
+        indexed: Vec<usize>,
+        /// A seek starts the queue again from this, as a seek to the
+        /// start does.
+        rewinds_to: Option<Vec<Next>>,
     }
 
     impl Packets for FakePackets {
@@ -645,6 +808,9 @@ mod tests {
         }
         fn seek_us(&mut self, at_us: i64) -> Result<(), String> {
             self.seeks.push(at_us);
+            if let Some(all) = &self.rewinds_to {
+                self.queue = all.clone();
+            }
             Ok(())
         }
         fn read_packet(&mut self) -> Next {
@@ -655,11 +821,16 @@ mod tests {
                 self.queue.remove(0)
             }
         }
+        fn index(&mut self, video: &StreamInfo) -> Vec<IndexEntry> {
+            self.indexed.push(video.index);
+            self.index.clone()
+        }
     }
 
     #[derive(Debug, PartialEq)]
     enum Wrote {
         Format(TrackKind, TrackFormat),
+        Index(Vec<IndexEntry>),
         Sample(TrackKind, i64, bool, Vec<u8>),
         End,
         Fail(String),
@@ -691,6 +862,10 @@ mod tests {
     impl Sink for FakeSink {
         fn format(&self, track: TrackKind, format: TrackFormat) -> Result<(), Stopped> {
             self.wrote.borrow_mut().push(Wrote::Format(track, format));
+            Ok(())
+        }
+        fn index(&self, entries: Vec<IndexEntry>) -> Result<(), Stopped> {
+            self.wrote.borrow_mut().push(Wrote::Index(entries));
             Ok(())
         }
         fn sample(&self, sample: Sample) -> Result<(), Stopped> {
@@ -742,6 +917,9 @@ mod tests {
             queue,
             seeks: Vec::new(),
             reads: 0,
+            index: Vec::new(),
+            indexed: Vec::new(),
+            rewinds_to: None,
         }
     }
 
@@ -765,7 +943,7 @@ mod tests {
             packet(4, 0, true, b"aac1"),
         ]);
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(1), Duration::ZERO, sink.clone());
+        repackage(&mut packets, &spec(1), Duration::ZERO, false, sink.clone());
         let config = H264Config::of(&avcc(4)).unwrap();
         let annex = annex_b(&[&[0x65, 0x88]]);
         assert_eq!(
@@ -809,7 +987,13 @@ mod tests {
         }
         let mut packets = film(vec![timed, packet(4, libav::NOPTS, true, b"b")]);
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(1), Duration::from_secs(6), sink.clone());
+        repackage(
+            &mut packets,
+            &spec(1),
+            Duration::from_secs(6),
+            false,
+            sink.clone(),
+        );
         assert_eq!(packets.seeks, vec![6_000_000]);
         let times: Vec<i64> = sink
             .wrote
@@ -823,13 +1007,147 @@ mod tests {
         assert_eq!(times, vec![6_023_000, 6_044_000]);
     }
 
+    /// **The run that fixes the layout reports the video's index** -- after
+    /// the formats, before the first sample -- having sought to the start,
+    /// which is what makes libavformat read a Matroska file's cues; a run
+    /// not asked for it neither seeks nor reports.
+    #[test]
+    fn a_run_asked_for_the_index_reports_it_before_its_first_sample() {
+        let mut packets = film(vec![packet(1, 0, true, SLICE)]);
+        let entries = vec![
+            IndexEntry {
+                pts_us: 23_000,
+                pos: 4_000,
+            },
+            IndexEntry {
+                pts_us: 2_023_000,
+                pos: 90_000,
+            },
+        ];
+        packets.index = entries.clone();
+        let sink = FakeSink::new(None);
+        repackage(&mut packets, &spec(1), Duration::ZERO, true, sink.clone());
+        assert_eq!(packets.seeks, vec![0]);
+        assert_eq!(packets.indexed, vec![1], "the film's video stream");
+        let wrote = sink.wrote.borrow();
+        assert!(matches!(wrote[1], Wrote::Format(TrackKind::Audio, _)));
+        assert_eq!(wrote[2], Wrote::Index(entries));
+        assert!(matches!(wrote[3], Wrote::Sample(TrackKind::Video, ..)));
+    }
+
+    /// **The index on the film's clock, at each block's own position**:
+    /// sync samples only, less the container's start, a Matroska cue's
+    /// cluster moved to its block where the cues say.
+    #[test]
+    fn the_index_is_on_the_films_clock_at_the_blocks() {
+        let ms = libav::Rational { num: 1, den: 1000 };
+        let entries = [
+            libav::IndexEntry {
+                pos: 500,
+                timestamp: 0,
+                keyframe: true,
+            },
+            libav::IndexEntry {
+                pos: 600,
+                timestamp: 40,
+                keyframe: false,
+            },
+            libav::IndexEntry {
+                pos: 9_000,
+                timestamp: 2_002,
+                keyframe: true,
+            },
+            libav::IndexEntry {
+                pos: 20_000,
+                timestamp: 4_004,
+                keyframe: true,
+            },
+        ];
+        let blocks = HashMap::from([((2_002, 9_000), 9_000 + 12 + 3_000)]);
+        assert_eq!(
+            film_index(&entries, &blocks, ms, -21_000),
+            vec![
+                IndexEntry {
+                    pts_us: 21_000,
+                    pos: 500
+                },
+                IndexEntry {
+                    pts_us: 2_023_000,
+                    pos: 12_012
+                },
+                IndexEntry {
+                    pts_us: 4_025_000,
+                    pos: 20_000
+                },
+            ]
+        );
+    }
+
+    /// **AAC in ADTS** (a transport stream's, no configuration in its
+    /// header): the configuration is the first frame's header -- AAC-LC,
+    /// 48 kHz, stereo here -- and every frame goes over without its header,
+    /// seven bytes or nine with a CRC.
+    #[test]
+    fn adts_audio_is_configured_from_its_first_frame_and_unwrapped() {
+        // LC (profile 1), 48 kHz (index 3), two channels, no CRC.
+        let header = [0xff, 0xf1, 0x4c, 0x80, 0x02, 0x1f, 0xfc];
+        assert_eq!(adts_config(&header).unwrap().as_ref(), &[0x11, 0x90]);
+        let mut frame = header.to_vec();
+        frame.extend_from_slice(b"aac");
+        assert_eq!(strip_adts(Bytes::from(frame)).as_ref(), b"aac");
+        let mut crc = header.to_vec();
+        crc[1] = 0xf0;
+        crc.extend_from_slice(&[0, 0]);
+        crc.extend_from_slice(b"aac");
+        assert_eq!(strip_adts(Bytes::from(crc)).as_ref(), b"aac");
+        assert_eq!(adts_config(b"raw aac frame"), None);
+        assert_eq!(strip_adts(Bytes::from_static(b"raw")).as_ref(), b"raw");
+
+        let mut ts = film(vec![
+            packet(1, 0, true, SLICE),
+            packet(4, 0, true, b"\xff\xf1\x4c\x80\x02\x1f\xfcaac"),
+        ]);
+        ts.streams[4].extradata = Bytes::new();
+        let sink = FakeSink::new(None);
+        repackage(&mut ts, &spec(1), Duration::ZERO, false, sink.clone());
+        let wrote = sink.wrote.borrow();
+        assert!(matches!(
+            &wrote[1],
+            Wrote::Format(TrackKind::Audio, TrackFormat::Aac { csd0, .. }) if csd0.as_ref() == [0x11, 0x90]
+        ));
+        assert!(
+            matches!(wrote[2], Wrote::Sample(TrackKind::Video, ..)),
+            "read ahead, handed out again"
+        );
+        assert_eq!(
+            wrote[3],
+            Wrote::Sample(TrackKind::Audio, 23_000, true, b"aac".to_vec())
+        );
+        drop(wrote);
+
+        // Asked for the index, the run seeks back to the start: what it
+        // read ahead for the configuration is read again, never handed out
+        // twice.
+        let queue = vec![
+            packet(1, 0, true, SLICE),
+            packet(4, 0, true, b"\xff\xf1\x4c\x80\x02\x1f\xfcaac"),
+        ];
+        let mut ts = film(queue.clone());
+        ts.streams[4].extradata = Bytes::new();
+        ts.rewinds_to = Some(queue);
+        let sink = FakeSink::new(None);
+        repackage(&mut ts, &spec(1), Duration::ZERO, true, sink.clone());
+        assert_eq!(ts.seeks, vec![0]);
+        assert_eq!(sink.samples(), 2, "each packet once");
+    }
+
     /// **The sink stopping the run stops the reading**: no read after the
     /// write the sink refused, and no end.
     #[test]
     fn a_stopped_sink_ends_the_run_where_it_is() {
         let mut packets = film((0..10).map(|n| packet(1, n * 40, n == 0, SLICE)).collect());
         let sink = FakeSink::new(Some(3));
-        repackage(&mut packets, &spec(0), Duration::ZERO, sink.clone());
+        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
         assert_eq!(sink.samples(), 3);
         assert_eq!(
             packets.reads, 4,
@@ -847,7 +1165,7 @@ mod tests {
             Next::Failed("the source failed".into()),
         ]);
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(0), Duration::ZERO, sink.clone());
+        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
         assert_eq!(
             sink.wrote.borrow().last(),
             Some(&Wrote::Fail(BROKEN.to_owned()))
@@ -867,7 +1185,7 @@ mod tests {
         let mut hevc = film(Vec::new());
         hevc.streams[1].codec = libav::AV_CODEC_ID_HEVC;
         let sink = FakeSink::new(None);
-        repackage(&mut hevc, &spec(0), Duration::ZERO, sink.clone());
+        repackage(&mut hevc, &spec(0), Duration::ZERO, false, sink.clone());
         assert_eq!(
             *sink.wrote.borrow(),
             vec![Wrote::Fail(NOT_BUILT.to_owned())]
@@ -878,6 +1196,7 @@ mod tests {
             &mut film(Vec::new()),
             &spec(2),
             Duration::ZERO,
+            false,
             sink.clone(),
         );
         assert_eq!(

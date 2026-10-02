@@ -73,19 +73,6 @@ pub fn media_publish_rendition(id: String, spec: String) -> anyhow::Result<Strin
     guarded(|| crate::media::publish_rendition_in(&crate::state::state(), &id, &spec))
 }
 
-/// How many times the receiver restarted the rendition published as `token`
-/// -- fetched its stream again from a start it had played past, which is
-/// what it does with a seek it cannot make -- so the player can load the
-/// stream again where the receiver was. `0` for a token that is not a
-/// rendition. Cheap: no runtime hop.
-#[frb(sync)]
-pub fn media_rendition_restarts(token: String) -> anyhow::Result<u32> {
-    guarded_ok(move || {
-        let restarts = crate::media::rendition_restarts_in(&crate::state::state(), &token);
-        u32::try_from(restarts).unwrap_or(u32::MAX)
-    })
-}
-
 /// Whether this device can make a rendition: a player has loaded libmpv,
 /// and the FFmpeg in it is the one this build is bound to. False until the
 /// first player has registered (`mpv_stream_register`), and on a desktop

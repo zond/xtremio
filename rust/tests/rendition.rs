@@ -1,11 +1,11 @@
-//! **A rendition, end to end on this machine**: an H.264 + AAC Matroska
-//! film made by `ffmpeg`, registered by path, published as a rendition,
-//! and fetched the way a Cast receiver fetches it -- playlist, init
-//! segment, media segments -- off the LAN listener, with the app's
-//! producer (`xtremio_core::rendition`) reading it through the FFmpeg in a
-//! real libmpv. What comes back is checked by `ffprobe` and decoded by
-//! `ffmpeg`, so a muxer or producer bug is not mirrored by the code that
-//! checks it.
+//! **A rendition, end to end on this machine**: H.264 + AAC films made by
+//! `ffmpeg` -- Matroska with cues, Matroska without, a transport stream --
+//! registered by path, published as renditions, and read the way a Cast
+//! receiver reads a file -- `HEAD`, ranges, a seek by the `sidx` -- off the
+//! LAN listener, with the app's producer (`xtremio_core::rendition`)
+//! reading them through the FFmpeg in a real libmpv. What comes back is
+//! checked by `ffprobe` and decoded by `ffmpeg`, so a muxer or producer bug
+//! is not mirrored by the code that checks it.
 //!
 //! The libmpv is the system's (`libmpv.so.2`, or `XTREMIO_LIBMPV`), loaded
 //! by registering the `xtremio` protocol on a handle of it, exactly as a
@@ -22,12 +22,14 @@ use xtremio_core::server::StartConfig;
 
 #[path = "support/film.rs"]
 mod film;
-use film::{libmpv_name, make_film, run};
+use film::{libmpv_name, make, make_film, run, Container};
 
 /// Three-second segments over the 13 s film ([`film::FILM_SECONDS`]).
 const SEGMENT_MS: u64 = 3000;
 /// mpv's duration of it: the container's, from the AAC priming on.
 const DURATION_MS: u64 = 13_021;
+/// The long films: six minutes, so a seek to 5:00 is a jump.
+const LONG_SECONDS: u32 = 360;
 
 struct Mpv {
     create: unsafe extern "C" fn() -> *mut c_void,
@@ -74,17 +76,18 @@ impl Mpv {
 }
 
 /// One packet as `ffprobe` reports it: presentation and decode time in
-/// milliseconds (rounded), and whether it is a key.
+/// milliseconds (rounded), whether it is a key, and where it is.
 #[derive(Clone, Debug, PartialEq)]
 struct Probed {
     pts_ms: Option<i64>,
     dts_ms: Option<i64>,
     key: bool,
+    pos: Option<u64>,
 }
 
 /// The packets of `kind` (`v` or `a`) in `file`, in file order, and the
 /// codec `ffprobe` names.
-fn probe(file: &Path, kind: &str) -> (String, Vec<Probed>) {
+fn probe(file: &str, kind: &str) -> (String, Vec<Probed>) {
     let out = run(
         "ffprobe",
         &[
@@ -93,10 +96,10 @@ fn probe(file: &Path, kind: &str) -> (String, Vec<Probed>) {
             "-select_streams",
             &format!("{kind}:0"),
             "-show_entries",
-            "stream=codec_name:packet=pts_time,dts_time,flags",
+            "stream=codec_name:packet=pts_time,dts_time,flags,pos",
             "-of",
             "json",
-            file.to_str().unwrap(),
+            file,
         ],
     )
     .expect("ffprobe ran");
@@ -120,6 +123,7 @@ fn probe(file: &Path, kind: &str) -> (String, Vec<Probed>) {
             pts_ms: ms(&packet["pts_time"]),
             dts_ms: ms(&packet["dts_time"]),
             key: packet["flags"].as_str().unwrap_or("").starts_with('K'),
+            pos: packet["pos"].as_str().and_then(|pos| pos.parse().ok()),
         })
         .collect();
     (
@@ -131,46 +135,105 @@ fn probe(file: &Path, kind: &str) -> (String, Vec<Probed>) {
     )
 }
 
-/// The `tfdt` of track 1 (video) in a media segment, in its 90 kHz
-/// ticks: where the segment's video begins. Walks the boxes by hand.
-fn video_tfdt(segment: &[u8]) -> Option<u64> {
-    fn boxes(data: &[u8]) -> Vec<([u8; 4], &[u8])> {
-        let mut out = Vec::new();
-        let mut at = 0;
-        while at + 8 <= data.len() {
-            let size = u32::from_be_bytes(data[at..at + 4].try_into().unwrap()) as usize;
-            if size < 8 || at + size > data.len() {
-                break;
-            }
-            out.push((
-                data[at + 4..at + 8].try_into().unwrap(),
-                &data[at + 8..at + size],
-            ));
-            at += size;
+/// The boxes at one level of `data`: type, offset, size.
+fn boxes(data: &[u8]) -> Vec<([u8; 4], usize, usize)> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at + 8 <= data.len() {
+        let size = u32::from_be_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+        if size < 8 || at + size > data.len() {
+            break;
         }
-        out
+        out.push((data[at + 4..at + 8].try_into().unwrap(), at, size));
+        at += size;
     }
-    let moof = boxes(segment)
-        .into_iter()
-        .find(|(kind, _)| kind == b"moof")?
-        .1;
-    for (kind, traf) in boxes(moof) {
+    out
+}
+
+/// The `tfdt` of track 1 (video) in a fragment, in its 90 kHz ticks:
+/// where the fragment's video begins.
+fn video_tfdt(fragment: &[u8]) -> Option<u64> {
+    let (_, at, size) = *boxes(fragment).iter().find(|(kind, ..)| kind == b"moof")?;
+    let moof = &fragment[at + 8..at + size];
+    for (kind, at, size) in boxes(moof) {
         if &kind != b"traf" {
             continue;
         }
+        let traf = &moof[at + 8..at + size];
         let inner = boxes(traf);
-        let tfhd = inner.iter().find(|(kind, _)| kind == b"tfhd")?.1;
-        if u32::from_be_bytes(tfhd[4..8].try_into().unwrap()) != 1 {
+        let (_, tfhd, _) = *inner.iter().find(|(kind, ..)| kind == b"tfhd")?;
+        if u32::from_be_bytes(traf[tfhd + 12..tfhd + 16].try_into().unwrap()) != 1 {
             continue;
         }
-        let tfdt = inner.iter().find(|(kind, _)| kind == b"tfdt")?.1;
-        return Some(if tfdt[0] == 1 {
-            u64::from_be_bytes(tfdt[4..12].try_into().unwrap())
+        let (_, tfdt, _) = *inner.iter().find(|(kind, ..)| kind == b"tfdt")?;
+        let body = &traf[tfdt + 8..];
+        return Some(if body[0] == 1 {
+            u64::from_be_bytes(body[4..12].try_into().unwrap())
         } else {
-            u64::from(u32::from_be_bytes(tfdt[4..8].try_into().unwrap()))
+            u64::from(u32::from_be_bytes(body[4..8].try_into().unwrap()))
         });
     }
     None
+}
+
+/// A rendition file's parts: the init segment, and each slot as
+/// `(offset, size)` by its `sidx`.
+struct Layout {
+    init: usize,
+    slots: Vec<(usize, usize)>,
+}
+
+impl Layout {
+    fn of(file: &[u8]) -> Self {
+        let top = boxes(file);
+        let kinds: Vec<&[u8; 4]> = top.iter().take(3).map(|(kind, ..)| kind).collect();
+        assert_eq!(kinds, [b"ftyp", b"moov", b"sidx"]);
+        let (_, sidx, sidx_size) = top[2];
+        let body = &file[sidx + 8..sidx + sidx_size];
+        let count = u16::from_be_bytes([body[30], body[31]]) as usize;
+        let mut offset = sidx + sidx_size;
+        let slots = (0..count)
+            .map(|k| {
+                let at = 32 + k * 12;
+                let size = u32::from_be_bytes(body[at..at + 4].try_into().unwrap()) as usize;
+                let slot = (offset, size);
+                offset += size;
+                slot
+            })
+            .collect();
+        assert_eq!(
+            offset,
+            file.len(),
+            "the sidx's slots end where the file does"
+        );
+        Self {
+            init: top[1].1 + top[1].2,
+            slots,
+        }
+    }
+
+    /// Slot `n`'s fragment: its bytes up to the `free` box that pads it.
+    fn fragment<'a>(&self, file: &'a [u8], n: usize) -> &'a [u8] {
+        let (offset, size) = self.slots[n];
+        let slot = &file[offset..offset + size];
+        let parts = boxes(slot);
+        let kinds: Vec<&[u8; 4]> = parts.iter().map(|(kind, ..)| kind).collect();
+        assert_eq!(kinds, [b"styp", b"moof", b"mdat", b"free"], "slot {n}");
+        &slot[..parts[3].1]
+    }
+}
+
+/// The slot sizes a file's `sidx` gives, from its first bytes.
+fn sidx_sizes(head: &[u8]) -> Vec<u32> {
+    let (_, sidx, _) = *boxes(head)
+        .iter()
+        .find(|(kind, ..)| kind == b"sidx")
+        .expect("a sidx in the first bytes");
+    let body = &head[sidx + 8..];
+    let count = u16::from_be_bytes([body[30], body[31]]) as usize;
+    (0..count)
+        .map(|k| u32::from_be_bytes(body[32 + k * 12..36 + k * 12].try_into().unwrap()))
+        .collect()
 }
 
 fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
@@ -181,45 +244,38 @@ fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
     }
 }
 
-/// A rendition's stream as its parts: the init segment (`ftyp` + `moov`)
-/// and each media segment (`styp` + `moof` + `mdat`).
-fn split_stream(stream: &[u8]) -> (&[u8], Vec<&[u8]>) {
-    let size = |at: usize| u32::from_be_bytes(stream[at..at + 4].try_into().unwrap()) as usize;
-    let init = size(0) + size(size(0));
-    let mut segments = Vec::new();
-    let mut at = init;
-    while at < stream.len() {
-        let start = at;
-        for _ in 0..3 {
-            at += size(at);
-        }
-        segments.push(&stream[start..at]);
-    }
-    (&stream[..init], segments)
-}
-
-/// GETs `path` off the LAN listener at `addr`, expecting a 200.
-fn get(runtime: &tokio::runtime::Runtime, addr: &str, path: &str) -> Vec<u8> {
-    let client = xtremio_core::env::http_client_builder()
+fn client() -> reqwest::Client {
+    xtremio_core::env::http_client_builder()
         .no_proxy()
         .build()
-        .unwrap();
+        .unwrap()
+}
+
+/// A `GET` of `url` with `range` if any: the status, the length it says,
+/// the body.
+fn get(
+    runtime: &tokio::runtime::Runtime,
+    url: &str,
+    range: Option<(u64, u64)>,
+) -> (u16, Option<u64>, Vec<u8>) {
     runtime.block_on(async {
-        let response = client
-            .get(format!("http://{addr}{path}"))
-            .send()
-            .await
-            .expect("the listener answered");
-        assert_eq!(response.status(), 200, "GET {path}");
-        response.bytes().await.unwrap().to_vec()
+        let request = client().get(url);
+        let request = match range {
+            Some((from, to)) => request.header("range", format!("bytes={from}-{to}")),
+            None => request,
+        };
+        let response = request.send().await.expect("the listener answered");
+        let status = response.status().as_u16();
+        let length = response.content_length();
+        (status, length, response.bytes().await.unwrap().to_vec())
     })
 }
 
-fn spec(start_ms: u64) -> String {
+fn spec(duration_ms: u64, segment_ms: u64) -> String {
     serde_json::json!({
-        "durationMs": DURATION_MS,
-        "segmentMs": SEGMENT_MS,
-        "startMs": start_ms,
+        "durationMs": duration_ms,
+        "segmentMs": segment_ms,
+        "startMs": 0,
         "video": "copy",
         "audio": "copy",
         "audioTrack": 0,
@@ -227,9 +283,51 @@ fn spec(start_ms: u64) -> String {
     .to_string()
 }
 
+/// How `ffprobe` seeks to 5:00 in `url` over HTTP: the requests it made
+/// and the first video packet's time after the seek, in seconds.
+fn ffprobe_seek(url: &str) -> (usize, f64) {
+    let out = run(
+        "ffprobe",
+        &[
+            "-v",
+            "debug",
+            "-read_intervals",
+            "300%+#1",
+            "-select_streams",
+            "v",
+            "-show_entries",
+            "packet=pts_time",
+            "-of",
+            "csv=p=0",
+            url,
+        ],
+    )
+    .expect("ffprobe ran");
+    assert!(out.status.success());
+    let log = String::from_utf8_lossy(&out.stderr);
+    let requests = log.matches("request: GET").count();
+    let first = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .and_then(|line| line.trim().parse::<f64>().ok())
+        .expect("a packet after the seek");
+    (requests, first)
+}
+
+/// `ffmpeg` decodes `input` whole with nothing to say.
+fn decodes(input: &str) {
+    let decoded =
+        run("ffmpeg", &["-v", "error", "-i", input, "-f", "null", "-"]).expect("ffmpeg ran");
+    assert!(decoded.status.success(), "{input}");
+    assert_eq!(
+        String::from_utf8_lossy(&decoded.stderr),
+        "",
+        "decode errors in {input}"
+    );
+}
+
 #[test]
-fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() -> anyhow::Result<()>
-{
+fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Result<()> {
     let name = libmpv_name();
     let Some(mpv) = load_mpv(&name) else {
         eprintln!("SKIPPED: no libmpv to load as {name} (set XTREMIO_LIBMPV)");
@@ -263,26 +361,40 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
     xtremio_core::api::media::mpv_stream_register(ctx as i64, name.clone())?;
     assert!(xtremio_core::api::media::media_renditions_available()?);
 
-    let id = xtremio_core::api::media::media_register_local_path(film.display().to_string(), None)?;
-    let token = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
-    let stream = format!("/cast/{token}/stream.mp4");
+    let publish = |path: &Path, duration_ms: u64, segment_ms: u64| -> anyhow::Result<String> {
+        let id =
+            xtremio_core::api::media::media_register_local_path(path.display().to_string(), None)?;
+        let token =
+            xtremio_core::api::media::media_publish_rendition(id, spec(duration_ms, segment_ms))?;
+        Ok(format!("http://{lan}/cast/{token}/stream.mp4"))
+    };
 
-    // The stream, as a receiver reads it: the init segment, then every
-    // segment in order to the film's end -- ceil(d / T) of them.
-    let whole = get(&runtime, &lan, &stream);
-    let (init, segments) = split_stream(&whole);
-    assert_eq!(segments.len() as u64, DURATION_MS.div_ceil(SEGMENT_MS));
+    // --- The short film: every packet, the cuts, the layout, the ranges ---------
+
+    let url = publish(&film, DURATION_MS, SEGMENT_MS)?;
+    // The length, before a byte of the file: what a receiver's HEAD reads.
+    let head = runtime.block_on(async { client().head(&url).send().await })?;
+    assert_eq!(head.status(), 200);
+    assert_eq!(head.headers()["accept-ranges"], "bytes");
+    let (status, whole_length, whole) = get(&runtime, &url, None);
+    assert_eq!(status, 200);
+    assert_eq!(whole_length, Some(whole.len() as u64));
+    let head_length: Option<u64> = head.headers()["content-length"].to_str()?.parse().ok();
+    assert_eq!(head_length, whole_length);
+    let layout = Layout::of(&whole);
     let out = tmp.path().join("out.mp4");
     std::fs::write(&out, &whole)?;
 
     // **The same samples, on the film's clock.** Every packet of the
     // source is there, once, with its key flag; times are the container's
     // less its start (-21 ms, the AAC priming), which is the clock mpv
-    // shows and the playlist is written on.
-    let (source_video_codec, source_video) = probe(&film, "v");
-    let (source_audio_codec, source_audio) = probe(&film, "a");
-    let (video_codec, video) = probe(&out, "v");
-    let (audio_codec, audio) = probe(&out, "a");
+    // shows and the segments are cut on.
+    let film_path = film.to_str().unwrap();
+    let out_path = out.to_str().unwrap();
+    let (source_video_codec, source_video) = probe(film_path, "v");
+    let (source_audio_codec, source_audio) = probe(film_path, "a");
+    let (video_codec, video) = probe(out_path, "v");
+    let (audio_codec, audio) = probe(out_path, "a");
     assert_eq!(
         (source_video_codec.as_str(), source_audio_codec.as_str()),
         ("h264", "aac")
@@ -317,7 +429,7 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
     // first. Where the first one sits is the `tfdt` check below, because
     // ffmpeg's MP4 demuxer moves a track whose composition offsets go
     // negative (`trun` version 1, B-frames) by its own reorder shift, which
-    // a receiver's MSE does not: it presents at `tfdt` plus the offset.
+    // a receiver's demuxer does not: it presents at `tfdt` plus the offset.
     let from_first = |packets: Vec<(i64, bool)>| -> Vec<(i64, bool)> {
         let first = packets[0].0;
         packets
@@ -344,76 +456,137 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
     let dts: Vec<i64> = video.iter().map(|packet| packet.dts_ms.unwrap()).collect();
     assert!(dts.windows(2).all(|pair| pair[0] < pair[1]), "{dts:?}");
 
-    // **Each segment begins at the first key at or after N x T.**
-    let keys: Vec<i64> = rebased(&source_video)
-        .into_iter()
-        .filter(|(_, key)| *key)
-        .map(|(pts, _)| pts)
+    // **Each slot begins at the first indexed key at or after N x T**, each
+    // a different key -- keys every 2 s, slots every 3 s: 0, 4, 6, 10, 12
+    // -- and its slot is that key's span of the source plus the headroom
+    // (8 KiB and a 64th), the key's position moved from its cluster to its
+    // block by the cue.
+    let keys: Vec<(i64, u64)> = source_video
+        .iter()
+        .filter(|packet| packet.key)
+        .map(|packet| (packet.pts_ms.unwrap() - start_ms, packet.pos.unwrap()))
         .collect();
-    for (n, segment) in segments.iter().enumerate() {
-        let cut = keys
+    let mut cuts: Vec<(i64, u64)> = vec![keys[0]];
+    for n in 1.. {
+        let Some(key) = keys
             .iter()
-            .find(|key| **key >= n as i64 * SEGMENT_MS as i64)
-            .copied()
-            .expect("a key in every segment of this film");
-        assert_eq!(video_tfdt(segment), Some(cut as u64 * 90), "segment {n}");
+            .find(|(pts, _)| *pts >= n * SEGMENT_MS as i64 && *pts > cuts.last().unwrap().0)
+        else {
+            break;
+        };
+        if cuts.last() != Some(key) {
+            cuts.push(*key);
+        }
+    }
+    assert_eq!(
+        cuts.iter().map(|(pts, _)| pts / 1000).collect::<Vec<_>>(),
+        vec![0, 4, 6, 10, 12]
+    );
+    assert_eq!(layout.slots.len(), cuts.len());
+    let film_len = std::fs::metadata(&film)?.len();
+    for (n, (pts, pos)) in cuts.iter().enumerate() {
+        let fragment = layout.fragment(&whole, n);
+        assert_eq!(
+            video_tfdt(fragment),
+            Some(*pts as u64 * 90),
+            "slot {n}'s tfdt"
+        );
+        let end = cuts.get(n + 1).map_or(film_len, |(_, pos)| *pos);
+        let span = end - pos;
+        let mirrored = span + 8 * 1024 + span / 64;
+        let size = layout.slots[n].1 as u64;
+        assert!(
+            size.abs_diff(mirrored) <= 32,
+            "slot {n} is {size} bytes, the source's span mirrored is {mirrored}"
+        );
     }
 
-    // **And it decodes**: every packet, no error, read as the one file it is.
-    let decoded = run(
-        "ffmpeg",
-        &[
-            "-v",
-            "error",
-            "-i",
-            out.to_str().unwrap(),
-            "-f",
-            "null",
-            "-",
-        ],
-    )
-    .expect("ffmpeg ran");
-    assert!(decoded.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&decoded.stderr),
-        "",
-        "decode errors"
-    );
-
-    // **A stream from a time is the same segments from there**: the
-    // receiver's seek is a new stream from 7 s, made by a run that seeks
-    // to 6 s (segment 2's time). The cut rule is a function of N and the
-    // film alone, so the bytes are the ones the run from the start made.
-    let from = get(&runtime, &lan, &format!("{stream}?from=7000"));
-    let mut expected = init.to_vec();
-    for segment in &segments[2..] {
-        expected.extend_from_slice(segment);
+    // **And it decodes**: every packet, no error, read as the one file it
+    // is -- and from every slot's start, each fragment after the init
+    // segment alone.
+    decodes(out_path);
+    for n in 0..layout.slots.len() {
+        let mut alone = whole[..layout.init].to_vec();
+        alone.extend_from_slice(layout.fragment(&whole, n));
+        let path = tmp.path().join(format!("slot{n}.mp4"));
+        std::fs::write(&path, alone)?;
+        decodes(path.to_str().unwrap());
     }
-    assert!(from == expected, "the stream from 7 s is not segments 2-4");
 
-    // **A receiver's restart is counted for the player**: the stream again
-    // from the start it was already read from end to end -- what a receiver
-    // does with a seek it cannot make -- and not the one from 7 s, a new
-    // start.
-    assert_eq!(
-        xtremio_core::api::media::media_rendition_restarts(token.clone())?,
-        0
-    );
-    get(&runtime, &lan, &stream);
-    assert_eq!(
-        xtremio_core::api::media::media_rendition_restarts(token.clone())?,
-        1
-    );
+    // **Every range is the file's bytes**, however it is asked for: a range
+    // across a slot boundary, one inside it, and the last bytes.
+    let boundary = layout.slots[2].0 as u64;
+    for (from, to) in [
+        (boundary - 5_000, boundary + 5_000),
+        (boundary - 10, boundary + 100_000),
+        (whole.len() as u64 - 16, whole.len() as u64 - 1),
+    ] {
+        let to = to.min(whole.len() as u64 - 1);
+        let (status, _, bytes) = get(&runtime, &url, Some((from, to)));
+        assert_eq!(status, 206);
+        assert!(bytes == whole[from as usize..=to as usize], "{from}-{to}");
+    }
 
-    // **Unpublishing ends a stream being read, and its run**: the thread
+    // A fresh rendition of the same film, read from its last slot first --
+    // a run started there -- is the same file.
+    let again = publish(&film, DURATION_MS, SEGMENT_MS)?;
+    let last = layout.slots[4].0 as u64;
+    let (_, _, tail) = get(&runtime, &again, Some((last, whole.len() as u64 - 1)));
+    assert!(tail == whole[last as usize..], "the last slot, made first");
+    let (_, _, again_whole) = get(&runtime, &again, None);
+    assert!(again_whole == whole, "the same file");
+
+    // --- The long films: a seek by the sidx, with and without an index -------
+
+    for (container, file) in [
+        (Container::Matroska, "long.mkv"),
+        (Container::MatroskaWithoutCues, "nocues.mkv"),
+        (Container::TransportStream, "long.ts"),
+    ] {
+        let path = tmp.path().join(file);
+        make(&path, LONG_SECONDS, container).expect("ffmpeg made the long film");
+        let url = publish(&path, u64::from(LONG_SECONDS) * 1000, 6000)?;
+        // Mirrored from the cues, the slots follow the keys' spans; with no
+        // index (no cues, a transport stream) they are estimated: equal, in
+        // proportion to time, all but the last.
+        let (_, _, head) = get(&runtime, &url, Some((0, 64 * 1024 - 1)));
+        let sizes = sidx_sizes(&head);
+        assert_eq!(sizes.len(), LONG_SECONDS as usize / 6, "{file}");
+        let middle = &sizes[1..sizes.len() - 1];
+        let equal = middle.iter().max().unwrap() - middle.iter().min().unwrap() <= 1;
+        assert_eq!(equal, container != Container::Matroska, "{file}: {sizes:?}");
+        // **One jump to the slot that holds 5:00**: the start, a peek at
+        // the end, the first fragment, the jump -- and a spare.
+        let (requests, landed) = ffprobe_seek(&url);
+        eprintln!("{file}: ffprobe sought to 5:00 in {requests} requests, landing at {landed} s");
+        assert!(
+            requests <= 6,
+            "{file}: ffprobe made {requests} requests to seek to 5:00"
+        );
+        // Keys every 2.8 s. Mirrored, the key at or before 5:00 (299.66 s);
+        // estimated -- each slot labelled a GOP (10 s) after its cut -- a
+        // key in the slot before, a segment and a GOP early at most.
+        let earliest = if container == Container::Matroska {
+            297.0
+        } else {
+            300.0 - 6.0 - 10.0
+        };
+        assert!(
+            (earliest..=300.0).contains(&landed),
+            "{file}: the seek landed at {landed} s"
+        );
+        decodes(&url);
+    }
+
+    // **Unpublishing ends a file being read, and its run**: the thread
     // returns, whatever it was blocked in.
-    let reading = xtremio_core::api::media::media_publish_rendition(id.clone(), spec(0))?;
+    let id = xtremio_core::api::media::media_register_local_path(film.display().to_string(), None)?;
+    let reading = xtremio_core::api::media::media_publish_rendition(
+        id.clone(),
+        spec(DURATION_MS, SEGMENT_MS),
+    )?;
     let body_broke = runtime.block_on(async {
-        let client = xtremio_core::env::http_client_builder()
-            .no_proxy()
-            .build()
-            .unwrap();
-        let mut response = client
+        let mut response = client()
             .get(format!("http://{lan}/cast/{reading}/stream.mp4"))
             .send()
             .await
@@ -436,8 +609,8 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
             }
         }
     });
-    assert!(body_broke, "a cut stream ended cleanly");
-    assert!(xtremio_core::api::media::media_unpublish(token)?);
+    assert!(body_broke, "a cut file ended cleanly");
+    xtremio_core::api::server::server_set_lan_media(false)?;
     wait_for("every rendition run to end", || {
         xtremio_core::rendition::live_runs() == 0
     });
@@ -451,17 +624,17 @@ fn an_h264_aac_matroska_film_is_repackaged_into_the_stream_a_receiver_reads() ->
 /// **Not a test: a rendition served from this machine**, for playing it
 /// in a browser or on a television before the app casts it
 /// (`docs/CASTING.md`). Publishes a rendition of `XTREMIO_RENDITION_FILE`
-/// (an H.264 + AAC film) on the LAN listener -- loopback, so a television
-/// reaches it through `adb reverse` -- writes the stream's path and the
-/// listener's port into `XTREMIO_RENDITION_OUT` (`path`, `port`, and `url`,
-/// the whole URL on this machine), and serves until a file named `stop`
-/// appears there:
+/// (an H.264 + AAC film: Matroska, MP4 or a transport stream) on the LAN
+/// listener -- loopback, so a television reaches it through `adb reverse`
+/// -- writes the file's path and the listener's port into
+/// `XTREMIO_RENDITION_OUT` (`path`, `port`, and `url`, the whole URL on
+/// this machine), and serves until a file named `stop` appears there:
 ///
 /// `XTREMIO_RENDITION_FILE=film.mkv XTREMIO_RENDITION_OUT=/tmp/r cargo
 /// test --test rendition serve -- --ignored --nocapture`
 ///
-/// The stream starts at the film's start; `?from=<ms>` on the path starts
-/// it elsewhere, which is what a seek is.
+/// The file is the rendition a receiver gets: a length, ranges, a `sidx`;
+/// seek in it with the television's remote.
 #[test]
 #[ignore]
 fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
@@ -491,29 +664,20 @@ fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
     .expect("a duration")
         / 1000;
     let id = xtremio_core::api::media::media_register_local_path(file.display().to_string(), None)?;
-    let spec = serde_json::json!({
-        "durationMs": duration_ms, "segmentMs": 6000, "startMs": 0,
-        "video": "copy", "audio": "copy", "audioTrack": 0,
-    });
-    let token = xtremio_core::api::media::media_publish_rendition(id, spec.to_string())?;
+    let token =
+        xtremio_core::api::media::media_publish_rendition(id, spec(duration_ms as u64, 6000))?;
     let path = format!("/cast/{token}/stream.mp4");
     let port = lan.rsplit(':').next().unwrap_or_default().to_owned();
-    // A HEAD, so a stream that would not answer says so here.
-    let head = runtime.block_on(async {
-        xtremio_core::env::http_client_builder()
-            .no_proxy()
-            .build()
-            .unwrap()
-            .head(format!("http://{lan}{path}"))
-            .send()
-            .await
-    })?;
+    // A HEAD, so a file that would not answer says so here.
+    let head =
+        runtime.block_on(async { client().head(format!("http://{lan}{path}")).send().await })?;
     assert_eq!(head.status(), 200);
     std::fs::write(out.join("path"), &path)?;
     std::fs::write(out.join("port"), &port)?;
     std::fs::write(out.join("url"), format!("http://{lan}{path}"))?;
     eprintln!(
-        "serving http://{lan}{path} ({duration_ms} ms) until {} exists",
+        "serving http://{lan}{path} ({duration_ms} ms, {} bytes) until {} exists",
+        head.headers()["content-length"].to_str().unwrap_or("?"),
         out.join("stop").display()
     );
     while !out.join("stop").exists() {
