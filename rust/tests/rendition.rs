@@ -314,6 +314,34 @@ fn ffprobe_seek(url: &str) -> (usize, f64) {
     (requests, first)
 }
 
+/// Where each of `ffmpeg -ss <at> -i <url>`'s requests began, decoding a
+/// second of every stream from there.
+fn ffmpeg_seek_ranges(url: &str, at: u32) -> Vec<u64> {
+    let out = run(
+        "ffmpeg",
+        &[
+            "-v",
+            "debug",
+            "-ss",
+            &at.to_string(),
+            "-i",
+            url,
+            "-t",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ],
+    )
+    .expect("ffmpeg ran");
+    assert!(out.status.success());
+    String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .filter_map(|line| line.strip_prefix("Range: bytes="))
+        .filter_map(|range| range.split('-').next()?.parse().ok())
+        .collect()
+}
+
 /// `ffmpeg` decodes `input` whole with nothing to say.
 fn decodes(input: &str) {
     let decoded =
@@ -574,6 +602,18 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
         assert!(
             (earliest..=300.0).contains(&landed),
             "{file}: the seek landed at {landed} s"
+        );
+        // **Every stream sought lands in that slot**: `ffmpeg -ss` seeks the
+        // sound too, to the sync sample's time; with no sound at or before
+        // it in the slot, it went back to what it read at the start.
+        // So: never back. Mirrored, the start and the jump and nothing
+        // else; estimated (slots labelled a GOP late), on forward from the
+        // slot before to the sync sample.
+        let ranges = ffmpeg_seek_ranges(&url, 60);
+        let mirrored = container == Container::Matroska;
+        assert!(
+            ranges.windows(2).all(|pair| pair[1] > pair[0]) && (!mirrored || ranges.len() == 2),
+            "{file}: ffmpeg -ss 60 asked {ranges:?}"
         );
         decodes(&url);
     }
