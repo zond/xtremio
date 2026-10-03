@@ -629,3 +629,17 @@ exports.similar = onRequest(
     {secrets: [GEMINI_API_KEY], region: 'europe-west1', timeoutSeconds: 60},
     similarApp,
 );
+
+/**
+ * A title's scores from MDBList, as its own function with its own secret
+ * (see `ratings.js`): MDBList's daily limit or a missing key cannot touch
+ * pairing or "More like this".
+ */
+const {mountRatings} = require('./ratings');
+const MDBLIST_API_KEY = defineSecret('MDBLIST_API_KEY');
+const ratingsApp = express();
+mountRatings(ratingsApp, MDBLIST_API_KEY);
+exports.ratings = onRequest(
+    {secrets: [MDBLIST_API_KEY], region: 'europe-west1', timeoutSeconds: 30},
+    ratingsApp,
+);

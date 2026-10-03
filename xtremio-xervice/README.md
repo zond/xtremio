@@ -1,8 +1,9 @@
 # xtremio-xervice
 
 Pairing a television with files in a Google Drive, over a QR code -- and,
-beside it, the manifest that Drive plays are tracked under and the "More
-like this" answers ([below](#more-like-this)). Served at
+beside it, the manifest that Drive plays are tracked under, the "More
+like this" answers ([below](#more-like-this)) and a title's scores
+([Ratings](#ratings)). Served at
 `https://xtremio-xervice.web.app`.
 
 The television cannot run the Google Picker — it is web-only — and cannot
@@ -113,7 +114,37 @@ everyone after -- one model call per title, ever, until the question
 changes. There is no "ask again". How the model and the wording were chosen
 is `tool/recommendations/README.md`.
 
-## Why there is no App Check
+## Ratings
+
+`GET /ratings/{type}/{id}` (a Cinemeta id, `movie` or `series`) answers a
+title's scores from [MDBList](https://mdblist.com):
+
+```json
+{"imdb": {"score": 8.1, "votes": 673852}, "tmdb": {"score": 7.6, "votes": 10114},
+ "tomatoes": {"score": 97, "votes": 102}, "popcorn": {"score": 90},
+ "fetchedAt": "2026-10-03T12:00:00.000Z"}
+```
+
+IMDb and TMDB out of ten, the Tomatometer (`tomatoes`) and the Popcornmeter
+(`popcorn`) as percentages, `null` for a source with no score, `votes` only
+where MDBList states it. It is its own function (`functions/ratings.js`) with
+its own secret, `MDBLIST_API_KEY`. The MDBList URL is built from the type
+(`movie` → `movie`, `series` → `show`) and an id that must match
+`tt` and digits, so nothing else can be asked through the key.
+
+The answer is stored in Firestore (`ratings/{type}_{id}`) and served for
+seven days -- one day when MDBList had no score at all -- and the edge keeps
+it a day. MDBList's free tier is a daily request count: a `429` writes the
+reset it names to `ratings/_limit`, and no title is fetched again until then;
+any other failure holds that title back an hour. Either way the answer is
+the stored one however old, or every score `null` with `fetchedAt: null`,
+kept at the edge ten minutes -- never an error status and never a retry.
+Two first requests for a title pay for one fetch. The key travels in the
+query string, so neither the URL nor a fetch error's text is ever logged.
+
+Tests: `cd functions && npm test` (Node's own runner; no install needed).
+
+$a
 
 App Check attests that a request came from a build Google Play
 distributed. Every install of this app is sideloaded — from Drive, or
@@ -152,6 +183,7 @@ firebase use xtremio-xervice
 firebase functions:secrets:set OAUTH_CLIENT_ID        # the web client id
 firebase functions:secrets:set OAUTH_CLIENT_SECRET    # its secret
 firebase functions:secrets:set GEMINI_API_KEY         # for /similar
+firebase functions:secrets:set MDBLIST_API_KEY        # for /ratings
 
 # The pages carry two public values; neither is a secret.
 sed -i "s/__CLIENT_ID__/<the web client id>/" public/link.html

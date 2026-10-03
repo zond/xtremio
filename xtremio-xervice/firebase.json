@@ -29,6 +29,10 @@
         "function": "similar"
       },
       {
+        "source": "/ratings/**",
+        "function": "ratings"
+      },
+      {
         "source": "/stream/**",
         "destination": "/no-streams.json"
       }
@@ -106,6 +110,7 @@
     "runtime": "nodejs22",
     "ignore": [
       "node_modules",
+      "test",
       ".git",
       "*.log"
     ]

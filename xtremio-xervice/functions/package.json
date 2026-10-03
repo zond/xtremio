@@ -1,7 +1,10 @@
 {
   "name": "xtremio-xervice",
-  "description": "xtremio's service: Drive pairing and More like this",
+  "description": "xtremio's service: Drive pairing, More like this and ratings",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "engines": {
     "node": "22"
   },
