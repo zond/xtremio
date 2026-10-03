@@ -510,8 +510,12 @@ class FocusMarked extends StatefulWidget {
 
   /// A radius that comes out a stadium on anything shorter than twice it:
   /// the painter clamps a corner to half the box it is drawn on and never
-  /// grows one. What the chips wear.
-  static const BorderRadius stadium = BorderRadius.all(Radius.circular(24));
+  /// grows one. What the chips wear, whose theme shape is a
+  /// [StadiumBorder] (`XtremioApp.themeFor`). Far past any chip's height on
+  /// purpose: 24 was a stadium for a phone's 48-pixel target and not for a
+  /// television's 52, nor for a chip under a larger text size, and a ring
+  /// with corners tighter than the pill inside it draws its ends square.
+  static const BorderRadius stadium = BorderRadius.all(Radius.circular(999));
 
   @override
   State<FocusMarked> createState() => _FocusMarkedState();

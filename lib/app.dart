@@ -235,6 +235,12 @@ class XtremioApp extends StatefulWidget {
         brightness: Brightness.dark,
       ),
       scaffoldBackgroundColor: const Color(0xFF0E0B16),
+      // Every chip in the app is a pill: the selected fill, the outline and
+      // the ink a press or a focus spreads are all drawn in the chip's
+      // shape, and the focus ring a television puts round one is a stadium
+      // too (`FocusMarked.stadium`). Material 3's own chip is a rectangle
+      // with 8 px corners, which drew a squared-off fill inside the ring.
+      chipTheme: const ChipThemeData(shape: StadiumBorder()),
     );
     return isTv ? FocusTheme.apply(TvDensity.theme(base), emphasis) : base;
   }

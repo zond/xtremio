@@ -72,15 +72,34 @@ Finder seasonPills() => find.descendant(
 
 /// What each season pill reads.
 List<String?> seasonLabels(WidgetTester tester) => [
-  for (final pill in tester.widgetList<ChoiceChip>(seasonPills()))
-    (pill.label as Text).data,
+  for (final pill in seasonPills().evaluate())
+    tester
+        .widget<Text>(
+          find
+              .descendant(
+                of: find.byWidget(pill.widget),
+                matching: find.byType(Text),
+              )
+              .first,
+        )
+        .data,
 ];
 
 /// The pill the row fills, and there is exactly one of those.
 String? selectedSeason(WidgetTester tester) {
   final filled = [
-    for (final pill in tester.widgetList<ChoiceChip>(seasonPills()))
-      if (pill.selected) (pill.label as Text).data,
+    for (final pill in seasonPills().evaluate())
+      if ((pill.widget as ChoiceChip).selected)
+        tester
+            .widget<Text>(
+              find
+                  .descendant(
+                    of: find.byWidget(pill.widget),
+                    matching: find.byType(Text),
+                  )
+                  .first,
+            )
+            .data,
   ];
   expect(filled, hasLength(1), reason: 'one season is current');
   return filled.single;

@@ -446,11 +446,6 @@ class SeasonSelector extends StatefulWidget {
   /// for `Specials` and the padding a chip puts around it.
   static const double _maxPillWidth = 120;
 
-  /// Rounds the focus ring around a pill. A chip is stadium-shaped, and a
-  /// radius this side of half its height is drawn as one (the radii are
-  /// scaled down to fit the box, never up).
-  static const BorderRadius _pillRadius = BorderRadius.all(Radius.circular(40));
-
   @override
   State<SeasonSelector> createState() => _SeasonSelectorState();
 }
@@ -568,23 +563,35 @@ class _SeasonSelectorState extends State<SeasonSelector> {
                         child: TvLadderHome(
                           isHome: season == widget.selected,
                           child: FocusHighlighted(
-                            borderRadius: SeasonSelector._pillRadius,
+                            borderRadius: FocusMarked.stadium,
                             focusNode: _nodeFor(season),
                             // The remote landing on a pill is the viewer
                             // asking to see that season: the episodes below
                             // follow the highlight, and select is left to
                             // mean the press that goes down into them.
                             onFocused: () => widget.onChanged(season),
-                            builder: (context, node) => ChoiceChip(
-                              focusNode: node,
-                              label: Text(SeasonSelector.label(season)),
-                              showCheckmark: false,
-                              selected: season == widget.selected,
-                              // Selected or not, every pill takes a press and
-                              // is a focus stop: a chip with no callback is
-                              // neither, which would leave a remote unable to
-                              // rest on the season already on screen.
-                              onSelected: (_) => widget.onChanged(season),
+                            // The chip itself is as wide as its slot. A
+                            // chip centres its body in whatever room it is
+                            // given and never stretches it, so a slot wider
+                            // than the label drew a small pill in the middle
+                            // of a wide focus ring; at its intrinsic width
+                            // tightened to the slot the body fills it, and
+                            // the label is centred in the body.
+                            builder: (context, node) => IntrinsicWidth(
+                              child: ChoiceChip(
+                                focusNode: node,
+                                label: Center(
+                                  heightFactor: 1,
+                                  child: Text(SeasonSelector.label(season)),
+                                ),
+                                showCheckmark: false,
+                                selected: season == widget.selected,
+                                // Selected or not, every pill takes a press and
+                                // is a focus stop: a chip with no callback is
+                                // neither, which would leave a remote unable to
+                                // rest on the season already on screen.
+                                onSelected: (_) => widget.onChanged(season),
+                              ),
                             ),
                           ),
                         ),
