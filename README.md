@@ -105,7 +105,10 @@ build comes from. One thing about those builds
 is worth knowing before installing, and the release notes say it: the macOS
 build is unsigned. The APKs carry this project's own release key: to
 Android, a signing certificate *is* the app's identity, so upgrading from a
-build signed with a different key needs an uninstall first.
+build signed with a different key needs an uninstall first. Once
+installed, the app looks for a newer release once a day and offers it --
+on Android it downloads, verifies and installs it, behind Android's own
+confirmation ([docs/ANDROID.md](docs/ANDROID.md#updating-from-inside-the-app)).
 
 Building it yourself needs Flutter stable and a Rust toolchain; `make run
 DEVICE=linux` runs it, and the setup, the `make` targets and what a build

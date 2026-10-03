@@ -132,6 +132,56 @@ renderer for them.
     (below).
   - `xtremio/downloads`: the foreground service (below).
   - `xtremio/drive_picker`: `DrivePicker.kt`, Android's own Drive picker.
+  - `xtremio/update`: `AppUpdateChannel.kt`, installing a downloaded
+    release (below).
+- **`REQUEST_INSTALL_PACKAGES`** and the unexported `InstallStatusReceiver`
+  are the in-app update's: see
+  [Updating from inside the app](#updating-from-inside-the-app).
+
+## Updating from inside the app
+
+The app looks for a newer release on GitHub by itself and offers it in a
+dialog: Update, Skip this version, Later. Settings > About > "Check for
+updates" asks at any time and says "up to date" too. The code is in
+`lib/features/update/`; the Android half is `AppUpdateChannel.kt`.
+
+- **When it looks.** Once a day at most, 20 seconds after start-up, and
+  never while a player is on the stack: both the look and the dialog wait
+  for the player to close. The time of the last look is written before
+  GitHub is asked (`updateCheckedAt` in the preferences), so a failed look
+  counts too: the unauthenticated API allows 60 requests an hour per IP,
+  shared with everything else on the network. "Check for updates" ignores
+  the day.
+- **What it compares.** The release tag (`vX.Y.Z`, from
+  `releases/latest`, which leaves drafts and pre-releases out) against the
+  `XTREMIO_VERSION` the Makefile stamps -- never the version code, which is
+  2001 on a phone and 1001 on a television for every release.
+- **Which builds look by themselves.** Only a release-mode build with a
+  release version stamped and a commit that is not `-dirty`
+  (`BuildIdentity.checksByItself`). A `flutter run`, a build from a
+  modified tree and every debug or profile build stay quiet. A debug or
+  profile build is `com.zond.xtremio.debug`, signed with the debug key, so
+  the release APK could never update it: "Check for updates" works there,
+  and offers only the release page.
+- **Installing.** Update downloads the APK for `Build.SUPPORTED_ABIS[0]`
+  (`arm64-v8a` or `armeabi-v7a`; a Chromecast with Google TV reports the
+  latter) into the app's own storage, picks up a stopped download where it
+  left off, and checks it against the SHA-256 GitHub lists for the asset;
+  a mismatch, or no checksum at all, deletes it and installs nothing. The
+  install is a `PackageInstaller` session that asks for user action
+  outright, so Android's own confirmation is always shown. When it
+  succeeds Android closes xtremio; open it again.
+- **"Install unknown apps".** Android lets an app install packages only
+  with that per-app switch. The dialog explains it and opens the switch
+  (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`); where nothing answers that screen
+  it says where the setting lives, and Install goes ahead anyway, which
+  makes Android ask in place.
+- **A different key.** Installs from before v0.1.8 are signed with another
+  key; Android refuses the update, and the dialog says to uninstall first
+  (which loses the login, settings and downloads). Every release since is
+  signed with the same key, and CI checks it.
+- **Desktops** get the same look and dialog, with "Open release page"
+  instead of Update: nothing replaces itself there.
 
 ## Typing with a remote
 
