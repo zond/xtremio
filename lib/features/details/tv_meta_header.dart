@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
@@ -43,7 +44,7 @@ import 'details_header.dart' show TrailerButton;
 /// the title rather than about what to play, and the remote has to be
 /// able to reach it.
 ///
-/// **The header says which of its two stops comes first**, because nothing
+/// **The header says which of its stops comes first**, because nothing
 /// else here can be trusted to. The description is built inside a
 /// [LayoutBuilder] -- it measures the words against the width it is given
 /// -- so its focus node attaches at layout, after the bookmark beside it.
@@ -118,7 +119,7 @@ class TvMetaHeader extends StatelessWidget {
     final description = meta.description;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      // The header's two stops, walked in the order they are read rather
+      // The header's stops, walked in the order they are read rather
       // than in the order they happen to be assembled: see the class.
       child: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -126,49 +127,58 @@ class TvMetaHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _title(context),
-                  const SizedBox(height: 10),
-                  Text(
-                    facts(meta),
-                    style: theme.textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (downloads.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    DownloadSummary(downloads: downloads, metaId: meta.id),
-                  ],
-                  if (description != null) ...[
-                    // Two short of the ten the other gaps are: the block
-                    // holds itself off its own ring by [FocusRing.textInset]
-                    // on every side, and that padding is part of the gap.
-                    const SizedBox(height: 2),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(stopOrderDescription),
-                      child: TvDescription(text: description),
-                    ),
-                  ],
-                  if (onTrailer case final onTrailer?) ...[
+              // Up and down between the plot and the trailer under it,
+              // before the ladder takes them out of the header: see
+              // [_walkColumn].
+              child: Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                includeSemantics: false,
+                onKeyEvent: _walkColumn,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _title(context),
                     const SizedBox(height: 10),
-                    // Over the backdrop, so the ring the bookmark wears
-                    // rather than the floor's fill: see the bookmark below.
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(stopOrderTrailer),
-                      child: FocusHighlighted(
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(24),
-                        ),
-                        builder: (context, node) => TrailerButton(
-                          focusNode: node,
-                          onPressed: onTrailer,
+                    Text(
+                      facts(meta),
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (downloads.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      DownloadSummary(downloads: downloads, metaId: meta.id),
+                    ],
+                    if (description != null) ...[
+                      // Two short of the ten the other gaps are: the block
+                      // holds itself off its own ring by [FocusRing.textInset]
+                      // on every side, and that padding is part of the gap.
+                      const SizedBox(height: 2),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(stopOrderDescription),
+                        child: TvDescription(text: description),
+                      ),
+                    ],
+                    if (onTrailer case final onTrailer?) ...[
+                      const SizedBox(height: 10),
+                      // Over the backdrop, so the ring the bookmark wears
+                      // rather than the floor's fill: see the bookmark below.
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(stopOrderTrailer),
+                        child: FocusHighlighted(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(24),
+                          ),
+                          builder: (context, node) => TrailerButton(
+                            focusNode: node,
+                            onPressed: onTrailer,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -195,6 +205,56 @@ class TvMetaHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Moves the remote up or down between the stops of the header's text
+  /// column -- the plot and the trailer drawn under it -- and declines a
+  /// press with no stop beyond it in the column, which the ladder row above
+  /// then answers by leaving the header.
+  ///
+  /// **Without this the trailer is unreachable whenever the plot is a
+  /// stop.** The ladder takes up and down for itself, a rung per press, and
+  /// left and right go by geometry: from the plot right is the bookmark,
+  /// and from the bookmark left is the plot, level with it, never the
+  /// trailer under it. Arriving lands on the plot, the header's first stop,
+  /// so there was no D-pad path to the button at all -- only Tab, which a
+  /// remote does not have. Down from the plot is where a viewer looks for
+  /// the button drawn under it.
+  ///
+  /// The column's stops are walked by where they are drawn, top first, not
+  /// by the order they attach in (the plot attaches at layout, after the
+  /// trailer: see the class). The plot's own handler runs first, deeper in
+  /// the tree, so an unfolded plot taller than the screen is still read
+  /// through before the press comes here.
+  static KeyEventResult _walkColumn(FocusNode column, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final up = key == LogicalKeyboardKey.arrowUp;
+    if (!up && key != LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.ignored;
+    }
+    final focused = FocusManager.instance.primaryFocus;
+    final stops = column.traversalDescendants.toList()
+      ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+    final at = focused == null ? -1 : stops.indexOf(focused);
+    final next = at + (up ? -1 : 1);
+    if (at < 0 || next < 0 || next >= stops.length) {
+      return KeyEventResult.ignored;
+    }
+    final stop = stops[next];
+    stop.requestFocus();
+    final target = stop.context;
+    if (target != null) {
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        alignmentPolicy: up
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+            : ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    }
+    return KeyEventResult.handled;
   }
 
   /// The logo, or the name when there is none and when the logo will not

@@ -554,14 +554,22 @@ void main() {
       );
 
       // And back up, by hand at the top: what the rungs know nothing about
-      // is the header's own two stops, and the walk has to reach both and
-      // leave again.
+      // is the header's own three stops, and the walk has to reach them
+      // all and leave again.
       await stepUpToRung(tester, kEpisodesLabel);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        focusedLabel(tester),
+        TrailerButton.label,
+        reason:
+            'above the top rung is the trailer the walk left the header '
+            'from, under the plot',
+      );
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(
         focusIn<TvDescription>(),
         isTrue,
-        reason: 'above the top rung is the plot the walk left',
+        reason: 'and above the trailer the plot',
       );
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(
@@ -847,14 +855,16 @@ void main() {
         down,
         [
           tester.widget<TvDescription>(find.byType(TvDescription)).text,
+          TrailerButton.label,
           kSourcesLabel,
           kStreamsSectionedLabel,
           'alpha.example',
           'Alpha 1080p',
         ],
         reason:
-            'the plot, the rung under it, the rung\'s own control, the '
-            'one group there is and the one source in it',
+            'the plot, the trailer under it, the rung under the header, '
+            'the rung\'s own control, the one group there is and the one '
+            'source in it',
       );
 
       final up = await walkStops(tester, LogicalKeyboardKey.arrowUp);

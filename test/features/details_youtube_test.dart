@@ -203,5 +203,124 @@ void main() {
       expect(opener.opened, [first]);
       expect(find.byType(PlayerScreen), findsNothing);
     });
+
+    testWidgets('on a television the D-pad reaches it: down from the plot, '
+        'wearing the ring, and select opens YouTube', (tester) async {
+      useScreen(tester, tvSize);
+      final opener = await mount(
+        tester,
+        device: tv,
+        fixture: loadMetaDetailsFixture(),
+      );
+
+      // A remote has no Tab: arrows and select only, from where the
+      // screen put the remote.
+      for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusIn<TvDescription>(), isTrue, reason: 'up lands on the plot');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), TrailerButton.label, reason: 'under it');
+      expect(focusIn<TvMetaHeader>(), isTrue);
+      expect(focusMarks(), contains(FocusMark.ring));
+
+      // Up goes back to the plot, and down again past the trailer leaves
+      // the header for the rung below, as it did before the trailer.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<TvDescription>(), isTrue, reason: 'back up to the plot');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), TrailerButton.label);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<TvMetaHeader>(), isFalse, reason: 'out of the header');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        focusedLabel(tester),
+        TrailerButton.label,
+        reason: 'the header remembers the stop it was left from',
+      );
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(opener.opened, [first]);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
+
+    testWidgets('on a television down from an unfolded plot puts the trailer '
+        'on the screen', (tester) async {
+      useScreen(tester, tvSize);
+      // A plot long enough that, unfolded, it pushes the trailer under the
+      // bottom edge of the screen.
+      final fixture = loadMetaDetailsFixture();
+      final meta =
+          fixture['metaItems'][0]['content']['content'] as Map<String, dynamic>;
+      meta['description'] = List.filled(40, meta['description']).join(' ');
+      await mount(tester, device: tv, fixture: fixture);
+
+      for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusIn<TvDescription>(), isTrue);
+      await press(tester, LogicalKeyboardKey.select);
+      for (var i = 0; i < 12 && !focusIn<OutlinedButton>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(focusedLabel(tester), TrailerButton.label);
+      final button = find.widgetWithText(OutlinedButton, TrailerButton.label);
+      // Its middle rather than its edge: the button is revealed at its
+      // resting size, and the focus zoom then grows it a little past that.
+      expect(
+        tester.getCenter(button).dy,
+        lessThanOrEqualTo(tvSize.height),
+        reason: 'the remote is somewhere the viewer can see',
+      );
+    });
+
+    testWidgets('on a television every stop in the header is reachable by '
+        'the D-pad', (tester) async {
+      useScreen(tester, tvSize);
+      await mount(tester, device: tv, fixture: loadMetaDetailsFixture());
+
+      final header = find.byType(TvMetaHeader);
+      bool inHeader(FocusNode node) {
+        final context = node.context;
+        return context != null &&
+            context.findAncestorWidgetOfExactType<TvMetaHeader>() != null;
+      }
+
+      final all = {
+        for (final node in FocusManager.instance.rootScope.descendants)
+          if (inHeader(node) &&
+              node.canRequestFocus &&
+              !node.skipTraversal &&
+              node is! FocusScopeNode)
+            node,
+      };
+      expect(header, findsOneWidget);
+      expect(all, hasLength(3), reason: 'the plot, the trailer, the bookmark');
+
+      for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      // Every stop one arrow press away from a stop already reached. Coming
+      // back to a stop to try the next arrow is a jump, not a press: what a
+      // press can reach from a stop does not depend on how it was reached.
+      final reached = {FocusManager.instance.primaryFocus!};
+      final pending = [...reached];
+      while (pending.isNotEmpty) {
+        final from = pending.removeLast();
+        for (final key in [
+          LogicalKeyboardKey.arrowUp,
+          LogicalKeyboardKey.arrowDown,
+          LogicalKeyboardKey.arrowLeft,
+          LogicalKeyboardKey.arrowRight,
+        ]) {
+          from.requestFocus();
+          await tester.pumpAndSettle();
+          await press(tester, key);
+          final to = FocusManager.instance.primaryFocus;
+          if (to != null && inHeader(to) && reached.add(to)) pending.add(to);
+        }
+      }
+      expect(reached, all);
+    });
   });
 }

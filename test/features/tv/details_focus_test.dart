@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/details/details_header.dart'
+    show TrailerButton;
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
 import 'package:xtremio/features/details/tv_meta_header.dart';
@@ -822,6 +824,11 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the title block');
 
+      expect(focusIn<TvDescription>(), isTrue, reason: 'on the plot');
+      // Out of the title block by the trailer under the plot, and then
+      // the rungs.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), TrailerButton.label);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), kEpisodesLabel, reason: 'not stepped over');
       await press(tester, LogicalKeyboardKey.arrowDown);
