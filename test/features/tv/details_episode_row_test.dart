@@ -72,8 +72,8 @@ Widget harness(
   );
 }
 
-/// The sources list grouped rather than sectioned, so the remote starts on
-/// an actual stream: what this file is about is the info column, and a
+/// The sources list grouped rather than sectioned, so the walk down lands
+/// on an actual stream: what this file is about is the info column, and a
 /// collapsed section header is one more press between it and the row.
 Future<AppPrefs> groupedPrefs() async {
   final prefs = AppPrefs(client: FakePrefsClient({'streamsSectioned': false}));
@@ -123,8 +123,8 @@ String? focusedEpisode() {
   return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
-/// The remote starts on the episodes of a series, which is the rung the
-/// screen opens on; this is what puts it back there from wherever a test
+/// The episodes of a series are the rung the screen opens, a walk down
+/// from the header the remote starts on; this is what puts it there from wherever a test
 /// has walked it to.
 Future<void> stepOntoTheRow(WidgetTester tester) async {
   // Down first and then up: the row sits under the rung's header, so

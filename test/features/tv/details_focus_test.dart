@@ -139,8 +139,8 @@ String? focusedEpisodeTitle() {
   return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
-/// The screen is one column of rows now, and the remote starts at the
-/// bottom of it, on the sources: [up] presses from there reach [T], an
+/// The screen is one column of rows now, and these tests walk the remote
+/// to the bottom of it, the sources: [up] presses from there reach [T], an
 /// episode card or a season pill on the way to the header.
 Future<void> stepUpTo<T extends Widget>(
   WidgetTester tester, {
@@ -263,8 +263,8 @@ Future<AppPrefs> groupedPrefs() async {
   return prefs;
 }
 
-/// Mounts Breaking Bad at the pilot on a TV, focus on the pilot's card in
-/// the episode row.
+/// Mounts Breaking Bad at the pilot on a TV and walks the remote down to
+/// the pilot's card in the episode row.
 Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   useScreen(tester, tvSize);
   final core = FakeCoreClient(
@@ -282,6 +282,8 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   await tester.pumpAndSettle();
   // A series nobody has played opens on its episodes: the choice the
   // screen is for is which one, not which source of one nobody picked.
+  // The remote starts on the header above them, and down reaches them.
+  await walkIntoTheOpenRung(tester);
   expect(focusedEpisodeTitle(), 'Pilot');
   return core;
 }
@@ -299,13 +301,15 @@ Finder sourceCard(String release) => find.byWidgetPredicate(
 void main() {
   group('movie', () {
     testWidgets('the sources are a row under the rest, not a pane beside '
-        'them, and the remote starts on the first group', (tester) async {
+        'them, and the walk down reaches the first group', (tester) async {
       useScreen(tester, tvSize);
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
       );
       await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
+      // The remote starts on the title's header, a walk down from them.
+      await walkIntoTheOpenRung(tester);
 
       // The whole screen is one column: the rows have the panel's width,
       // rather than 480 px of it on the right.
@@ -314,9 +318,9 @@ void main() {
       expect(rows.width, greaterThan(tvSize.width * 0.8));
 
       // One card per addon that answered, in the profile's order, and the
-      // remote on the first of them -- not on a stream, which is a press
-      // further in now. Its row is out, because the highlight is what says
-      // which addon the screen is showing.
+      // walk down lands on the first of them -- not on a stream, which is
+      // a press further in now. Its row is out, because the highlight is
+      // what says which addon the screen is showing.
       expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), 'watchhub.strem.io');
       expect(find.byType(TvSourceCard), findsWidgets);
@@ -336,6 +340,7 @@ void main() {
       );
       await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       // WatchHub's externals cannot play, so none of its cards takes the
       // remote at all; the public-domain torrent is the next group along.
@@ -422,6 +427,9 @@ void main() {
         harness(core, prefs: layout, downloads: downloads),
       );
       await tester.pumpAndSettle();
+      // The remote starts on the title's header; these are about the rows
+      // a walk down reaches.
+      await walkIntoTheOpenRung(tester);
       return core;
     }
 
@@ -430,9 +438,8 @@ void main() {
     ) async {
       await mountSectioned(tester);
 
-      // The resolutions are what the remote starts on, and the one it
-      // starts on is open: a highlight over a shut row says nothing about
-      // anything.
+      // The resolutions are what the walk down reaches, and the first is
+      // open: a highlight over a shut row says nothing about anything.
       expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), '2160p');
       expect(sourceCard('Alpha 2160p'), findsOneWidget);
@@ -576,7 +583,7 @@ void main() {
       tester,
     ) async {
       await mountSectioned(tester);
-      // The card the remote starts on has its row out already, so the
+      // The card the walk down lands on has its row out already, so the
       // press that goes down into it is the first one the viewer makes.
       expect(sourceCard('Alpha 2160p'), findsOneWidget);
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -824,10 +831,9 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the title block');
 
-      expect(focusIn<TvDescription>(), isTrue, reason: 'on the plot');
-      // Out of the title block by the trailer under the plot, and then
-      // the rungs.
-      await press(tester, LogicalKeyboardKey.arrowDown);
+      // On the trailer under the plot, which is where the walk down from
+      // the plot the screen opened on left the title block; and out of
+      // it again into the rungs.
       expect(focusedLabel(tester), TrailerButton.label);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), kEpisodesLabel, reason: 'not stepped over');
@@ -1045,6 +1051,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       await stepUpToPills(tester);
       for (var i = 0; i < 30 && focusedLabel(tester) != '1'; i++) {
@@ -1100,6 +1107,7 @@ void main() {
         harness(core, downloads: downloads, prefs: await groupedPrefs()),
       );
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       // The card says the file is on the device, and says it passively:
       // a button drawn inside a focusable thing cannot be reached by a
@@ -1155,6 +1163,7 @@ void main() {
         harness(core, downloads: downloads, prefs: await groupedPrefs()),
       );
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       await openSource(tester, 'caching.stremio.net', '1080p');
       await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
@@ -1176,6 +1185,7 @@ void main() {
         harness(core, downloads: downloads, prefs: await groupedPrefs()),
       );
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       await openSource(tester, 'caching.stremio.net', '1080p');
       await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
@@ -1200,6 +1210,7 @@ void main() {
         harness(core, downloads: downloads, prefs: await groupedPrefs()),
       );
       await tester.pumpAndSettle();
+      await walkIntoTheOpenRung(tester);
 
       await openSource(tester, 'caching.stremio.net', '1080p');
       await press(tester, LogicalKeyboardKey.select);

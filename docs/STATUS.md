@@ -79,7 +79,11 @@ on to the next episode by itself), and a title in the library never opened
 here starts on the episode last watched. An episode it was sent to -- from
 Continue watching -- wins over both.
 
-**On a television** the screen is laid out for a remote:
+**On a television** the screen is laid out for a remote, and opens at the
+top of the page with the remote on the header -- the plot, else the header's
+first stop -- whatever arrives after it; the rung the title is for is open
+under it, a walk down away. Coming back to it, from the player or a screen
+over it, leaves the remote where it was:
 
 - the title's backdrop fills the panel under the overscan band, darkened by
   a gradient scrim, with the logo, one line of year, runtime, genres and
@@ -94,10 +98,10 @@ Continue watching -- wins over both.
   (`TvLadderHome`): landing on a card there chooses it;
 - sources are the last two rows: a card per group (resolution or addon, per
   the same layout preference), and under the chosen one a row of its
-  sources. The last-used source is a card above them and where the remote
-  starts. Back closes the open row before leaving. An addon that failed
-  or had nothing is not drawn at all; when no addon had anything, the last
-  rung says so, with a card that opens the addons.
+  sources. The last-used source is a card above them, and its rung is the
+  one open when there is one. Back closes the open row before leaving. An
+  addon that failed or had nothing is not drawn at all; when no addon had
+  anything, the last rung says so, with a card that opens the addons.
 
 ## Player
 

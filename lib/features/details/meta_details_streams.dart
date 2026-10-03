@@ -79,10 +79,6 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
         const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
       ];
     }
-    // On a TV focus starts on the stream the user most likely wants: the
-    // last used source, else the first playable one. Autofocus only takes
-    // when nothing on the screen is focused yet, so streams arriving after
-    // the user has moved on leave focus where it is.
     final isTv = DeviceScope.isTv(context);
     final derived = _deriveStreams(
       state,
@@ -105,7 +101,6 @@ extension _MetaDetailsStreams on _MetaDetailsScreenState {
     final lastUsedStream = lastUsed == null
         ? null
         : sources.merged(lastUsed.$2);
-    if (isTv && lastUsedStream != null) _takeTheRemoteToTheLastUsed();
     final downloads = _downloadsClient == null
         ? null
         : StreamDownloads(

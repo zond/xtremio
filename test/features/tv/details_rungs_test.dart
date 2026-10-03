@@ -10,6 +10,7 @@ import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/tv_ladder.dart';
@@ -175,6 +176,14 @@ Future<List<String>> walkStops(
   return stood;
 }
 
+/// Walks down until the remote is on the header of the rung called [label].
+Future<void> stepDownToRung(WidgetTester tester, String label) async {
+  for (var i = 0; i < 6 && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
+  expect(focusedLabel(tester), label);
+}
+
 /// Walks up until the remote is on the header of the rung called [label].
 Future<void> stepUpToRung(WidgetTester tester, String label) async {
   for (var i = 0; i < 6 && focusedLabel(tester) != label; i++) {
@@ -201,6 +210,11 @@ Future<void> mount(
   // A spinner never stops, so a screen that is still waiting cannot be
   // settled; it is pumped a frame at a time instead.
   bool settle = true,
+  // The screen opens with the remote on its header, and what most of
+  // these tests are about is a few presses down: walk it into the open
+  // rung first. Only a settled screen can be walked, and only a
+  // television's.
+  bool walkIn = true,
 }) async {
   useScreen(tester, tvSize);
   final prefs = AppPrefs(
@@ -250,9 +264,11 @@ Future<void> mount(
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
-  if (!overRoute) return;
-  await tester.tap(find.text(openDetails));
-  await tester.pumpAndSettle();
+  if (overRoute) {
+    await tester.tap(find.text(openDetails));
+    await tester.pumpAndSettle();
+  }
+  if (walkIn && settle && device.isTv) await walkIntoTheOpenRung(tester);
 }
 
 /// The button on the screen [mount] pushes the details screen from.
@@ -272,43 +288,118 @@ String? openRungLabel(WidgetTester tester) => tester
     .singleOrNull;
 
 void main() {
+  /// **The remote starts at the top of the page**, on the header, and the
+  /// page is not scrolled: the title, its facts and its plot are what a
+  /// screen opens on. What the title is for decides which rung is *open*
+  /// under the header -- and is where the walk down goes first.
   group('what is open on arrival is whatever the title is for', () {
+    /// The screen as it opens: the remote on the header, the page at its
+    /// top -- whichever rung is open below.
+    void expectAtTheTop(WidgetTester tester) {
+      expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the remote');
+      expect(pageScrollOffset(tester), 0, reason: 'the page');
+    }
+
     testWidgets('a film nobody has played opens on its sources: there is '
         'nothing to choose but which one', (tester) async {
-      await mount(tester, film());
+      await mount(tester, film(), walkIn: false);
 
       expect(openRungLabel(tester), kSourcesLabel);
+      expectAtTheTop(tester);
+      await walkIntoTheOpenRung(tester);
       expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), 'alpha.example');
     });
 
     testWidgets('a series nobody has played opens on its episodes, not on '
         'the sources of an episode nobody picked', (tester) async {
-      await mount(tester, series(), type: 'series', id: seriesId);
+      await mount(
+        tester,
+        series(),
+        type: 'series',
+        id: seriesId,
+        walkIn: false,
+      );
 
       expect(openRungLabel(tester), kEpisodesLabel);
-      expect(focusIn<TvEpisodeCard>(), isTrue);
       expect(find.byType(TvSourceGroupPill), findsNothing);
+      expectAtTheTop(tester);
+      await walkIntoTheOpenRung(tester);
+      expect(focusIn<TvEpisodeCard>(), isTrue);
     });
 
     testWidgets('a film that has been played opens on the last-used source', (
       tester,
     ) async {
-      await mount(tester, playedFilm());
+      await mount(tester, playedFilm(), walkIn: false);
 
       expect(openRungLabel(tester), kContinueWatchingLabel);
-      // One press of select from here carries on watching, which is what
-      // the viewer came back for.
+      expectAtTheTop(tester);
+      // And it is the first card down from the header: select from there
+      // carries on watching, which is what the viewer came back for.
+      await walkIntoTheOpenRung(tester);
       expect(focusedLabel(tester), kContinueWithLastSource);
     });
 
     testWidgets('and so does a series: carrying on beats picking an episode '
         'that has already been picked', (tester) async {
-      await mount(tester, playedSeries(), type: 'series', id: seriesId);
+      await mount(
+        tester,
+        playedSeries(),
+        type: 'series',
+        id: seriesId,
+        walkIn: false,
+      );
 
       expect(openRungLabel(tester), kContinueWatchingLabel);
-      expect(focusedLabel(tester), kContinueWithLastSource);
       expect(find.byType(TvEpisodeCard), findsNothing);
+      expectAtTheTop(tester);
+      await walkIntoTheOpenRung(tester);
+      expect(focusedLabel(tester), kContinueWithLastSource);
+    });
+
+    testWidgets('coming back from the player is not an opening: the remote '
+        'is on the source it played, and the page where it was', (
+      tester,
+    ) async {
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: film(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      await mount(tester, film(), client: core);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(focusedLabel(tester), 'Alpha 1080p', reason: 'the source');
+      final scrolled = pageScrollOffset(tester);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      Navigator.of(tester.element(find.byType(PlayerScreen))).pop();
+      await tester.pumpAndSettle();
+
+      expect(focusedLabel(tester), 'Alpha 1080p');
+      expect(pageScrollOffset(tester), scrolled);
+    });
+
+    testWidgets('streams arriving after the screen take nothing: the remote '
+        'stays on the header and the page at its top', (tester) async {
+      // The addons answer after the title is drawn, and the first group
+      // then opens under its pill. Nothing in it may take the remote: a
+      // card that takes focus scrolls itself to the middle of the panel,
+      // which is the page opening scrolled past its own title.
+      final waiting = film()
+        ..['streams'] = [streamGroup('alpha.example', null)];
+      final core = FakeCoreClient(state: {CoreField.metaDetails: waiting});
+      await mount(tester, waiting, client: core, settle: false);
+      expect(find.text(kLookingForStreams), findsOneWidget);
+      expectAtTheTop(tester);
+
+      core.setState(CoreField.metaDetails, film());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TvSourceCard), findsWidgets, reason: 'they landed');
+      expectAtTheTop(tester);
     });
 
     testWidgets('and the rung that is open is the only one that is: the '
@@ -471,8 +562,8 @@ void main() {
       // `ExcludeFocus`). So this walks the stops rather than the headers,
       // down and back up, with the sources rung open and nothing to walk
       // on to below it.
-      await mount(tester, film(), sectioned: true);
-      await stepUpToRung(tester, kSourcesLabel);
+      await mount(tester, film(), sectioned: true, walkIn: false);
+      await stepDownToRung(tester, kSourcesLabel);
 
       final down = await walkStops(tester, LogicalKeyboardKey.arrowDown);
       expect(
@@ -497,9 +588,11 @@ void main() {
         reason: 'and back over the same stops, none skipped, none stranded',
       );
       // Up does not stop at the top rung: above it is the title's own
-      // header, and its two stops are the plot the header declares first
-      // and then the bookmark, which has no text of its own.
+      // header, which hands the remote back to the trailer the walk down
+      // left it from, then the plot over it, and then the bookmark, which
+      // has no text of its own.
       expect(up.skip(down.length), [
+        TrailerButton.label,
         tester.widget<TvDescription>(find.byType(TvDescription)).text,
         '(nothing focused)',
       ]);
@@ -534,16 +627,13 @@ void main() {
         plotted(playedSeries()),
         type: 'series',
         id: seriesId,
+        walkIn: false,
       );
       final drawn = rungs(tester);
       expect(drawn, [kEpisodesLabel, kContinueWatchingLabel, kSourcesLabel]);
 
-      for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
-        await press(tester, LogicalKeyboardKey.arrowUp);
-      }
-      expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the top of the walk');
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(focusIn<TvDescription>(), isTrue, reason: 'beside the bookmark');
+      // The screen opens on the plot, the header's first stop.
+      expect(focusIn<TvDescription>(), isTrue, reason: 'the top of the walk');
 
       expect(
         await walkRungs(tester, LogicalKeyboardKey.arrowDown),
@@ -604,8 +694,9 @@ void main() {
       expect(find.byType(TvSourceGroupPill), findsNothing);
       expect(find.text(kLookingForStreams), findsOneWidget);
 
+      // Down from the title's header, where the screen starts the remote.
       for (var i = 0; i < 6 && focusedLabel(tester) != kSourcesLabel; i++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
       }
       expect(focusedLabel(tester), kSourcesLabel, reason: 'the header');
@@ -634,6 +725,12 @@ void main() {
       await mount(tester, loading, type: 'series', id: seriesId, settle: false);
 
       expect(openRungLabel(tester), kEpisodesLabel);
+      // Down from the title's header into the episodes first.
+      for (var i = 0; i < 6 && !focusIn<TvEpisodeCard>(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+      }
+      expect(focusIn<TvEpisodeCard>(), isTrue);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
       expect(focusedLabel(tester), kSourcesLabel);
@@ -717,23 +814,24 @@ void main() {
     expect(lit.treatment.lifts, isFalse);
   });
 
-  testWidgets('a last-used source arriving late takes a remote nobody has '
-      'moved, and opens the rung it is on', (tester) async {
+  testWidgets('a last-used source arriving late opens the rung it is on, '
+      'and leaves the remote on the header', (tester) async {
     // The addons answer with streams before the engine says which source
     // the title was last played from, so the rung the screen means to
     // offer is built after the one standing in for it. Nobody has touched
-    // the D-pad, so the start of the screen is still the screen's to
-    // choose.
+    // the D-pad, so which rung is open is still the screen's to choose --
+    // but where the remote is was decided when the screen opened.
     final core = FakeCoreClient(state: {CoreField.metaDetails: film()});
-    await mount(tester, film(), client: core);
+    await mount(tester, film(), client: core, walkIn: false);
     expect(openRungLabel(tester), kSourcesLabel);
-    expect(focusedLabel(tester), 'alpha.example');
+    expect(focusIn<TvMetaHeader>(), isTrue);
 
     core.setState(CoreField.metaDetails, playedFilm());
     await tester.pumpAndSettle();
 
     expect(openRungLabel(tester), kContinueWatchingLabel);
-    expect(focusedLabel(tester), kContinueWithLastSource);
+    expect(focusIn<TvMetaHeader>(), isTrue);
+    expect(pageScrollOffset(tester), 0);
   });
 
   testWidgets('but once the remote has been walked anywhere, the rung it is '
@@ -768,6 +866,7 @@ void main() {
       plotted(film()),
       overRoute: true,
       downloads: FakeDownloadsClient(),
+      walkIn: false,
     );
 
     testWidgets('lands on the plot from the downloads button, which is the '

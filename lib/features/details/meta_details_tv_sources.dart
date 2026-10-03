@@ -160,8 +160,6 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
               TvLadderRow(
                 level: _ladderLastUsed,
                 child: TvSourceRow(
-                  defaultFocus: _startedOn == null,
-                  focusNode: _lastUsedNode,
                   sources: [
                     _tvLastUsed(state, lastUsed.$1, lastUsedStream, downloads),
                   ],
@@ -240,14 +238,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
                 onFocusGroup: _focusSourceGroup,
                 groupLevel: _ladderGroups,
                 sourceLevel: _ladderSources,
-                // Whether the first pill is the screen's starting
-                // place, and -- when the viewer opens this rung
-                // themselves later -- what makes it put a row of sources
-                // out rather than a row of pills with nothing under
-                // them. The autofocus half of that is dropped by Flutter
-                // when the header already holds the remote, which is the
-                // only way of arriving here with something focused.
-                defaultFocus: lastUsedStream == null,
+                // A row of sources out under the pills, not a row of
+                // pills with nothing under them, when this is the rung
+                // the title is for.
+                openOnArrival: lastUsedStream == null,
               ),
             ],
           ),
@@ -268,14 +262,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
             children: [
               TvLadderRow(
                 level: _ladderAddons,
-                // The last rung standing is where the remote starts: a
-                // fresh profile whose addons all had nothing opens on
-                // this, and a screen with nothing focused is a dead
-                // D-pad.
-                child: TvSourceRow(
-                  defaultFocus: _startedOn == null,
-                  sources: nothing.sources,
-                ),
+                child: TvSourceRow(sources: nothing.sources),
               ),
             ],
           ),
@@ -290,7 +277,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// takes seconds when it comes at all, by which time the viewer has read
   /// the screen and moved the remote, and something appearing under a
   /// viewer who is using the screen breaks it (see
-  /// [_takeTheRemoteToTheLastUsed] and [FocusableTile._autofocus]). Three
+  /// [_startAtTheTop] and [FocusableTile._autofocus]). Three
   /// things keep it still, and none of them is optional:
   ///
   ///  * **The header is there from the first frame.** Whether there is a
@@ -300,10 +287,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   ///    changes the words on it and nothing else. A rung that appeared
   ///    when the answer did would push everything below it down the panel
   ///    at a moment nobody chose.
-  ///  * **Nothing in it asks for the remote.** Every other rung hands its
-  ///    row a `defaultFocus` for the arrival case; this one never does,
-  ///    at any point in its life. The remote gets here by being walked
-  ///    here.
+  ///  * **Nothing in it asks for the remote.** No rung does: the remote
+  ///    starts on the header ([_startAtTheTop]) and gets here by being
+  ///    walked here.
   ///  * **The row is the same height empty as full** ([SimilarTitlesRow]),
   ///    so even a viewer standing inside the open rung when the answer
   ///    lands sees posters replace a spinner and nothing move.

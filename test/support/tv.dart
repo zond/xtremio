@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/focus_emphasis.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/focus_theme.dart';
+import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 
@@ -67,6 +69,38 @@ BuildContext? _focusedContext() {
 /// The widget with primary focus sits under a [T].
 bool focusIn<T extends Widget>() =>
     _focusedContext()?.findAncestorWidgetOfExactType<T>() != null;
+
+/// How far the screen's outermost vertical scroll view is scrolled: zero is
+/// the top of the page.
+double pageScrollOffset(WidgetTester tester) => tester
+    .stateList<ScrollableState>(find.byType(Scrollable))
+    .firstWhere((s) => axisDirectionToAxis(s.axisDirection) == Axis.vertical)
+    .position
+    .pixels;
+
+/// Whether the remote is on a card of a details screen's rungs: a group
+/// pill, a source (the last-used one included) or an episode.
+bool _onARungsCard() =>
+    focusIn<TvSourceGroupPill>() ||
+    focusIn<TvSourceCard>() ||
+    focusIn<TvEpisodeCard>();
+
+/// Walks the remote down from a details screen's header into the rung the
+/// screen opened, and stops on the first card there: the episode, the
+/// last-used source, the first group pill, the notice that nothing was
+/// found. For the tests about what happens *inside* a rung, which start
+/// where the viewer would after a few presses down.
+Future<void> walkIntoTheOpenRung(WidgetTester tester, {int limit = 8}) async {
+  expect(
+    focusIn<TvMetaHeader>(),
+    isTrue,
+    reason: 'a details screen opens with the remote on its header',
+  );
+  for (var i = 0; i < limit && !_onARungsCard(); i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
+  expect(_onARungsCard(), isTrue, reason: 'the walk down reached a card');
+}
 
 /// What this app draws to say the remote is standing here.
 ///

@@ -288,7 +288,8 @@ void main() {
         'remote back', (tester) async {
       await mount(tester);
       await land(tester, [stalker, existenz]);
-      expect(focusIn<TvSourceGroupPill>(), isTrue, reason: 'the arrival');
+      await walkIntoTheOpenRung(tester);
+      expect(focusIn<TvSourceGroupPill>(), isTrue, reason: 'the sources');
 
       final presses = await stepDownToRung(tester, kMoreLikeThisLabel);
 

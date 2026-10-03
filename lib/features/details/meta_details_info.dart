@@ -96,6 +96,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
       SliverToBoxAdapter(
         child: isTv
             ? TvLadderRow(
+                key: _headerRow,
                 level: _ladderInfo,
                 child: TvMetaHeader(
                   meta: meta,
@@ -152,13 +153,6 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                     selectedVideoId: _selectedVideoId(state),
                     homeVideoId: _requestedVideoId,
                     now: now,
-                    // The remote starts here only when this is the rung
-                    // the title is for and nothing has taken it yet: a
-                    // rung the viewer opens themselves leaves them on the
-                    // header they pressed, one press above the row.
-                    defaultFocus:
-                        _shownRung == _DetailsRung.episodes &&
-                        _startedOn == null,
                     isWatched: state.isWatched,
                     resumeProgress: (video) => _resumeProgress(state, video),
                     downloadOf: (video) =>

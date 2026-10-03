@@ -422,6 +422,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // The remote starts on the title's header; the cards are a walk
+      // down from it.
+      await walkIntoTheOpenRung(tester);
     }
 
     /// Every string the card led by [lead] draws, with the break

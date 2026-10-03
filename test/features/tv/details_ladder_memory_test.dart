@@ -130,6 +130,9 @@ void main() {
 
       expect(loadedVideos(core).last, episode(3, 4));
       expect(shownSeason(tester), 3);
+      // The remote starts on the header; down from it reaches the row,
+      // which hands it the episode the screen opened on.
+      await walkIntoTheOpenRung(tester);
       expect(focusedEpisodeTitle(), titleOf(episode(3, 4)));
 
       // Up onto the pills lands on the season on screen. Landing on any
@@ -167,6 +170,7 @@ void main() {
 
       expect(loadedVideos(core).last, episode(2, 5));
       expect(shownSeason(tester), 2);
+      await walkIntoTheOpenRung(tester);
       expect(focusedEpisodeTitle(), titleOf(episode(2, 5)));
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedSeason(tester), '2');
@@ -189,8 +193,9 @@ void main() {
       expect(loadedVideos(core).last, episode(2, 5));
       expect(shownSeason(tester), 4);
       await tester.pumpAndSettle();
+      // Down from the header, where the remote starts.
       for (var i = 0; i < 4 && focusedSeason(tester) == null; i++) {
-        await press(tester, LogicalKeyboardKey.arrowUp);
+        await press(tester, LogicalKeyboardKey.arrowDown);
       }
       expect(focusedSeason(tester), '4');
     });
@@ -269,6 +274,7 @@ void main() {
     testWidgets('is written down once they stop there', (tester) async {
       final (prefs, client) = await prefsWith();
       await mount(tester, series(libraryVideo: episode(3, 4)), prefs: prefs);
+      await walkIntoTheOpenRung(tester);
 
       await press(tester, LogicalKeyboardKey.arrowUp);
       await press(tester, LogicalKeyboardKey.arrowRight);
@@ -290,6 +296,7 @@ void main() {
     ) async {
       final (prefs, _) = await prefsWith();
       await mount(tester, series(libraryVideo: episode(3, 4)), prefs: prefs);
+      await walkIntoTheOpenRung(tester);
 
       await press(tester, LogicalKeyboardKey.arrowUp);
       await press(tester, LogicalKeyboardKey.arrowRight);

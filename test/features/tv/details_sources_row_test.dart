@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
+import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -113,6 +114,10 @@ Future<FakeCoreClient> mount(
   // A spinner never stops, so a screen with an addon still answering
   // cannot be settled; it is pumped a frame at a time instead.
   bool settle = true,
+  // The screen opens with the remote on its header, and what these tests
+  // are about is a few presses down: walk it into the open rung first.
+  // Only a settled screen can be walked, and only a television's.
+  bool walkIn = true,
 }) async {
   useScreen(tester, size);
   final core = FakeCoreClient(state: {CoreField.metaDetails: fixture, ...also});
@@ -134,6 +139,7 @@ Future<FakeCoreClient> mount(
     await tester.tap(find.text('open the title'));
     await tester.pumpAndSettle();
   }
+  if (walkIn && settle && device.isTv) await walkIntoTheOpenRung(tester);
   return core;
 }
 
@@ -258,7 +264,7 @@ void main() {
 
     expect(groupLabels(tester), ['1080p', '720p']);
 
-    // The rung the remote starts on has its row out: both addons' 1080p
+    // The rung the walk down lands on has its row out: both addons' 1080p
     // releases, in the order the chips choose (peers per megabyte: beta's
     // ninety peers over the same two gigabytes), and nothing of 720p's.
     expect(sourceTitles(tester), ['Beta 1080p', 'Alpha 1080p']);
@@ -457,7 +463,12 @@ void main() {
     expect(find.byType(TvSourceCard), findsOneWidget);
 
     // Raw presses: a rung with an addon still out spins, and settling
-    // never comes back.
+    // never comes back. Down from the header to the pills first.
+    for (var i = 0; i < 8 && !focusIn<TvSourceGroupPill>(); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(focusedLabel(tester), 'alpha.example');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
 
@@ -613,7 +624,7 @@ void main() {
   });
 
   testWidgets('a title that has been played opens on the last-used source, '
-      'with the remote already on it', (tester) async {
+      'the first card the remote meets on its way down', (tester) async {
     await mount(
       tester,
       withLastUsed(
@@ -646,24 +657,30 @@ void main() {
     expect(find.byType(PlayerScreen), findsOneWidget);
   });
 
-  testWidgets('the last-used card arriving after the streams takes the '
-      'remote, which has not been moved', (tester) async {
+  testWidgets('the last-used card arriving after the streams leaves the '
+      'remote on the header and the page at its top', (tester) async {
     // Opening a title from a continue-watching card: the addons answer
     // with streams before the engine has said which source the title was
-    // last played from, so the card the screen wants the remote on is
-    // built after the row that stands in for it. Nobody has touched the
-    // D-pad, so the start of the screen is still the screen's to choose.
+    // last played from, so the card is built a moment after the screen
+    // is. It opens its rung, which is what the title is for -- and takes
+    // nothing: a card taking the remote scrolls itself to the middle of
+    // the panel, which is the page opening scrolled past its own title.
     List<Map<String, dynamic>> streams() => [
       readyGroup('alpha.example', [
         torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
       ]),
     ];
-    final core = await mount(tester, movieWith(streams()));
-    expect(focusedLabel(tester), 'alpha.example');
+    final core = await mount(tester, movieWith(streams()), walkIn: false);
+    expect(focusIn<TvMetaHeader>(), isTrue);
 
     core.setState(CoreField.metaDetails, withLastUsed(movieWith(streams())));
     await tester.pumpAndSettle();
 
+    expect(find.text(kContinueWithLastSource), findsOneWidget);
+    expect(focusIn<TvMetaHeader>(), isTrue);
+    expect(pageScrollOffset(tester), 0);
+    // And it is a walk down away, the first card the walk meets.
+    await walkIntoTheOpenRung(tester);
     expect(focusedLabel(tester), kContinueWithLastSource);
   });
 
@@ -810,7 +827,7 @@ void main() {
       ]),
       sectioned: true,
     );
-    // Open on arrival: the remote lands on the group and its row is out,
+    // Open on arrival: the walk down lands on the group and its row is out,
     // with no select -- which would carry the remote down into the row.
     expect(sourceTitles(tester), ['Alpha 1080p']);
     expect(backLeaves(tester), isFalse, reason: 'a row is open');
@@ -886,6 +903,9 @@ void main() {
       // WatchHub (and others) are installed and serve `stream` for
       // `movie`, same as the bug on a title no installed addon covers.
       also: {CoreField.ctx: loadCtxLoggedOutFixture()},
+      // The one card on the panel is a notice that takes no press, so
+      // there is no card to walk into.
+      walkIn: false,
     );
 
     expect(groupLabels(tester), isEmpty);

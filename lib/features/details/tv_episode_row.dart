@@ -51,7 +51,6 @@ class TvEpisodeRow extends StatefulWidget {
     required this.onSelect,
     required this.onToggleWatched,
     this.onFocus,
-    this.defaultFocus = false,
     this.homeVideoId,
   });
 
@@ -91,15 +90,6 @@ class TvEpisodeRow extends StatefulWidget {
   /// is not a press: the screen decides what a walk along the row costs
   /// (it waits for the walk to stop before it asks an addon anything).
   final ValueChanged<VideoInfo>? onFocus;
-
-  /// Whether this row is where the remote starts on this screen: a series
-  /// nobody has played yet is a choice of episode, and the screen opens on
-  /// that choice rather than on the sources of one nobody picked.
-  ///
-  /// It lands on the selected episode, not the first card, for the same
-  /// reason the row scrolls to it: resuming a series at episode 19 must not
-  /// start the remote at episode 1.
-  final bool defaultFocus;
 
   /// How wide one card is. Three of them and the edge of a fourth fit the
   /// info column of a 720p panel, which is what says the row scrolls.
@@ -212,8 +202,8 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
   Widget build(BuildContext context) {
     final ids = _ids.toSet();
     _cards.removeWhere((id, _) => !ids.contains(id));
-    // Which card the remote starts on, when this row is where it starts,
-    // and lands on whenever it arrives ([TvLadderHome]): the selected
+    // Which card the remote lands on whenever it arrives ([TvLadderHome]):
+    // the selected
     // episode when it is in this season, else the first one that has
     // aired, since a card that takes no press cannot take the focus.
     final home = widget.homeVideoId ?? widget.selectedVideoId;
@@ -242,7 +232,6 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
                   isHome: video.id == landsOn,
                   child: TvEpisodeCard(
                     video: video,
-                    defaultFocus: widget.defaultFocus && video.id == landsOn,
                     isSelected: video.id == widget.selectedVideoId,
                     isWatched: widget.isWatched(video),
                     isReleased: video.isReleased(widget.now),
@@ -283,11 +272,7 @@ class TvEpisodeCard extends StatelessWidget {
     this.progress,
     this.download,
     this.onFocused,
-    this.defaultFocus = false,
   });
-
-  /// Autofocus when nothing else has the remote; see [TvEpisodeRow].
-  final bool defaultFocus;
 
   final VideoInfo video;
 
@@ -337,7 +322,6 @@ class TvEpisodeCard extends StatelessWidget {
       onTap: isReleased ? onTap : null,
       onLongPress: isReleased ? onLongPress : null,
       onFocused: isReleased ? onFocused : null,
-      defaultFocus: isReleased && defaultFocus,
       memoryId: 'details/episode/${video.id}',
       borderRadius: radius,
       child: Column(

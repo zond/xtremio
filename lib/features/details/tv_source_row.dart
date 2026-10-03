@@ -69,7 +69,7 @@ class TvSourceRows extends StatefulWidget {
     this.onFocusGroup,
     required this.groupLevel,
     required this.sourceLevel,
-    this.defaultFocus = false,
+    this.openOnArrival = false,
   });
 
   /// Which rung of the screen's [TvLadder] each of these two rows is.
@@ -93,9 +93,13 @@ class TvSourceRows extends StatefulWidget {
   /// it was opened from. Falls back to [onOpen] when nobody is listening.
   final ValueChanged<String>? onFocusGroup;
 
-  /// Whether the first group pill is where the remote starts on this
-  /// screen. False when something above it (the last-used source) is.
-  final bool defaultFocus;
+  /// Whether the first group is open when the row first has one: the
+  /// sources are the rung the title is for, so the panel shows some of
+  /// them from the start rather than a row of pills with nothing under
+  /// them. False when something above it (the last-used source) is what
+  /// the title is for. Opening is all it does: the remote starts on the
+  /// screen's header, and reaches the pills by being walked here.
+  final bool openOnArrival;
 
   /// How wide a group pill is allowed to get.
   ///
@@ -164,7 +168,7 @@ class TvSourceRows extends StatefulWidget {
 }
 
 class _TvSourceRowsState extends State<TvSourceRows> {
-  /// Whether the group the remote was handed on arrival has been shown.
+  /// Whether the first group has been opened on arrival ([openOnArrival]).
   ///
   /// Once per row, and never again: Back closes an open row by rebuilding
   /// this one with nothing open and the remote back on the pill that
@@ -185,20 +189,13 @@ class _TvSourceRowsState extends State<TvSourceRows> {
     _showOnArrival();
   }
 
-  /// Opens the group the remote starts on, so the highlight tells the
-  /// truth from the first frame.
+  /// Opens the first group on arrival ([openOnArrival]), the way the
+  /// remote walking onto its pill would.
   ///
-  /// The pill that takes focus by default says which resolution -- or
-  /// which addon -- the screen is showing, and a highlight over a shut row
-  /// says it about nothing: every other way of landing on a group opens
-  /// it, so this one did too, one press later and only because the viewer
-  /// pressed select on a pill they were already standing on.
-  ///
-  /// Nothing happens when the remote starts somewhere else ([defaultFocus]
-  /// is false whenever another rung is the one the title is for), nor when
-  /// a group is open already.
+  /// Nothing happens when another rung is the one the title is for, nor
+  /// when a group is open already.
   void _showOnArrival() {
-    if (_shownOnArrival || !widget.defaultFocus) return;
+    if (_shownOnArrival || !widget.openOnArrival) return;
     final first = widget.groups.firstOrNull;
     if (first == null) return;
     _shownOnArrival = true;
@@ -225,11 +222,10 @@ class _TvSourceRowsState extends State<TvSourceRows> {
             height: TvSourceRows.groupRowHeight(context),
             child: TvCardStrip(
               children: [
-                for (final (index, group) in groups.indexed)
+                for (final group in groups)
                   TvSourceGroupPill(
                     group: group,
                     chosen: group.label == openLabel,
-                    defaultFocus: widget.defaultFocus && index == 0,
                     // Opening, not toggling: the remote standing here is
                     // already what opened this row, so a press that closed
                     // it again would make select mean the opposite of what
@@ -257,23 +253,9 @@ class _TvSourceRowsState extends State<TvSourceRows> {
 /// [TvSourceRows], and on its own the one-card row the last-used source is
 /// drawn in.
 class TvSourceRow extends StatelessWidget {
-  const TvSourceRow({
-    super.key,
-    required this.sources,
-    this.defaultFocus = false,
-    this.focusNode,
-  });
+  const TvSourceRow({super.key, required this.sources});
 
   final List<TvSource> sources;
-
-  /// Whether the first card is where the remote starts on this screen.
-  final bool defaultFocus;
-
-  /// The node the first card focuses with, for a screen that has to put
-  /// the remote on that card itself rather than by [defaultFocus] -- which
-  /// only ever takes when nothing else is focused yet (see
-  /// [MetaDetailsScreen]'s last-used card, the one caller).
-  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) => ConstrainedBox(
@@ -289,14 +271,10 @@ class TvSourceRow extends StatelessWidget {
       // drawn rather than as addons with different amounts to say.
       equalHeights: true,
       children: [
-        for (final (index, source) in sources.indexed)
+        for (final source in sources)
           SizedBox(
             width: TvSourceRows.sourceCardWidth,
-            child: TvSourceCard(
-              source: source,
-              defaultFocus: defaultFocus && index == 0,
-              focusNode: index == 0 ? focusNode : null,
-            ),
+            child: TvSourceCard(source: source),
           ),
       ],
     ),
@@ -402,7 +380,6 @@ class TvSourceGroupPill extends StatelessWidget {
     required this.chosen,
     required this.onTap,
     this.onFocused,
-    this.defaultFocus = false,
   });
 
   final TvSourceGroup group;
@@ -415,8 +392,6 @@ class TvSourceGroupPill extends StatelessWidget {
   /// The remote has come to rest on this pill, which opens its sources
   /// (see [TvSourceRows]).
   final VoidCallback? onFocused;
-
-  final bool defaultFocus;
 
   /// Half the height, so the box comes out a stadium: the painter clamps a
   /// corner to half the box it is drawn on and never grows one.
@@ -432,7 +407,6 @@ class TvSourceGroupPill extends StatelessWidget {
     return FocusableTile(
       onTap: onTap,
       onFocused: onFocused,
-      defaultFocus: defaultFocus,
       borderRadius: _radius,
       // A row of stadiums side by side: the ring, and none of the lift a
       // poster gets. The chosen one is already marked by its fill.
@@ -526,18 +500,9 @@ class TvSourceGroupPill extends StatelessWidget {
 /// list's disabled row does. What kind of source it is leads the quiet
 /// last line instead, since there is no play arrow to replace.
 class TvSourceCard extends StatelessWidget {
-  const TvSourceCard({
-    super.key,
-    required this.source,
-    this.defaultFocus = false,
-    this.focusNode,
-  });
+  const TvSourceCard({super.key, required this.source});
 
   final TvSource source;
-  final bool defaultFocus;
-
-  /// See [TvSourceRow.focusNode]; one is made for the card when null.
-  final FocusNode? focusNode;
 
   /// How many lines the lead and each of the addon's own lines are given
   /// before they are ellipsized.
@@ -574,8 +539,6 @@ class TvSourceCard extends StatelessWidget {
     return FocusableTile(
       onTap: source.onSelect,
       onLongPress: source.onHold,
-      defaultFocus: defaultFocus,
-      focusNode: focusNode,
       borderRadius: _cardRadius,
       child: _CardBox(
         color: source.highlighted

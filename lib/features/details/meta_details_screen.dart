@@ -417,9 +417,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// what is on screen.
   _DetailsRung? _shownRung;
 
-  /// The node the last-used source card focuses with, so the screen can
-  /// put the remote there itself; see [_takeTheRemoteToTheLastUsed].
-  final FocusNode _lastUsedNode = FocusNode(debugLabel: 'last-used source');
+  /// The header's row on a television, which is where the remote starts
+  /// ([_startAtTheTop]).
+  final GlobalKey<TvLadderRowState> _headerRow = GlobalKey();
 
   /// How "More like this" is asked, from the [SimilarScope] above this
   /// screen (absent, a [MoreLikeThis] of the screen's own). Read once,
@@ -461,12 +461,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   FocusNode? _startedOn;
   bool _remoteHasMoved = false;
 
-  /// Whether the screen has taken the remote to the last-used card, which
-  /// it does at most once -- on arrival, when that card turns up.
-  bool _tookTheRemote = false;
+  /// Whether the screen has put the remote down yet ([_startAtTheTop]).
+  bool _placedTheRemote = false;
 
-  /// Follows the remote, so [_takeTheRemoteToTheLastUsed] can tell the
-  /// focus the screen chose from the focus the viewer chose.
+  /// Follows the remote, so the screen can tell the focus it chose from
+  /// the focus the viewer chose.
   void _watchTheRemote() {
     final node = FocusManager.instance.primaryFocus;
     // A scope is what holds focus between one tile losing it and the next
@@ -487,31 +486,33 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _chosenRung ??= _shownRung;
   }
 
-  /// Puts the remote on the last-used card, the first time that card is
-  /// drawn and only while the remote is still where the screen put it.
+  /// Puts the remote on the header -- the plot, or the header's first
+  /// stop -- once the header is drawn, so a title opens at the top of its
+  /// page: what it is, before what to play it from.
   ///
-  /// The card's own autofocus is not enough. The addons answer with
-  /// streams before the engine has said which source the title was last
-  /// played from, so the sources rung below is built first and takes the
-  /// start of the screen -- and Flutter drops an autofocus asked for by a
-  /// widget built into a scope that already has a focused child. Opening a
-  /// title from a continue-watching card left the remote a row below the
-  /// one card that continues it, which is several presses from the one
-  /// thing the viewer came to do.
+  /// **Every opening of the screen starts here**, a title played before
+  /// included. The remote used to start on the rung the title is for --
+  /// the last-used source, the episode row, the first group of sources --
+  /// and a card taking focus scrolls itself to the middle of the panel
+  /// ([FocusableTile]), so the screen opened scrolled past its own title
+  /// and plot. Which rung is *open* is still the title's choice
+  /// ([_rungToOpen]): it is drawn right under the header, a press or two
+  /// down. Coming back to the screen -- from the player, from a screen
+  /// pushed over it -- is not an opening: the state is the one the viewer
+  /// left, and the route hands the remote back to the card it was on.
   ///
-  /// Never off a card the viewer walked to: the player writes the
-  /// last-used source down while it is up, so coming back from it draws
-  /// this card for the first time on a screen the viewer is already using.
-  /// Decided here, while the build that draws the card is still running:
-  /// by the frame this lands on, the rung the remote was standing in has
-  /// closed under it and the scope has handed the ring elsewhere, so
-  /// asking again then would be asking about the screen's own doing.
-  void _takeTheRemoteToTheLastUsed() {
-    if (_tookTheRemote || _remoteHasMoved) return;
-    _tookTheRemote = true;
+  /// Nothing in the rungs asks for the remote on arrival, so nothing that
+  /// arrives late -- streams, the last-used source the engine reports
+  /// seconds after them -- can take it off the header and move the page.
+  ///
+  /// Once, after the frame that first draws the header: its stops attach
+  /// at layout, so the build is too early to ask the row for them.
+  void _startAtTheTop() {
+    if (_placedTheRemote) return;
+    _placedTheRemote = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _lastUsedNode.requestFocus();
+      _headerRow.currentState?.focusRemembered(up: true);
     });
   }
 
@@ -684,7 +685,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _flushVisit();
     releaseField();
     FocusManager.instance.removeListener(_watchTheRemote);
-    _lastUsedNode.dispose();
     _focusSelect?.cancel();
     _narrowScroll.dispose();
     _details?.dispose();
@@ -1298,6 +1298,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
     final isTv = DeviceScope.isTv(context);
     _isTv = isTv;
+    if (isTv) _startAtTheTop();
     // Built here rather than inside the [LayoutBuilder] below because the
     // sources are the same list at every width, and because building them
     // is what answers [_openSourceRowDrawn] -- which the `PopScope` a few

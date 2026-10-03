@@ -294,6 +294,55 @@ void main() {
       );
     });
 
+    testWidgets('a phone opens at the top of the page, whatever arrives '
+        'after it', (tester) async {
+      // A television opened scrolled down to the first source. A phone
+      // never did -- nothing here takes focus or scrolls on its own until
+      // a tap asks for it -- and this holds it: the title first, with the
+      // streams and the last-used source landing after the first frame.
+      usePhoneViewport(tester, height: 800);
+      final waiting = loadMetaDetailsFixture()
+        ..['streams'] = [
+          streamGroup(
+            'https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json',
+            null,
+          ),
+        ];
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: waiting,
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pump();
+      double offset() => tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position
+          .pixels;
+      expect(offset(), 0);
+
+      final played = loadMetaDetailsFixture();
+      final torrents = (played['streams'] as List<dynamic>)[1];
+      played['lastUsedStream'] = {
+        'request': torrents['request'],
+        'content': {
+          'type': 'Ready',
+          'content': torrents['content']['content'][0],
+        },
+      };
+      core.setState(CoreField.metaDetails, played);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue with last source'), findsOneWidget);
+      expect(offset(), 0);
+    });
+
     testWidgets('loads the episode the player hands back for the next one', (
       tester,
     ) async {
