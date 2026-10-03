@@ -49,6 +49,39 @@ already advertises HLS transcoding support, so this may be wiring rather
 than building; scope it before estimating. Wanted, and deferred every time
 because direct play covers what is actually watched.
 
+## Speak to search
+
+Typing a title with a D-pad is the worst part of the television; on the
+phone it is merely slower than it needs to be.
+
+Android already does the hard part: `RecognizerIntent.ACTION_RECOGNIZE_SPEECH`
+opens the system's speech recogniser (Google's on a Google TV and on most
+phones) and answers with candidate transcripts, no permission or network
+code of ours. So: a microphone button in the search field (phone and TV)
+that starts it through a small Kotlin channel and fills the field with the
+top candidate; on the television, also take the remote's own search/mic
+key (`KEYCODE_SEARCH`, or the Assistant handing over a query through a
+searchable activity) straight into the search screen. Check what a Google TV
+remote's mic button actually sends to a foreground app before building on
+it -- the Assistant may keep it for itself. About a day.
+
+## Continue watching on the Google TV home screen
+
+The Google TV home screen has a "Continue watching" row that other apps put
+their half-watched titles in; xtremio's Continue watching lives only inside
+the app.
+
+The Android TV route is the Watch Next channel: publish each continue-
+watching item (title, poster, position, duration, a deep link back into
+xtremio's details or player) through `androidx.tvprovider`'s
+`TvContractCompat.WatchNextPrograms`, update it as progress changes, remove it
+when watched or dismissed (our long-press "Remove from Continue watching"
+included), and handle the deep link. Unverified: whether Google TV still
+shows Watch Next entries from an app that is not on the Play Store, or now
+requires Google's Engage SDK / a partnership -- measure on zond's Chromecast
+with a single hand-published entry before building the sync. One to two
+days if the plain API is honoured.
+
 ## Cast a link straight to the receiver
 
 Cast a link directly to the receiver when it needs no rendition
