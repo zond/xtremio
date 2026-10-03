@@ -13,6 +13,8 @@ import '../local/desktop_local_media_source.dart';
 import '../local/local_folders_section.dart';
 import '../local/local_media.dart';
 import '../player/player_screen.dart';
+import '../update/app_updates.dart';
+import '../update/check_for_updates_tile.dart';
 import 'account_section.dart';
 import 'core_settings.dart';
 
@@ -346,6 +348,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const _SectionHeader('About'),
+          if (AppUpdatesScope.maybeOf(context) case final updates?)
+            CheckForUpdatesTile(updates: updates),
           ListTile(
             key: const ValueKey('setting-licences'),
             leading: const Icon(Icons.description_outlined),
