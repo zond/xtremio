@@ -5,8 +5,8 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
-already serves, with no processing anywhere -- or, for an H.264 + AAC film
-in a Matroska file, **repackaged**: the same samples as one fragmented MP4,
+already serves, with no processing anywhere -- or, for an H.264 or HEVC
+film with AAC sound in a Matroska file, **repackaged**: the same samples as one fragmented MP4,
 made as the receiver reads it ([Renditions](#renditions-a-matroska-film-repackaged)). It
 turns the player screen into a remote while the television plays. Nothing
 is decoded or encoded for a receiver yet, so the honest part of this is
@@ -65,11 +65,45 @@ never pending: a member whose name says nothing is an unknown file.
 ## Renditions: a Matroska film, repackaged
 
 A Chromecast will not open a Matroska file, and most films are one. When
-the film inside is H.264 with AAC sound -- **as mpv reports it**, since a
-copy is only as right as the codecs it copies, and a release's claim is
-not enough -- `CastCompatibility.of` answers `CastRendition` instead of the
-container refusal, provided the stream is played by id and this device can
-make one (`media_renditions_available`). The player then publishes a
+the film inside is H.264 or HEVC with AAC sound -- **as mpv reports it**,
+since a copy is only as right as the codecs it copies, and a release's claim
+is not enough -- `CastCompatibility.of` answers `CastRendition` instead of
+the container refusal, provided the stream is played by id and this device
+can make one (`media_renditions_available`). HEVC (Main and Main 10, so
+HDR10 and HLG too) is allowed because zond's receiver, a Chromecast with
+Google TV 4K (`sabrina`), decodes it up to 4K: `_repackagedVideo` is a
+constant for that receiver until the receiver table (step F5) makes it a
+row per model, and until then an HEVC film cast to a receiver without HEVC
+is a black screen.
+
+**When it would be repackaged and a track cannot be**, the refusal names
+the track and why, in one sentence each, the picture first:
+
+- sound that is not AAC -- "This film's sound is Dolby Digital Plus
+  (E-AC3), which xtremio can't convert for casting yet." (converting it is
+  step F3);
+- video the receiver decodes but a copy does not carry (VP8, VP9) --
+  "This film's video is VP9, which xtremio can't repackage for casting
+  yet.";
+- video the receiver cannot decode (AV1, MPEG-4 Part 2, MPEG-2, VC-1) --
+  "This film's video is AV1, which this receiver can't play, and xtremio
+  can't convert it for casting yet." (step F4);
+- codecs mpv has not reported yet -- a "not yet", headed *Still working out
+  what this file is*: "...which xtremio repackages for casting once the
+  player has said what is in it. Try again once it has started playing."
+
+What mpv cannot see, the producer refuses when the receiver first asks:
+**Dolby Vision**. mpv reports it as HEVC; the producer reads the container's
+Dolby Vision record (`StreamInfo::dolby_vision`, from the stream's side
+data) and copies profiles 7 and 8 as the HDR10, SDR or HLG base layer they
+carry, dropping the RPU and enhancement-layer NAL units (types 62 and 63)
+and signalling no Dolby Vision; **profile 5** -- a base layer only a Dolby
+Vision decoder shows right -- fails the rendition with "This film's
+picture is Dolby Vision profile 5, which has no ordinary HDR or SDR picture
+underneath: the television would show it in the wrong colours." The
+server answers the receiver `503` with that sentence; the app does not yet
+read a rendition's state (`rendition_state`, step F5), so on the phone it
+shows as a receiver that did not play. The player then publishes a
 **rendition** (`media_publish_rendition`, stream-server's
 `ServerHandle::publish_rendition`) with this player's duration, position and
 audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
@@ -93,8 +127,13 @@ exports FFmpeg 6.0's whole API; Android's `MediaExtractor` drops Dolby and
 DTS tracks and opens no AVI, measured on zond's phone). It picks the film's
 video and the audio track playing here, seeks to the run's segment, and
 hands the server every packet's presentation time on mpv's clock (less the
-container's start), the H.264 parameter sets and samples in Annex-B, and the
-AAC frames as they are. Stop and every other way out unpublish, which
+container's start), the H.264 or HEVC parameter sets and samples in Annex-B
+(an HEVC `hvcC`'s SEI messages too: an HDR10 encode's mastering display and
+light levels are often only there), and the AAC frames as they are. The
+server writes HEVC as `hvc1` + `hvcC`, its samples length-prefixed, with a
+`colr` from the SPS's colour description; the key flags are the
+container's, which for Matroska are HEVC's IRAP pictures, the same ones its
+cues index (x265's open GOPs make every key after the first a CRA). Stop and every other way out unpublish, which
 ends the run wherever it is blocked. There is no timer: a stalled torrent
 is waited for.
 
@@ -135,12 +174,14 @@ FFmpeg majors are not 6.x's (libavformat 60, libavcodec 60, libavutil 58).
 A bump of the vendored libs package to another FFmpeg re-runs the tool.
 On a desktop the system libmpv's FFmpeg is found through it; casting is not
 offered there anyway (`CastClient.isSupported`), but `rust/tests/rendition.rs`
-runs the whole path against it: an `ffmpeg`-made film published, fetched
-off the LAN listener, checked by `ffprobe` and decoded by `ffmpeg`.
+runs the whole path against it: `ffmpeg`-made films -- H.264, and HEVC
+Main 10 HDR10 with open GOPs, as Matroska with Dolby Vision records patched
+in -- published, fetched off the LAN listener, checked by `ffprobe` and
+decoded by `ffmpeg`.
 
-Sound that is not AAC, video that is not H.264 and every other container
-are still refused; converting them is the rest of step F of the renditions
-design.
+Sound that is not AAC, video that is neither H.264 nor HEVC and every other
+container are still refused; converting them is the rest of step F of the
+renditions design.
 
 ## The URL and the address the receiver is given
 

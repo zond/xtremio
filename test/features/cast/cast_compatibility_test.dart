@@ -126,7 +126,7 @@ void main() {
     });
   });
 
-  group('a Matroska H.264 + AAC film played by id is a rendition', () {
+  group('a Matroska H.264 or HEVC + AAC film played by id is a rendition', () {
     final byId = mediaIdUrl('0123456789abcdef0123456789abcdef');
     const h264Aac = PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'aac');
 
@@ -145,29 +145,132 @@ void main() {
       expect(refusalOf(result), CastRefusal.container);
     });
 
+    test('HEVC is copied too, Main 10 included: the receiver decodes it', () {
+      // zond's Chromecast with Google TV 4K decodes HEVC Main and Main 10.
+      for (final video in ['hevc (Main 10)', 'hevc (Main)', 'hevc']) {
+        final result = check(
+          url: byId,
+          filename: 'film.2160p.HDR.x265.mkv',
+          stats: PlaybackStats(videoCodec: video, audioCodec: 'aac'),
+          canRepackage: true,
+        );
+        expect(result, isA<CastRendition>(), reason: video);
+      }
+    });
+
     test('a release claiming H.264 and AAC is not enough: mpv must say', () {
+      // Until mpv has said, a "not yet" -- never the verdict that the
+      // container cannot be cast, which is what the field saw for a film
+      // that can.
       final result = check(
         url: byId,
         filename: 'film.1080p.x264.AAC.mkv',
         facts: factsFor('film 1080p x264 AAC'),
         canRepackage: true,
       );
-      expect(refusalOf(result), CastRefusal.container);
+      expect(refusalOf(result), CastRefusal.codecsPending);
+      final refused = result as CastRefused;
+      expect(
+        refused.explanation,
+        'This stream is a Matroska (.mkv) file, which xtremio repackages for '
+        'casting once the player has said what is in it. Try again once it '
+        'has started playing.',
+      );
+      expect(refused.title, 'Still working out what this file is');
+      expect(
+        refusalOf(
+          check(
+            url: byId,
+            filename: 'film.mkv',
+            stats: const PlaybackStats(videoCodec: 'h264 (High)'),
+            canRepackage: true,
+          ),
+        ),
+        CastRefusal.codecsPending,
+        reason: 'the sound not reported yet',
+      );
     });
 
-    test('any other codec mpv reports keeps the refusal', () {
-      for (final stats in const [
-        PlaybackStats(videoCodec: 'hevc (Main 10)', audioCodec: 'aac'),
-        PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'eac3'),
+    test('sound a copy cannot carry is named, and why (the field: E-AC3)', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mkv',
+        stats: const PlaybackStats(
+          videoCodec: 'h264 (High)',
+          audioCodec: 'eac3',
+        ),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.renditionAudio);
+      expect(
+        (result as CastRefused).explanation,
+        "This film's sound is Dolby Digital Plus (E-AC3), which xtremio "
+        "can't convert for casting yet.",
+      );
+      for (final (codec, name) in [
+        ('ac3', 'Dolby Digital (AC3)'),
+        ('dts', 'DTS'),
+        ('truehd', 'Dolby TrueHD'),
+        ('opus', 'Opus'),
       ]) {
         final result = check(
           url: byId,
           filename: 'film.mkv',
-          stats: stats,
+          stats: PlaybackStats(videoCodec: 'hevc (Main 10)', audioCodec: codec),
           canRepackage: true,
+        ) as CastRefused;
+        expect(
+          result.explanation,
+          "This film's sound is $name, which xtremio can't convert for "
+          'casting yet.',
         );
-        expect(refusalOf(result), CastRefusal.container, reason: '$stats');
       }
+    });
+
+    test('video the receiver cannot play is named, and why', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mkv',
+        stats: const PlaybackStats(videoCodec: 'av1 (Main)', audioCodec: 'aac'),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.renditionVideo);
+      expect(
+        (result as CastRefused).explanation,
+        "This film's video is AV1, which this receiver can't play, and "
+        "xtremio can't convert it for casting yet.",
+      );
+    });
+
+    test('video the receiver plays but a copy cannot carry yet says so', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mkv',
+        stats: const PlaybackStats(videoCodec: 'vp9', audioCodec: 'aac'),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.renditionVideo);
+      expect(
+        (result as CastRefused).explanation,
+        "This film's video is VP9, which xtremio can't repackage for casting "
+        'yet.',
+      );
+    });
+
+    test('both tracks wrong: both are named, the picture first', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mkv',
+        stats: const PlaybackStats(videoCodec: 'mpeg4', audioCodec: 'dts'),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.renditionVideo);
+      expect(
+        (result as CastRefused).explanation,
+        "This film's video is MPEG-4 Part 2, which this receiver can't play, "
+        "and xtremio can't convert it for casting yet. This film's sound is "
+        "DTS, which xtremio can't convert for casting yet.",
+      );
     });
 
     test('only Matroska, and only a stream played by id', () {
@@ -199,6 +302,48 @@ void main() {
         canRepackage: true,
       );
       expect(result, isA<CastReady>());
+    });
+  });
+
+  group('the sentences of the refusals that are not about a rendition', () {
+    // Each still true now that some Matroska films are repackaged: these are
+    // the files handed over as they are, or not repackaged at all.
+    test('a container no rendition is made from', () {
+      final result = check(
+        filename: 'film.avi',
+        stats: const PlaybackStats(),
+      ) as CastRefused;
+      expect(result.reason, CastRefusal.container);
+      expect(
+        result.explanation,
+        'A Chromecast plays MP4 and WebM files; this stream is an AVI file. '
+        'Casting it would need conversion, which this app cannot do yet.',
+      );
+    });
+
+    test('video in an MP4 the receiver cannot decode', () {
+      final result = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(videoCodec: 'av1'),
+      ) as CastRefused;
+      expect(
+        result.explanation,
+        'A Chromecast decodes H.264, HEVC, VP8 or VP9 video; this stream is '
+        'AV1. Casting it would need conversion, which this app cannot do yet.',
+      );
+    });
+
+    test('sound in an MP4 the receiver cannot decode', () {
+      final result = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'eac3'),
+      ) as CastRefused;
+      expect(
+        result.explanation,
+        'A Chromecast decodes AAC or MP3 audio in an MP4 file; this stream is '
+        'Dolby Digital Plus (E-AC3). Casting it would need conversion, which '
+        'this app cannot do yet.',
+      );
     });
   });
 
