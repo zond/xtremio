@@ -35,6 +35,11 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
+    <!-- Updating the app from its own GitHub release (AppUpdateChannel):
+         what lets it open a PackageInstaller session at all. It grants
+         nothing by itself: the viewer still allows xtremio under "Install
+         unknown apps", and Android confirms every install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
@@ -158,6 +163,13 @@
             android:exported="false"
             android:stopWithTask="true"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Where a PackageInstaller session reports how an update went
+             (AppUpdateChannel.kt). Not exported: only the PendingIntent the
+             session was committed with reaches it. -->
+        <receiver
+            android:name=".InstallStatusReceiver"
+            android:exported="false" />
 
         <!-- The notification the Cast SDK puts up while a session runs, with
              the transport controls on it. It lives in Play services, not in

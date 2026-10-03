@@ -60,6 +60,13 @@ class MainActivity : FlutterActivity() {
      */
     private var localMedia: LocalMediaChannel? = null
 
+    /**
+     * Installing an update from the app's GitHub release
+     * (lib/features/update/), alive for as long as the engine is. Held
+     * because the session's status comes back through a receiver.
+     */
+    private var appUpdate: AppUpdateChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Answers `DeviceProfile.detect()` (lib/shell/device_profile.dart),
@@ -129,6 +136,7 @@ class MainActivity : FlutterActivity() {
         // the only picker on a phone that can choose more than one file.
         drivePicker = DrivePicker(this, flutterEngine.dartExecutor.binaryMessenger)
         localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        appUpdate = AppUpdateChannel(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -460,6 +468,8 @@ class MainActivity : FlutterActivity() {
         localMedia?.detach()
         localMedia = null
         drivePicker = null
+        appUpdate?.detach()
+        appUpdate = null
         textEntry = null
         super.onDestroy()
     }
