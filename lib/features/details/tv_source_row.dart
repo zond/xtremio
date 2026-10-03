@@ -223,17 +223,20 @@ class _TvSourceRowsState extends State<TvSourceRows> {
             child: TvCardStrip(
               children: [
                 for (final group in groups)
-                  TvSourceGroupPill(
-                    group: group,
-                    chosen: group.label == openLabel,
-                    // Opening, not toggling: the remote standing here is
-                    // already what opened this row, so a press that closed
-                    // it again would make select mean the opposite of what
-                    // it means everywhere else on the screen. Back is what
-                    // closes a row.
-                    onTap: () => widget.onOpen(group.label),
-                    onFocused: () =>
-                        (widget.onFocusGroup ?? widget.onOpen)(group.label),
+                  TvLadderStopId(
+                    id: group.label,
+                    child: TvSourceGroupPill(
+                      group: group,
+                      chosen: group.label == openLabel,
+                      // Opening, not toggling: the remote standing here is
+                      // already what opened this row, so a press that
+                      // closed it again would make select mean the opposite
+                      // of what it means everywhere else on the screen.
+                      // Back is what closes a row.
+                      onTap: () => widget.onOpen(group.label),
+                      onFocused: () =>
+                          (widget.onFocusGroup ?? widget.onOpen)(group.label),
+                    ),
                   ),
               ],
             ),
@@ -272,9 +275,12 @@ class TvSourceRow extends StatelessWidget {
       equalHeights: true,
       children: [
         for (final source in sources)
-          SizedBox(
-            width: TvSourceRows.sourceCardWidth,
-            child: TvSourceCard(source: source),
+          TvLadderStopId(
+            id: source.id,
+            child: SizedBox(
+              width: TvSourceRows.sourceCardWidth,
+              child: TvSourceCard(source: source),
+            ),
           ),
       ],
     ),
@@ -717,6 +723,11 @@ const BorderRadius _cardRadius = BorderRadius.all(Radius.circular(8));
 /// sources list's business, and what a press does about it -- play it, keep
 /// it, check the addon that failed -- is the screen's.
 typedef TvSource = ({
+  /// What the card is the same card by, across rebuilds that reorder or
+  /// add to its row ([TvLadderStopId]): the source's [StreamInfo.sourceKey].
+  /// Null for a card that is the only one of its kind on its row.
+  String? id,
+
   /// The kind of source, or what the line is about.
   IconData icon,
 

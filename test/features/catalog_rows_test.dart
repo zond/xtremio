@@ -170,6 +170,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MetaDetailsScreen), findsOneWidget);
+    // Which says where it came from: a television's remote goes to the
+    // card that carries on.
+    expect(
+      tester
+          .widget<MetaDetailsScreen>(find.byType(MetaDetailsScreen))
+          .openedFrom,
+      DetailsOpenedFrom.continueWatching,
+    );
     final load = core.dispatched.firstWhere(
       (a) => a.field == CoreField.metaDetails,
     );
@@ -554,6 +562,12 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(MetaDetailsScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<MetaDetailsScreen>(find.byType(MetaDetailsScreen))
+          .openedFrom,
+      DetailsOpenedFrom.elsewhere,
+    );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Night of the Living Dead'), findsNothing);
     final load = core.dispatched.firstWhere(

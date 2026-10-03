@@ -13,6 +13,7 @@ TvSource _accountingCard({
   VoidCallback? onSelect,
   VoidCallback? onHold,
 }) => (
+  id: null,
   icon: icon,
   title: title,
   lines: lines,
@@ -445,6 +446,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
         (group == null ? driveSourceLabel : _addonNameOf(_profileNow, group));
     final shown = StreamPresentation.of(stream, addonName: addon);
     return (
+      id: stream.sourceKey,
       icon: StreamTile.iconFor(stream.kind),
       title: shown.lead,
       lines: shown.rest,
@@ -483,6 +485,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   ) {
     final bound = downloads?.forGroup(group);
     return (
+      id: null,
       icon: Icons.history,
       title: kContinueWithLastSource,
       lines: [

@@ -276,10 +276,20 @@ class _CatalogRowsState extends State<CatalogRows> {
     _client!.dispatch(_rangeAction(nextStart, nextEnd));
   }
 
-  void _openDetails(String type, String id, {String? videoId}) {
+  void _openDetails(
+    String type,
+    String id, {
+    String? videoId,
+    DetailsOpenedFrom openedFrom = DetailsOpenedFrom.elsewhere,
+  }) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => MetaDetailsScreen(type: type, id: id, videoId: videoId),
+        builder: (_) => MetaDetailsScreen(
+          type: type,
+          id: id,
+          videoId: videoId,
+          openedFrom: openedFrom,
+        ),
       ),
     );
   }
@@ -320,8 +330,12 @@ class _CatalogRowsState extends State<CatalogRows> {
                 items: items,
                 layout: layout,
                 isFirstRow: widget.defaultFocus && index == 0,
-                onOpen: (item) =>
-                    _openDetails(item.type, item.id, videoId: item.videoId),
+                onOpen: (item) => _openDetails(
+                  item.type,
+                  item.id,
+                  videoId: item.videoId,
+                  openedFrom: DetailsOpenedFrom.continueWatching,
+                ),
                 onLongPress: _continueWatchingLongPress,
               ),
               _CatalogRow(:final row) => _CatalogRowView(

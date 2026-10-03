@@ -56,7 +56,12 @@ import 'remote_press.dart';
 /// decide, not this widget's: which rung a title is *for* is a question
 /// about the title.
 class TvLadder extends StatefulWidget {
-  const TvLadder({super.key, required this.child});
+  const TvLadder({super.key, this.controller, required this.child});
+
+  /// The rows' controller, for a screen that has to ask where the remote
+  /// is on its ladder or put it somewhere itself ([TvLadderController.locate],
+  /// [TvLadderController.focusStop]). One is made when null.
+  final TvLadderController? controller;
 
   final Widget child;
 
@@ -68,11 +73,13 @@ class TvLadder extends StatefulWidget {
 }
 
 class _TvLadderState extends State<TvLadder> {
-  final TvLadderController _controller = TvLadderController();
+  final TvLadderController _own = TvLadderController();
 
   @override
-  Widget build(BuildContext context) =>
-      _TvLadderScope(controller: _controller, child: widget.child);
+  Widget build(BuildContext context) => _TvLadderScope(
+    controller: widget.controller ?? _own,
+    child: widget.child,
+  );
 }
 
 class _TvLadderScope extends InheritedWidget {
@@ -120,6 +127,45 @@ class TvLadderController {
       if (_rows[level]?.focusRemembered(up: up) ?? false) return true;
     }
     return false;
+  }
+
+  /// Where [node] is on this ladder: the level of the row it is a stop
+  /// of, its place in that row's walk, and the [TvLadderStopId] it was
+  /// drawn under. Null for a node that is no row's stop -- the app bar, a
+  /// screen pushed over this one.
+  ({int level, int index, String? id})? locate(FocusNode node) {
+    for (final MapEntry(key: level, value: row) in _rows.entries) {
+      final index = row._stops.indexOf(node);
+      if (index >= 0) return (level: level, index: index, id: row._idOf(node));
+    }
+    return null;
+  }
+
+  /// Puts the remote on a stop of the row at [level]: the one drawn under
+  /// [id] when there is one, else the one at [index] -- clamped to the
+  /// row, or the row's home when it names one ([TvLadderHome]). False when
+  /// no row is at [level], it has no stops, or [id] names none of them,
+  /// so the caller can wait for the stop to arrive or settle for another.
+  bool focusStop(int level, {String? id, int index = 0}) {
+    final row = _rows[level];
+    if (row == null) return false;
+    if (id != null) {
+      final at = row._stops.indexWhere((stop) => row._idOf(stop) == id);
+      if (at < 0) return false;
+      index = at;
+    }
+    row._remembered = index;
+    return row.focusRemembered();
+  }
+
+  /// Whether [focusStop] would find a stop: a row at [level] with stops,
+  /// one of them drawn under [id] when that is given.
+  bool hasStop(int level, {String? id}) {
+    final row = _rows[level];
+    if (row == null) return false;
+    final stops = row._stops;
+    if (id == null) return stops.isNotEmpty;
+    return stops.any((stop) => row._idOf(stop) == id);
   }
 }
 
@@ -300,6 +346,23 @@ class TvLadderRowState extends State<TvLadderRow> {
 
   /// Whether [stop] sits under a [TvLadderHome] that is on, inside this
   /// row: a marker above the row is some other row's business.
+  /// The id [stop] was drawn under ([TvLadderStopId]), inside this row.
+  String? _idOf(FocusNode stop) {
+    final element = stop.context;
+    if (element == null) return null;
+    String? id;
+    element.visitAncestorElements((ancestor) {
+      if (identical(ancestor, context)) return false;
+      final widget = ancestor.widget;
+      if (widget is TvLadderStopId) {
+        id = widget.id;
+        return false;
+      }
+      return true;
+    });
+    return id;
+  }
+
   bool _isHome(FocusNode stop) {
     final element = stop.context;
     if (element == null) return false;
@@ -403,6 +466,24 @@ class TvLadderHome extends InheritedWidget {
 
   @override
   bool updateShouldNotify(TvLadderHome oldWidget) => false;
+}
+
+/// Names the stop below it within its [TvLadderRow], so a screen can find
+/// the same card again when the row is rebuilt in another order or with
+/// cards added -- a source by its release, a group by its label -- where
+/// a place in the row would name whatever card is there now
+/// ([TvLadderController.locate], [TvLadderController.focusStop]).
+///
+/// Wrap every card of a row the same way, with a null [id] for one that
+/// has none, for the reason [TvLadderHome] is: a marker that came and
+/// went would change the tree above the cards and take their focus.
+class TvLadderStopId extends InheritedWidget {
+  const TvLadderStopId({super.key, required this.id, required super.child});
+
+  final String? id;
+
+  @override
+  bool updateShouldNotify(TvLadderStopId oldWidget) => false;
 }
 
 /// The row a control is in, for [TvLadderRow.moveFrom].

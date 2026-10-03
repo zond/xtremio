@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -125,6 +126,50 @@ const int _ladderSimilar = 65;
 const int _ladderAddonsHeader = 70;
 const int _ladderAddons = 75;
 
+/// What a visit stores each row of the ladder as ([DetailsRemote.row]):
+/// names, so a renumbering above does not send a stored visit to another
+/// row.
+const Map<int, String> _ladderRowNames = {
+  _ladderInfo: 'header',
+  _ladderEpisodesHeader: 'episodesRung',
+  _ladderSeasons: 'seasons',
+  _ladderEpisodes: 'episodes',
+  _ladderLastUsedHeader: 'continueRung',
+  _ladderLastUsed: 'continue',
+  _ladderSourcesHeader: 'sourcesRung',
+  _ladderStreamControls: 'layout',
+  _ladderStreamOrder: 'order',
+  _ladderGroups: 'groups',
+  _ladderSources: 'sources',
+  _ladderSimilarHeader: 'similarRung',
+  _ladderSimilar: 'similar',
+  _ladderAddonsHeader: 'addonsRung',
+  _ladderAddons: 'addons',
+};
+
+/// The level a stored row name is, null for a name this build has no row
+/// for.
+int? _ladderLevelNamed(String name) {
+  for (final MapEntry(key: level, value: row) in _ladderRowNames.entries) {
+    if (row == name) return level;
+  }
+  return null;
+}
+
+/// Where a details screen was opened from, which is part of where it
+/// opens ([MetaDetailsScreen.openedFrom]).
+enum DetailsOpenedFrom {
+  /// Anywhere that is not a promise to carry on: a catalogue, a search,
+  /// the library. The page opens where the viewer left it, or at the top
+  /// for a title never visited.
+  elsewhere,
+
+  /// A Continue watching tile, which says what the viewer came for: on a
+  /// television the remote goes straight to the card that carries on with
+  /// the last source, whatever the page was left on.
+  continueWatching,
+}
+
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
 /// installed addons return for the selected video. Tapping a playable
@@ -185,20 +230,29 @@ const int _ladderAddons = 75;
 /// a card per group and, under whichever is chosen, a row of its sources
 /// -- so the whole screen is one column the remote walks with four keys,
 /// and Back comes down a ladder: the open row of sources first, the
-/// screen second. Focus starts on the last-used source, or else the first
-/// group card; the remote's menu key or a held select on an episode
-/// toggles watched, and a long season list is picked from a [FilterMenu].
+/// screen second. The remote starts on the header the first time a title
+/// is visited, where it was left every time after ([DetailsVisit]), and
+/// on the last-used source from a Continue watching tile ([openedFrom]);
+/// the remote's menu key or a held select on an episode toggles watched,
+/// and a long season list is picked from a [FilterMenu].
 class MetaDetailsScreen extends StatefulWidget {
   const MetaDetailsScreen({
     super.key,
     required this.type,
     required this.id,
     this.videoId,
+    this.openedFrom = DetailsOpenedFrom.elsewhere,
     this.driveOpener = const ServerDriveFileOpener(),
   });
 
   final String type;
   final String id;
+
+  /// What the screen was opened from. On a television a title opens with
+  /// the remote on the header the first time it is visited, back where it
+  /// was left every time after, and -- from a Continue watching tile --
+  /// on the card that carries on.
+  final DetailsOpenedFrom openedFrom;
 
   /// The video to show streams for straight away (the continue-watching
   /// row knows it); without it the engine guesses, or the screen picks.
@@ -299,6 +353,49 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The write of where the viewer is, waiting for them to stop moving;
   /// see [_rememberVisit].
   Timer? _visitWrite;
+
+  /// When the season or episode on screen was chosen, which is what a
+  /// visit's [DetailsVisit.at] says: the last visit's time until something
+  /// is chosen here, and the epoch for a title never visited -- so leaving
+  /// the screen, which writes the visit again, never makes an episode
+  /// chosen before a binge look newer than the library's.
+  late DateTime _visitAt =
+      _lastVisit?.at ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+  /// Writes the visit when the app goes out of sight, which is the last
+  /// moment there is to: a television's app is killed from the background
+  /// without anything else being told. Hidden comes before paused on the
+  /// way there, on every platform, and a minimised desktop window stops at
+  /// hidden.
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(
+    onHide: _leaveVisit,
+  );
+
+  /// How far down the page is scrolled, as the visit stores it
+  /// ([DetailsVisit.offset]). Followed while the viewer is using the page,
+  /// and held at the last visit's while the page is still being put back
+  /// there ([_arrival], [_offsetToRestore]).
+  double _offset = 0;
+
+  /// Where the remote stands on the ladder, as the visit stores it
+  /// ([DetailsVisit.remote]): the last visit's until the remote is put
+  /// down, then wherever it is.
+  ({int level, int index, String? id})? _remoteAt;
+
+  /// Where the remote is to be put on arrival on a television, once that
+  /// stop is drawn: the stop the last visit left it on, or the
+  /// last-used source from Continue watching. Null when there is nowhere
+  /// to go but the header, and once the remote has been put down or the
+  /// viewer has moved it ([_tryArrival]).
+  ({int level, String? id, int index})? _arrival;
+
+  /// Whether a frame is already asked to try [_arrival].
+  bool _arrivalScheduled = false;
+
+  /// The scroll offset a phone or a desktop is to be put back at once the
+  /// page is long enough for it; null once it is there, the viewer has
+  /// scrolled, or everything has arrived ([_restoreOffset]).
+  double? _offsetToRestore;
 
   /// How long the viewer has to stay on a season or an episode before it
   /// is written down. Walking the season pills changes the season once
@@ -421,6 +518,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// ([_startAtTheTop]).
   final GlobalKey<TvLadderRowState> _headerRow = GlobalKey();
 
+  /// The ladder's rows, asked where the remote is ([_noteTheRemote]) and
+  /// told where to put it ([_tryArrival]).
+  final TvLadderController _ladder = TvLadderController();
+
   /// How "More like this" is asked, from the [SimilarScope] above this
   /// screen (absent, a [MoreLikeThis] of the screen's own). Read once,
   /// because the question is asked once.
@@ -474,16 +575,26 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (node == null || node is FocusScopeNode) return;
     if (_startedOn == null) {
       _startedOn = node;
-      return;
+    } else if (node != _startedOn && !_remoteHasMoved) {
+      _remoteHasMoved = true;
+      // The remote has left where the screen put it, so which rung is open
+      // is the viewer's from here: a last-used source arriving late must
+      // not shut the rung they walked into. Whatever is open when they
+      // move is what they are looking at, even though they never pressed
+      // select on its header.
+      _chosenRung ??= _shownRung;
+      // And where the remote is is theirs too: a remembered stop drawn
+      // after this must not take it back off what they walked to.
+      _arrival = null;
     }
-    if (node == _startedOn || _remoteHasMoved) return;
-    _remoteHasMoved = true;
-    // The remote has left where the screen put it, so which rung is open
-    // is the viewer's from here: a last-used source arriving late must not
-    // shut the rung they walked into. Whatever is open when they move is
-    // what they are looking at, even though they never pressed select on
-    // its header.
-    _chosenRung ??= _shownRung;
+    if (_arrival == null) _noteTheRemote(node);
+  }
+
+  /// Writes down where [node] is on the ladder, when it is a stop of it --
+  /// not a control of the app bar, nor a screen pushed over this one.
+  void _noteTheRemote(FocusNode node) {
+    final at = _ladder.locate(node);
+    if (at != null) _remoteAt = at;
   }
 
   /// Puts the remote on the header -- the plot, or the header's first
@@ -507,13 +618,188 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   ///
   /// Once, after the frame that first draws the header: its stops attach
   /// at layout, so the build is too early to ask the row for them.
+  ///
+  /// **A title visited before goes on to where it was left**, and one
+  /// opened from Continue watching to its last-used source ([_arrival]):
+  /// the header holds the remote until that stop is drawn, which for a
+  /// source is when its addon answers ([_tryArrival]).
   void _startAtTheTop() {
-    if (_placedTheRemote) return;
-    _placedTheRemote = true;
+    if (_placedTheRemote && _arrival == null) return;
+    if (_arrivalScheduled) return;
+    _arrivalScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _arrivalScheduled = false;
       if (!mounted) return;
-      _headerRow.currentState?.focusRemembered(up: true);
+      final arrived = _tryArrival();
+      if (_placedTheRemote) return;
+      _placedTheRemote = true;
+      if (!arrived) _headerRow.currentState?.focusRemembered(up: true);
     });
+  }
+
+  /// Decides where the remote goes on arrival ([_arrival]) and where a
+  /// phone's page scrolls to ([_offsetToRestore]), from where the screen
+  /// was opened from and the last [visit].
+  ///
+  /// Never visited: nothing, which is the top of the page with the remote
+  /// on the header. Visited: on a television the stop the remote was left
+  /// on, with the rung and the group of sources that were open around it
+  /// open again (the page follows the stop, [_placeRemote]); elsewhere the
+  /// page scrolled as far. From Continue watching: on a television the
+  /// last-used source, whatever the visit says.
+  void _planArrival(DetailsVisit? visit) {
+    final isTv = DeviceScope.isTv(context);
+    final remote = visit?.remote;
+    final level = remote == null ? null : _ladderLevelNamed(remote.row);
+    if (visit != null) {
+      _offset = visit.offset ?? 0;
+      if (level != null) {
+        _remoteAt = (level: level, index: remote!.index, id: remote.id);
+      }
+    }
+    if (widget.openedFrom == DetailsOpenedFrom.continueWatching) {
+      // A phone opens at the top, the way it always opened from there:
+      // there is no remote to put on the card, and the card is at the
+      // head of the sources.
+      if (isTv) {
+        _arrival = (level: _ladderLastUsed, id: null, index: 0);
+      }
+      return;
+    }
+    if (visit == null) return;
+    if (!isTv) {
+      _offsetToRestore = visit.offset;
+      return;
+    }
+    if (remote != null) {
+      _chosenRung = _DetailsRung.values.asNameMap()[remote.rung];
+      _openSourceGroup = remote.group;
+    }
+    _arrival = (
+      level: level ?? _ladderInfo,
+      id: level == null ? null : remote?.id,
+      index: level == null ? 0 : remote!.index,
+    );
+  }
+
+  /// Puts the remote on [_arrival]'s stop if it is drawn, and says whether
+  /// it did.
+  ///
+  /// A stop not drawn yet is waited for -- a source turns up when its
+  /// addon answers, the last-used source with the streams -- while the
+  /// remote waits on the header. Once whatever the stop depends on has
+  /// all arrived and it is still not there, the nearest stop of the same
+  /// rung takes its place: the same row, then the rows above it in the
+  /// rung, then the header. Either way the arrival is over, and nothing
+  /// drawn later moves the remote; nor does anything once the viewer has
+  /// moved it themselves ([_watchTheRemote]).
+  bool _tryArrival() {
+    final arrival = _arrival;
+    final state = ownState;
+    if (arrival == null || state == null) return false;
+    if (_placeRemote(arrival.level, id: arrival.id, index: arrival.index)) {
+      return true;
+    }
+    if (!_settledFor(arrival.level, state)) return false;
+    _arrival = null;
+    for (final level in _fallbacksOf(arrival.level)) {
+      final index = level == arrival.level ? arrival.index : 0;
+      if (_placeRemote(level, index: index)) return true;
+    }
+    return false;
+  }
+
+  /// Puts the remote on a stop of the row at [level]
+  /// ([TvLadderController.focusStop]), when that stop is drawn.
+  ///
+  /// The page follows the stop: a card that takes focus scrolls itself to
+  /// the middle of the panel ([FocusableTile]), which is where it was when
+  /// the page was left -- that is how a television's page got scrolled in
+  /// the first place -- so the stop brings the offset back with it and no
+  /// stored offset is laid over it.
+  bool _placeRemote(int level, {String? id, int index = 0}) {
+    if (!_ladder.hasStop(level, id: id)) return false;
+    _arrival = null;
+    _ladder.focusStop(level, id: id, index: index);
+    return true;
+  }
+
+  /// Whether everything a stop at [level] depends on has arrived, so a
+  /// stop still not drawn is not going to be.
+  bool _settledFor(int level, MetaDetailsState state) {
+    // The header and the episodes are drawn with the title.
+    if (level < _ladderLastUsedHeader) return true;
+    if (level >= _ladderSimilarHeader && level < _ladderAddonsHeader) {
+      return !_hasSimilar || _similar != null;
+    }
+    return _streamsSettled(state);
+  }
+
+  /// Whether every addon asked for the selected video's sources has
+  /// answered -- and so the engine's last-used source has been decided
+  /// too, since it is read out of those answers.
+  bool _streamsSettled(MetaDetailsState state) {
+    return state.allStreamGroups.isNotEmpty && !state.isLoadingStreams;
+  }
+
+  /// Where the remote goes when the stop at [level] is gone: that row, the
+  /// rows above it in its rung, then the header. Never down, and never
+  /// into the stream controls from a source: a remote that cannot be put
+  /// back is put back above where it was, on the rung it was in.
+  static Iterable<int> _fallbacksOf(int level) sync* {
+    const rungs = [
+      _ladderEpisodesHeader,
+      _ladderLastUsedHeader,
+      _ladderSourcesHeader,
+      _ladderSimilarHeader,
+      _ladderAddonsHeader,
+    ];
+    final rung = rungs.lastWhere((r) => r <= level, orElse: () => _ladderInfo);
+    final rows = _ladderRowNames.keys.toList()..sort((a, b) => b - a);
+    for (final row in rows) {
+      if (row > level || row < rung) continue;
+      if (row != level &&
+          (row == _ladderStreamControls || row == _ladderStreamOrder)) {
+        continue;
+      }
+      yield row;
+    }
+    if (rung != _ladderInfo) yield _ladderInfo;
+  }
+
+  /// Puts a phone's or a desktop's page back where the last visit left it
+  /// ([_offsetToRestore]), as far as the page is long yet: the sources at
+  /// the foot of it arrive after the title, so the page grows to the
+  /// offset over a few frames. Done when it gets there, when everything
+  /// has arrived and it is as far as it goes, or when the viewer drags the
+  /// page themselves ([_onNarrowScroll]).
+  void _restoreOffset() {
+    final target = _offsetToRestore;
+    final state = ownState;
+    if (target == null || state == null || !_narrowScroll.hasClients) return;
+    final position = _narrowScroll.position;
+    final reachable = math.min(target, position.maxScrollExtent);
+    if (reachable > position.pixels) position.jumpTo(reachable);
+    if (reachable >= target || _streamsSettled(state)) {
+      _offsetToRestore = null;
+      _offset = position.pixels;
+    }
+  }
+
+  /// A drag ends the restoring: the page is the viewer's.
+  bool _onNarrowScroll(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _offsetToRestore = null;
+    }
+    return false;
+  }
+
+  /// Follows the page's scroll for the visit, except while the page is
+  /// still being put back where the last one left it.
+  void _followTheScroll() {
+    if (_offsetToRestore != null || _arrival != null) return;
+    if (_narrowScroll.hasClients) _offset = _narrowScroll.offset;
   }
 
   /// Which rung of the collapsing ladder is open.
@@ -589,6 +875,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void initState() {
     super.initState();
     FocusManager.instance.addListener(_watchTheRemote);
+    _narrowScroll.addListener(_followTheScroll);
+    _lifecycle;
   }
 
   @override
@@ -617,6 +905,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (!_lastVisitRead) {
       _lastVisitRead = true;
       _lastVisit = prefs.detailsVisits.forMeta(widget.id);
+      _planArrival(_lastVisit);
     }
     // Read here for the reason the preferences above are: [DriveAccountScope]
     // is an `InheritedNotifier` too, so a match landing while this screen is
@@ -682,8 +971,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 
   @override
   void dispose() {
-    _flushVisit();
+    _leaveVisit();
     releaseField();
+    _lifecycle.dispose();
     FocusManager.instance.removeListener(_watchTheRemote);
     _focusSelect?.cancel();
     _narrowScroll.dispose();
@@ -827,10 +1117,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return season != null && seasons.contains(season) ? season : null;
   }
 
-  /// Writes down where the viewer is, once they have stayed there for
-  /// [_visitWriteDelay] -- see [DetailsVisitMemory]. Only for a title with
-  /// episodes: a film's screen has nowhere on the ladder to come back to.
+  /// Writes down the season or episode the viewer is on, once they have
+  /// stayed there for [_visitWriteDelay] -- see [DetailsVisitMemory].
   void _rememberVisit() {
+    _visitAt = DateTime.now().toUtc();
     _visitWrite?.cancel();
     _visitWrite = Timer(_visitWriteDelay, _writeVisit);
   }
@@ -843,30 +1133,47 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     unawaited(prefs.setDetailsVisits(prefs.detailsVisits.withVisit(visit)));
   }
 
-  /// Where the viewer is now, as a visit; null for a title with no
-  /// episodes, or before it has any.
+  /// Where the viewer is now, as a visit: the season and episode for a
+  /// series, how far the page is scrolled, and on a television where the
+  /// remote stands. Null before the title is in.
   DetailsVisit? _currentVisit() {
     final state = ownState;
     final meta = state?.meta;
-    if (state == null || meta == null || !state.hasVideos) return null;
-    final videoId = _requestedVideoId ?? state.streamPath?.id;
+    if (state == null || meta == null) return null;
+    final videoId = state.hasVideos
+        ? _requestedVideoId ?? state.streamPath?.id
+        : null;
+    final remote = _remoteAt;
+    final row = remote == null ? null : _ladderRowNames[remote.level];
     return DetailsVisit(
       meta: widget.id,
-      season:
-          _season ?? (videoId == null ? null : meta.videoById(videoId)?.season),
+      season: state.hasVideos
+          ? _season ??
+                (videoId == null ? null : meta.videoById(videoId)?.season)
+          : null,
       videoId: videoId,
-      at: DateTime.now().toUtc(),
+      at: _visitAt,
+      offset: _offset > 0 ? _offset : null,
+      remote: !_isTv || row == null
+          ? null
+          : DetailsRemote(
+              row: row,
+              index: remote!.index,
+              id: remote.id,
+              rung: _chosenRung?.name,
+              group: _openSourceGroup,
+            ),
     );
   }
 
-  /// A visit still waiting to be written, written now: the screen is
-  /// going. Before the field is let go, which is what the visit is read
-  /// from; [AppPrefs.setDetailsVisits] tells no listener, so writing while
-  /// the tree comes down asks nothing of it.
-  void _flushVisit() {
-    final pending = _visitWrite;
-    if (pending == null || !pending.isActive) return;
-    pending.cancel();
+  /// The viewer is leaving -- the screen is going, the player is going over
+  /// it, the app is going to the background -- so where they are is
+  /// written now, a season change still waiting included. Before the
+  /// field is let go, which is what the visit is read from;
+  /// [AppPrefs.setDetailsVisits] tells no listener, so writing while the
+  /// tree comes down asks nothing of it.
+  void _leaveVisit() {
+    _visitWrite?.cancel();
     _writeVisit();
   }
 
@@ -1075,21 +1382,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _playing = true;
     try {
       final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
-      await Navigator.of(context).push<PlayerScreenResult>(
-        MaterialPageRoute<PlayerScreenResult>(
-          settings: const RouteSettings(name: PlayerScreen.routeName),
-          builder: (_) => PlayerScreen(
-            stream: localStreamJson(file),
-            streamRequest: localStreamRequest(
-              type: widget.type,
-              videoId: videoId,
-            ),
-            metaRequest: state.metaRequest,
-            subtitlesPath: ResourcePath(
-              resource: 'subtitles',
-              type: widget.type,
-              id: videoId,
-            ),
+      await _openPlayer(
+        PlayerScreen(
+          stream: localStreamJson(file),
+          streamRequest: localStreamRequest(
+            type: widget.type,
+            videoId: videoId,
+          ),
+          metaRequest: state.metaRequest,
+          subtitlesPath: ResourcePath(
+            resource: 'subtitles',
+            type: widget.type,
+            id: videoId,
           ),
         ),
       );
@@ -1128,22 +1432,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       switch (opened) {
         case DriveFilePlayable():
           final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
-          await Navigator.of(context).push<PlayerScreenResult>(
-            MaterialPageRoute<PlayerScreenResult>(
-              settings: const RouteSettings(name: PlayerScreen.routeName),
-              builder: (_) => PlayerScreen(
-                stream: driveStreamJson(file: file, playable: opened),
-                streamRequest: driveStreamRequest(
-                  type: widget.type,
-                  videoId: videoId,
-                ),
-                metaRequest: state.metaRequest,
-                driveOpener: widget.driveOpener,
-                subtitlesPath: ResourcePath(
-                  resource: 'subtitles',
-                  type: widget.type,
-                  id: videoId,
-                ),
+          await _openPlayer(
+            PlayerScreen(
+              stream: driveStreamJson(file: file, playable: opened),
+              streamRequest: driveStreamRequest(
+                type: widget.type,
+                videoId: videoId,
+              ),
+              metaRequest: state.metaRequest,
+              driveOpener: widget.driveOpener,
+              subtitlesPath: ResourcePath(
+                resource: 'subtitles',
+                type: widget.type,
+                id: videoId,
               ),
             ),
           );
@@ -1212,25 +1513,37 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       playback = await offlinePlayback(client, download);
     }
     if (!mounted) return;
-    final result = await Navigator.of(context).push<PlayerScreenResult>(
-      MaterialPageRoute<PlayerScreenResult>(
-        settings: const RouteSettings(name: PlayerScreen.routeName),
-        builder: (_) => PlayerScreen(
-          stream: playback ?? stream.json,
-          streamRequest: group.request,
-          metaRequest: state.metaRequest,
-          driveOpener: widget.driveOpener,
-          subtitlesPath: ResourcePath(
-            resource: 'subtitles',
-            type: widget.type,
-            id: videoId,
-          ),
+    final result = await _openPlayer(
+      PlayerScreen(
+        stream: playback ?? stream.json,
+        streamRequest: group.request,
+        metaRequest: state.metaRequest,
+        driveOpener: widget.driveOpener,
+        subtitlesPath: ResourcePath(
+          resource: 'subtitles',
+          type: widget.type,
+          id: videoId,
         ),
       ),
     );
     // The player wanted the next episode but had no stream for it: show
     // that episode's streams.
     if (result != null && mounted) _selectVideoId(result.selectVideoId);
+  }
+
+  /// Pushes [player] over the screen, every source's one way there.
+  ///
+  /// The player going over the screen is leaving it as far as the visit
+  /// is concerned ([_leaveVisit]): an app killed from the player never
+  /// comes back here to write it.
+  Future<PlayerScreenResult?> _openPlayer(PlayerScreen player) {
+    _leaveVisit();
+    return Navigator.of(context).push<PlayerScreenResult>(
+      MaterialPageRoute<PlayerScreenResult>(
+        settings: const RouteSettings(name: PlayerScreen.routeName),
+        builder: (_) => player,
+      ),
+    );
   }
 
   void _tell(String message) =>
@@ -1312,10 +1625,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         _isWide = isWide;
         final info = _infoSlivers(state, meta, isWide: isWide, isTv: isTv);
         if (!isWide) {
+          if (!isTv && _offsetToRestore != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _restoreOffset();
+            });
+          }
           return TvLadder(
-            child: CustomScrollView(
-              controller: _narrowScroll,
-              slivers: [...info, ...streams],
+            controller: _ladder,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onNarrowScroll,
+              child: CustomScrollView(
+                controller: _narrowScroll,
+                slivers: [...info, ...streams],
+              ),
             ),
           );
         }

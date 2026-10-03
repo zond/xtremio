@@ -113,8 +113,10 @@ final class DetailsVisit {
   /// without choosing an episode from it.
   final String? videoId;
 
-  /// When the visit was made, in UTC -- what is compared with the
-  /// library's `lastWatched`.
+  /// When the season or episode was chosen, in UTC -- what is compared
+  /// with the library's `lastWatched`. Not when the screen was left: the
+  /// screen writes the visit again on every leaving, and an episode chosen
+  /// before a binge must not look newer than the library for it.
   final DateTime at;
 
   /// How far down the page was scrolled, in logical pixels; null for the

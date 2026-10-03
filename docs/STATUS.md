@@ -77,13 +77,25 @@ episode. A series opens on the season and episode it was left on last
 time, unless the library has watched something since (the player moving
 on to the next episode by itself), and a title in the library never opened
 here starts on the episode last watched. An episode it was sent to -- from
-Continue watching -- wins over both.
+Continue watching -- wins over both. A phone's page (and a narrow
+window's; the two-pane layout is not restored) also opens scrolled as far
+as it was left -- the last 200 titles are remembered across restarts,
+written on leaving, on the player going over the page and on the app
+going to the background -- except from Continue watching, which starts at
+the top.
 
-**On a television** the screen is laid out for a remote, and opens at the
-top of the page with the remote on the header -- the plot, else the header's
-first stop -- whatever arrives after it; the rung the title is for is open
-under it, a walk down away. Coming back to it, from the player or a screen
-over it, leaves the remote where it was:
+**On a television** the screen is laid out for a remote. A title never
+visited opens at the top of the page with the remote on the header -- the
+plot, else the header's first stop -- and the rung the title is for open
+under it, a walk down away. A title visited before opens with the remote
+on the stop it was left on (the same source, group pill, episode or
+header, with its rung and group open), once that stop has arrived; the
+remote waits on the header meanwhile, and a source that is gone gives way
+to the card beside it, then the group pills, then the header. Opened from
+Continue watching, the remote goes to the "Continue with last source" card
+instead. Nothing that arrives after the remote is put down -- or after the
+viewer moves it -- takes it anywhere. Coming back to it, from the player or
+a screen over it, leaves the remote where it was:
 
 - the title's backdrop fills the panel under the overscan band, darkened by
   a gradient scrim, with the logo, one line of year, runtime, genres and
