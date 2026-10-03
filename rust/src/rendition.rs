@@ -5,8 +5,9 @@
 //! ring; what it asks of the embedder is a [`Producer`]: given a reader over
 //! the media id, a plan and a time, hand encoded samples to a
 //! [`SampleSink`]. This is that producer for the one plan F2 builds,
-//! `Copy`/`Copy` -- an H.264 + AAC film in a container the receiver will
-//! not take, its samples moved into the server's fMP4 as they are.
+//! `Copy`/`Copy` -- an H.264 or HEVC film with AAC sound in a container the
+//! receiver will not take, its samples moved into the server's fMP4 as they
+//! are.
 //!
 //! # A run
 //!
@@ -34,8 +35,29 @@
 //!   SPS and PPS in Annex-B -- and takes a sample as length-prefixed only
 //!   when it does not begin with a start code, which a four-byte length of
 //!   256 to 511 does (`00 00 01 xx`). So both are handed over in Annex-B
-//!   ([`H264Config`]); no bitstream filter is needed for that. AAC's
-//!   AudioSpecificConfig is the container's as it is.
+//!   ([`H264Config`]); no bitstream filter is needed for that. HEVC the
+//!   same way ([`HevcConfig`]): Matroska's `hvcC` becomes `csd-0` -- the
+//!   VPS, SPS and PPS, and the SEI messages beside them (an HDR10 encode's
+//!   mastering display and light levels) -- in Annex-B, and the samples go
+//!   over in Annex-B too, which the server's muxer turns back into the
+//!   four-byte length prefixes its `hvc1` + `hvcC` declares (ISO/IEC
+//!   14496-15). Main 10 and HDR pass through as they are: the bit depth
+//!   and the colours are in the parameter sets, which the muxer reads into
+//!   the `hvcC` and a `colr`. AAC's AudioSpecificConfig is the container's
+//!   as it is.
+//! - **Dolby Vision** is not signalled to the receiver: a film whose
+//!   container declares it (a `dvcC`/`dvvC`, [`libav::DolbyVision`]) goes
+//!   over as the HEVC it is underneath, and the Dolby Vision NAL units in
+//!   its samples (types 62 and 63, the RPU and the enhancement layer, which
+//!   an HEVC decoder ignores) are dropped. That is right for profiles 7 and
+//!   8, whose base layer is HDR10, SDR or HLG; profile 5's base layer is
+//!   only Dolby Vision's own IPT-PQ-c2, which a receiver showing it as HEVC
+//!   shows in the wrong colours, so a base layer with no compatibility
+//!   ([`DolbyVision::compatibility`] 0) is refused with a sentence
+//!   ([`dolby_vision_refusal`]).
+//! - **Sync samples** are the container's key flags, as the source's index
+//!   is: Matroska marks HEVC's IRAP pictures (IDR, CRA, BLA) key, and its
+//!   cues index them, so the cut rule's keys and the samples' agree.
 //! - **Seek and restart**: a run starts where the server says (two seconds
 //!   before the cut of the first segment it makes); the demuxer is put on
 //!   the sync point at or before it and the server discards what precedes
@@ -78,7 +100,7 @@ use stream_server::{
     TrackFormat, TrackKind, VideoPlan,
 };
 
-use crate::libav::{self, Demuxer, Kind, Libav, Next, StreamInfo};
+use crate::libav::{self, Demuxer, DolbyVision, Kind, Libav, Next, StreamInfo};
 use std::collections::{HashMap, VecDeque};
 use stream_server::IndexEntry;
 
@@ -90,6 +112,45 @@ pub const UNAVAILABLE: &str =
 pub const NOT_BUILT: &str =
     "Converting this film's picture or sound for the television is not built yet; only \
      repackaging is.";
+
+/// The sentence for a film whose picture is `codec` (an `AVCodecID`),
+/// which this producer does not copy.
+pub fn video_refusal(codec: std::ffi::c_int) -> String {
+    match libav::codec_name(codec) {
+        Some(name) => {
+            format!("This film's video is {name}, which xtremio can't convert for casting yet.")
+        }
+        None => {
+            "This film's video is in a format xtremio can't convert for casting yet.".to_owned()
+        }
+    }
+}
+
+/// The sentence for a film whose sound is `codec` (an `AVCodecID`), which
+/// this producer does not copy.
+pub fn audio_refusal(codec: std::ffi::c_int) -> String {
+    match libav::codec_name(codec) {
+        Some(name) => {
+            format!("This film's sound is {name}, which xtremio can't convert for casting yet.")
+        }
+        None => {
+            "This film's sound is in a format xtremio can't convert for casting yet.".to_owned()
+        }
+    }
+}
+
+/// The sentence for a Dolby Vision film whose base layer no decoder but
+/// Dolby Vision's shows right, or `None` for one a copy carries.
+pub fn dolby_vision_refusal(dolby_vision: Option<DolbyVision>) -> Option<String> {
+    let dv = dolby_vision?;
+    (dv.compatibility == 0).then(|| {
+        format!(
+            "This film's picture is Dolby Vision profile {}, which has no ordinary HDR or SDR \
+             picture underneath: the television would show it in the wrong colours.",
+            dv.profile
+        )
+    })
+}
 /// The film's header could not be read.
 pub const UNREADABLE: &str = "This film could not be read to repackage it for the television.";
 /// The source failed, or the file could not be read past a point.
@@ -423,7 +484,7 @@ pub fn repackage<P: Packets, K: Sink>(
             continue;
         };
         let (key, data) = match track {
-            TrackKind::Video => (packet.key, chosen.h264.sample(packet.data)),
+            TrackKind::Video => (packet.key, chosen.config.sample(packet.data)),
             TrackKind::Audio if chosen.adts => (true, strip_adts(packet.data)),
             TrackKind::Audio => (true, packet.data),
         };
@@ -467,7 +528,7 @@ impl Clock {
 struct Chosen {
     video: StreamInfo,
     audio: StreamInfo,
-    h264: H264Config,
+    config: VideoConfig,
     video_format: TrackFormat,
     audio_format: TrackFormat,
     /// The audio comes in ADTS frames, and its configuration is the first
@@ -484,25 +545,28 @@ impl Chosen {
             .iter()
             .find(|stream| stream.kind == Kind::Video && !stream.attached_picture)
             .ok_or("This film has no picture to send to the television.")?;
-        if video.codec != libav::AV_CODEC_ID_H264 {
-            return Err(NOT_BUILT.to_owned());
-        }
+        let config = match video.codec {
+            libav::AV_CODEC_ID_H264 => {
+                VideoConfig::H264(H264Config::of(&video.extradata).ok_or(UNREADABLE)?)
+            }
+            libav::AV_CODEC_ID_HEVC => {
+                if let Some(sentence) = dolby_vision_refusal(video.dolby_vision) {
+                    return Err(sentence);
+                }
+                VideoConfig::Hevc(HevcConfig::of(&video.extradata).ok_or(UNREADABLE)?)
+            }
+            other => return Err(video_refusal(other)),
+        };
         let audio = streams
             .iter()
             .filter(|stream| stream.kind == Kind::Audio)
             .nth(audio_track as usize)
             .ok_or("The sound track being played is not in the film any more.")?;
         if audio.codec != libav::AV_CODEC_ID_AAC {
-            return Err(NOT_BUILT.to_owned());
+            return Err(audio_refusal(audio.codec));
         }
-        let h264 = H264Config::of(&video.extradata).ok_or(UNREADABLE)?;
         Ok(Self {
-            video_format: TrackFormat::H264 {
-                width: video.width,
-                height: video.height,
-                csd0: h264.csd0.clone(),
-                csd1: h264.csd1.clone(),
-            },
+            video_format: config.format(video.width, video.height),
             audio_format: TrackFormat::Aac {
                 sample_rate: audio.sample_rate,
                 channels: audio.channels.max(1),
@@ -511,7 +575,7 @@ impl Chosen {
             adts: audio.extradata.is_empty(),
             video: video.clone(),
             audio: audio.clone(),
-            h264,
+            config,
         })
     }
 
@@ -607,20 +671,178 @@ impl H264Config {
             return data;
         };
         let mut out = Vec::with_capacity(data.len() + 8);
-        let mut at = 0;
-        while at + size <= data.len() {
-            let len = data[at..at + size]
-                .iter()
-                .fold(0usize, |len, byte| (len << 8) | usize::from(*byte));
-            at += size;
-            let Some(unit) = data.get(at..at + len) else {
-                break;
-            };
+        for unit in length_prefixed_units(&data, size) {
             out.extend_from_slice(&START_CODE);
             out.extend_from_slice(unit);
-            at += len;
         }
         Bytes::from(out)
+    }
+}
+
+/// HEVC's configuration as the server wants it -- `csd0`, the VPS, SPS and
+/// PPS and any SEI messages beside them, Annex-B -- and how the container
+/// frames its samples.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HevcConfig {
+    pub csd0: Bytes,
+    /// The size of each NAL unit's length prefix in a sample (an `hvcC`'s
+    /// `lengthSizeMinusOne` + 1), or `None` for samples already in Annex-B.
+    pub length_size: Option<usize>,
+}
+
+/// HEVC NAL unit types (H.265 table 7-1) this producer reads.
+const HEVC_VPS: u8 = 32;
+const HEVC_SPS: u8 = 33;
+const HEVC_PPS: u8 = 34;
+const HEVC_PREFIX_SEI: u8 = 39;
+const HEVC_SUFFIX_SEI: u8 = 40;
+/// Unspecified in HEVC and ignored by its decoders; Dolby Vision's RPU
+/// (62) and enhancement layer (63) in practice, dropped from samples.
+const HEVC_UNSPECIFIED_62: u8 = 62;
+const HEVC_UNSPECIFIED_63: u8 = 63;
+
+fn hevc_type(unit: &[u8]) -> Option<u8> {
+    unit.first().map(|header| (header >> 1) & 0x3f)
+}
+
+impl HevcConfig {
+    /// From a container's HEVC extradata: an `hvcC` (Matroska, MP4) or
+    /// parameter sets in Annex-B (a transport stream's). `None` for
+    /// anything else, or one without a VPS, an SPS and a PPS.
+    pub fn of(extradata: &[u8]) -> Option<Self> {
+        let (units, length_size) = if starts_annex_b(extradata) {
+            (annex_b_units(extradata), None)
+        } else {
+            let (units, length_size) = hvcc_units(extradata)?;
+            (units, Some(length_size))
+        };
+        let kept: Vec<&[u8]> = units
+            .into_iter()
+            .filter(|unit| {
+                matches!(
+                    hevc_type(unit),
+                    Some(HEVC_VPS | HEVC_SPS | HEVC_PPS | HEVC_PREFIX_SEI | HEVC_SUFFIX_SEI)
+                )
+            })
+            .collect();
+        for needed in [HEVC_VPS, HEVC_SPS, HEVC_PPS] {
+            if !kept.iter().any(|unit| hevc_type(unit) == Some(needed)) {
+                return None;
+            }
+        }
+        let mut csd0 = Vec::new();
+        for unit in kept {
+            csd0.extend_from_slice(&START_CODE);
+            csd0.extend_from_slice(unit);
+        }
+        Some(Self {
+            csd0: Bytes::from(csd0),
+            length_size,
+        })
+    }
+
+    /// A sample as the server takes it: Annex-B, each NAL unit behind a
+    /// four-byte start code, Dolby Vision's units (62, 63) left out.
+    pub fn sample(&self, data: Bytes) -> Bytes {
+        let units: Vec<&[u8]> = match self.length_size {
+            Some(size) => length_prefixed_units(&data, size),
+            None => annex_b_units(&data),
+        };
+        let kept = |unit: &[u8]| {
+            !matches!(
+                hevc_type(unit),
+                Some(HEVC_UNSPECIFIED_62 | HEVC_UNSPECIFIED_63)
+            )
+        };
+        if self.length_size.is_none() && units.iter().all(|unit| kept(unit)) {
+            return data;
+        }
+        let mut out = Vec::with_capacity(data.len() + 8);
+        for unit in units.into_iter().filter(|unit| kept(unit)) {
+            out.extend_from_slice(&START_CODE);
+            out.extend_from_slice(unit);
+        }
+        Bytes::from(out)
+    }
+}
+
+/// The NAL units of a sample whose units each follow a `size`-byte length;
+/// a length that runs past the end ends the sample there.
+fn length_prefixed_units(data: &[u8], size: usize) -> Vec<&[u8]> {
+    let mut units = Vec::new();
+    let mut at = 0;
+    while at + size <= data.len() {
+        let len = data[at..at + size]
+            .iter()
+            .fold(0usize, |len, byte| (len << 8) | usize::from(*byte));
+        at += size;
+        let Some(unit) = data.get(at..at + len) else {
+            break;
+        };
+        units.push(unit);
+        at += len;
+    }
+    units
+}
+
+/// The NAL units of an `hvcC` (ISO/IEC 14496-15 §8.3.3.1), every array's,
+/// and its NAL length size.
+fn hvcc_units(hvcc: &[u8]) -> Option<(Vec<&[u8]>, usize)> {
+    if hvcc.len() < 23 {
+        return None;
+    }
+    let length_size = usize::from(hvcc[21] & 0x03) + 1;
+    let arrays = hvcc[22];
+    let mut at = 23;
+    let mut units = Vec::new();
+    let u16_at = |at: usize| -> Option<usize> {
+        Some(usize::from(u16::from_be_bytes([
+            *hvcc.get(at)?,
+            *hvcc.get(at + 1)?,
+        ])))
+    };
+    for _ in 0..arrays {
+        let count = u16_at(at + 1)?;
+        at += 3;
+        for _ in 0..count {
+            let len = u16_at(at)?;
+            at += 2;
+            units.push(hvcc.get(at..at + len)?);
+            at += len;
+        }
+    }
+    Some((units, length_size))
+}
+
+/// The video's configuration, by codec.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum VideoConfig {
+    H264(H264Config),
+    Hevc(HevcConfig),
+}
+
+impl VideoConfig {
+    fn format(&self, width: u32, height: u32) -> TrackFormat {
+        match self {
+            Self::H264(h264) => TrackFormat::H264 {
+                width,
+                height,
+                csd0: h264.csd0.clone(),
+                csd1: h264.csd1.clone(),
+            },
+            Self::Hevc(hevc) => TrackFormat::Hevc {
+                width,
+                height,
+                csd0: hevc.csd0.clone(),
+            },
+        }
+    }
+
+    fn sample(&self, data: Bytes) -> Bytes {
+        match self {
+            Self::H264(h264) => h264.sample(data),
+            Self::Hevc(hevc) => hevc.sample(data),
+        }
     }
 }
 
@@ -774,6 +996,7 @@ mod tests {
             sample_rate: if kind == Kind::Audio { 48_000 } else { 0 },
             channels: if kind == Kind::Audio { 2 } else { 0 },
             time_base: libav::Rational { num: 1, den: 1000 },
+            dolby_vision: None,
         }
     }
 
@@ -1188,13 +1411,39 @@ mod tests {
         convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
         assert_eq!(refusal_for(&convert), Some(NOT_BUILT));
 
-        let mut hevc = film(Vec::new());
-        hevc.streams[1].codec = libav::AV_CODEC_ID_HEVC;
-        let sink = FakeSink::new(None);
-        repackage(&mut hevc, &spec(0), Duration::ZERO, false, sink.clone());
+        // Each track it will not copy is named, in plain words.
+        let refused = |change: &dyn Fn(&mut FakePackets)| -> Vec<Wrote> {
+            let mut packets = film(Vec::new());
+            change(&mut packets);
+            let sink = FakeSink::new(None);
+            repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+            sink.wrote.take()
+        };
         assert_eq!(
-            *sink.wrote.borrow(),
-            vec![Wrote::Fail(NOT_BUILT.to_owned())]
+            refused(&|film| film.streams[1].codec = 226),
+            vec![Wrote::Fail(
+                "This film's video is AV1, which xtremio can't convert for casting yet.".to_owned()
+            )]
+        );
+        assert_eq!(
+            refused(&|film| film.streams[3].codec = 86056),
+            vec![Wrote::Fail(
+                "This film's sound is Dolby Digital Plus (E-AC3), which xtremio can't convert \
+                 for casting yet."
+                    .to_owned()
+            )]
+        );
+        assert_eq!(
+            refused(&|film| film.streams[3].codec = 0x7fff_0000),
+            vec![Wrote::Fail(
+                "This film's sound is in a format xtremio can't convert for casting yet."
+                    .to_owned()
+            )]
+        );
+        // HEVC whose configuration is not an `hvcC` cannot be read.
+        assert_eq!(
+            refused(&|film| film.streams[1].codec = libav::AV_CODEC_ID_HEVC),
+            vec![Wrote::Fail(UNREADABLE.to_owned())]
         );
 
         let sink = FakeSink::new(None);
@@ -1211,5 +1460,216 @@ mod tests {
                 "The sound track being played is not in the film any more.".to_owned()
             )]
         );
+    }
+
+    // --- HEVC ---------------------------------------------------------------------
+
+    const VPS: &[u8] = &[0x40, 0x01, 0x0c, 0x01, 0xff, 0xff];
+    const HEVC_SPS: &[u8] = &[0x42, 0x01, 0x01, 0x02, 0x20];
+    const HEVC_PPS: &[u8] = &[0x44, 0x01, 0xc1, 0x72];
+    /// A prefix SEI: an HDR10 encode's light levels.
+    const SEI: &[u8] = &[0x4e, 0x01, 0x90, 0x04, 0x03, 0xe8, 0x01, 0x90, 0x80];
+    /// Dolby Vision's RPU, an unspecified NAL unit type (62) to HEVC.
+    const RPU: &[u8] = &[0x7c, 0x01, 0x19, 0x08];
+    /// An IDR slice.
+    const IDR: &[u8] = &[0x26, 0x01, 0xaf, 0x09];
+
+    /// An `hvcC` holding `arrays` (NAL unit type, units), with
+    /// `length_size`-byte lengths in its samples.
+    fn hvcc(length_size: u8, arrays: &[(u8, &[&[u8]])]) -> Vec<u8> {
+        let mut out = vec![1, 0x02, 0x20, 0, 0, 0, 0x90, 0, 0, 0, 0, 0, 0x3c];
+        out.extend_from_slice(&[0xf0, 0x00, 0xfc, 0xfd, 0xfa, 0xfa, 0x00, 0x00]);
+        out.push(0x0c | (length_size - 1));
+        out.push(arrays.len() as u8);
+        for (kind, units) in arrays {
+            out.push(0x80 | kind);
+            out.extend_from_slice(&(units.len() as u16).to_be_bytes());
+            for unit in *units {
+                out.extend_from_slice(&(unit.len() as u16).to_be_bytes());
+                out.extend_from_slice(unit);
+            }
+        }
+        out
+    }
+
+    fn hdr10_hvcc(length_size: u8) -> Vec<u8> {
+        hvcc(
+            length_size,
+            &[
+                (32, &[VPS]),
+                (33, &[HEVC_SPS]),
+                (34, &[HEVC_PPS]),
+                (39, &[SEI]),
+            ],
+        )
+    }
+
+    /// **An `hvcC` becomes `csd-0` in Annex-B** -- the parameter sets and
+    /// the SEI beside them, in the record's order -- and a sample whose
+    /// first length is 256 to 511, which reads as a start code, becomes
+    /// Annex-B units the server cannot misread.
+    #[test]
+    fn an_hvcc_and_its_samples_are_handed_over_in_annex_b() {
+        let config = HevcConfig::of(&hdr10_hvcc(4)).expect("an hvcC");
+        assert_eq!(
+            config.csd0.as_ref(),
+            annex_b(&[VPS, HEVC_SPS, HEVC_PPS, SEI]).as_slice()
+        );
+        assert_eq!(config.length_size, Some(4));
+
+        let slice = [IDR, &[0x55; 296]].concat();
+        let mut sample = (slice.len() as u32).to_be_bytes().to_vec();
+        assert_eq!(
+            &sample[..3],
+            &[0, 0, 1],
+            "this length looks like a start code"
+        );
+        sample.extend_from_slice(&slice);
+        let out = config.sample(Bytes::from(sample));
+        assert_eq!(out.as_ref(), annex_b(&[&slice]).as_slice());
+
+        let two = HevcConfig::of(&hdr10_hvcc(2)).unwrap();
+        assert_eq!(two.length_size, Some(2));
+        let mut sample = (IDR.len() as u16).to_be_bytes().to_vec();
+        sample.extend_from_slice(IDR);
+        assert_eq!(
+            two.sample(Bytes::from(sample)).as_ref(),
+            annex_b(&[IDR]).as_slice()
+        );
+
+        // A configuration short of a parameter set is not one.
+        assert_eq!(
+            HevcConfig::of(&hvcc(4, &[(32, &[VPS]), (33, &[HEVC_SPS])])),
+            None,
+            "no PPS"
+        );
+        assert_eq!(HevcConfig::of(&avcc(4)), None, "an avcC");
+        // A transport stream's: Annex-B already, samples as they are.
+        let annex = HevcConfig::of(&annex_b(&[VPS, HEVC_SPS, HEVC_PPS])).expect("Annex-B");
+        assert_eq!(annex.length_size, None);
+        let sample = Bytes::from(annex_b(&[IDR]));
+        assert_eq!(annex.sample(sample.clone()), sample);
+    }
+
+    /// **Dolby Vision's units are left out of a copy**, length-prefixed or
+    /// Annex-B: the RPU (62) and an enhancement layer (63) mean nothing to
+    /// an HEVC decoder, and the picture is its base layer.
+    #[test]
+    fn dolby_visions_units_are_dropped_from_hevc_samples() {
+        let el: &[u8] = &[0x7e, 0x01, 0x44];
+        let config = HevcConfig::of(&hdr10_hvcc(4)).unwrap();
+        let mut sample = Vec::new();
+        for unit in [IDR, RPU, el] {
+            sample.extend_from_slice(&(unit.len() as u32).to_be_bytes());
+            sample.extend_from_slice(unit);
+        }
+        assert_eq!(
+            config.sample(Bytes::from(sample)).as_ref(),
+            annex_b(&[IDR]).as_slice()
+        );
+        let annex = HevcConfig::of(&annex_b(&[VPS, HEVC_SPS, HEVC_PPS])).unwrap();
+        assert_eq!(
+            annex.sample(Bytes::from(annex_b(&[IDR, RPU]))).as_ref(),
+            annex_b(&[IDR]).as_slice()
+        );
+    }
+
+    /// **An HEVC film is copied**: its format is the `hvcC`'s sets in
+    /// Annex-B, its samples go over in Annex-B with their key flags.
+    #[test]
+    fn a_run_copies_hevc() {
+        let mut packets = film(vec![
+            packet(1, 0, true, &[0, 0, 0, 4, 0x26, 0x01, 0xaf, 0x09]),
+            packet(1, 40, false, &[0, 0, 0, 3, 0x02, 0x01, 0xd0]),
+        ]);
+        packets.streams[1].codec = libav::AV_CODEC_ID_HEVC;
+        packets.streams[1].extradata = Bytes::from(hdr10_hvcc(4));
+        let sink = FakeSink::new(None);
+        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+        let wrote = sink.wrote.borrow();
+        assert_eq!(
+            wrote[0],
+            Wrote::Format(
+                TrackKind::Video,
+                TrackFormat::Hevc {
+                    width: 320,
+                    height: 240,
+                    csd0: Bytes::from(annex_b(&[VPS, HEVC_SPS, HEVC_PPS, SEI])),
+                }
+            )
+        );
+        assert_eq!(
+            wrote[2],
+            Wrote::Sample(TrackKind::Video, 23_000, true, annex_b(&[IDR]))
+        );
+        assert_eq!(
+            wrote[3],
+            Wrote::Sample(
+                TrackKind::Video,
+                63_000,
+                false,
+                annex_b(&[&[0x02, 0x01, 0xd0]])
+            )
+        );
+    }
+
+    /// **Dolby Vision: profiles 7 and 8 are copied as their base layer,
+    /// profile 5 is refused** -- it has no base layer any other decoder
+    /// shows right -- with a sentence that says so.
+    #[test]
+    fn dolby_vision_without_a_compatible_base_layer_is_refused() {
+        let run = |profile: u8, compatibility: u8| -> Vec<Wrote> {
+            let mut packets = film(vec![packet(
+                1,
+                0,
+                true,
+                &[0, 0, 0, 4, 0x26, 0x01, 0xaf, 0x09],
+            )]);
+            packets.streams[1].codec = libav::AV_CODEC_ID_HEVC;
+            packets.streams[1].extradata = Bytes::from(hdr10_hvcc(4));
+            packets.streams[1].dolby_vision = Some(DolbyVision {
+                profile,
+                level: 6,
+                compatibility,
+            });
+            let sink = FakeSink::new(None);
+            repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+            sink.wrote.take()
+        };
+        assert_eq!(
+            run(5, 0),
+            vec![Wrote::Fail(
+                "This film's picture is Dolby Vision profile 5, which has no ordinary HDR or SDR \
+                 picture underneath: the television would show it in the wrong colours."
+                    .to_owned()
+            )]
+        );
+        for (profile, compatibility) in [(8, 1), (8, 4), (7, 6)] {
+            let wrote = run(profile, compatibility);
+            assert!(
+                matches!(
+                    wrote[0],
+                    Wrote::Format(TrackKind::Video, TrackFormat::Hevc { .. })
+                ),
+                "profile {profile}.{compatibility}: {wrote:?}"
+            );
+            assert_eq!(wrote.last(), Some(&Wrote::End));
+        }
+    }
+
+    /// The record's bytes: version 1.0, profile 8, level 6, RPU and base
+    /// layer present, compatibility 1 (HDR10).
+    #[test]
+    fn a_dolby_vision_record_reads_its_profile_and_compatibility() {
+        let record = [1, 0, 8, 6, 1, 0, 1, 1, 0, 0, 0, 0];
+        assert_eq!(
+            DolbyVision::of_record(&record),
+            Some(DolbyVision {
+                profile: 8,
+                level: 6,
+                compatibility: 1
+            })
+        );
+        assert_eq!(DolbyVision::of_record(&record[..7]), None);
     }
 }

@@ -1,5 +1,7 @@
 //! **A rendition, end to end on this machine**: H.264 + AAC films made by
 //! `ffmpeg` -- Matroska with cues, Matroska without, a transport stream --
+//! and HEVC Main 10 + AAC ones in Matroska (with Dolby Vision records too,
+//! [`hevc_films`]) --
 //! registered by path, published as renditions, and read the way a Cast
 //! receiver reads a file -- `HEAD`, ranges, a seek by the `sidx` -- off the
 //! LAN listener, with the app's producer (`xtremio_core::rendition`)
@@ -22,7 +24,10 @@ use xtremio_core::server::StartConfig;
 
 #[path = "support/film.rs"]
 mod film;
-use film::{libmpv_name, make, make_film, run, Container};
+use film::{
+    libmpv_name, make, make_film, make_with, run, with_dolby_vision, Container, Video,
+    DOLBY_VISION_PLACEHOLDER,
+};
 
 /// Three-second segments over the 13 s film ([`film::FILM_SECONDS`]).
 const SEGMENT_MS: u64 = 3000;
@@ -408,7 +413,7 @@ fn decodes(input: &str) {
 }
 
 #[test]
-fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Result<()> {
+fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Result<()> {
     let name = libmpv_name();
     let Some(mpv) = load_mpv(&name) else {
         eprintln!("SKIPPED: no libmpv to load as {name} (set XTREMIO_LIBMPV)");
@@ -617,6 +622,8 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
     let (_, _, again_whole) = get(&runtime, &again, None);
     assert!(again_whole == whole, "the same file");
 
+    hevc_films(&runtime, tmp.path(), &publish)?;
+
     // --- The long films: a seek by the sidx, with and without an index -------
 
     for (container, file) in [
@@ -742,10 +749,202 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
     Ok(())
 }
 
+/// `ffprobe`'s word on the first stream of `kind` in `file`: `codec_name`,
+/// `codec_tag_string`, `profile` and `pix_fmt`.
+fn stream_facts(file: &str, kind: &str) -> serde_json::Value {
+    let out = run(
+        "ffprobe",
+        &[
+            "-v",
+            "error",
+            "-select_streams",
+            &format!("{kind}:0"),
+            "-show_entries",
+            "stream=codec_name,codec_tag_string,profile,pix_fmt",
+            "-of",
+            "json",
+            file,
+        ],
+    )
+    .expect("ffprobe ran");
+    assert!(out.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    json["streams"][0].clone()
+}
+
+/// **HEVC is copied**: a Main 10 HDR10 film with open GOPs (its keys after
+/// the first are CRAs) in Matroska comes back as `hvc1` -- the same
+/// packets, keys and times, decodable whole and from every slot -- and a
+/// long one seeks by its `sidx` as the H.264 one does. A Dolby Vision
+/// profile 5 film is refused with its sentence; profile 8 is copied.
+fn hevc_films(
+    runtime: &tokio::runtime::Runtime,
+    tmp: &Path,
+    publish: &dyn Fn(&Path, u64, u64) -> anyhow::Result<String>,
+) -> anyhow::Result<()> {
+    let film = tmp.join("hevc.mkv");
+    let seconds = film::FILM_SECONDS;
+    if make_with(&film, seconds, Container::Matroska, Video::HevcHdr10, &[]).is_none() {
+        eprintln!("SKIPPED the HEVC films: no ffmpeg with libx265");
+        return Ok(());
+    }
+    let url = publish(&film, DURATION_MS, SEGMENT_MS)?;
+    let (status, _, whole) = get(runtime, &url, None);
+    assert_eq!(status, 200);
+    let layout = Layout::of(&whole);
+    let out = tmp.join("hevc.mp4");
+    std::fs::write(&out, &whole)?;
+    let (film_path, out_path) = (film.to_str().unwrap(), out.to_str().unwrap());
+
+    let facts = stream_facts(out_path, "v");
+    assert_eq!(facts["codec_name"], "hevc", "{facts}");
+    assert_eq!(facts["codec_tag_string"], "hvc1", "{facts}");
+    assert_eq!(facts["profile"], "Main 10", "{facts}");
+    assert_eq!(facts["pix_fmt"], "yuv420p10le", "{facts}");
+    assert_eq!(stream_facts(out_path, "a")["codec_name"], "aac");
+
+    // The same packets: every one, its key flag, its distance from the
+    // first, and decode order a clock that only moves on.
+    let (_, source) = probe(film_path, "v");
+    let (_, video) = probe(out_path, "v");
+    let shape = |packets: &[Probed]| -> Vec<(i64, bool)> {
+        let mut out: Vec<(i64, bool)> = packets
+            .iter()
+            .map(|packet| (packet.pts_ms.unwrap(), packet.key))
+            .collect();
+        out.sort_unstable();
+        let first = out[0].0;
+        out.into_iter()
+            .map(|(pts, key)| (pts - first, key))
+            .collect()
+    };
+    assert_eq!(video.len(), source.len());
+    assert_eq!(shape(&video), shape(&source));
+    let keys = source.iter().filter(|packet| packet.key).count();
+    assert!(keys > 3, "keys every 2 s: {keys}");
+    let dts: Vec<i64> = video.iter().map(|packet| packet.dts_ms.unwrap()).collect();
+    assert!(dts.windows(2).all(|pair| pair[0] < pair[1]), "{dts:?}");
+    // A slot per key on the 3 s grid, as for the H.264 film.
+    assert_eq!(layout.slots.len(), 5);
+
+    decodes(out_path);
+    for n in 0..layout.slots.len() {
+        let mut alone = whole[..layout.init].to_vec();
+        alone.extend_from_slice(layout.fragment(&whole, n));
+        let path = tmp.join(format!("hevc-slot{n}.mp4"));
+        std::fs::write(&path, alone)?;
+        decodes(path.to_str().unwrap());
+    }
+
+    // --- A long one: one jump to the slot that holds the time --------------
+    let long = tmp.join("hevc-long.mkv");
+    make_with(
+        &long,
+        LONG_SECONDS,
+        Container::Matroska,
+        Video::HevcHdr10,
+        &[],
+    )
+    .expect("ffmpeg made the long HEVC film");
+    let url = publish(&long, u64::from(LONG_SECONDS) * 1000, 6000)?;
+    let (requests, landed) = ffprobe_seek(&url);
+    eprintln!(
+        "hevc-long.mkv: ffprobe sought to 5:00 in {requests} requests, landing at {landed} s"
+    );
+    assert!(
+        requests <= 6,
+        "ffprobe made {requests} requests to seek to 5:00"
+    );
+    assert!(
+        (297.0..=300.0).contains(&landed),
+        "the seek landed at {landed} s"
+    );
+    let ranges = ffmpeg_seek_ranges(&url, 60);
+    assert_eq!(ranges.len(), 2, "ffmpeg -ss 60 asked {ranges:?}");
+    let seeks = [100, 250, 330, 43, 30];
+    let landed = ffprobe_seeks(&url, &seeks);
+    for (at, landed) in seeks.iter().zip(&landed) {
+        let at = f64::from(*at);
+        assert!(
+            (at - 6.0 - 2.8..=at).contains(landed),
+            "seeks {seeks:?} landed at {landed:?}"
+        );
+    }
+    decodes(&url);
+
+    // --- Dolby Vision ----------------------------------------------------------
+    let placeholder = tmp.join("dv.mkv");
+    make_with(
+        &placeholder,
+        4,
+        Container::Matroska,
+        Video::HevcHdr10,
+        &[
+            "-metadata:s:v:0",
+            &format!("title={DOLBY_VISION_PLACEHOLDER}"),
+            "-write_crc32",
+            "0",
+        ],
+    )
+    .expect("ffmpeg made the Dolby Vision film");
+    let plain = std::fs::read(&placeholder)?;
+    let libav = xtremio_core::libav::Libav::registered().map_err(anyhow::Error::msg)?;
+    for (profile, compatibility, refused) in [(5u8, 0u8, true), (8, 1, false)] {
+        let path = tmp.join(format!("dv{profile}.mkv"));
+        let bytes = with_dolby_vision(&plain, profile, compatibility);
+        std::fs::write(&path, &bytes)?;
+        // The container's record, as the producer reads it.
+        let demuxer = xtremio_core::libav::Demuxer::open(
+            libav,
+            std::io::Cursor::new(bytes::Bytes::from(bytes)),
+        )
+        .map_err(anyhow::Error::msg)?;
+        let video = demuxer
+            .streams()
+            .iter()
+            .find(|stream| stream.kind == xtremio_core::libav::Kind::Video)
+            .expect("a video stream");
+        assert_eq!(
+            video.dolby_vision,
+            Some(xtremio_core::libav::DolbyVision {
+                profile,
+                level: 6,
+                compatibility
+            })
+        );
+        drop(demuxer);
+        let url = publish(&path, 4_000, SEGMENT_MS)?;
+        let (status, _, body) = get(runtime, &url, None);
+        if refused {
+            assert_eq!(status, 503, "profile {profile}");
+            let body = String::from_utf8_lossy(&body);
+            assert!(
+                body.contains(
+                    "This film's picture is Dolby Vision profile 5, which has no ordinary HDR \
+                     or SDR picture underneath: the television would show it in the wrong \
+                     colours."
+                ),
+                "{body}"
+            );
+        } else {
+            assert_eq!(status, 200, "profile {profile}");
+            let out = tmp.join(format!("dv{profile}.mp4"));
+            std::fs::write(&out, &body)?;
+            assert_eq!(
+                stream_facts(out.to_str().unwrap(), "v")["codec_tag_string"],
+                "hvc1"
+            );
+            decodes(out.to_str().unwrap());
+        }
+    }
+    Ok(())
+}
+
 /// **Not a test: a rendition served from this machine**, for playing it
 /// in a browser or on a television before the app casts it
 /// (`docs/CASTING.md`). Publishes a rendition of `XTREMIO_RENDITION_FILE`
-/// (an H.264 + AAC film: Matroska, MP4 or a transport stream) on the LAN
+/// (an H.264 or HEVC film with AAC sound: Matroska, MP4 or a transport
+/// stream) on the LAN
 /// listener -- loopback, so a television reaches it through `adb reverse`
 /// -- writes the file's path and the listener's port into
 /// `XTREMIO_RENDITION_OUT` (`path`, `port`, and `url`, the whole URL on

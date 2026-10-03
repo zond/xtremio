@@ -40,6 +40,8 @@ cat > "$WORK/offsets.c" <<'EOF'
 O(AVFormatContext, pb) O(AVFormatContext, nb_streams) O(AVFormatContext, streams)
 O(AVFormatContext, start_time) O(AVFormatContext, duration)
 O(AVStream, index) O(AVStream, codecpar) O(AVStream, time_base) O(AVStream, disposition)
+O(AVStream, attached_pic) O(AVStream, side_data) O(AVStream, nb_side_data)
+O(AVPacketSideData, size) O(AVPacketSideData, type)
 O(AVCodecParameters, codec_type) O(AVCodecParameters, codec_id)
 O(AVCodecParameters, extradata) O(AVCodecParameters, extradata_size)
 O(AVCodecParameters, width) O(AVCodecParameters, height)
@@ -48,8 +50,17 @@ O(AVChannelLayout, nb_channels)
 O(AVPacket, pts) O(AVPacket, dts) O(AVPacket, data) O(AVPacket, size)
 O(AVPacket, stream_index) O(AVPacket, flags) O(AVPacket, duration)
 O(AVIOContext, buffer)
+const unsigned long off_size_AVPacket = sizeof(AVPacket),
+    off_size_AVPacketSideData = sizeof(AVPacketSideData);
 const unsigned long id_h264 = AV_CODEC_ID_H264, id_hevc = AV_CODEC_ID_HEVC,
-    id_aac = AV_CODEC_ID_AAC;
+    id_aac = AV_CODEC_ID_AAC, id_av1 = AV_CODEC_ID_AV1, id_vp9 = AV_CODEC_ID_VP9,
+    id_vp8 = AV_CODEC_ID_VP8, id_mpeg4 = AV_CODEC_ID_MPEG4,
+    id_mpeg2 = AV_CODEC_ID_MPEG2VIDEO, id_vc1 = AV_CODEC_ID_VC1,
+    id_ac3 = AV_CODEC_ID_AC3, id_eac3 = AV_CODEC_ID_EAC3,
+    id_truehd = AV_CODEC_ID_TRUEHD, id_dts = AV_CODEC_ID_DTS,
+    id_flac = AV_CODEC_ID_FLAC, id_opus = AV_CODEC_ID_OPUS, id_mp3 = AV_CODEC_ID_MP3,
+    id_mp2 = AV_CODEC_ID_MP2, id_vorbis = AV_CODEC_ID_VORBIS,
+    id_dovi_conf = AV_PKT_DATA_DOVI_CONF;
 EOF
 
 for target in x86_64-linux-gnu armv7a-linux-androideabi24; do

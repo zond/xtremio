@@ -87,6 +87,32 @@ const AVMEDIA_TYPE_AUDIO: c_int = 1;
 pub const AV_CODEC_ID_H264: c_int = 27;
 pub const AV_CODEC_ID_HEVC: c_int = 173;
 pub const AV_CODEC_ID_AAC: c_int = 0x15002;
+
+/// What a sentence calls the codec `id` (an n6.0 `AVCodecID`), for the
+/// ones a film is likely to carry; `None` for the rest.
+pub fn codec_name(id: c_int) -> Option<&'static str> {
+    Some(match id {
+        AV_CODEC_ID_H264 => "H.264",
+        AV_CODEC_ID_HEVC => "HEVC",
+        226 => "AV1",
+        167 => "VP9",
+        139 => "VP8",
+        12 => "MPEG-4 Part 2",
+        2 => "MPEG-2",
+        70 => "VC-1",
+        AV_CODEC_ID_AAC => "AAC",
+        86019 => "Dolby Digital (AC3)",
+        86056 => "Dolby Digital Plus (E-AC3)",
+        86060 => "Dolby TrueHD",
+        86020 => "DTS",
+        86028 => "FLAC",
+        86076 => "Opus",
+        86017 => "MP3",
+        86016 => "MP2",
+        86021 => "Vorbis",
+        _ => return None,
+    })
+}
 /// How much the custom I/O context asks of a [`Source`] at a time.
 const IO_BUFFER: usize = 256 * 1024;
 
@@ -134,7 +160,9 @@ struct AVFormatContext {
     duration: i64,
 }
 
-/// `AVStream`, n6.0, up to `disposition`.
+/// `AVStream`, n6.0, up to `nb_side_data` (deprecated in 6.1, which still
+/// fills it from the codec parameters' side data, and gone in 7.0 -- where
+/// the major check refuses the library anyway).
 #[repr(C)]
 struct AVStream {
     av_class: *const c_void,
@@ -147,7 +175,28 @@ struct AVStream {
     duration: i64,
     nb_frames: i64,
     disposition: c_int,
+    discard: c_int,
+    sample_aspect_ratio: Rational,
+    metadata: *mut c_void,
+    avg_frame_rate: Rational,
+    attached_pic: AVPacket,
+    side_data: *const AVPacketSideData,
+    nb_side_data: c_int,
 }
+
+/// `AVPacketSideData`, n6.0, whole.
+#[repr(C)]
+struct AVPacketSideData {
+    data: *const u8,
+    size: usize,
+    kind: c_int,
+}
+
+/// `AV_PKT_DATA_DOVI_CONF`: an `AVDOVIDecoderConfigurationRecord`, the
+/// Dolby Vision configuration a container carries (Matroska's `dvcC`/`dvvC`
+/// block addition mapping, an MP4's `dvcC`/`dvvC` box, a transport
+/// stream's descriptor).
+const AV_PKT_DATA_DOVI_CONF: c_int = 29;
 
 /// `AVChannelLayout`, n6.0, up to its union, whose `uint64_t` is what
 /// aligns the struct -- and so where `ch_layout` sits -- to eight bytes.
@@ -194,7 +243,7 @@ struct AVCodecParameters {
     ch_layout: AVChannelLayout,
 }
 
-/// `AVPacket`, n6.0, up to `duration`.
+/// `AVPacket`, n6.0, whole: [`AVStream`] holds one by value.
 #[repr(C)]
 struct AVPacket {
     buf: *mut c_void,
@@ -207,6 +256,10 @@ struct AVPacket {
     side_data: *mut c_void,
     side_data_elems: c_int,
     duration: i64,
+    pos: i64,
+    opaque: *mut c_void,
+    opaque_ref: *mut c_void,
+    time_base: Rational,
 }
 
 /// `AVIOContext`, up to `buffer`, which the context may have reallocated
@@ -247,6 +300,19 @@ mod layout {
     at!(AVStream.codecpar, 16, 12);
     at!(AVStream.time_base, 32, 20);
     at!(AVStream.disposition, 64, 56);
+    at!(AVStream.attached_pic, 96, 88);
+    at!(AVStream.side_data, 200, 168);
+    at!(AVStream.nb_side_data, 208, 172);
+    at!(AVPacketSideData.size, 8, 4);
+    at!(AVPacketSideData.kind, 16, 8);
+    const _: () = assert!(
+        std::mem::size_of::<AVPacketSideData>()
+            == if cfg!(target_pointer_width = "64") {
+                24
+            } else {
+                12
+            }
+    );
     at!(AVCodecParameters.codec_type, 0, 0);
     at!(AVCodecParameters.codec_id, 4, 4);
     at!(AVCodecParameters.extradata, 16, 12);
@@ -263,6 +329,14 @@ mod layout {
     at!(AVPacket.stream_index, 36, 32);
     at!(AVPacket.flags, 40, 36);
     at!(AVPacket.duration, 64, 48);
+    const _: () = assert!(
+        std::mem::size_of::<AVPacket>()
+            == if cfg!(target_pointer_width = "64") {
+                104
+            } else {
+                80
+            }
+    );
     at!(AVIOContext.buffer, 8, 4);
     at!(AVIndexEntry.timestamp, 8, 8);
     at!(AVIndexEntry.flags_and_size, 16, 16);
@@ -537,6 +611,36 @@ pub struct StreamInfo {
     pub sample_rate: u32,
     pub channels: u32,
     pub time_base: Rational,
+    /// The Dolby Vision configuration the container declares for this
+    /// stream, if it declares one.
+    pub dolby_vision: Option<DolbyVision>,
+}
+
+/// A Dolby Vision configuration record (`AVDOVIDecoderConfigurationRecord`,
+/// the `dvcC`/`dvvC` of the Dolby Vision streams specification): which
+/// profile, and what the base layer is to a decoder that knows nothing of
+/// Dolby Vision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DolbyVision {
+    pub profile: u8,
+    pub level: u8,
+    /// `dv_bl_signal_compatibility_id`: 0 for a base layer only a Dolby
+    /// Vision decoder shows right (profile 5's IPT-PQ-c2), 1 for HDR10,
+    /// 2 for SDR, 4 for HLG, 6 for a Blu-ray's HDR10 (profile 7).
+    pub compatibility: u8,
+}
+
+impl DolbyVision {
+    /// From the record as FFmpeg holds it, a byte per field: version major
+    /// and minor, profile, level, three presence flags, then the
+    /// compatibility id.
+    pub fn of_record(record: &[u8]) -> Option<Self> {
+        Some(Self {
+            profile: *record.get(2)?,
+            level: *record.get(3)?,
+            compatibility: *record.get(7)?,
+        })
+    }
 }
 
 /// One packet, as `av_read_frame` handed it out.
@@ -842,6 +946,17 @@ impl<S: Source> Demuxer<S> {
                         _ => Kind::Other,
                     };
                     let positive = |value: c_int| u32::try_from(value).unwrap_or(0);
+                    let side_data = if stream.side_data.is_null() || stream.nb_side_data <= 0 {
+                        &[][..]
+                    } else {
+                        std::slice::from_raw_parts(stream.side_data, stream.nb_side_data as usize)
+                    };
+                    let dolby_vision = side_data
+                        .iter()
+                        .filter(|side| side.kind == AV_PKT_DATA_DOVI_CONF && !side.data.is_null())
+                        .find_map(|side| {
+                            DolbyVision::of_record(std::slice::from_raw_parts(side.data, side.size))
+                        });
                     Some(StreamInfo {
                         index: usize::try_from(stream.index).unwrap_or(at),
                         kind,
@@ -853,6 +968,7 @@ impl<S: Source> Demuxer<S> {
                         sample_rate: positive(par.sample_rate),
                         channels: positive(par.ch_layout.nb_channels),
                         time_base: stream.time_base,
+                        dolby_vision,
                     })
                 })
                 .collect()
