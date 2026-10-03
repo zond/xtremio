@@ -46,6 +46,64 @@ void main() {
     expect(DetailsVisitMemory.fromJson(memory.toJson()), memory);
   });
 
+  test('where the page and the remote were is written and read back', () {
+    final memory = DetailsVisitMemory.empty.withVisit(
+      DetailsVisit(
+        meta: 'a',
+        at: DateTime.utc(2026, 9, 1),
+        offset: 412.5,
+        remote: const DetailsRemote(
+          row: 'sources',
+          index: 3,
+          id: 'torrent:abc/0',
+          rung: 'sources',
+          group: '1080p',
+        ),
+      ),
+    );
+    final json = memory.toJson();
+    expect((json['visits']! as List).single, {
+      'meta': 'a',
+      'at': DateTime.utc(2026, 9, 1).millisecondsSinceEpoch,
+      'offset': 412.5,
+      'remote': {
+        'row': 'sources',
+        'index': 3,
+        'id': 'torrent:abc/0',
+        'rung': 'sources',
+        'group': '1080p',
+      },
+    });
+    expect(DetailsVisitMemory.fromJson(json), memory);
+  });
+
+  test('a remote or an offset it cannot use is dropped, the visit kept', () {
+    final memory = DetailsVisitMemory.fromJson({
+      'visits': [
+        {'meta': 'a', 'at': 1, 'offset': -3, 'remote': 'nonsense'},
+        {
+          'meta': 'b',
+          'at': 2,
+          'offset': 'far',
+          'remote': {'index': 2},
+        },
+        {
+          'meta': 'c',
+          'at': 3,
+          'offset': 80,
+          'remote': {'row': 'groups', 'index': -1, 'id': ' '},
+        },
+      ],
+    });
+    expect([for (final v in memory.visits) v.meta], ['a', 'b', 'c']);
+    expect(memory.forMeta('a')?.offset, isNull);
+    expect(memory.forMeta('a')?.remote, isNull);
+    expect(memory.forMeta('b')?.offset, isNull);
+    expect(memory.forMeta('b')?.remote, isNull, reason: 'no row');
+    expect(memory.forMeta('c')?.offset, 80.0);
+    expect(memory.forMeta('c')?.remote, const DetailsRemote(row: 'groups'));
+  });
+
   test('a row it cannot use is dropped, never a failure', () {
     final memory = DetailsVisitMemory.fromJson({
       'visits': [

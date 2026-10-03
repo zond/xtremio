@@ -1,9 +1,16 @@
 /// Where the viewer was on each title's details screen when they last left
-/// it, so the next visit opens on the same season and episode.
+/// it, so the next visit opens where they were: the same season and
+/// episode, the page scrolled as far, and on a television the remote on
+/// the same stop.
 ///
-/// One row per title: the season the episode list showed and the episode
-/// whose sources were up. The details screen writes it as the viewer moves
-/// and reads it once, when it opens (`MetaDetailsScreen`).
+/// One row per title: the season the episode list showed, the episode
+/// whose sources were up, how far the page was scrolled and where the
+/// remote stood ([DetailsRemote]). The details screen writes it as the
+/// viewer moves and whenever they leave -- a pop, the player pushed over
+/// it, the app paused -- and reads it once, when it opens
+/// (`MetaDetailsScreen`). **A title with a row has been visited**, which
+/// is what decides whether its screen opens at the top or where it was
+/// left.
 ///
 /// **The library can be newer.** A visit is where the viewer *looked*; the
 /// library's `video_id` is what they last *watched*, and the player moves
@@ -16,6 +23,73 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+/// Where the remote stood on a television's details screen: a stop on
+/// its ladder, and which rung and group of sources were open around it.
+///
+/// The row is a name rather than the ladder's level number, so a
+/// renumbering of the ladder does not send a stored row somewhere else.
+@immutable
+final class DetailsRemote {
+  const DetailsRemote({
+    required this.row,
+    this.index = 0,
+    this.id,
+    this.rung,
+    this.group,
+  });
+
+  /// Which row of the ladder: `header`, `episodes`, `sources`, ... --
+  /// the screen's names for its levels.
+  final String row;
+
+  /// Which stop of the row, in the order the remote walks it.
+  final int index;
+
+  /// The stop's own name where it has one (a source's key, a group's
+  /// label), which finds it again when the row is drawn in another order.
+  final String? id;
+
+  /// The rung that was open, when the viewer had chosen it.
+  final String? rung;
+
+  /// The group of sources whose row was out.
+  final String? group;
+
+  Map<String, Object> toJson() => {
+    'row': row,
+    'index': index,
+    'id': ?id,
+    'rung': ?rung,
+    'group': ?group,
+  };
+
+  static DetailsRemote? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final row = DetailsVisit._token(json['row']);
+    if (row == null) return null;
+    final index = json['index'];
+    return DetailsRemote(
+      row: row,
+      index: index is int && index >= 0 ? index : 0,
+      id: DetailsVisit._token(json['id']),
+      rung: DetailsVisit._token(json['rung']),
+      group: DetailsVisit._token(json['group']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DetailsRemote &&
+      other.row == row &&
+      other.index == index &&
+      other.id == id &&
+      other.rung == rung &&
+      other.group == group;
+
+  @override
+  int get hashCode => Object.hash(row, index, id, rung, group);
+}
+
 /// One title's last visit.
 @immutable
 final class DetailsVisit {
@@ -24,6 +98,8 @@ final class DetailsVisit {
     required this.at,
     this.season,
     this.videoId,
+    this.offset,
+    this.remote,
   });
 
   /// The meta item's id: the show, never one of its episodes.
@@ -41,11 +117,21 @@ final class DetailsVisit {
   /// library's `lastWatched`.
   final DateTime at;
 
+  /// How far down the page was scrolled, in logical pixels; null for the
+  /// top.
+  final double? offset;
+
+  /// Where the remote stood, on a television; null off one, and on a
+  /// screen the remote never reached.
+  final DetailsRemote? remote;
+
   Map<String, Object> toJson() => {
     'meta': meta,
     'season': ?season,
     'videoId': ?videoId,
     'at': at.toUtc().millisecondsSinceEpoch,
+    'offset': ?offset,
+    'remote': ?remote?.toJson(),
   };
 
   /// One stored row, or null when it is not one this build can use.
@@ -57,11 +143,16 @@ final class DetailsVisit {
     final at = json['at'];
     if (meta == null || at is! int) return null;
     final season = json['season'];
+    final offset = json['offset'];
     return DetailsVisit(
       meta: meta,
       season: season is int && season >= 0 ? season : null,
       videoId: _token(json['videoId']),
       at: DateTime.fromMillisecondsSinceEpoch(at, isUtc: true),
+      offset: offset is num && offset.isFinite && offset > 0
+          ? offset.toDouble()
+          : null,
+      remote: DetailsRemote.fromJson(json['remote']),
     );
   }
 
@@ -77,10 +168,12 @@ final class DetailsVisit {
       other.meta == meta &&
       other.season == season &&
       other.videoId == videoId &&
-      other.at == at;
+      other.at == at &&
+      other.offset == offset &&
+      other.remote == remote;
 
   @override
-  int get hashCode => Object.hash(meta, season, videoId, at);
+  int get hashCode => Object.hash(meta, season, videoId, at, offset, remote);
 }
 
 /// Every title whose last visit is still remembered, most recent first.
@@ -97,8 +190,8 @@ final class DetailsVisitMemory {
   final List<DetailsVisit> visits;
 
   /// How many titles are remembered. What falls off is the title visited
-  /// longest ago, and a title in the library still opens on its last
-  /// watched episode without a row here.
+  /// longest ago, which opens at the top again as if never visited -- and
+  /// a title in the library still on its last watched episode.
   static const int limit = 200;
 
   /// [meta]'s last visit, or null when it has none.
