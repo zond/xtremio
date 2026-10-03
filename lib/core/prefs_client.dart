@@ -12,6 +12,7 @@ import 'drive_link.dart';
 import 'local_media_files.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
+import 'title_ratings.dart';
 import 'stream_order.dart';
 import 'subtitle_picks.dart';
 import 'subtitle_sync.dart';
@@ -226,6 +227,11 @@ class AppPrefs extends ChangeNotifier {
   /// its row is there without a round trip every time it is opened.
   static const String similarSuggestionsKey = 'similarSuggestions';
 
+  /// The `titleRatings` key: the scores the server has told this device
+  /// about each title (see [TitleRatingsMemory]), so a title opened again
+  /// shows them in its first frame.
+  static const String titleRatingsKey = 'titleRatings';
+
   /// The `driveLinkedFiles` key: which Google Drive files a pairing has
   /// linked to this device (see [LinkedDriveFiles]).
   ///
@@ -344,6 +350,11 @@ class AppPrefs extends ChangeNotifier {
   SimilarMemory _similarSuggestions = SimilarMemory.empty;
 
   SimilarMemory get similarSuggestions => _similarSuggestions;
+
+  TitleRatingsMemory _titleRatings = TitleRatingsMemory.empty;
+
+  /// The scores remembered per title -- see [titleRatingsKey].
+  TitleRatingsMemory get titleRatings => _titleRatings;
 
   /// Which Drive files are linked -- see [driveLinkedFilesKey]. Read
   /// straight out of memory, so a screen may build from it.
@@ -547,6 +558,13 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(titleRatingsKey)) {
+      final ratings = TitleRatingsMemory.fromJson(stored[titleRatingsKey]);
+      if (ratings != _titleRatings) {
+        _titleRatings = ratings;
+        changed = true;
+      }
+    }
     if (loaded(driveLinkedFilesKey)) {
       final linked = LinkedDriveFiles.fromJson(stored[driveLinkedFilesKey]);
       if (linked != _driveLinkedFiles) {
@@ -723,6 +741,20 @@ class AppPrefs extends ChangeNotifier {
     notifyListeners();
     await _write(
       similarSuggestionsKey,
+      value.entries.isEmpty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores the remembered scores, or removes the key once nothing is.
+  ///
+  /// Tells no listener, as [setDetailsVisits] does not: the screen that
+  /// asked has the scores in hand already, and every other screen reading
+  /// the preferences would rebuild for a value none of them draws.
+  Future<void> setTitleRatings(TitleRatingsMemory value) async {
+    if (_titleRatings == value) return;
+    _titleRatings = value;
+    await _write(
+      titleRatingsKey,
       value.entries.isEmpty ? null : value.toJson(),
     );
   }

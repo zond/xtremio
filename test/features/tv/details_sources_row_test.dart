@@ -950,8 +950,22 @@ void main() {
 
     // A television's app bar scrolls with the panel, and the open row is
     // far enough down to have taken it off the top: scroll it back first,
-    // as a pointer would have to.
-    await tester.ensureVisible(find.byType(BackButton));
+    // as a pointer would have to. Far enough down, the bar is past the
+    // panel's cache and not built at all, so drag until it is.
+    await tester.scrollUntilVisible(
+      find.byType(BackButton),
+      -200,
+      scrollable: find
+          .descendant(
+            of: find.byType(MetaDetailsScreen),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+            ),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();

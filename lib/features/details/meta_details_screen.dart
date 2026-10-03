@@ -22,12 +22,14 @@ import '../downloads/remove_download_dialog.dart';
 import '../local/local_media.dart';
 import '../local/local_playback.dart';
 import '../player/player_screen.dart';
+import '../ratings/xtremio_ratings.dart';
 import '../similar/similar_resolver.dart';
 import 'details_header.dart';
 import 'similar_row.dart';
 import 'stream_facts.dart';
 import 'stream_list.dart';
 import 'stream_sources.dart';
+import 'title_scores.dart';
 import 'tv_backdrop.dart';
 import 'tv_episode_row.dart';
 import 'tv_meta_header.dart';
@@ -444,6 +446,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   bool get _hasSimilar =>
       _similarAsked && (_similar == null || _similar!.isNotEmpty);
 
+  /// Whether this title's scores have been asked for ([_maybeAskRatings]).
+  bool _ratingsAsked = false;
+
+  /// The scores beyond the addon's IMDb rating: what this device
+  /// remembers, then what the server answers. Null while neither is known,
+  /// which the header draws as the addon's IMDb rating alone.
+  TitleRatings? _ratings;
+
   /// Where the remote was first put down on this screen, and whether it
   /// has left. Where it starts is the screen's to choose; after that it is
   /// the viewer's, and nothing drawn later takes it off what they walked
@@ -721,6 +731,37 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
     _maybePickInitialVideo(state);
     _maybeAskSimilar(state);
+    _maybeAskRatings(state);
+  }
+
+  /// Puts the remembered scores up and asks for newer ones, once, as soon
+  /// as the title is known.
+  ///
+  /// Nothing waits on it. The remembered scores are assigned without a
+  /// `setState` because the one caller is followed by a build:
+  /// `onFieldChanged` has already marked the screen for the new own state.
+  /// The preferences are always in hand by then -- they are read in
+  /// `didChangeDependencies`, before the field's first state can arrive.
+  /// A server answer arrives whenever it does and only adds to the header;
+  /// a failure leaves whatever was shown.
+  void _maybeAskRatings(MetaDetailsState state) {
+    final prefs = _prefs;
+    if (!mounted || _ratingsAsked || state.meta == null || prefs == null) {
+      return;
+    }
+    if (!RatingsService.askable(type: widget.type, id: widget.id)) return;
+    _ratingsAsked = true;
+    final service = RatingsService(
+      prefs: prefs,
+      provider: RatingsScope.of(context),
+    );
+    _ratings = service.remembered(type: widget.type, id: widget.id);
+    unawaited(_ratingsFor(service));
+  }
+
+  Future<void> _ratingsFor(RatingsService service) async {
+    final ratings = await service.refreshed(type: widget.type, id: widget.id);
+    if (ratings != null && mounted) setState(() => _ratings = ratings);
   }
 
   /// Asks what this title is like, once, as soon as the title itself is

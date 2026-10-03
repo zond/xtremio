@@ -32,7 +32,9 @@ Android TV layout are all built. What is not is in the README's
 
 Facts and genres; for a series a season picker and episode list with
 watched state (picking an episode loads its streams); a bookmark to add or
-remove the title from the library; a **More like this** row of suggestions
+remove the title from the library; IMDb, TMDB, Rotten Tomatoes and
+Popcornmeter scores ([Ratings](ARCHITECTURE.md#ratings)); a **More like
+this** row of suggestions
 ([Recommendations](ARCHITECTURE.md#recommendations)); and the sources every
 installed addon returned, plus any linked Google Drive file and any video
 on this device matched to this title or episode.

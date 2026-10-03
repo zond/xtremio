@@ -9,6 +9,7 @@ import '../../widgets/readout.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/text_overflow.dart';
 import 'details_header.dart' show TrailerButton;
+import 'title_scores.dart';
 
 /// What a title says about itself on a television: the logo, one line of
 /// facts, and enough of the description to know whether this is the film
@@ -31,11 +32,12 @@ import 'details_header.dart' show TrailerButton;
 ///   titles that ship none, for a logo that will not load, and for a
 ///   screen reader ([Image.semanticLabel]) -- a missing image may never
 ///   disturb the layout.
-/// - **The facts are one line and the description a couple.** Year,
-///   runtime, genres and rating are one glance; the genres are text
-///   rather than the phone's chips because a chip is a focus stop, and a
-///   remote spends presses walking past every stop between it and the
-///   rows. The couple of lines are what is *shown*: a description with
+/// - **The facts are one line, the scores another, and the description a
+///   couple.** Year, runtime and genres are one glance and the scores
+///   ([tvScoresLine]) a second; the genres and the scores are text rather
+///   than the phone's chips and IMDb link because a chip or a link is a
+///   focus stop, and a remote spends presses walking past every stop
+///   between it and the rows. The couple of lines are what is *shown*: a description with
 ///   more to say is a control the remote can press to unfold
 ///   ([TvDescription]), because an ellipsis with no way past it is a plot
 ///   the viewer cannot reach.
@@ -63,9 +65,13 @@ class TvMetaHeader extends StatelessWidget {
     required this.downloads,
     required this.onToggleLibrary,
     this.onTrailer,
+    this.ratings,
   });
 
   final MetaItem meta;
+
+  /// The scores beyond the addon's IMDb rating; null while none is known.
+  final TitleRatings? ratings;
 
   /// Opens the title's trailer; null draws no button ([MetaItem.trailerUrl]).
   final VoidCallback? onTrailer;
@@ -99,17 +105,16 @@ class TvMetaHeader extends StatelessWidget {
   /// for.
   static const int descriptionLines = 2;
 
-  /// The one compact line: year, runtime, genres, rating. Empty parts are
-  /// left out rather than shown as a gap, so a title the addon knows
-  /// little about gets a short line and not a row of separators.
+  /// The one compact line: year, runtime, genres. Empty parts are left
+  /// out rather than shown as a gap, so a title the addon knows little
+  /// about gets a short line and not a row of separators. The scores are
+  /// the line under it ([tvScoresLine]).
   static String facts(MetaItem meta) {
     final genres = [for (final genre in meta.genres) genre.name].join(', ');
-    final rating = meta.imdbRating;
     return [
       ?meta.releaseInfo,
       ?meta.runtime,
       if (genres.isNotEmpty) genres,
-      if (rating != null) 'IMDb $rating',
     ].join(' · ');
   }
 
@@ -117,6 +122,7 @@ class TvMetaHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final description = meta.description;
+    final scores = tvScoresLine(meta, ratings);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       // The header's stops, walked in the order they are read rather
@@ -146,6 +152,18 @@ class TvMetaHeader extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // Text, not a stop: see [tvScoresLine].
+                    if (scores.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        scores,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     if (downloads.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       DownloadSummary(downloads: downloads, metaId: meta.id),

@@ -91,13 +91,10 @@ void main() {
   );
 
   group('the one line of facts', () {
-    test('is year, runtime, genres and rating, in that order', () {
+    test('is year, runtime and genres, in that order', () {
       final meta = MetaDetailsState.fromJson(loadMetaDetailsFixture()).meta!;
 
-      expect(
-        TvMetaHeader.facts(meta),
-        '1968 · 96 min · Horror, Thriller · IMDb 7.8',
-      );
+      expect(TvMetaHeader.facts(meta), '1968 · 96 min · Horror, Thriller');
     });
 
     test('leaves out what the addon did not send rather than showing a '
@@ -167,9 +164,7 @@ void main() {
           .getTopLeft(
             find.descendant(
               of: find.byType(TvMetaHeader),
-              matching: find.text(
-                '1968 · 96 min · Horror, Thriller · IMDb 7.8',
-              ),
+              matching: find.text('1968 · 96 min · Horror, Thriller'),
             ),
           )
           .dy;
@@ -183,9 +178,7 @@ void main() {
               .getTopLeft(
                 find.descendant(
                   of: find.byType(TvMetaHeader),
-                  matching: find.text(
-                    '1968 · 96 min · Horror, Thriller · IMDb 7.8',
-                  ),
+                  matching: find.text('1968 · 96 min · Horror, Thriller'),
                 ),
               )
               .dy -
@@ -196,10 +189,7 @@ void main() {
     testWidgets('says the facts once, on one line', (tester) async {
       await pump(tester, movieWith({}));
 
-      final facts = textOf(
-        tester,
-        '1968 · 96 min · Horror, Thriller · IMDb 7.8',
-      );
+      final facts = textOf(tester, '1968 · 96 min · Horror, Thriller');
       expect(facts.maxLines, 1);
       expect(facts.overflow, TextOverflow.ellipsis);
     });

@@ -30,6 +30,7 @@ export 'resource.dart';
 export 'secret_store.dart';
 export 'server_client.dart';
 export 'similar_memory.dart';
+export 'title_ratings.dart';
 export 'state/addon_descriptor.dart';
 export 'state/addon_details.dart';
 export 'state/background_traffic.dart';

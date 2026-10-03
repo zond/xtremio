@@ -11,6 +11,7 @@ import '../../widgets/poster_tile.dart';
 import '../../widgets/text_overflow.dart';
 import '../../widgets/remote_press.dart';
 import 'episode_thumbnail.dart';
+import 'title_scores.dart';
 import 'tv_backdrop.dart';
 import 'tv_meta_header.dart';
 
@@ -145,20 +146,23 @@ class ImdbRating extends StatelessWidget {
         ],
       ],
     );
-    if (url == null) return line;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        // Hugging the words rather than the column's width: a tap lands
-        // where the thing it opens is drawn.
-        onTap: () => openInBrowser(context, url),
-        borderRadius: BorderRadius.circular(6),
-        child: Semantics(
-          link: true,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: line,
-          ),
+    if (url == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: line,
+      );
+    }
+    // Hugging the words rather than the column's width -- [DetailsScores]
+    // lays it out in a [Wrap], which sizes it to them -- so a tap lands
+    // where the thing it opens is drawn.
+    return InkWell(
+      onTap: () => openInBrowser(context, url),
+      borderRadius: BorderRadius.circular(6),
+      child: Semantics(
+        link: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: line,
         ),
       ),
     );
@@ -175,10 +179,15 @@ class DetailsMetaHeader extends StatelessWidget {
     required this.onGenre,
     required this.onToggleLibrary,
     this.onTrailer,
+    this.ratings,
   });
 
   final MetaItem meta;
   final bool isWide;
+
+  /// The scores beyond the addon's IMDb rating ([DetailsScores]); null
+  /// while none is known.
+  final TitleRatings? ratings;
 
   /// Opens the title's trailer; null draws no button, for a title that has
   /// none ([MetaItem.trailerUrl]).
@@ -199,7 +208,7 @@ class DetailsMetaHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final facts = [?meta.releaseInfo, ?meta.runtime, meta.type].join(' · ');
-    final rating = meta.imdbRating;
+    final scores = shownScores(meta, ratings);
     final genres = meta.genres;
     final posterWidth = isWide ? 130.0 : 90.0;
     final description = meta.description;
@@ -229,9 +238,9 @@ class DetailsMetaHeader extends StatelessWidget {
           const SizedBox(height: 6),
           DownloadSummary(downloads: downloads, metaId: meta.id),
         ],
-        if (rating != null) ...[
+        if (scores.isNotEmpty) ...[
           const SizedBox(height: 4),
-          ImdbRating(rating: rating, url: meta.imdbUrl),
+          DetailsScores(meta: meta, ratings: ratings),
         ],
         if (genres.isNotEmpty) ...[
           const SizedBox(height: 8),

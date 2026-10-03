@@ -103,6 +103,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                   downloads: _downloads?.ofMeta(widget.id) ?? const [],
                   onToggleLibrary: () => _toggleLibrary(state, meta),
                   onTrailer: onTrailer,
+                  ratings: _ratings,
                 ),
               )
             : DetailsMetaHeader(
@@ -113,6 +114,7 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                 onGenre: _openGenre,
                 onToggleLibrary: () => _toggleLibrary(state, meta),
                 onTrailer: onTrailer,
+                ratings: _ratings,
               ),
       ),
       if (state.hasVideos) ...[

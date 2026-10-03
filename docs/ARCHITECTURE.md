@@ -182,6 +182,7 @@ the rest. Nothing secret goes in it.
 | `verboseDiagnostics` | Settings → Developer → "Verbose logging" |
 | `subtitleSync`, `subtitlePicks` | What the viewer fixed about subtitle timing, and what they picked (see [Subtitles](#subtitles)) |
 | `similarSuggestions` | "More like this" answers already fetched |
+| `titleRatings` | A title's scores already fetched (see [Ratings](#ratings)) |
 | `driveLinkedFiles`, `driveTokenDead`, `drivePendingSession` | Linked Drive files, a grant Google has refused, a pairing not yet collected |
 | `addonHealth` | Written by the Rust side (see [docs/ADDONS.md](ADDONS.md)) |
 
@@ -1007,6 +1008,26 @@ different film, so a suggestion is kept only when a catalogue answers with
 the same title and a year within one. Nothing in this path throws; every
 failure is an empty row. Which model is asked, and how that was measured, is
 [tool/recommendations/README.md](../tool/recommendations/README.md).
+
+## Ratings
+
+The details header shows a title's scores: IMDb, TMDB, Rotten Tomatoes'
+Tomatometer (`RT`) and its Popcornmeter (`Popcorn`), as words and numbers
+(`title_scores.dart`) -- no logos, which are their owners' marks. IMDb is
+the addon's own rating (`MetaItem.imdbRating`), drawn with the page and
+still the link to the title's IMDb page on a phone; the other three come
+from the xtremio-xervice function at `GET
+https://xtremio-xervice.web.app/ratings/{type}/{id}`
+(`lib/features/ratings/xtremio_ratings.dart`), which asks MDBList with the
+owner's key at most once a week per title for everybody
+([xtremio-xervice/README.md](../xtremio-xervice/README.md#ratings)).
+MDBList's IMDb score is shown only for a title the addon gave none.
+`RatingsService` draws what this device remembers first
+(`TitleRatingsMemory`, the `titleRatings` preference) and asks again once
+that is a day old; an answer with no scores, or a failure, is not written
+down and changes nothing on screen. Only a `movie` or `series` with a `tt`
+id is asked about. On a television the scores are one line of text under
+the facts, never a focus stop.
 
 ## Casting
 
