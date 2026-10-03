@@ -213,13 +213,17 @@ impl Layout {
     }
 
     /// Slot `n`'s fragment: its bytes up to the `free` box that pads it.
+    /// It opens with its `moof` -- no `styp` -- where the slot opens at its
+    /// `sidx` label (a mirrored layout's): FFmpeg read a `moof` a `styp`
+    /// kept apart from its `sidx` reference twice, and lost its index's
+    /// order on a seek back.
     fn fragment<'a>(&self, file: &'a [u8], n: usize) -> &'a [u8] {
         let (offset, size) = self.slots[n];
         let slot = &file[offset..offset + size];
         let parts = boxes(slot);
         let kinds: Vec<&[u8; 4]> = parts.iter().map(|(kind, ..)| kind).collect();
-        assert_eq!(kinds, [b"styp", b"moof", b"mdat", b"free"], "slot {n}");
-        &slot[..parts[3].1]
+        assert_eq!(kinds, [b"moof", b"mdat", b"free"], "slot {n}");
+        &slot[..parts[2].1]
     }
 }
 
@@ -329,6 +333,38 @@ fn ffprobe_seek(url: &str) -> (usize, f64) {
         .and_then(|line| line.trim().parse::<f64>().ok())
         .expect("a packet after the seek");
     (requests, first)
+}
+
+/// Where the video lands after each of `seeks` (seconds), in order, in
+/// one `ffprobe` that first reads the film's first 16 s: the TV's remote
+/// seeks, forward then back.
+fn ffprobe_seeks(url: &str, seeks: &[u32]) -> Vec<f64> {
+    let intervals: Vec<String> = std::iter::once("%+16".to_owned())
+        .chain(seeks.iter().map(|at| format!("{at}%+#1")))
+        .collect();
+    let out = run(
+        "ffprobe",
+        &[
+            "-v",
+            "error",
+            "-read_intervals",
+            &intervals.join(","),
+            "-select_streams",
+            "v",
+            "-show_entries",
+            "packet=pts_time",
+            "-of",
+            "csv=p=0",
+            url,
+        ],
+    )
+    .expect("ffprobe ran");
+    assert!(out.status.success());
+    let times: Vec<f64> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<f64>().ok())
+        .collect();
+    times[times.len() - seeks.len()..].to_vec()
 }
 
 /// Where each of `ffmpeg -ss <at> -i <url>`'s requests began, decoding a
@@ -643,6 +679,23 @@ fn h264_aac_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow::Res
             ranges.windows(2).all(|pair| pair[1] > pair[0]) && (!mirrored || ranges.len() == 2),
             "{file}: ffmpeg -ss 60 asked {ranges:?}"
         );
+        // **Seeks forward, then back to what was not read** (zond's TV:
+        // 1:55, 7:05, 8:41, then 0:43, which sat buffering): mirrored,
+        // each lands on the key at or before it, a slot back at most.
+        // With a styp before each moof FFmpeg landed the seek back at 16 s,
+        // the end of what it read first. Estimated slots keep the styp
+        // (FFmpeg 4.4 would time them by their late labels) and still do.
+        if mirrored {
+            let seeks = [100, 250, 330, 43, 30];
+            let landed = ffprobe_seeks(&url, &seeks);
+            for (at, landed) in seeks.iter().zip(&landed) {
+                let at = f64::from(*at);
+                assert!(
+                    (at - 6.0 - 2.8..=at).contains(landed),
+                    "{file}: seeks {seeks:?} landed at {landed:?}"
+                );
+            }
+        }
         decodes(&url);
     }
 

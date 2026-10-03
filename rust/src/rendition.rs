@@ -39,7 +39,12 @@
 //! - **Seek and restart**: a run starts where the server says (two seconds
 //!   before the cut of the first segment it makes); the demuxer is put on
 //!   the sync point at or before it and the server discards what precedes
-//!   the cut. A run from the start needs no seek.
+//!   the cut. A run from the start seeks to the start too, as the first
+//!   run does (below): a slot's bytes must not depend on which run made
+//!   it, and a seek is not a read from the file's first byte -- zond's
+//!   film's audio packet at -21 ms, before the first cluster's key, is not
+//!   returned after a seek to the start, and slot 0 made again by a run
+//!   that did not seek had one audio frame more.
 //! - **The source's index**, for the run that fixes the rendition's byte
 //!   layout (`Job::wants_index`, stream-server `docs/design/renditions.md`
 //!   §2.8): the video's sync samples from libavformat's index -- an MP4's
@@ -371,23 +376,21 @@ pub fn repackage<P: Packets, K: Sink>(
         return;
     }
     let from_us = i64::try_from(from.as_micros()).unwrap_or(i64::MAX);
-    if from_us > 0 || wants_index {
-        // What was read ahead is from before wherever the seek goes.
-        pending.clear();
-    }
+    // Every run seeks, so what was read ahead is from before wherever the
+    // seek goes.
+    pending.clear();
     if from_us > 0 {
         if let Err(error) = packets.seek_us(from_us) {
             tracing::warn!(%error, "a rendition's source could not be sought in");
             sink.fail(UNSEEKABLE.to_owned());
             return;
         }
-    } else if wants_index {
-        // A Matroska file's cues are read at a first seek, so a run from
-        // the start that is asked for the index makes one; one that fails
-        // costs the index, not the run, which needs no seek.
-        if let Err(error) = packets.seek_us(0) {
-            tracing::warn!(%error, "a rendition's source could not be sought to its start");
-        }
+    } else if let Err(error) = packets.seek_us(0) {
+        // A run from the start seeks to it: a Matroska file's cues are read
+        // at a first seek (the index), and every run from the start must
+        // read what the first one did. One that fails costs the index, not
+        // the run.
+        tracing::warn!(%error, "a rendition's source could not be sought to its start");
     }
     if wants_index && sink.index(packets.index(&chosen.video)).is_err() {
         return;
@@ -930,7 +933,7 @@ mod tests {
     /// the other audio stream are skipped, the second audio stream is the
     /// one asked for, times are rebased so the container's start is zero,
     /// video goes over in Annex-B with the container's key flags, and audio
-    /// as it is. A run from zero does not seek.
+    /// as it is. A run from zero seeks to the start, as the first run does.
     #[test]
     fn a_run_copies_the_chosen_streams_on_the_films_clock() {
         let mut packets = film(vec![
@@ -973,7 +976,7 @@ mod tests {
                 Wrote::End,
             ]
         );
-        assert!(packets.seeks.is_empty());
+        assert_eq!(packets.seeks, vec![0]);
     }
 
     /// A run from N x T seeks there first -- on the film's clock; the
@@ -1010,7 +1013,7 @@ mod tests {
     /// **The run that fixes the layout reports the video's index** -- after
     /// the formats, before the first sample -- having sought to the start,
     /// which is what makes libavformat read a Matroska file's cues; a run
-    /// not asked for it neither seeks nor reports.
+    /// not asked for it seeks there the same and does not report.
     #[test]
     fn a_run_asked_for_the_index_reports_it_before_its_first_sample() {
         let mut packets = film(vec![packet(1, 0, true, SLICE)]);
@@ -1103,22 +1106,25 @@ mod tests {
         assert_eq!(adts_config(b"raw aac frame"), None);
         assert_eq!(strip_adts(Bytes::from_static(b"raw")).as_ref(), b"raw");
 
-        let mut ts = film(vec![
+        // Read up to the first audio frame for the configuration, then (a
+        // run from the start seeks to it) read again from the start.
+        let queue = vec![
             packet(1, 0, true, SLICE),
             packet(4, 0, true, b"\xff\xf1\x4c\x80\x02\x1f\xfcaac"),
-        ]);
+        ];
+        let mut ts = film(queue.clone());
         ts.streams[4].extradata = Bytes::new();
+        ts.rewinds_to = Some(queue);
         let sink = FakeSink::new(None);
         repackage(&mut ts, &spec(1), Duration::ZERO, false, sink.clone());
+        assert_eq!(ts.seeks, vec![0]);
         let wrote = sink.wrote.borrow();
         assert!(matches!(
             &wrote[1],
             Wrote::Format(TrackKind::Audio, TrackFormat::Aac { csd0, .. }) if csd0.as_ref() == [0x11, 0x90]
         ));
-        assert!(
-            matches!(wrote[2], Wrote::Sample(TrackKind::Video, ..)),
-            "read ahead, handed out again"
-        );
+        assert!(matches!(wrote[2], Wrote::Sample(TrackKind::Video, ..)));
+        assert_eq!(wrote.len(), 5, "each packet once, then the end");
         assert_eq!(
             wrote[3],
             Wrote::Sample(TrackKind::Audio, 23_000, true, b"aac".to_vec())
