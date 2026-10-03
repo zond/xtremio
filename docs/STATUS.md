@@ -89,7 +89,8 @@ over it, leaves the remote where it was:
   a gradient scrim, with the logo, one line of year, runtime, genres and
   rating, and two lines of description; no poster. A missing backdrop falls
   back to the poster, and the logo's box holds its height whether the logo
-  arrives or not;
+  arrives or not. The bookmark in the corner is a press right of the plot
+  or the trailer, and left of it is back where the remote came from;
 - episodes are a **row of cards** under the season pills: still, number,
   title, air date, watched check, download badge and a resume bar; an
   unaired episode takes no focus, and the row scrolls to the selected card.

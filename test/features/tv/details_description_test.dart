@@ -369,10 +369,10 @@ void main() {
     tester,
   ) async {
     // The bookmark is a press to the right whether or not it is on the
-    // screen, and the press back is Flutter's own traversal, which reveals
-    // a stop with one edge against one edge of the viewport -- for a block
-    // this tall, its last line. Reading starts at the top of a paragraph
-    // whichever way the remote came.
+    // screen, and the press back reveals the stop it came from -- which,
+    // for a block this tall, must be its first line and not its last.
+    // Reading starts at the top of a paragraph whichever way the remote
+    // came.
     await pump(tester, tallPlot);
     await upToTheDescription(tester);
     await press(tester, LogicalKeyboardKey.select);

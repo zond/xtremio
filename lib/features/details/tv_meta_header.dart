@@ -207,15 +207,22 @@ class TvMetaHeader extends StatelessWidget {
             // the remote can land on.
             FocusTraversalOrder(
               order: const NumericFocusOrder(stopOrderBookmark),
-              child: FocusHighlighted(
-                borderRadius: const BorderRadius.all(Radius.circular(24)),
-                builder: (context, node) => IconButton(
-                  focusNode: node,
-                  tooltip: isInLibrary ? removeTooltip : addTooltip,
-                  isSelected: isInLibrary,
-                  icon: const Icon(Icons.bookmark_border),
-                  selectedIcon: const Icon(Icons.bookmark),
-                  onPressed: onToggleLibrary,
+              // Left back to the column: see [_crossToTheBookmark].
+              child: Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                includeSemantics: false,
+                onKeyEvent: _crossBack,
+                child: FocusHighlighted(
+                  borderRadius: const BorderRadius.all(Radius.circular(24)),
+                  builder: (context, node) => IconButton(
+                    focusNode: node,
+                    tooltip: isInLibrary ? removeTooltip : addTooltip,
+                    isSelected: isInLibrary,
+                    icon: const Icon(Icons.bookmark_border),
+                    selectedIcon: const Icon(Icons.bookmark),
+                    onPressed: onToggleLibrary,
+                  ),
                 ),
               ),
             ),
@@ -228,7 +235,8 @@ class TvMetaHeader extends StatelessWidget {
   /// Moves the remote up or down between the stops of the header's text
   /// column -- the plot and the trailer drawn under it -- and declines a
   /// press with no stop beyond it in the column, which the ladder row above
-  /// then answers by leaving the header.
+  /// then answers by leaving the header. A press right is
+  /// [_crossToTheBookmark]'s.
   ///
   /// **Without this the trailer is unreachable whenever the plot is a
   /// stop.** The ladder takes up and down for itself, a rung per press, and
@@ -247,6 +255,9 @@ class TvMetaHeader extends StatelessWidget {
   static KeyEventResult _walkColumn(FocusNode column, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowRight) {
+      return _crossToTheBookmark(column);
+    }
     final up = key == LogicalKeyboardKey.arrowUp;
     if (!up && key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
@@ -273,6 +284,94 @@ class TvMetaHeader extends StatelessWidget {
       );
     }
     return KeyEventResult.handled;
+  }
+
+  /// Moves the remote right from a stop of the text column -- the plot, the
+  /// trailer -- to the bookmark; [_crossBack] takes it left again, to the
+  /// stop it came from.
+  ///
+  /// **Without these the bookmark had no press that reached it** whenever
+  /// the remote was on the trailer. Left and right go by geometry, and the
+  /// bookmark is drawn in the top corner, level with the logo rather than
+  /// with any stop beside it: a press right takes the nearest thing whose
+  /// middle is right of the trailer, which is the plot above it when the
+  /// plot is a stop, and the first rung's header below it when it is not
+  /// -- a short plot, or none. Up from the trailer leaves the header for the
+  /// app bar, and down from the bar comes back to the trailer, so the
+  /// bookmark was out of reach entirely. Right from beside it is where a
+  /// viewer looks for it.
+  static KeyEventResult _crossToTheBookmark(FocusNode column) {
+    final focused = FocusManager.instance.primaryFocus;
+    final bookmark = column.parent?.traversalDescendants
+        .where(_isBookmark)
+        .firstOrNull;
+    if (focused == null || bookmark == null) return KeyEventResult.ignored;
+    if (!column.traversalDescendants.contains(focused)) {
+      return KeyEventResult.ignored;
+    }
+    _cameFrom[bookmark] = focused;
+    _reveal(bookmark, up: true);
+    return KeyEventResult.handled;
+  }
+
+  /// Left from the bookmark: back to the column stop [_crossToTheBookmark]
+  /// came from, or the column's first when the remote got here another way.
+  /// A header with no stop in its column leaves the press alone.
+  static KeyEventResult _crossBack(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent ||
+        event.logicalKey != LogicalKeyboardKey.arrowLeft) {
+      return KeyEventResult.ignored;
+    }
+    final bookmark = FocusManager.instance.primaryFocus;
+    final column =
+        (node.parent?.traversalDescendants ?? const <FocusNode>[])
+            .where((stop) => !_isBookmark(stop))
+            .toList()
+          ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+    if (bookmark == null || column.isEmpty) return KeyEventResult.ignored;
+    final from = _cameFrom[bookmark];
+    _reveal(column.contains(from) ? from! : column.first, up: false);
+    return KeyEventResult.handled;
+  }
+
+  /// Which column stop the remote crossed to each bookmark from.
+  static final Expando<FocusNode> _cameFrom = Expando('came from');
+
+  /// Whether [stop] is the bookmark, by the order it declares.
+  static bool _isBookmark(FocusNode stop) {
+    final context = stop.context;
+    final order = context == null ? null : FocusTraversalOrder.maybeOf(context);
+    return order is NumericFocusOrder && order.order == stopOrderBookmark;
+  }
+
+  /// Focuses [stop] and brings it on screen from the side the remote came
+  /// from, only as far as needed: the bookmark is above everything in the
+  /// column, and an unfolded plot can have scrolled it off the top; back
+  /// down from it, the trailer under that plot can be below the bottom.
+  ///
+  /// A stop taller than the screen -- an unfolded plot -- is revealed by its
+  /// first line either way, never its last: reading starts at the top of a
+  /// paragraph ([ReadableBlock.revealBlock] says why).
+  static void _reveal(FocusNode stop, {required bool up}) {
+    stop.requestFocus();
+    final target = stop.context;
+    if (target == null) return;
+    final box = target.findRenderObject();
+    final position = Scrollable.maybeOf(target)?.position;
+    final tall =
+        box is RenderBox &&
+        box.hasSize &&
+        position != null &&
+        position.hasViewportDimension &&
+        box.size.height > position.viewportDimension;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      alignmentPolicy: up || tall
+          ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+          : ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+    );
   }
 
   /// The logo, or the name when there is none and when the logo will not

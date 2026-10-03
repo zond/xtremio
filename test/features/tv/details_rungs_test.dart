@@ -200,6 +200,7 @@ Future<void> mount(
   bool sectioned = false,
   FakeCoreClient? client,
   DeviceProfile device = tv,
+  Size size = tvSize,
   // The screen as a viewer really meets it: pushed over the one they came
   // from, so the app bar draws Back, and with a downloads client, so it
   // draws the button at the other end of the bar. Both are drawn only
@@ -216,7 +217,7 @@ Future<void> mount(
   // television's.
   bool walkIn = true,
 }) async {
-  useScreen(tester, tvSize);
+  useScreen(tester, size);
   final prefs = AppPrefs(
     client: FakePrefsClient({'streamsSectioned': sectioned}),
   );
@@ -269,6 +270,53 @@ Future<void> mount(
     await tester.pumpAndSettle();
   }
   if (walkIn && settle && device.isTv) await walkIntoTheOpenRung(tester);
+}
+
+/// [fixture] with the title's description set to [plot], or taken away
+/// when it is null, and with its trailers taken away unless [trailer].
+Map<String, dynamic> headed(
+  Map<String, dynamic> fixture, {
+  required String? plot,
+  required bool trailer,
+}) {
+  final content =
+      ((fixture['metaItems'] as List<dynamic>).first
+              as Map<String, dynamic>)['content']['content']
+          as Map<String, dynamic>;
+  if (plot == null) {
+    content.remove('description');
+  } else {
+    content['description'] = plot;
+  }
+  if (!trailer) content.remove('trailerStreams');
+  return fixture;
+}
+
+/// The header's focus stops, the plot and the trailer of its text column
+/// top first, and the bookmark last.
+({List<FocusNode> column, FocusNode bookmark}) headerStops(
+  WidgetTester tester,
+) {
+  bool inHeader(FocusNode node) =>
+      node.context?.findAncestorWidgetOfExactType<TvMetaHeader>() != null;
+  final stops = [
+    for (final node in FocusManager.instance.rootScope.descendants)
+      if (inHeader(node) &&
+          node.canRequestFocus &&
+          !node.skipTraversal &&
+          node is! FocusScopeNode)
+        node,
+  ];
+  final bookmark = stops.singleWhere(
+    (node) =>
+        node.context?.findAncestorWidgetOfExactType<Tooltip>()?.message ==
+        TvMetaHeader.addTooltip,
+  );
+  return (
+    column: stops.where((node) => node != bookmark).toList()
+      ..sort((a, b) => a.rect.top.compareTo(b.rect.top)),
+    bookmark: bookmark,
+  );
 }
 
 /// The button on the screen [mount] pushes the details screen from.
@@ -977,6 +1025,135 @@ void main() {
       // of their own.
       expect(up.skip(down.length), ['(nothing focused)']);
       expect(focusedTooltip(), kBackTooltip);
+    });
+  });
+
+  /// The bookmark is the one stop of the header outside its text column,
+  /// drawn in the top corner, level with the logo rather than with any
+  /// stop beside it -- so a press right out of the trailer went wherever
+  /// geometry found the nearest thing: the plot above it, or with no plot
+  /// to stop on, the first rung's header below it. The bookmark had no
+  /// press that reached it from there. Right from any stop of the column
+  /// is the bookmark, and left from the bookmark is the stop it was
+  /// reached from, in every shape the header comes in -- on the panel
+  /// these tests are written for and on a Chromecast's, which is 960 by
+  /// 540 logical pixels.
+  group('the bookmark', () {
+    final shapes = [
+      for (final size in [tvSize, const Size(960, 540)])
+        for (final series in [false, true])
+          for (final plot in [longPlot, 'Short.', null])
+            for (final trailer in [true, false])
+              (size: size, series: series, plot: plot, trailer: trailer),
+    ];
+    for (final (:size, :series, :plot, :trailer) in shapes) {
+      final shape = [
+        series ? 'a series' : 'a film',
+        'at ${size.width.toInt()}x${size.height.toInt()}',
+        switch (plot) {
+          null => 'no plot',
+          longPlot => 'a long plot',
+          _ => 'a short plot',
+        },
+        trailer ? 'a trailer' : 'no trailer',
+      ].join(', ');
+      testWidgets('is right of every stop of the column, and left of it is '
+          'where the remote came from: $shape', (tester) async {
+        await mount(
+          tester,
+          headed(
+            series ? playedSeries() : film(),
+            plot: plot,
+            trailer: trailer,
+          ),
+          type: series ? 'series' : 'movie',
+          id: series ? seriesId : movieId,
+          size: size,
+          overRoute: true,
+          downloads: FakeDownloadsClient(),
+          walkIn: false,
+        );
+        final (:column, :bookmark) = headerStops(tester);
+        expect(
+          column,
+          hasLength((plot == longPlot ? 1 : 0) + (trailer ? 1 : 0)),
+          reason: 'a plot that fits is words, not a stop',
+        );
+        expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the arrival');
+        if (column.isEmpty) {
+          expect(
+            FocusManager.instance.primaryFocus,
+            bookmark,
+            reason: 'the only stop is where the screen opens',
+          );
+        }
+        for (final stop in column) {
+          stop.requestFocus();
+          await tester.pumpAndSettle();
+          await press(tester, LogicalKeyboardKey.arrowRight);
+          expect(FocusManager.instance.primaryFocus, bookmark);
+          await press(tester, LogicalKeyboardKey.arrowLeft);
+          expect(FocusManager.instance.primaryFocus, stop);
+        }
+      });
+    }
+
+    testWidgets('is a press right of an unfolded plot read down to its '
+        'end, and on the panel when the remote gets there', (tester) async {
+      await mount(
+        tester,
+        headed(
+          film(),
+          plot: List.filled(12, longPlot).join(' '),
+          trailer: true,
+        ),
+        overRoute: true,
+        downloads: FakeDownloadsClient(),
+        walkIn: false,
+      );
+      expect(focusIn<TvDescription>(), isTrue);
+      await press(tester, LogicalKeyboardKey.select);
+      for (
+        var i = 0;
+        i < 12 && focusedLabel(tester) != TrailerButton.label;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(focusedLabel(tester), TrailerButton.label);
+      expect(pageScrollOffset(tester), greaterThan(0), reason: 'read down');
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+      final bookmark = tester.getRect(find.byTooltip(TvMetaHeader.addTooltip));
+      // Its middle rather than its edge: it is revealed at its resting
+      // size, and the focus zoom then grows it a little past that.
+      expect(bookmark.center.dy, greaterThan(0), reason: 'on the panel');
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusedLabel(tester), TrailerButton.label);
+      final trailer = tester.getRect(
+        find.widgetWithText(OutlinedButton, TrailerButton.label),
+      );
+      expect(trailer.center.dy, lessThanOrEqualTo(tvSize.height));
+    });
+
+    testWidgets('is a press right of where up out of the first rung lands', (
+      tester,
+    ) async {
+      await mount(
+        tester,
+        plotted(series()),
+        type: 'series',
+        id: seriesId,
+        overRoute: true,
+        downloads: FakeDownloadsClient(),
+      );
+      await stepUpToRung(tester, kEpisodesLabel);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<TvMetaHeader>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
     });
   });
 
