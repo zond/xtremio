@@ -276,6 +276,15 @@ class AppPrefs extends ChangeNotifier {
   /// on the server this app talks to.
   static const String viewerIdKey = 'viewerId';
 
+  /// The `updateCheckedAt` key: when the app last asked GitHub for its
+  /// latest release, in milliseconds since the epoch (see `AppUpdates`,
+  /// which asks at most once a day by itself).
+  static const String updateCheckedAtKey = 'updateCheckedAt';
+
+  /// The `updateSkippedTag` key: the release tag "Skip this version" was
+  /// pressed for, which the daily look does not offer again.
+  static const String updateSkippedTagKey = 'updateSkippedTag';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -393,6 +402,15 @@ class AppPrefs extends ChangeNotifier {
   }
 
   static final RegExp _viewerIdShape = RegExp(r'^[0-9a-z]{1,64}$');
+
+  /// When the latest release was last asked for -- see
+  /// [updateCheckedAtKey]. Null when it never has been.
+  DateTime? get updateCheckedAt => _updateCheckedAt;
+  DateTime? _updateCheckedAt;
+
+  /// The release the viewer skipped -- see [updateSkippedTagKey].
+  String? get updateSkippedTag => _updateSkippedTag;
+  String? _updateSkippedTag;
 
   /// See [drivePendingSessionKey]. Null when nothing is outstanding, which
   /// is the ordinary state.
@@ -586,6 +604,16 @@ class AppPrefs extends ChangeNotifier {
         _drivePendingSession = pendingSession;
         changed = true;
       }
+    }
+    if (loaded(updateCheckedAtKey)) {
+      final at = stored[updateCheckedAtKey];
+      if (at is int) {
+        _updateCheckedAt = DateTime.fromMillisecondsSinceEpoch(at);
+      }
+    }
+    if (loaded(updateSkippedTagKey)) {
+      final tag = stored[updateSkippedTagKey];
+      if (tag is String && tag.isNotEmpty) _updateSkippedTag = tag;
     }
     final storedViewer = stored[viewerIdKey];
     if (!_viewerIdKept &&
@@ -787,6 +815,21 @@ class AppPrefs extends ChangeNotifier {
     _drivePendingSession = value;
     notifyListeners();
     await _write(drivePendingSessionKey, value);
+  }
+
+  /// Records when the latest release was asked for. **Tells no listener**:
+  /// nothing is drawn from it.
+  Future<void> setUpdateCheckedAt(DateTime value) async {
+    _updateCheckedAt = value;
+    await _write(updateCheckedAtKey, value.millisecondsSinceEpoch);
+  }
+
+  /// Records the release "Skip this version" was pressed for. Tells no
+  /// listener either, for the same reason.
+  Future<void> setUpdateSkippedTag(String? value) async {
+    if (_updateSkippedTag == value) return;
+    _updateSkippedTag = value;
+    await _write(updateSkippedTagKey, value);
   }
 
   /// The keys written since [load] asked for the stored values, while it

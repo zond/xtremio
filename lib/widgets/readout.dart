@@ -49,9 +49,16 @@ class Readout extends StatefulWidget {
     required this.child,
     this.padding = EdgeInsets.zero,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+    this.focusNode,
   });
 
   final Widget child;
+
+  /// The stop's node, for a surface that has to send the remote here
+  /// itself: a block taller than its viewport has its centre below
+  /// whatever sits under the viewport, so Flutter's directional traversal
+  /// never picks it going up (the update dialog's notes over its buttons).
+  final FocusNode? focusNode;
 
   /// Held between the ring and what is inside it, on a television only.
   ///
@@ -247,6 +254,7 @@ class _ReadoutState extends State<Readout> with ReadableBlock<Readout> {
   Widget build(BuildContext context) {
     if (!DeviceScope.isTv(context)) return widget.child;
     return Focus(
+      focusNode: widget.focusNode,
       onFocusChange: _onFocusChange,
       onKeyEvent: (node, event) => walkBlock(event),
       child: FocusHighlight(

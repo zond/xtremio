@@ -17,6 +17,8 @@ import 'features/diagnostics/diagnostics_trace.dart';
 import 'features/sharing/idle_sharing.dart';
 import 'features/drive/drive_native_pair_screen.dart';
 import 'features/sharing/sharing_activity.dart';
+import 'features/update/app_updates.dart';
+import 'features/update/update_dialog.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
@@ -115,6 +117,14 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// the one it built itself. Nothing here settles where the files go: there
 /// is one torrent-data root, the embedded server's, named where the server
 /// is started and moved from Settings.
+///
+/// And the [AppUpdatesScope]: one [AppUpdates], which looks for a newer
+/// release once a day, [updateCheckDelay] after start-up, and offers it in
+/// a dialog -- never while a player is on the stack: the look and the offer
+/// both wait for the player to be gone. A build that does not check by
+/// itself (`BuildIdentity.checksByItself`: debug and profile builds,
+/// unstamped and modified ones) asks nothing then; Settings' "Check for
+/// updates" asks for any build.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
@@ -133,7 +143,17 @@ class XtremioApp extends StatefulWidget {
     this.sharingActivity = const RustSharingActivityClient(),
     this.serverBackground = const RustServerBackgroundControl(),
     this.sharingHold = const RustIdleSharingHold(),
+    this.updates,
   });
+
+  /// How long after the preferences are in the daily update look waits:
+  /// out of the way of start-up, and of a viewer who opened the app to
+  /// press play.
+  static const Duration updateCheckDelay = Duration(seconds: 20);
+
+  /// The app's updates, for tests that want one over fakes. Read once,
+  /// when the app comes up, like [downloads].
+  final AppUpdates? updates;
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
@@ -281,6 +301,13 @@ class _XtremioAppState extends State<XtremioApp> {
   /// player's `_createEngine`, which would then see the defaults.
   late final CoreFieldNotifier _ctx;
 
+  /// The update look and offer: see [XtremioApp.updates].
+  late final AppUpdates _updates;
+  Timer? _updateTimer;
+
+  /// An update step waiting for the player to leave the stack.
+  VoidCallback? _afterPlayer;
+
   /// The app left the resumed state at some point, so the next resume is a
   /// real return to the foreground. Without this the first `resumed` a
   /// platform reports after launch would repeat the startup pull.
@@ -308,6 +335,8 @@ class _XtremioAppState extends State<XtremioApp> {
           null => null,
           final source => LocalMedia(prefs: _prefs, source: source),
         };
+    _updates = widget.updates ?? AppUpdates(prefs: _prefs);
+    _routes.onChanged = _onRoutesChanged;
     _ownsDrive = widget.drive == null;
     _drive =
         widget.drive ??
@@ -344,6 +373,8 @@ class _XtremioAppState extends State<XtremioApp> {
         // A scan only where access is already there: the first launch asks
         // nothing, and the Local list is where the asking happens.
         unawaited(_localMedia?.refresh());
+        // After the preferences, because the last look's time is one.
+        _scheduleUpdateCheck();
       }),
     );
     _lifecycle = AppLifecycleListener(
@@ -510,6 +541,46 @@ class _XtremioAppState extends State<XtremioApp> {
     );
   }
 
+  void _scheduleUpdateCheck() {
+    if (!mounted) return;
+    _updateTimer = Timer(
+      XtremioApp.updateCheckDelay,
+      () => _whenNotPlaying(_checkForUpdate),
+    );
+  }
+
+  /// Runs [step] now, or once no player is on the stack: an update's look
+  /// and its offer stay out of the way of playback, and a dialog over a
+  /// film is the last thing a viewer wants.
+  void _whenNotPlaying(VoidCallback step) {
+    if (!mounted) return;
+    if (_routes.contains(PlayerScreen.routeName)) {
+      _afterPlayer = step;
+      return;
+    }
+    step();
+  }
+
+  void _onRoutesChanged() {
+    final step = _afterPlayer;
+    if (step == null || _routes.contains(PlayerScreen.routeName)) return;
+    _afterPlayer = null;
+    // Not inside the navigator's own pop: a dialog is a push.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _whenNotPlaying(step));
+  }
+
+  Future<void> _checkForUpdate() async {
+    final result = await _updates.checkIfDue();
+    if (result is! UpdateAvailable) return;
+    _whenNotPlaying(() {
+      final context = _navigator.currentContext;
+      if (context == null) return;
+      unawaited(
+        showUpdateDialog(context, updates: _updates, release: result.release),
+      );
+    });
+  }
+
   void _onAway() => _away = true;
 
   /// The app is in the background (`hidden`, and `paused` after it on
@@ -619,6 +690,8 @@ class _XtremioAppState extends State<XtremioApp> {
   void dispose() {
     _events?.cancel();
     _links?.cancel();
+    _updateTimer?.cancel();
+    _routes.onChanged = null;
     // Before the downloads client and the cast sender it listens to.
     _footprint.dispose();
     // Takes the foreground service down before the client it reports on:
@@ -677,30 +750,33 @@ class _XtremioAppState extends State<XtremioApp> {
                     child: SharingScope(
                       policy: _sharing,
                       monitor: _activity,
-                      child: PlaybackScope(
-                        createEngine: _createEngine,
-                        // Under the [PrefsScope] rather than above it, so that
-                        // the focus floor is rebuilt when the Bold switch is
-                        // flipped: the scope is an [InheritedNotifier] and this
-                        // builder reads it. Every other part of the theme is
-                        // settled before the app is built.
-                        child: Builder(
-                          builder: (context) => _showingFocus(
-                            isTv: isTv,
-                            child: MaterialApp(
-                              title: 'Xtremio',
-                              debugShowCheckedModeBanner: false,
-                              navigatorKey: _navigator,
-                              theme: XtremioApp.themeFor(
-                                isTv: isTv,
-                                emphasis: FocusHighlight.emphasisOf(context),
+                      child: AppUpdatesScope(
+                        updates: _updates,
+                        child: PlaybackScope(
+                          createEngine: _createEngine,
+                          // Under the [PrefsScope] rather than above it, so that
+                          // the focus floor is rebuilt when the Bold switch is
+                          // flipped: the scope is an [InheritedNotifier] and this
+                          // builder reads it. Every other part of the theme is
+                          // settled before the app is built.
+                          child: Builder(
+                            builder: (context) => _showingFocus(
+                              isTv: isTv,
+                              child: MaterialApp(
+                                title: 'Xtremio',
+                                debugShowCheckedModeBanner: false,
+                                navigatorKey: _navigator,
+                                theme: XtremioApp.themeFor(
+                                  isTv: isTv,
+                                  emphasis: FocusHighlight.emphasisOf(context),
+                                ),
+                                builder: isTv ? TvMediaQuery.builder : null,
+                                navigatorObservers: [
+                                  _routes,
+                                  if (kDebugMode) RouteLogObserver(),
+                                ],
+                                home: const RootShell(),
                               ),
-                              builder: isTv ? TvMediaQuery.builder : null,
-                              navigatorObservers: [
-                                _routes,
-                                if (kDebugMode) RouteLogObserver(),
-                              ],
-                              home: const RootShell(),
                             ),
                           ),
                         ),
@@ -742,6 +818,9 @@ class _AddonHealth extends StatelessWidget {
 class _RouteStackObserver extends NavigatorObserver {
   final List<Route<dynamic>> _stack = [];
 
+  /// Told after a route leaves the stack.
+  VoidCallback? onChanged;
+
   Route<dynamic>? get top => _stack.isEmpty ? null : _stack.last;
 
   /// Whether a route named [name] is anywhere on the stack, under whatever
@@ -754,12 +833,16 @@ class _RouteStackObserver extends NavigatorObserver {
       _stack.add(route);
 
   @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _stack.remove(route);
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    onChanged?.call();
+  }
 
   @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _stack.remove(route);
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    onChanged?.call();
+  }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
