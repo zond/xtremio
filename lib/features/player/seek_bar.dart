@@ -181,7 +181,13 @@ class _SeekBarState extends State<SeekBar> {
         // [ExcludeSemantics] drops that raw gesture semantics without
         // touching the gestures themselves -- nothing here changes what a
         // tap or a drag does.
+        //
+        // A node of its own ([Semantics.container]): left to merge, the
+        // slider joined the nearest node above that is one -- the whole
+        // player screen -- and a screen reader took the entire screen, the
+        // title and the bar's label run together, for the seek bar.
         return Semantics(
+          container: true,
           slider: true,
           label: 'Seek',
           value: _valueLabel(widget.position),

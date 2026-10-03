@@ -2429,82 +2429,94 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                     duration: const Duration(milliseconds: 200),
                     child: IgnorePointer(
                       ignoring: !shown,
-                      child: SafeArea(
-                        child: _controlsFocus(
-                          Column(
-                            children: [
-                              PlayerTopBar(
-                                title: state?.title ?? '',
-                                onBack: _leavePlayer,
-                                subtitlesOn:
-                                    _tracks.value.activeSubtitleId != null,
-                                onSubtitles: _openSubtitleMenu,
-                                onAudio: _tracks.value.audio.length > 1
-                                    ? _openAudioMenu
-                                    : null,
-                                statsOn: _statsPinned ?? false,
-                                onStats: _toggleStatsPinned,
-                                onSettings: _openSettings,
-                                onNext: nextVideo == null || casting
-                                    ? null
-                                    : _playNext,
-                                onCast: _castAvailable ? _openCastSheet : null,
-                                castOn: casting,
-                                firstFocusNode: _topBarFocus,
-                              ),
-                              Expanded(
-                                child:
-                                    !wide &&
-                                        hasVideo &&
-                                        status == null &&
-                                        !startup
-                                    ? Center(
-                                        child: PlayerCenterControls(
-                                          playing: _playing,
-                                          seekStep: seekStep,
-                                          onPlayPause: _togglePlay,
-                                          onSeekBack: () => _seekBy(-seekStep),
-                                          onSeekForward: () =>
-                                              _seekBy(seekStep),
-                                        ),
-                                      )
-                                    : const SizedBox.expand(),
-                              ),
-                              if (hasVideo)
-                                PlayerBottomBar(
-                                  key: _bottomBarKey,
-                                  wide: wide,
-                                  playing: _playing,
-                                  seekStep: seekStep,
-                                  position: _position,
-                                  buffered: _buffer,
-                                  duration: _duration,
-                                  showRemaining: _showRemaining,
-                                  volume: _volume,
-                                  fullscreen: _fullscreenOn,
-                                  onPlayPause: _togglePlay,
-                                  onSeekBack: () => _seekBy(-seekStep),
-                                  onSeekForward: () => _seekBy(seekStep),
-                                  onSeek: _seekTo,
-                                  onStep: _seekBy,
-                                  onScrubStart: () {
-                                    _scrubbing = true;
-                                    _controlsTimer?.cancel();
-                                  },
-                                  onScrubEnd: () {
-                                    _scrubbing = false;
-                                    _restartControlsTimer();
-                                  },
-                                  onToggleTimeDisplay: () => setState(
-                                    () => _showRemaining = !_showRemaining,
-                                  ),
-                                  onVolume: _setVolume,
-                                  onMute: _toggleMute,
-                                  onFullscreen: _toggleFullscreen,
-                                  playPauseFocusNode: _playPauseFocus,
-                                  seekBarFocusNode: _seekBarFocus,
+                      // Hidden is hidden to a screen reader too, from the
+                      // moment the bar starts to fade: an opacity takes
+                      // its subtree out of the semantics tree only once it
+                      // has reached zero, and until then the seek bar
+                      // would still be offered as a slider over a screen
+                      // that shows none.
+                      child: ExcludeSemantics(
+                        excluding: !shown,
+                        child: SafeArea(
+                          child: _controlsFocus(
+                            Column(
+                              children: [
+                                PlayerTopBar(
+                                  title: state?.title ?? '',
+                                  onBack: _leavePlayer,
+                                  subtitlesOn:
+                                      _tracks.value.activeSubtitleId != null,
+                                  onSubtitles: _openSubtitleMenu,
+                                  onAudio: _tracks.value.audio.length > 1
+                                      ? _openAudioMenu
+                                      : null,
+                                  statsOn: _statsPinned ?? false,
+                                  onStats: _toggleStatsPinned,
+                                  onSettings: _openSettings,
+                                  onNext: nextVideo == null || casting
+                                      ? null
+                                      : _playNext,
+                                  onCast: _castAvailable
+                                      ? _openCastSheet
+                                      : null,
+                                  castOn: casting,
+                                  firstFocusNode: _topBarFocus,
                                 ),
-                            ],
+                                Expanded(
+                                  child:
+                                      !wide &&
+                                          hasVideo &&
+                                          status == null &&
+                                          !startup
+                                      ? Center(
+                                          child: PlayerCenterControls(
+                                            playing: _playing,
+                                            seekStep: seekStep,
+                                            onPlayPause: _togglePlay,
+                                            onSeekBack: () =>
+                                                _seekBy(-seekStep),
+                                            onSeekForward: () =>
+                                                _seekBy(seekStep),
+                                          ),
+                                        )
+                                      : const SizedBox.expand(),
+                                ),
+                                if (hasVideo)
+                                  PlayerBottomBar(
+                                    key: _bottomBarKey,
+                                    wide: wide,
+                                    playing: _playing,
+                                    seekStep: seekStep,
+                                    position: _position,
+                                    buffered: _buffer,
+                                    duration: _duration,
+                                    showRemaining: _showRemaining,
+                                    volume: _volume,
+                                    fullscreen: _fullscreenOn,
+                                    onPlayPause: _togglePlay,
+                                    onSeekBack: () => _seekBy(-seekStep),
+                                    onSeekForward: () => _seekBy(seekStep),
+                                    onSeek: _seekTo,
+                                    onStep: _seekBy,
+                                    onScrubStart: () {
+                                      _scrubbing = true;
+                                      _controlsTimer?.cancel();
+                                    },
+                                    onScrubEnd: () {
+                                      _scrubbing = false;
+                                      _restartControlsTimer();
+                                    },
+                                    onToggleTimeDisplay: () => setState(
+                                      () => _showRemaining = !_showRemaining,
+                                    ),
+                                    onVolume: _setVolume,
+                                    onMute: _toggleMute,
+                                    onFullscreen: _toggleFullscreen,
+                                    playPauseFocusNode: _playPauseFocus,
+                                    seekBarFocusNode: _seekBarFocus,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
