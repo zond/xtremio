@@ -176,18 +176,14 @@ class GoogleCastClient implements CastClient {
         ended:
             state == CastPlayerState.idle &&
             status.idleReason == GoogleCastMediaIdleReason.finished,
+        failed:
+            state == CastPlayerState.idle &&
+            status.idleReason == GoogleCastMediaIdleReason.error,
       ),
     );
   }
 
-  void _onPosition(Duration position) => _emit(
-    CastStatus(
-      state: _last.state,
-      position: position,
-      duration: _last.duration,
-      ended: _last.ended,
-    ),
-  );
+  void _onPosition(Duration position) => _emit(_last.at(position));
 
   void _emit(CastStatus status) {
     if (_status.isClosed || status == _last) return;

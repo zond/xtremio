@@ -70,6 +70,7 @@ final class CastStatus {
     this.position = Duration.zero,
     this.duration,
     this.ended = false,
+    this.failed = false,
   });
 
   final CastPlayerState state;
@@ -85,6 +86,13 @@ final class CastStatus {
   /// is what tells the core `Ended` from a session someone closed.
   final bool ended;
 
+  /// The receiver gave up on the media: idle, with the reason `ERROR` -- a
+  /// URL it could not fetch (a 403, a host it cannot reach) or bytes it
+  /// could not play. Only ever true alongside [CastPlayerState.idle]. What
+  /// a cast handed straight to the source falls back on (the player's
+  /// `_fallBackFromDirect`).
+  final bool failed;
+
   /// The same report at another position: what a seek shows while the
   /// receiver's own answer is still on its way.
   CastStatus at(Duration position) => CastStatus(
@@ -92,6 +100,7 @@ final class CastStatus {
     position: position,
     duration: duration,
     ended: ended,
+    failed: failed,
   );
 
   @override
@@ -100,14 +109,16 @@ final class CastStatus {
       other.state == state &&
       other.position == position &&
       other.duration == duration &&
-      other.ended == ended;
+      other.ended == ended &&
+      other.failed == failed;
 
   @override
-  int get hashCode => Object.hash(state, position, duration, ended);
+  int get hashCode => Object.hash(state, position, duration, ended, failed);
 
   @override
   String toString() =>
-      'CastStatus($state, $position/$duration${ended ? ', ended' : ''})';
+      'CastStatus($state, $position/$duration${ended ? ', ended' : ''}'
+      '${failed ? ', failed' : ''})';
 }
 
 /// The media to hand a receiver: a URL it can fetch, what is in it, and what

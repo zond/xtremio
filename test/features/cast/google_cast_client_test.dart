@@ -106,6 +106,46 @@ void main() {
     client.dispose();
   });
 
+  test('a receiver giving up on the media is reported as failed, and only '
+      'that', () {
+    // What a cast handed straight to the source falls back on: a receiver
+    // that could not fetch the link says so with an idle and ERROR, and
+    // nothing else -- a film that finished, or one someone stopped -- may
+    // read as a refusal, or a finished film would be cast again.
+    final client = GoogleCastClient();
+    final seen = <CastStatus>[];
+    client.status.listen(seen.add);
+
+    client.onMediaStatus(reported(CastMediaPlayerState.buffering));
+    expect(client.lastStatus.failed, isFalse);
+    client.onMediaStatus(
+      reported(
+        CastMediaPlayerState.idle,
+        idleReason: GoogleCastMediaIdleReason.finished,
+      ),
+    );
+    expect(client.lastStatus.failed, isFalse);
+    client.onMediaStatus(
+      reported(
+        CastMediaPlayerState.idle,
+        idleReason: GoogleCastMediaIdleReason.cancelled,
+      ),
+    );
+    expect(client.lastStatus.failed, isFalse);
+    client.onMediaStatus(
+      reported(
+        CastMediaPlayerState.idle,
+        idleReason: GoogleCastMediaIdleReason.error,
+      ),
+    );
+    expect(client.lastStatus.failed, isTrue);
+    expect(client.lastStatus.ended, isFalse);
+    // A position tick after it is still the same refusal, not a recovery.
+    client.onPosition(const Duration(seconds: 3));
+    expect(client.lastStatus.failed, isTrue);
+    client.dispose();
+  });
+
   test('a state change carries the position last seen', () {
     final client = GoogleCastClient();
     final seen = <CastStatus>[];
