@@ -117,6 +117,33 @@ file has a length and ranges, and its timestamps are the film's, so the
 receiver reports the film's position. Same token rules, same listener,
 same watchdog: each read of the file counts as a body.
 
+**The receiver is told to load only once the rendition's start is made.**
+A rendition's first answer waits for the film's index (a Matroska file's
+Cues, usually at its end) and the slot the receiver starts in; behind a
+thin swarm that took a minute on zond's phone, and the Chromecast default
+receiver gave up on a load that silent. So after publishing, the player
+asks the server to prepare it (`media_prepare_rendition`,
+`ServerHandle::prepare_rendition`) and polls `media_rendition_readiness`
+every half second (`PlayerScreen.castPreparePoll`), showing a card over the
+video -- "Preparing for <receiver>…", then "Reading the film's index…" or
+"Fetching the start…", and the torrent's download speed when there is one
+-- with a **Cancel** that unpublishes, ends the session and leaves the film
+here. A `failed` readiness is shown as a refusal with the server's
+sentence. **Local playback goes on while it prepares**, and the hand-over
+position is taken at the load, where the phone is then (what its own player
+just read is on the disk for the receiver's first slot). No timer gives up:
+the viewer is the one who cancels. A direct (as-is) cast is loaded at once,
+as before.
+
+**The torrent stays up for as long as anything uses it, because the app
+says so.** The server keeps a player screen's torrent running from its
+first read until the screen is left (`server_release_player` in the
+player's teardown, `ServerHandle::release_player`), and a cast's from
+publish to unpublish (stream-server `docs/storage.md`, *Who keeps a torrent
+running*). Before, it guessed from the last stream opened and the reads in
+flight, and stopped the torrent a television was waiting on once anything
+else opened.
+
 The server cuts six-second segments at the film's own keyframes, muxes
 them, keeps a few in memory and answers the receiver's ranges from them --
 nothing on disk (its `docs/design/renditions.md`). What it asks of the app is the **producer**,

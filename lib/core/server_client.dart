@@ -104,6 +104,16 @@ abstract interface class ProxyStreamControl {
   /// texture, on the audio device -- is not waiting on this read and is
   /// untouched.
   int closeProxyStreams(String token);
+
+  /// **The player screen [token] is gone**: the torrent its requests held
+  /// is let go (stream-server's `ServerHandle::release_player`). From the
+  /// screen's first read until this, the server keeps that torrent running
+  /// whether it is playing, paused, stalled or has nothing open -- the app
+  /// says when it stops using it, the server does not guess. A cast
+  /// published from the screen holds the torrent on its own until it is
+  /// unpublished. Answers whether a hold was released; throws as
+  /// [closeProxyStreams] can.
+  bool releasePlayer(String token);
 }
 
 /// Asking what the server holds of one playing stream, which is the whole
@@ -442,6 +452,9 @@ class ServerClient
   @override
   int closeProxyStreams(String token) =>
       rust.serverCloseProxyStreams(token: token);
+
+  @override
+  bool releasePlayer(String token) => rust.serverReleasePlayer(token: token);
 
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {

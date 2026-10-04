@@ -472,6 +472,18 @@ pub fn server_close_proxy_streams(token: String) -> anyhow::Result<i64> {
     guarded_ok(|| i64::try_from(crate::server::close_proxy_streams(&token)).unwrap_or(i64::MAX))
 }
 
+/// **The player screen `token` is gone**: the torrent its requests held is
+/// let go (stream-server's `ServerHandle::release_player`). The server keeps
+/// a screen's torrent running from its first read until this -- paused,
+/// stalled or with nothing open -- and a cast published from the screen
+/// holds it on its own until unpublished. Whether a hold was released;
+/// `false` with no server running, which holds nothing. Synchronous, for
+/// the same teardown reason as [`server_close_proxy_streams`].
+#[frb(sync)]
+pub fn server_release_player(token: String) -> anyhow::Result<bool> {
+    guarded_ok(|| crate::server::release_player(&token))
+}
+
 /// Starts or stops the server's LAN media listener and answers the address
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
 ///

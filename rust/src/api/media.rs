@@ -73,6 +73,25 @@ pub fn media_publish_rendition(id: String, spec: String) -> anyhow::Result<Strin
     guarded(|| crate::media::publish_rendition_in(&crate::state::state(), &id, &spec))
 }
 
+/// Starts making the published rendition `token`'s start -- the source's
+/// index, the header, the slot the receiver will begin in -- with no
+/// receiver asking yet, so the app hands the receiver the stream only once
+/// [`media_rendition_readiness`] says it is ready. Returns at once; the
+/// work waits as long as the source takes, and an unpublish ends it.
+/// Whether `token` is a published rendition.
+#[frb(sync)]
+pub fn media_prepare_rendition(token: String) -> anyhow::Result<bool> {
+    guarded(|| crate::media::prepare_rendition_in(&crate::state::state(), &token))
+}
+
+/// How far the rendition `token` has got, as JSON: `{"phase": "index"}`,
+/// `"start"`, `"ready"`, `"failed"` with the `sentence` to show, or
+/// `"ended"` (not published). Cheap; polled.
+#[frb(sync)]
+pub fn media_rendition_readiness(token: String) -> anyhow::Result<String> {
+    guarded(|| crate::media::rendition_readiness_in(&crate::state::state(), &token))
+}
+
 /// Whether this device can make a rendition: a player has loaded libmpv,
 /// and the FFmpeg in it is the one this build is bound to. False until the
 /// first player has registered (`mpv_stream_register`), and on a desktop

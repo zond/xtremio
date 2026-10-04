@@ -952,6 +952,13 @@ pub fn close_proxy_streams(token: &str) -> usize {
     with_handle(|handle| Ok(handle.close_proxy_streams(token))).unwrap_or(0)
 }
 
+/// Lets go of the torrent the player screen `token` held
+/// (`ServerHandle::release_player`): the screen is gone. `false` when no
+/// server is running, which holds nothing.
+pub fn release_player(token: &str) -> bool {
+    with_handle(|handle| Ok(handle.release_player(token))).unwrap_or(false)
+}
+
 /// Starts or stops the LAN media listener -- the server's second HTTP
 /// listener, which serves media bytes to the local network and mounts no
 /// control route at all (deliberately not `/proxy` and not `/ftp`) -- and

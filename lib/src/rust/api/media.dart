@@ -65,6 +65,21 @@ Future<String> mediaPublishRendition({
 }) =>
     RustLib.instance.api.crateApiMediaMediaPublishRendition(id: id, spec: spec);
 
+/// Starts making the published rendition `token`'s start -- the source's
+/// index, the header, the slot the receiver will begin in -- with no
+/// receiver asking yet, so the app hands the receiver the stream only once
+/// [`media_rendition_readiness`] says it is ready. Returns at once; the
+/// work waits as long as the source takes, and an unpublish ends it.
+/// Whether `token` is a published rendition.
+bool mediaPrepareRendition({required String token}) =>
+    RustLib.instance.api.crateApiMediaMediaPrepareRendition(token: token);
+
+/// How far the rendition `token` has got, as JSON: `{"phase": "index"}`,
+/// `"start"`, `"ready"`, `"failed"` with the `sentence` to show, or
+/// `"ended"` (not published). Cheap; polled.
+String mediaRenditionReadiness({required String token}) =>
+    RustLib.instance.api.crateApiMediaMediaRenditionReadiness(token: token);
+
 /// Whether this device can make a rendition: a player has loaded libmpv,
 /// and the FFmpeg in it is the one this build is bound to. False until the
 /// first player has registered (`mpv_stream_register`), and on a desktop

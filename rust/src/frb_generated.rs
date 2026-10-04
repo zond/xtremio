@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -748047446;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1716752060;
 
 // Section: executor
 
@@ -805,6 +805,38 @@ fn wire__crate__api__media__media_note_player_stalled_impl(
         },
     )
 }
+fn wire__crate__api__media__media_prepare_rendition_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "media_prepare_rendition",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_token = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::media::media_prepare_rendition(api_token)?;
+                    std::result::Result::Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 fn wire__crate__api__media__media_publish_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1003,6 +1035,38 @@ fn wire__crate__api__media__media_register_local_path_impl(
                 (move || {
                     let output_ok =
                         crate::api::media::media_register_local_path(api_path, api_name)?;
+                    std::result::Result::Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
+fn wire__crate__api__media__media_rendition_readiness_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "media_rendition_readiness",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_token = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::media::media_rendition_readiness(api_token)?;
                     std::result::Result::Ok(output_ok)
                 })(),
             )
@@ -1835,6 +1899,38 @@ fn wire__crate__api__server__server_note_player_stalled_impl(
         },
     )
 }
+fn wire__crate__api__server__server_release_player_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "server_release_player",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_token = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::server::server_release_player(api_token)?;
+                    std::result::Result::Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 fn wire__crate__api__server__server_set_background_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -2491,74 +2587,74 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        23 => wire__crate__api__media__media_publish_impl(port, ptr, rust_vec_len, data_len),
-        24 => {
+        24 => wire__crate__api__media__media_publish_impl(port, ptr, rust_vec_len, data_len),
+        25 => {
             wire__crate__api__media__media_publish_rendition_impl(port, ptr, rust_vec_len, data_len)
         }
-        30 => wire__crate__api__media__media_resolve_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__media__media_stream_numbers_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__media__media_unpublish_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__media__mpv_stream_register_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__prefs__prefs_get_all_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__prefs__prefs_set_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__server__server_background_traffic_impl(
+        32 => wire__crate__api__media__media_resolve_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__media__media_stream_numbers_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__media__media_unpublish_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__media__mpv_stream_register_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__prefs__prefs_get_all_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__prefs__prefs_set_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__server__server_background_traffic_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__server__server_cache_usage_impl(port, ptr, rust_vec_len, data_len),
-        41 => {
+        42 => wire__crate__api__server__server_cache_usage_impl(port, ptr, rust_vec_len, data_len),
+        43 => {
             wire__crate__api__server__server_clean_cache_now_impl(port, ptr, rust_vec_len, data_len)
         }
-        44 => wire__crate__api__server__server_drive_grant_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__server__server_drive_open_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__server__server_lan_media_base_url_impl(
+        46 => wire__crate__api__server__server_drive_grant_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__server__server_drive_open_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__server__server_lan_media_base_url_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => {
+        52 => {
             wire__crate__api__server__server_note_duration_impl(port, ptr, rust_vec_len, data_len)
         }
-        51 => wire__crate__api__server__server_note_player_opened_impl(
+        53 => wire__crate__api__server__server_note_player_opened_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__crate__api__server__server_note_player_stalled_impl(
+        54 => wire__crate__api__server__server_note_player_stalled_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        54 => wire__crate__api__server__server_set_idle_sharing_held_impl(
+        57 => wire__crate__api__server__server_set_idle_sharing_held_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        55 => {
+        58 => {
             wire__crate__api__server__server_set_lan_media_impl(port, ptr, rust_vec_len, data_len)
         }
-        56 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
-        59 => {
+        59 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
+        62 => {
             wire__crate__api__server__server_storage_report_impl(port, ptr, rust_vec_len, data_len)
         }
-        60 => {
+        63 => {
             wire__crate__api__server__server_stream_numbers_impl(port, ptr, rust_vec_len, data_len)
         }
-        61 => {
+        64 => {
             wire__crate__api__server__server_torrent_stats_impl(port, ptr, rust_vec_len, data_len)
         }
-        62 => {
+        65 => {
             wire__crate__api__server__server_update_settings_impl(port, ptr, rust_vec_len, data_len)
         }
-        63 => wire__crate__api__subtitles__subtitles_match_impl(port, ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__subtitles__subtitles_match_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2576,30 +2672,33 @@ fn pde_ffi_dispatcher_sync_impl(
         9 => wire__crate__api__hello__core_schema_version_impl(ptr, rust_vec_len, data_len),
         11 => wire__crate__api__diagnostics__diagnostics_log_impl(ptr, rust_vec_len, data_len),
         12 => wire__crate__api__diagnostics__diagnostics_snapshot_impl(ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__media__media_register_impl(ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__media__media_register_drive_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__media__media_register_local_fd_impl(ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__media__media_register_local_path_impl(ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__media__media_renditions_available_impl(ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__media__media_set_buffer_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__media__media_set_play_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__server__server_base_url_impl(ptr, rust_vec_len, data_len),
-        42 => {
+        23 => wire__crate__api__media__media_prepare_rendition_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__media__media_register_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__media__media_register_drive_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__media__media_register_local_fd_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__media__media_register_local_path_impl(ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__media__media_rendition_readiness_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__media__media_renditions_available_impl(ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__media__media_set_buffer_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__media__media_set_play_impl(ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__server__server_base_url_impl(ptr, rust_vec_len, data_len),
+        44 => {
             wire__crate__api__server__server_close_proxy_streams_impl(ptr, rust_vec_len, data_len)
         }
-        43 => wire__crate__api__server__server_dht_status_impl(ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__server__server_lan_media_bodies_served_impl(
+        45 => wire__crate__api__server__server_dht_status_impl(ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__server__server_lan_media_bodies_served_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__crate__api__server__server_lan_media_requests_served_impl(
+        50 => wire__crate__api__server__server_lan_media_requests_served_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        49 => wire__crate__api__server__server_lan_media_running_impl(ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__server__server_set_background_impl(ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__server__server_lan_media_running_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__server__server_release_player_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__server__server_set_background_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

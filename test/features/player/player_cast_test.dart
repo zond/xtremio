@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart'
-    show CoreField, MediaResolution, mediaIdUrl;
+    show CoreField, MediaResolution, RenditionReadiness, mediaIdUrl;
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -248,6 +248,147 @@ void main() {
         expect(media.duration, const Duration(minutes: 90));
         expect(start, const Duration(minutes: 12));
         expect(find.byType(CastRemotePanel), findsOneWidget);
+      });
+
+      /// [castWithStats] without settling: a rendition being prepared draws
+      /// a spinner, which never settles, and a poll on a timer.
+      Future<void> castWhilePreparing(
+        WidgetTester tester,
+        PlayerHarness harness,
+      ) async {
+        await tester.tap(castButton);
+        await tester.pumpAndSettle();
+        harness.engine.emitStats(h264Aac);
+        await tester.pump();
+        await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      }
+
+      /// One readiness poll: the wait, then what it set off.
+      Future<void> nextPoll(WidgetTester tester) async {
+        await tester.pump(PlayerScreen.castPreparePoll);
+        for (var i = 0; i < 5; i++) {
+          await tester.pump();
+        }
+      }
+
+      PlayerHarness preparingHarness(FakeCastClient cast) {
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        harness.mediaIds.renditionsAvailable = true;
+        return harness;
+      }
+
+      testWidgets(
+        'is loaded on the receiver only once its start is ready, the phone '
+        'playing on meanwhile',
+        (tester) async {
+          useWideViewport(tester);
+          final cast = FakeCastClient(devices: const [livingRoom]);
+          final harness = preparingHarness(cast);
+          harness.mediaIds.readiness = const RenditionReadiness('index');
+          await harness.pump(tester);
+          harness.engine.emitDuration(const Duration(minutes: 90));
+          harness.engine.emitPosition(const Duration(minutes: 12));
+          await pumpEvents(tester);
+          final pausesBefore = harness.engine.pauseCalls;
+
+          await castWhilePreparing(tester, harness);
+
+          // Published and asked to prepare; the receiver has heard nothing.
+          expect(harness.mediaIds.prepared, ['t1']);
+          expect(cast.loads, isEmpty);
+          expect(find.text('Preparing for Living Room TV…'), findsOneWidget);
+          expect(find.text("Reading the film's index…"), findsOneWidget);
+          expect(find.byType(CastRemotePanel), findsNothing);
+          expect(
+            harness.engine.pauseCalls,
+            pausesBefore,
+            reason: 'still playing here',
+          );
+
+          harness.mediaIds.readiness = const RenditionReadiness('start');
+          await nextPoll(tester);
+          expect(find.text('Fetching the start…'), findsOneWidget);
+          expect(cast.loads, isEmpty);
+
+          // The phone played on; the television takes over where it is now.
+          harness.engine.emitPosition(const Duration(minutes: 13));
+          harness.mediaIds.readiness = RenditionReadiness.ready;
+          await nextPoll(tester);
+          await tester.pumpAndSettle();
+          expect(cast.loads, hasLength(1));
+          final (media, start) = cast.loads.single;
+          expect(media.url, lanBase.resolve('cast/t1/stream.mp4'));
+          expect(start, const Duration(minutes: 13));
+          expect(find.byType(CastPreparingPanel), findsNothing);
+          expect(find.byType(CastRemotePanel), findsOneWidget);
+          expect(harness.engine.pauseCalls, greaterThan(pausesBefore));
+        },
+      );
+
+      testWidgets('Cancel while preparing unpublishes and never loads', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final harness = preparingHarness(cast);
+        harness.mediaIds.readiness = const RenditionReadiness('index');
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        harness.engine.emitPosition(const Duration(minutes: 12));
+        await pumpEvents(tester);
+        final pausesBefore = harness.engine.pauseCalls;
+        await castWhilePreparing(tester, harness);
+        expect(find.byType(CastPreparingPanel), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('cast-prepare-cancel')));
+        await tester.pumpAndSettle();
+
+        expect(harness.mediaIds.unpublished, ['t1']);
+        expect(cast.disconnects, greaterThan(0));
+        expect(cast.loads, isEmpty);
+        expect(find.byType(CastPreparingPanel), findsNothing);
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(
+          harness.engine.pauseCalls,
+          pausesBefore,
+          reason: 'the film never left',
+        );
+        // Nothing polls after the cancel.
+        final asks = harness.mediaIds.readinessAsks;
+        await tester.pump(PlayerScreen.castPreparePoll * 4);
+        expect(harness.mediaIds.readinessAsks, asks);
+        expect(cast.loads, isEmpty);
+      });
+
+      testWidgets('a rendition that fails while prepared is refused with its '
+          'sentence', (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final harness = preparingHarness(cast);
+        harness.mediaIds.nextReadiness.add(const RenditionReadiness('index'));
+        harness.mediaIds.readiness = const RenditionReadiness(
+          'failed',
+          sentence: 'This phone cannot repackage this film.',
+        );
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+        await castWhilePreparing(tester, harness);
+        await nextPoll(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CastRefusedDialog), findsOneWidget);
+        expect(
+          find.text('This phone cannot repackage this film.'),
+          findsOneWidget,
+        );
+        expect(cast.loads, isEmpty);
+        expect(harness.mediaIds.unpublished, ['t1']);
+        expect(find.byType(CastPreparingPanel), findsNothing);
       });
 
       testWidgets('is sought on the receiver, which seeks in it by bytes', (

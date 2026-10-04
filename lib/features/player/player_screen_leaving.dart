@@ -156,6 +156,24 @@ extension _PlayerLeaving on _PlayerScreenState {
     }
   }
 
+  /// Tells the server this screen is gone, so the torrent it held is let
+  /// go ([ProxyStreamControl.releasePlayer]). The server keeps a screen's
+  /// torrent running from its first read until this -- paused, stalled or
+  /// with nothing open -- because the app knows when it stops using it and
+  /// the server should not guess. Every screen, torrent or not (a screen
+  /// that held nothing releases nothing). Like [_closeProxiedStreams],
+  /// nothing it does may escape the teardown.
+  void _releaseTorrent() {
+    try {
+      _proxyStreams?.releasePlayer(_proxyToken);
+    } catch (error) {
+      DiagnosticsLog.error(
+        'player',
+        'could not release the torrent of the player being left: $error',
+      );
+    }
+  }
+
   /// Ends this player: the `quit`, then the streams it was reading, then the
   /// release -- and logs how long the whole of it took.
   ///
@@ -199,6 +217,7 @@ extension _PlayerLeaving on _PlayerScreenState {
         );
       }
       _closeProxiedStreams();
+      _releaseTorrent();
       try {
         await engine?.dispose();
       } catch (error) {

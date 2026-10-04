@@ -80,11 +80,11 @@ void main() {
     expect(engine.quitCalls, 1, reason: 'the read is already ending');
     expect(
       harness.calls,
-      ['quit', 'close-streams', 'dispose'],
+      ['quit', 'close-streams', 'release-player', 'dispose'],
       reason:
           'and in that order: the server documents quit-then-close, '
           'because a demuxer that has already been cancelled never '
-          'reaches its reconnect',
+          'reaches its reconnect; the torrent hold goes before the release',
     );
 
     wedged.complete();
@@ -546,6 +546,25 @@ void main() {
 
       expect(harness.engine.disposed, isTrue);
       expect(harness.proxyStreams.closed, isEmpty);
+    });
+
+    testWidgets('leaving lets go of the torrent the screen held', (
+      tester,
+    ) async {
+      // The server keeps a screen's torrent running from its first read
+      // until the screen says it is gone -- paused, stalled or with nothing
+      // open -- so every screen says so on the way out, by its own token.
+      final harness = PlayerHarness();
+      await pumpPushed(tester, harness);
+      expect(harness.proxyStreams.released, isEmpty);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(harness.proxyStreams.released, [
+        harness.mediaIds.plays.last.token,
+      ]);
+      expect(harness.engine.disposed, isTrue);
     });
 
     testWidgets('a link read by id has nothing to close, and is not asked', (

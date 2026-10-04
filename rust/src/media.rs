@@ -252,6 +252,22 @@ pub fn publish_rendition_in(app: &AppState, id: &str, spec: &str) -> anyhow::Res
     })
 }
 
+/// Starts preparing the published rendition `token`
+/// (`ServerHandle::prepare_rendition`). Whether it is one.
+pub fn prepare_rendition_in(app: &AppState, token: &str) -> anyhow::Result<bool> {
+    let token = CastToken::from(token.to_owned());
+    crate::server::with_handle_in(app, |handle| Ok(handle.prepare_rendition(&token)))
+}
+
+/// The rendition `token`'s readiness as JSON
+/// (`ServerHandle::rendition_readiness`).
+pub fn rendition_readiness_in(app: &AppState, token: &str) -> anyhow::Result<String> {
+    let token = CastToken::from(token.to_owned());
+    crate::server::with_handle_in(app, |handle| {
+        Ok(serde_json::to_string(&handle.rendition_readiness(&token))?)
+    })
+}
+
 /// Ends a publication: nothing more is served under `token`, and a body
 /// being served under it is cut. Whether it was published. `false` when
 /// the server is not running, which stopped the listener and every token

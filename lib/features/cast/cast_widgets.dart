@@ -251,3 +251,106 @@ class CastRefusedDialog extends StatelessWidget {
     ],
   );
 }
+
+/// **The phone getting a converted stream ready before the television is
+/// told about it** (a rendition, stream-server `docs/design/renditions.md`).
+///
+/// The receiver gives up on a load whose first answer stays silent for long
+/// -- measured on a Chromecast with Google TV against a torrent whose first
+/// piece and index took a minute -- so the television is handed the stream
+/// only once its start is made. Until then this card is drawn over the
+/// video, which keeps playing here, with what the server is doing and a
+/// Cancel that leaves the film on this screen.
+class CastPreparingPanel extends StatelessWidget {
+  const CastPreparingPanel({
+    super.key,
+    required this.deviceName,
+    required this.phase,
+    required this.onCancel,
+    this.speed,
+  });
+
+  final String deviceName;
+
+  /// What the server is doing, as one line ([phaseLine]).
+  final String phase;
+
+  /// The torrent's download speed, already formatted, when there is one.
+  final String? speed;
+
+  final VoidCallback onCancel;
+
+  /// What the card says the server is doing, by the readiness phase the
+  /// server reports (`index` reading the film's index and formats, `start`
+  /// making the part the television starts with).
+  static String phaseLine(String phase) => switch (phase) {
+    'start' => "Fetching the start…",
+    _ => "Reading the film's index…",
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 72, left: 16, right: 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Preparing for $deviceName…',
+                          style: textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          phase,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                        if (speed case final speed?)
+                          Text(
+                            speed,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: Colors.white54,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('cast-prepare-cancel'),
+                    onPressed: onCancel,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

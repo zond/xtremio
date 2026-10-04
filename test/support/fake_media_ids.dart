@@ -138,6 +138,29 @@ class FakeMediaIds implements MediaIds {
     return 't${published.length}';
   }
 
+  /// Every token whose preparation was asked for, in order.
+  final List<String> prepared = [];
+
+  /// What [renditionReadiness] answers, one each, before [readiness] takes
+  /// over: a test steps a preparation through its phases with these.
+  final List<RenditionReadiness> nextReadiness = [];
+
+  /// What [renditionReadiness] answers once [nextReadiness] is empty:
+  /// ready, unless a test says otherwise.
+  RenditionReadiness readiness = RenditionReadiness.ready;
+
+  /// How many times readiness was asked.
+  int readinessAsks = 0;
+
+  @override
+  Future<void> prepareRendition(String token) async => prepared.add(token);
+
+  @override
+  Future<RenditionReadiness> renditionReadiness(String token) async {
+    readinessAsks++;
+    return nextReadiness.isNotEmpty ? nextReadiness.removeAt(0) : readiness;
+  }
+
   @override
   Future<bool> unpublish(String token) async {
     unpublished.add(token);

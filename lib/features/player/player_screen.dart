@@ -24,6 +24,7 @@ import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
 import 'subtitle_timing.dart';
+import 'torrent_progress_card.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
@@ -210,6 +211,11 @@ class PlayerScreen extends StatefulWidget {
   /// a receiver that is on its way but unhurried, and is short enough that
   /// nobody is left watching a splash screen wondering.
   static const Duration castFetchTimeout = Duration(seconds: 20);
+
+  /// How often a rendition being prepared for a receiver is asked how far
+  /// it has got ([_PlayerCasting._prepareRendition]): a map read on the
+  /// server, cheap enough for twice a second.
+  static const Duration castPreparePoll = Duration(milliseconds: 500);
 
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
@@ -873,6 +879,19 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([MediaIds.publish]), or null when nothing is. **Never logged**: it is
   /// a URL into this device for as long as it is published.
   String? _castToken;
+
+  /// **A rendition being made ready before the receiver is told to load
+  /// it** ([_PlayerCasting._prepareRendition]): the receiver it is for and
+  /// the server's phase, while it is; null otherwise. Local playback goes
+  /// on meanwhile, and the card over it has a Cancel.
+  CastDevice? _castPreparingFor;
+  String _castPreparingPhase = 'index';
+
+  /// The wait between two readiness asks, and the completer that ends it
+  /// early: Cancel, Stop and leaving the screen wake the loop rather than
+  /// leave it parked on a timer.
+  Timer? _castPrepareTimer;
+  Completer<void>? _castPrepareWake;
 
   /// What the remote says under the title while the receiver has reached
   /// this device and been sent nothing yet ([_castFetchCheck]); null
@@ -2226,6 +2245,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (!_handedOver) _cast?.stopDiscovery().ignore();
     // Nothing of ours is left on the LAN: the session ends and the listener
     // with it.
+    _wakeCastPrepare();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
     // A television leaves fullscreen only when the player is really over: on
     // a hand-over the replacement entered fullscreen while this screen was
@@ -2363,6 +2383,21 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                         onSeek: _seekTo,
                         onStop: () => unawaited(_stopCast()),
                         playPauseFocusNode: _isTv ? _playPauseFocus : null,
+                      ),
+                    ),
+                  if (_castPreparingFor case final device? when !casting)
+                    SafeArea(
+                      child: CastPreparingPanel(
+                        deviceName: device.name,
+                        phase: CastPreparingPanel.phaseLine(
+                          _castPreparingPhase,
+                        ),
+                        speed: switch (_torrentStats?.downloadSpeed) {
+                          final speed? when speed > 0 =>
+                            TorrentProgressCard.formatSpeed(speed),
+                          _ => null,
+                        },
+                        onCancel: _cancelCastPrepare,
                       ),
                     ),
                   if (hasVideo && _statsVisible)

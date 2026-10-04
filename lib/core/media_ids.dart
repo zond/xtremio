@@ -140,6 +140,45 @@ final class RenditionSpec {
   };
 }
 
+/// How far a published rendition has got towards the part the receiver
+/// starts with: stream-server's `RenditionReadiness`, asked after
+/// [MediaIds.prepareRendition] and before the receiver is told to load.
+///
+/// [phase] is the server's word: `index` (the first run is reading the
+/// film's index and formats, which for a Matroska file means its last
+/// bytes), `start` (the layout is known and the slot the receiver starts
+/// in is being made), `ready`, `failed` (with the [sentence] a viewer is
+/// shown) or `ended` (not published any more).
+final class RenditionReadiness {
+  const RenditionReadiness(this.phase, {this.sentence});
+
+  factory RenditionReadiness.fromJson(Map<dynamic, dynamic> json) =>
+      RenditionReadiness(
+        json['phase'] as String? ?? 'ended',
+        sentence: json['sentence'] as String?,
+      );
+
+  static const ready = RenditionReadiness('ready');
+
+  final String phase;
+  final String? sentence;
+
+  /// Still on its way: neither made nor refused.
+  bool get preparing => phase == 'index' || phase == 'start';
+
+  @override
+  bool operator ==(Object other) =>
+      other is RenditionReadiness &&
+      other.phase == phase &&
+      other.sentence == sentence;
+
+  @override
+  int get hashCode => Object.hash(phase, sentence);
+
+  @override
+  String toString() => 'RenditionReadiness($phase)';
+}
+
 /// Playing a stream by id: what the player asks of the embedded server so
 /// that mpv reads `xtremio://<id>` rather than a URL on the server
 /// (stream-server `docs/design/media-pipeline.md` §2.5), and what a cast
@@ -198,6 +237,16 @@ abstract interface class MediaIds {
   /// stream is under (`<lan base>/cast/<token>/stream.mp4`). **Never
   /// log it.** Throws as [publish] does.
   Future<String> publishRendition(String id, RenditionSpec spec);
+
+  /// Starts making the published rendition [token]'s start -- its index,
+  /// its header and the slot the receiver will begin in -- with no receiver
+  /// asking yet, so the receiver is told to load only once it is there
+  /// ([renditionReadiness]). Returns at once; the work waits as long as the
+  /// source takes, and an unpublish ends it.
+  Future<void> prepareRendition(String token);
+
+  /// How far [token]'s preparation has got. Cheap; polled.
+  Future<RenditionReadiness> renditionReadiness(String token);
 
   /// Ends the publication [token]; a body being served under it is cut.
   Future<bool> unpublish(String token);
@@ -261,6 +310,16 @@ class RustMediaIds implements MediaIds {
   @override
   Future<String> publishRendition(String id, RenditionSpec spec) =>
       rust.mediaPublishRendition(id: id, spec: jsonEncode(spec.toJson()));
+
+  @override
+  Future<void> prepareRendition(String token) async =>
+      rust.mediaPrepareRendition(token: token);
+
+  @override
+  Future<RenditionReadiness> renditionReadiness(String token) async =>
+      RenditionReadiness.fromJson(
+        jsonDecode(rust.mediaRenditionReadiness(token: token)) as Map,
+      );
 
   @override
   Future<bool> unpublish(String token) => rust.mediaUnpublish(token: token);

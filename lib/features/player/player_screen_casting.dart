@@ -320,6 +320,28 @@ extension _PlayerCasting on _PlayerScreenState {
       await _teardownCast();
       return null;
     }
+    // A rendition is made ready before the receiver hears of it: its first
+    // answer waits for the film's index and its first slot, and a receiver
+    // left on a silent load gives up. Local playback goes on meanwhile.
+    if (rendition) {
+      final ready = await _prepareRendition(device, abandoned);
+      if (abandoned()) {
+        await _teardownCast();
+        return null;
+      }
+      if (ready != null) {
+        DiagnosticsLog.warn(
+          'player',
+          'a rendition could not be prepared for a receiver: ${ready.phase}',
+        );
+        await _teardownCast();
+        return ready.sentence ??
+            'This device could not hand the stream to ${device.name}.';
+      }
+    }
+    // Taken here, at the load: for a rendition, after the preparation the
+    // phone went on playing through, so the television takes over where
+    // the phone is now.
     final position = _position.value;
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
@@ -394,6 +416,75 @@ extension _PlayerCasting on _PlayerScreenState {
     }
     _watchCastFetch();
     return null;
+  }
+
+  /// **Makes the published rendition's start before the receiver is told
+  /// to load it**, and answers null once it is ready -- or what refused it
+  /// (a `failed` readiness with its sentence, or `ended`). A Cancel, a Stop
+  /// or leaving the screen ends the wait; the caller asks [abandoned].
+  ///
+  /// The receiver (the Chromecast default receiver, Chrome 92) gives up on
+  /// a load whose first answer stays silent too long, and a rendition's
+  /// first answer waits for the film's index -- a Matroska file's is at its
+  /// end -- and the slot it starts in: a minute behind a thin swarm,
+  /// measured. So the server is asked to make them first
+  /// ([MediaIds.prepareRendition]) and asked how far it has got every
+  /// [PlayerScreen.castPreparePoll], with the phase on the card over the
+  /// video. **Local playback goes on**: nicer than a frozen phone, and the
+  /// hand-over position is taken at the load, where the phone is then
+  /// (what its own player just read is on the disk for the receiver's
+  /// first slot). No give-up timer: a stalled source is waited for, and
+  /// the viewer is the one who cancels.
+  Future<RenditionReadiness?> _prepareRendition(
+    CastDevice device,
+    bool Function() abandoned,
+  ) async {
+    final ids = _mediaIds;
+    final token = _castToken;
+    if (ids == null || token == null) return null;
+    setState(() {
+      _castPreparingFor = device;
+      _castPreparingPhase = 'index';
+    });
+    try {
+      await ids.prepareRendition(token);
+      while (!abandoned()) {
+        final readiness = await ids.renditionReadiness(token);
+        if (abandoned()) return null;
+        if (readiness.phase == 'ready') return null;
+        if (!readiness.preparing) return readiness;
+        if (readiness.phase != _castPreparingPhase && mounted) {
+          setState(() => _castPreparingPhase = readiness.phase);
+        }
+        final wake = Completer<void>();
+        _castPrepareWake = wake;
+        _castPrepareTimer = Timer(PlayerScreen.castPreparePoll, () {
+          if (!wake.isCompleted) wake.complete();
+        });
+        await wake.future;
+      }
+      return null;
+    } finally {
+      _castPrepareTimer?.cancel();
+      _castPrepareTimer = null;
+      _castPrepareWake = null;
+      if (mounted) setState(() => _castPreparingFor = null);
+    }
+  }
+
+  /// Ends a preparation's wait now: Cancel, Stop, leaving the screen.
+  void _wakeCastPrepare() {
+    _castPrepareTimer?.cancel();
+    _castPrepareTimer = null;
+    final wake = _castPrepareWake;
+    if (wake != null && !wake.isCompleted) wake.complete();
+  }
+
+  /// The card's Cancel: the rendition is unpublished, the session ended,
+  /// and the film never left this screen.
+  void _cancelCastPrepare() {
+    _castStops++;
+    _wakeCastPrepare();
   }
 
   /// Starts the wait that asks whether the receiver ever came back for the

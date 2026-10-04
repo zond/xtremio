@@ -23,6 +23,18 @@ class FakeProxyStreams implements ProxyStreamControl {
   /// way to say the app honours it.
   List<String>? callLog;
 
+  /// Every player screen released, in order: the torrent hold each one
+  /// let go of.
+  final List<String> released = [];
+
+  @override
+  bool releasePlayer(String token) {
+    callLog?.add('release-player');
+    released.add(token);
+    if (failure case final failure?) throw failure;
+    return true;
+  }
+
   @override
   int closeProxyStreams(String token) {
     callLog?.add('close-streams');
