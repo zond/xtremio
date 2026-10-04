@@ -190,11 +190,12 @@ void main() {
       /// only time the screen samples it.
       Future<void> castWithStats(
         WidgetTester tester,
-        PlayerHarness harness,
-      ) async {
+        PlayerHarness harness, {
+        PlaybackStats stats = h264Aac,
+      }) async {
         await tester.tap(castButton);
         await tester.pumpAndSettle();
-        harness.engine.emitStats(h264Aac);
+        harness.engine.emitStats(stats);
         await tester.pump();
         await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
         await tester.pumpAndSettle();
@@ -248,6 +249,42 @@ void main() {
         expect(media.duration, const Duration(minutes: 90));
         expect(start, const Duration(minutes: 12));
         expect(find.byType(CastRemotePanel), findsOneWidget);
+      });
+
+      testWidgets('with Dolby sound, has its sound converted to stereo AAC', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        harness.mediaIds.renditionsAvailable = true;
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        harness.engine.emitPosition(const Duration(minutes: 3));
+        await pumpEvents(tester);
+
+        await castWithStats(
+          tester,
+          harness,
+          stats: const PlaybackStats(
+            videoCodec: 'h264 (High)',
+            audioCodec: 'eac3',
+          ),
+        );
+
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(harness.mediaIds.renditions.single.spec.toJson(), {
+          'durationMs': const Duration(minutes: 90).inMilliseconds,
+          'segmentMs': 6000,
+          'startMs': const Duration(minutes: 3).inMilliseconds,
+          'video': 'copy',
+          'audio': {
+            'aacStereo': {'bitrate': 192000},
+          },
+          'audioTrack': 0,
+        });
+        expect(cast.loads.single.$1.url, lanBase.resolve('cast/t1/stream.mp4'));
       });
 
       /// [castWithStats] without settling: a rendition being prepared draws

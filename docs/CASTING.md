@@ -6,12 +6,14 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
 already serves, with no processing anywhere -- or, for an H.264 or HEVC
-film with AAC sound in a Matroska file, **repackaged**: the same samples as one fragmented MP4,
-made as the receiver reads it ([Renditions](#renditions-a-matroska-film-repackaged)). It
-turns the player screen into a remote while the television plays. Nothing
-is decoded or encoded for a receiver yet, so the honest part of this is
-still the refusal. The button is never built on Android TV: a TV is a
-receiver, not a sender.
+film in a Matroska or QuickTime file, or an MP4 whose sound the receiver
+will not take, **repackaged**: the same picture as one fragmented MP4, its
+sound copied when it is AAC and **converted to stereo AAC** otherwise, made
+as the receiver reads it ([Renditions](#renditions-the-picture-repackaged-the-sound-converted)).
+It turns the player screen into a remote while the television plays. The
+picture is never decoded or encoded for a receiver yet, so the honest part
+of this is still the refusal. The button is never built on Android TV: a TV
+is a receiver, not a sender.
 
 ## What can be cast
 
@@ -62,26 +64,35 @@ while the player is on that stream, and taken only from an answer about the
 file being streamed, never the torrent-level fallback's guess. A member is
 never pending: a member whose name says nothing is an unknown file.
 
-## Renditions: a Matroska film, repackaged
+## Renditions: the picture repackaged, the sound converted
 
 A Chromecast will not open a Matroska file, and most films are one. When
-the film inside is H.264 or HEVC with AAC sound -- **as mpv reports it**,
-since a copy is only as right as the codecs it copies, and a release's claim
-is not enough -- `CastCompatibility.of` answers `CastRendition` instead of
-the container refusal, provided the stream is played by id and this device
-can make one (`media_renditions_available`). HEVC (Main and Main 10, so
+the film inside is H.264 or HEVC -- **as mpv reports it**, since a copy is
+only as right as the codecs it copies, and a release's claim is not enough
+-- `CastCompatibility.of` answers `CastRendition` instead of the container
+refusal, provided the stream is played by id and this device can make one
+(`media_renditions_available`). The same goes for a QuickTime file, and for
+an MP4 or M4V whose picture the receiver takes but whose sound its container
+does not allow (Dolby Digital in an MP4, the common case), which would
+otherwise be refused.
+
+**The sound is copied when it is AAC, and converted to stereo AAC
+otherwise** (`CastRendition.convertsSound`, `RenditionSpec.convertSound`:
+`{"aacStereo": {"bitrate": 192000}}`) -- Dolby Digital, Dolby Digital Plus,
+DTS, TrueHD, Opus, FLAC, MP3, PCM: whatever mpv names, since the producer
+decodes with the same FFmpeg mpv played it with. **Surround is converted
+whatever the receiver says it plays**: zond's television sends its sound
+over Bluetooth, and Dolby cast to it plays silent. (AAC with more than two
+channels is still copied: mpv's report has no channel count until step F5.) HEVC (Main and Main 10, so
 HDR10 and HLG too) is allowed because zond's receiver, a Chromecast with
 Google TV 4K (`sabrina`), decodes it up to 4K: `_repackagedVideo` is a
 constant for that receiver until the receiver table (step F5) makes it a
 row per model, and until then an HEVC film cast to a receiver without HEVC
 is a black screen.
 
-**When it would be repackaged and a track cannot be**, the refusal names
-the track and why, in one sentence each, the picture first:
+**When it would be repackaged and its picture cannot be**, the refusal
+names it and why (the sound is never the reason: it converts):
 
-- sound that is not AAC -- "This film's sound is Dolby Digital Plus
-  (E-AC3), which xtremio can't convert for casting yet." (converting it is
-  step F3);
 - video the receiver decodes but a copy does not carry (VP8, VP9) --
   "This film's video is VP9, which xtremio can't repackage for casting
   yet.";
@@ -159,7 +170,8 @@ video and the audio track playing here, seeks to the run's segment, and
 hands the server every packet's presentation time on mpv's clock (less the
 container's start), the H.264 or HEVC parameter sets and samples in Annex-B
 (an HEVC `hvcC`'s SEI messages too: an HDR10 encode's mastering display and
-light levels are often only there), and the AAC frames as they are. The
+light levels are often only there), and the AAC frames as they are -- or,
+converting, the AAC frames it made (below). The
 server writes HEVC as `hvc1` + `hvcC`, its samples length-prefixed, with a
 `colr` from the SPS's colour description; the key flags are the
 container's, which for Matroska are HEVC's IRAP pictures, the same ones its
@@ -209,9 +221,55 @@ Main 10 HDR10 with open GOPs, as Matroska with Dolby Vision records patched
 in -- published, fetched off the LAN listener, checked by `ffprobe` and
 decoded by `ffmpeg`.
 
-Sound that is not AAC, video that is neither H.264 nor HEVC and every other
-container are still refused; converting them is the rest of step F of the
-renditions design.
+### Converting the sound
+
+`rust/src/sound.rs` (step F3). The run's thread decodes the chosen track
+with **libavcodec from the same libmpv** (`libav::SoundDecoder`: it has
+every decoder, Dolby, DTS and TrueHD included; zond's phone has Dolby
+`MediaCodec` decoders but none for DTS or TrueHD, and `MediaExtractor` hands
+none of them out anyway, so FFmpeg decodes everything), mixes it down to
+stereo at 48 kHz with **libswresample** (the default matrix -- centre and
+surrounds at -3 dB into each side, LFE left out -- normalised so the sum
+never clips), and encodes **AAC-LC stereo, 48 kHz, 192 kbit/s**: with
+**Android's `MediaCodec`** on a phone (`rust/src/mediacodec.rs`, the NDK's
+`AMediaCodec` from a `dlopen`ed `libmediandk.so` -- `c2.android.aac.encoder`,
+AOSP's FDK, by name; no Kotlin, no JNI), and with **FFmpeg's own AAC
+encoder** where the library has one (a desktop's system FFmpeg). Neither
+there, the producer refuses: "This device cannot convert the film's sound
+for the television: it has no AAC encoder this app can use."
+
+**The same bytes, whichever run makes them.** A slot must be identical
+however it is reached (the receiver seeks by bytes), and a codec's output
+depends on everything it saw before. So the sound is made in **chunks of
+48 AAC frames** (1.024 s) on a fixed grid of the film's clock -- frame `i`
+is the sound at `i x 1024` samples, stamped `i x 64000/3` us, which the
+server's 90 kHz clock reads as exactly `i x 1920` -- **each chunk from a
+fresh decoder, resampler and encoder**: the decoder fed from the first
+packet 0.4 s before the encoder's input (an AC3 frame's overlap, TrueHD's
+wait for a major sync and Opus's prediction all settle in that), the encoder
+fed from two frames before the chunk to two after and flushed, its priming
+discarded by count (FFmpeg's encoder: 1024 samples; FDK: 1600, its
+transform plus block-switching look-ahead), so its kept frames land on the
+grid. Where the run began decides nothing: a chunk is made only from
+packets that are a function of the chunk, and only when the run read from
+before its pre-roll (a run starts two seconds before its first cut, and a
+chunk with its pre-rolls spans about 1.5 s). The conversion lags the
+picture by about 1.5 s of film, which the server's cut rule already waits
+for.
+
+`rust/tests/rendition_sound.rs` makes H.264 films with Dolby Digital Plus
+5.1, Dolby Digital 5.1, DTS 5.1 and TrueHD 5.1 in Matroska and Dolby
+Digital in MP4, flashing white and clicking on every channel at each whole
+second, and checks what comes back: AAC-LC stereo 48 kHz, decoding clean,
+every click within 3 ms of where the source's is against its flash (whole,
+and in every slot read alone after the header), every slot byte-identical
+when a fresh rendition's run is started at it, and a seek one jump.
+`cargo test --test rendition_sound serve -- --ignored --nocapture` serves a
+converted rendition for a television.
+
+Video that is neither H.264 nor HEVC, and containers other than Matroska,
+QuickTime and an MP4 with the wrong sound, are still refused; converting
+the picture is step F4 of the renditions design.
 
 ## The URL and the address the receiver is given
 

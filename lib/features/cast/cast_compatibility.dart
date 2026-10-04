@@ -5,10 +5,11 @@ import '../player/playback_stats.dart';
 /// Whether a stream can be handed to a receiver as it is, repackaged, or
 /// not at all, and why.
 ///
-/// **Nothing is decoded or encoded.** A cast sends the bytes the server
-/// already serves, or the same samples in another container
-/// ([CastRendition]), so a codec the receiver cannot decode is not a
-/// slower cast, it is a black screen. The gate therefore has to answer
+/// **The picture is never decoded or encoded.** A cast sends the bytes the
+/// server already serves, or the same picture in another container with
+/// its sound copied or converted to stereo AAC ([CastRendition]), so a
+/// video codec the receiver cannot decode is not a slower cast, it is a
+/// black screen. The gate therefore has to answer
 /// honestly, and a refusal has to say what is wrong rather than let the
 /// cast fail on the television.
 ///
@@ -42,19 +43,26 @@ import '../player/playback_stats.dart';
 /// about the URL and comes first. A stream played by id is judged on
 /// `xtremio://<id>`, which names no route, and is cast by publishing it.
 ///
-/// **One stream the receiver will not take is cast anyway: as a
-/// rendition.** An H.264 or HEVC film with AAC sound in a Matroska file,
+/// **Streams the receiver will not take are cast anyway: as a
+/// rendition.** An H.264 or HEVC film in a Matroska or QuickTime file,
 /// played by id, is [CastRendition] when this device can make one
-/// (`canRepackage`): the server repackages the film's own samples into one
+/// (`canRepackage`): the server repackages the film's own picture into one
 /// fragmented MP4 as the receiver asks for it (stream-server
-/// `docs/design/renditions.md`, step F2). Only mpv's word on the codecs
-/// counts for it -- a copy carries the codecs as they are, so a release's
-/// claim is not enough -- and only for a stream played by id, since the
-/// server reads the film through its id. A Matroska film that would be
-/// repackaged but has a track a copy cannot carry is refused with a sentence
-/// that names the track and why ([CastRefusal.renditionVideo],
-/// [CastRefusal.renditionAudio]); one whose codecs mpv has not reported yet
-/// is a "not yet" ([CastRefusal.codecsPending]).
+/// `docs/design/renditions.md`, step F2), **with its sound copied when it
+/// is AAC and converted to stereo AAC otherwise** (step F3: Dolby Digital,
+/// Dolby Digital Plus, DTS, TrueHD, Opus, FLAC, MP3, PCM -- whatever mpv
+/// itself decodes, the producer decodes with the same FFmpeg). **Surround is
+/// converted whatever the receiver says it plays**: zond's television sends
+/// its sound over Bluetooth, and a Dolby track cast to it plays silent. So
+/// an MP4 or M4V whose picture the receiver takes but whose sound the
+/// container does not allow (Dolby Digital in an MP4, the common case) is a
+/// rendition too, not a refusal. Only mpv's word on the codecs counts for
+/// a rendition -- a copy carries the picture as it is, so a release's claim
+/// is not enough -- and only for a stream played by id, since the server
+/// reads the film through its id. A film that would be repackaged but whose
+/// picture a copy cannot carry is refused with a sentence that names it and
+/// why ([CastRefusal.renditionVideo]); one whose codecs mpv has not reported
+/// yet is a "not yet" ([CastRefusal.codecsPending]).
 ///
 /// **What is judged is the film, not the container it arrived in.** When the
 /// server resolved a stream to the member of an archive or a disc image,
@@ -104,6 +112,15 @@ sealed class CastCompatibility {
     }
     final audio = _audioCodec(facts: facts, filename: filename, stats: stats);
     if (audio != null && !format.audio.contains(audio)) {
+      // An MP4 whose sound the receiver will not take (or will play
+      // silent): the same picture, the sound converted.
+      if (canRepackage &&
+          _soundConvertedContainers.contains(container) &&
+          mediaIdOf(url) != null &&
+          _repackagedVideo.contains(_canonicalVideo(stats?.videoCodec)) &&
+          _canonicalAudio(stats?.audioCodec) != null) {
+        return const CastRendition(convertsSound: true);
+      }
       return CastRefused._audio(audio, _describeAudioSupport(format));
     }
     return CastReady(contentType: format.contentType);
@@ -121,12 +138,15 @@ final class CastReady extends CastCompatibility {
   final String contentType;
 }
 
-/// The stream goes to a receiver as a rendition: the same H.264 and AAC,
+/// The stream goes to a receiver as a rendition: the same H.264 or HEVC,
 /// repackaged by the server into one fragmented MP4 the receiver plays as a
-/// file
-/// (`MediaIds.publishRendition`).
+/// file (`MediaIds.publishRendition`), its sound copied when it is AAC and
+/// converted to stereo AAC when [convertsSound].
 final class CastRendition extends CastCompatibility {
-  const CastRendition();
+  const CastRendition({this.convertsSound = false});
+
+  /// The sound is converted to stereo AAC (`RenditionSpec.convertSound`).
+  final bool convertsSound;
 
   /// The MIME type of what the receiver is handed: an MP4, which it plays
   /// as a file -- not HLS, which zond's Chromecast with Google TV cannot
@@ -194,10 +214,10 @@ final class CastRefused extends CastCompatibility {
         title: 'Still working out what this file is',
       );
 
-  /// A film that would be repackaged but has a track a copy cannot carry:
-  /// [sentences] names each, video first.
-  const CastRefused._rendition(CastRefusal reason, String sentences)
-    : this._(reason, sentences);
+  /// A film that would be repackaged but whose picture a copy cannot
+  /// carry: [sentence] names it.
+  const CastRefused._rendition(CastRefusal reason, String sentence)
+    : this._(reason, sentence);
 
   /// Which rule refused, for the tests and for whatever later decides that
   /// a particular refusal is the one Media3 could remux around.
@@ -214,10 +234,11 @@ final class CastRefused extends CastCompatibility {
 }
 
 /// Why a stream was refused. [container], [videoCodec] and [audioCodec] are
-/// about a file the receiver would be handed as it is; [renditionVideo] and
-/// [renditionAudio] about one that would be repackaged but has a track a
-/// copy cannot carry (what a transcode, steps F3 and F4 of the renditions
-/// design, would answer); [proxied] is never castable, [unknownContainer] is
+/// about a file the receiver would be handed as it is; [renditionVideo]
+/// about one that would be repackaged but whose picture a copy cannot carry
+/// (what a transcode, step F4 of the renditions design, would answer); a
+/// rendition's sound is never refused here, since it is converted when it
+/// is not AAC; [proxied] is never castable, [unknownContainer] is
 /// a question rather than an answer, and [containerPending] and
 /// [codecsPending] are not even that yet -- ask again when the server has
 /// opened the file, or mpv has reported what is in it.
@@ -230,7 +251,6 @@ enum CastRefusal {
   videoCodec,
   audioCodec,
   renditionVideo,
-  renditionAudio,
 }
 
 /// The file extensions a receiver plays: the MIME type to declare, how a
@@ -294,9 +314,14 @@ const Map<String, String> _knownContainers = {
 /// and named here rather than rediscovered.
 const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 
-/// The containers a rendition repackages out of. Matroska only: the one
-/// case step F2 of the renditions design builds and proves.
-const Set<String> _repackagedContainers = {'mkv'};
+/// The containers a rendition repackages out of: Matroska, the case step F2
+/// of the renditions design proved, and QuickTime, which libavformat reads
+/// as it reads an MP4 (its sample tables are the index the layout mirrors).
+const Set<String> _repackagedContainers = {'mkv', 'mov'};
+
+/// The containers a receiver takes whose sound it may not: an MP4 with
+/// Dolby Digital or DTS is a rendition with its sound converted.
+const Set<String> _soundConvertedContainers = {'mp4', 'm4v'};
 
 /// The video a rendition copies: what the producer and the server's muxer
 /// carry (`avc1`, `hvc1`), **and what the receiver decodes** -- HEVC is
@@ -314,38 +339,33 @@ const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 /// codec it cannot play from one only the repackaging cannot carry yet.
 const Set<String> _receiverVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 
-/// The sound a rendition copies. Anything else needs converting to stereo
-/// AAC (step F3), which is not built.
+/// The sound a rendition copies. Anything else is converted to stereo AAC
+/// (step F3). AAC with more than two channels is copied too: mpv's report
+/// carries no channel count yet (step F5 adds it).
 const String _repackagedAudio = 'AAC';
 
-/// What a Matroska film played by id is when this device can repackage:
-/// [CastRendition] when mpv reports video and sound a copy carries, a
-/// sentence naming each track it cannot when it does not, and a "not yet"
-/// while mpv has not said -- a copy is only as right as the codecs it
-/// copies, so a release's claim does not count.
+/// What a Matroska or QuickTime film played by id is when this device can
+/// repackage: [CastRendition] when mpv reports video a copy carries -- its
+/// sound copied when AAC, converted otherwise -- a sentence naming the
+/// video when a copy cannot carry it, and a "not yet" while mpv has not
+/// said -- a copy is only as right as the codecs it copies, so a release's
+/// claim does not count.
 CastCompatibility _rendition(String container, PlaybackStats? stats) {
   final video = _canonicalVideo(stats?.videoCodec);
   final audio = _canonicalAudio(stats?.audioCodec);
   if (video == null || audio == null) {
     return CastRefused._codecsPending(_describeContainer(container));
   }
-  final videoOk = _repackagedVideo.contains(video);
-  final audioOk = audio == _repackagedAudio;
-  if (videoOk && audioOk) return const CastRendition();
-  final sentences = [
-    if (!videoOk)
-      _receiverVideo.contains(video)
-          ? "This film's video is $video, which xtremio can't repackage for "
-                'casting yet.'
-          : "This film's video is $video, which this receiver can't play, "
-                "and xtremio can't convert it for casting yet.",
-    if (!audioOk)
-      "This film's sound is $audio, which xtremio can't convert for casting "
-          'yet.',
-  ];
+  if (_repackagedVideo.contains(video)) {
+    return CastRendition(convertsSound: audio != _repackagedAudio);
+  }
   return CastRefused._rendition(
-    videoOk ? CastRefusal.renditionAudio : CastRefusal.renditionVideo,
-    sentences.join(' '),
+    CastRefusal.renditionVideo,
+    _receiverVideo.contains(video)
+        ? "This film's video is $video, which xtremio can't repackage for "
+              'casting yet.'
+        : "This film's video is $video, which this receiver can't play, and "
+              "xtremio can't convert it for casting yet.",
   );
 }
 

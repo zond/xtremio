@@ -191,39 +191,38 @@ void main() {
       );
     });
 
-    test('sound a copy cannot carry is named, and why (the field: E-AC3)', () {
+    test('its sound is copied when it is AAC', () {
       final result = check(
         url: byId,
         filename: 'film.mkv',
-        stats: const PlaybackStats(
-          videoCodec: 'h264 (High)',
-          audioCodec: 'eac3',
-        ),
+        stats: h264Aac,
         canRepackage: true,
       );
-      expect(refusalOf(result), CastRefusal.renditionAudio);
-      expect(
-        (result as CastRefused).explanation,
-        "This film's sound is Dolby Digital Plus (E-AC3), which xtremio "
-        "can't convert for casting yet.",
-      );
-      for (final (codec, name) in [
-        ('ac3', 'Dolby Digital (AC3)'),
-        ('dts', 'DTS'),
-        ('truehd', 'Dolby TrueHD'),
-        ('opus', 'Opus'),
+      expect((result as CastRendition).convertsSound, isFalse);
+    });
+
+    test('any other sound is converted to stereo AAC (the field: E-AC3)', () {
+      // Dolby cast to zond's television plays silent over its Bluetooth
+      // sound, so surround is converted whatever the receiver claims.
+      for (final codec in [
+        'eac3',
+        'ac3',
+        'dts',
+        'truehd',
+        'opus',
+        'flac',
+        'mp3',
+        'pcm_s24le',
+        'vorbis',
       ]) {
         final result = check(
           url: byId,
           filename: 'film.mkv',
           stats: PlaybackStats(videoCodec: 'hevc (Main 10)', audioCodec: codec),
           canRepackage: true,
-        ) as CastRefused;
-        expect(
-          result.explanation,
-          "This film's sound is $name, which xtremio can't convert for "
-          'casting yet.',
         );
+        expect(result, isA<CastRendition>(), reason: codec);
+        expect((result as CastRendition).convertsSound, isTrue, reason: codec);
       }
     });
 
@@ -257,7 +256,7 @@ void main() {
       );
     });
 
-    test('both tracks wrong: both are named, the picture first', () {
+    test('picture a copy cannot carry is named alone: the sound converts', () {
       final result = check(
         url: byId,
         filename: 'film.mkv',
@@ -268,8 +267,61 @@ void main() {
       expect(
         (result as CastRefused).explanation,
         "This film's video is MPEG-4 Part 2, which this receiver can't play, "
-        "and xtremio can't convert it for casting yet. This film's sound is "
-        "DTS, which xtremio can't convert for casting yet.",
+        "and xtremio can't convert it for casting yet.",
+      );
+    });
+
+    test('a QuickTime film is repackaged as a Matroska one is', () {
+      final result = check(
+        url: byId,
+        filename: 'film.mov',
+        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
+        canRepackage: true,
+      );
+      expect((result as CastRendition).convertsSound, isTrue);
+    });
+
+    test('an MP4 whose sound the receiver will not take has it converted', () {
+      // Dolby Digital in an MP4: a Chromecast takes the file, and zond's
+      // plays it silent. The picture is copied, the sound converted.
+      for (final codec in ['ac3', 'eac3', 'dts', 'opus']) {
+        final result = check(
+          url: byId,
+          filename: 'film.mp4',
+          stats: PlaybackStats(videoCodec: 'h264 (High)', audioCodec: codec),
+          canRepackage: true,
+        );
+        expect(result, isA<CastRendition>(), reason: codec);
+        expect((result as CastRendition).convertsSound, isTrue, reason: codec);
+      }
+      // Not by id, or on a device that cannot: refused, as before.
+      expect(
+        refusalOf(
+          check(
+            filename: 'film.mp4',
+            stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
+            canRepackage: true,
+          ),
+        ),
+        CastRefusal.audioCodec,
+      );
+      expect(
+        refusalOf(
+          check(
+            url: byId,
+            filename: 'film.mp4',
+            stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
+          ),
+        ),
+        CastRefusal.audioCodec,
+      );
+      // A release's claim of Dolby is not mpv's word: refused until mpv
+      // says what the picture and the sound are.
+      expect(
+        refusalOf(
+          check(url: byId, filename: 'film.EAC3.mp4', canRepackage: true),
+        ),
+        CastRefusal.audioCodec,
       );
     });
 

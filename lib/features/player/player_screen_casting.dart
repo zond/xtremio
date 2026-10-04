@@ -348,7 +348,13 @@ extension _PlayerCasting on _PlayerScreenState {
       url = direct;
     } else {
       try {
-        url = await _castUrl(local, receiver, rendition: rendition);
+        url = await _castUrl(
+          local,
+          receiver,
+          rendition: rendition,
+          convertSound:
+              compatibility is CastRendition && compatibility.convertsSound,
+        );
       } catch (error) {
         // The server would not publish the stream: an id it let go, a
         // listener that stopped under the switch. The kind, never a token.
@@ -729,7 +735,8 @@ extension _PlayerCasting on _PlayerScreenState {
   /// the same listener and token rules, and the receiver is handed the
   /// token's file, `<lan base>/cast/<token>/stream.mp4`: one fragmented MP4
   /// the server makes as it is read, its first part from this player's
-  /// position, with the audio track it is playing. It has a length and
+  /// position, with the audio track it is playing -- converted to stereo
+  /// AAC when [convertSound]. It has a length and
   /// ranges and an index of its segments, so the receiver seeks in it by
   /// bytes like any file -- its remote's seeks and this screen's `SEEK`s
   /// alike (stream-server `docs/design/renditions.md` §2.8).
@@ -741,6 +748,7 @@ extension _PlayerCasting on _PlayerScreenState {
     Uri local,
     CastDevice device, {
     bool rendition = false,
+    bool convertSound = false,
   }) async {
     final id = mediaIdOf(local);
     if (id == null) return isEmbeddedServerHost(local.host) ? null : local;
@@ -768,6 +776,7 @@ extension _PlayerCasting on _PlayerScreenState {
           duration: _duration,
           start: start,
           audioTrack: _castAudioTrack,
+          convertSound: convertSound,
         ),
       );
       _castToken = token;

@@ -103,16 +103,21 @@ class MediaResolution {
 /// stream the server makes from a film for a receiver that cannot take it
 /// as it is (stream-server `docs/design/renditions.md`).
 ///
-/// The one plan built is a repackage -- the film's own H.264 and AAC
-/// samples, moved into fragmented MP4 -- so the plan is not a field yet:
-/// [toJson] always asks for `copy`/`copy`.
+/// The picture is always copied -- the film's own H.264 or HEVC samples,
+/// moved into fragmented MP4 -- and the sound copied when it is AAC, or
+/// converted to stereo AAC ([convertSound], step F3: Dolby, DTS and the
+/// rest, which zond's television plays silent or not at all).
 final class RenditionSpec {
   const RenditionSpec({
     required this.duration,
     required this.start,
     this.audioTrack = 0,
+    this.convertSound = false,
     this.segment = defaultSegment,
   });
+
+  /// The bitrate converted sound is made at: stereo AAC-LC at 48 kHz.
+  static const int soundBitrate = 192000;
 
   /// The segment length the design settled on (§6): long enough that a
   /// copied video's keyframes rarely leave a segment empty.
@@ -128,6 +133,9 @@ final class RenditionSpec {
   /// tracks -- the order mpv lists them in, which is the file's.
   final int audioTrack;
 
+  /// The sound is converted to stereo AAC rather than copied.
+  final bool convertSound;
+
   final Duration segment;
 
   Map<String, Object> toJson() => {
@@ -135,7 +143,11 @@ final class RenditionSpec {
     'segmentMs': segment.inMilliseconds,
     'startMs': start.inMilliseconds,
     'video': 'copy',
-    'audio': 'copy',
+    'audio': convertSound
+        ? {
+            'aacStereo': {'bitrate': soundBitrate},
+          }
+        : 'copy',
     'audioTrack': audioTrack,
   };
 }
