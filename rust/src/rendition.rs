@@ -1,13 +1,15 @@
-//! **The rendition producer: repackaging, nothing decoded** (stream-server
-//! `docs/design/renditions.md`, step F2).
+//! **The rendition producer: the picture repackaged, the sound copied or
+//! converted** (stream-server `docs/design/renditions.md`, steps F2 and F3).
 //!
 //! The server owns a rendition's route, its stream, cut rule, fMP4 muxer and
 //! ring; what it asks of the embedder is a [`Producer`]: given a reader over
 //! the media id, a plan and a time, hand encoded samples to a
-//! [`SampleSink`]. This is that producer for the one plan F2 builds,
-//! `Copy`/`Copy` -- an H.264 or HEVC film with AAC sound in a container the
-//! receiver will not take, its samples moved into the server's fMP4 as they
-//! are.
+//! [`SampleSink`]. This is that producer for the plans with the picture
+//! copied: `Copy`/`Copy` -- an H.264 or HEVC film with AAC sound in a
+//! container the receiver will not take, its samples moved into the
+//! server's fMP4 as they are -- and `Copy`/`AacStereo`, the same with the
+//! sound decoded, mixed down and encoded as stereo AAC ([`crate::sound`]),
+//! the same bytes whichever run makes them.
 //!
 //! # A run
 //!
@@ -101,6 +103,7 @@ use stream_server::{
 };
 
 use crate::libav::{self, Demuxer, DolbyVision, Kind, Libav, Next, StreamInfo};
+use crate::sound::{self, AacEncoder, SoundConverter};
 use std::collections::{HashMap, VecDeque};
 use stream_server::IndexEntry;
 
@@ -110,8 +113,14 @@ pub const UNAVAILABLE: &str =
      this app can use.";
 /// What a viewer is told for a plan this producer does not build.
 pub const NOT_BUILT: &str =
-    "Converting this film's picture or sound for the television is not built yet; only \
-     repackaging is.";
+    "Converting this film's picture for the television is not built yet; only repackaging \
+     it and converting its sound are.";
+/// What a viewer is told when this device has nothing to encode AAC with.
+pub const NO_AAC_ENCODER: &str =
+    "This device cannot convert the film's sound for the television: it has no AAC encoder \
+     this app can use.";
+/// The sound's conversion failed partway.
+pub const SOUND_FAILED: &str = "Converting this film's sound for the television failed.";
 
 /// The sentence for a film whose picture is `codec` (an `AVCodecID`),
 /// which this producer does not copy.
@@ -127,7 +136,7 @@ pub fn video_refusal(codec: std::ffi::c_int) -> String {
 }
 
 /// The sentence for a film whose sound is `codec` (an `AVCodecID`), which
-/// this producer does not copy.
+/// this producer neither copies nor decodes.
 pub fn audio_refusal(codec: std::ffi::c_int) -> String {
     match libav::codec_name(codec) {
         Some(name) => {
@@ -209,7 +218,7 @@ impl Repackager {
 /// Why `spec` is not one this producer makes, if it is not.
 fn refusal_for(spec: &RenditionSpec) -> Option<&'static str> {
     match (&spec.video, &spec.audio) {
-        (VideoPlan::Copy, AudioPlan::Copy) => None,
+        (VideoPlan::Copy, AudioPlan::Copy | AudioPlan::AacStereo { .. }) => None,
         _ => Some(NOT_BUILT),
     }
 }
@@ -272,6 +281,14 @@ pub trait Packets {
     /// `video`'s sync samples where the source's index puts them, on the
     /// film's clock ([`film_index`]).
     fn index(&mut self, video: &StreamInfo) -> Vec<IndexEntry>;
+    /// What converts `audio` to stereo AAC at `bitrate` for a run from
+    /// `from_us`, or the sentence for why this device cannot.
+    fn sound_converter(
+        &self,
+        audio: &StreamInfo,
+        bitrate: u32,
+        from_us: i64,
+    ) -> Result<SoundConverter, String>;
 }
 
 impl<S: libav::Source> Packets for Demuxer<S> {
@@ -320,6 +337,47 @@ impl<S: libav::Source> Packets for Demuxer<S> {
             HashMap::new()
         };
         film_index(&entries, &blocks, video.time_base, self.start_us())
+    }
+
+    fn sound_converter(
+        &self,
+        audio: &StreamInfo,
+        bitrate: u32,
+        from_us: i64,
+    ) -> Result<SoundConverter, String> {
+        let unavailable = |error: String| {
+            tracing::warn!(%error, "no FFmpeg to convert a rendition's sound with");
+            UNAVAILABLE.to_owned()
+        };
+        let par = self.codec_parameters(audio.index).map_err(unavailable)?;
+        let decoder = libav::SoundDecoder::new(par)
+            .map_err(unavailable)?
+            .ok_or_else(|| audio_refusal(audio.codec))?;
+        let encoder = aac_encoder(self.libav(), bitrate)?;
+        Ok(SoundConverter::new(
+            Box::new(decoder),
+            encoder,
+            audio.time_base,
+            self.start_us(),
+            from_us,
+        ))
+    }
+}
+
+/// **The AAC encoder this device has**: Android's `MediaCodec` on a phone
+/// (whose libmpv has no encoder), FFmpeg's own where the library has it (a
+/// desktop's system FFmpeg); otherwise [`NO_AAC_ENCODER`].
+fn aac_encoder(libav: &'static Libav, bitrate: u32) -> Result<Box<dyn AacEncoder>, String> {
+    #[cfg(target_os = "android")]
+    match crate::mediacodec::NdkAac::open(bitrate) {
+        Ok((codec, delay)) => {
+            return Ok(Box::new(crate::mediacodec::CodecAac::new(codec, delay)));
+        }
+        Err(error) => tracing::warn!(%error, "no MediaCodec AAC encoder"),
+    }
+    match libav::LibavAac::new(libav, bitrate) {
+        Some(encoder) => Ok(Box::new(encoder)),
+        None => Err(NO_AAC_ENCODER.to_owned()),
     }
 }
 
@@ -392,7 +450,7 @@ pub fn repackage<P: Packets, K: Sink>(
     wants_index: bool,
     sink: K,
 ) {
-    let mut chosen = match Chosen::of(packets.streams(), spec.audio_track) {
+    let mut chosen = match Chosen::of(packets.streams(), spec.audio_track, &spec.audio) {
         Ok(chosen) => chosen,
         Err(sentence) => {
             sink.fail(sentence);
@@ -427,6 +485,21 @@ pub fn repackage<P: Packets, K: Sink>(
             }
         }
     }
+    let from_us = i64::try_from(from.as_micros()).unwrap_or(i64::MAX);
+    // The sound to convert, if it is: refused here, before any format, when
+    // this device cannot.
+    let mut converter = match &spec.audio {
+        AudioPlan::Copy => None,
+        AudioPlan::AacStereo { bitrate } => {
+            match packets.sound_converter(&chosen.audio, *bitrate, from_us) {
+                Ok(converter) => Some(converter),
+                Err(sentence) => {
+                    sink.fail(sentence);
+                    return;
+                }
+            }
+        }
+    };
     if sink
         .format(TrackKind::Video, chosen.video_format.clone())
         .is_err()
@@ -436,7 +509,6 @@ pub fn repackage<P: Packets, K: Sink>(
     {
         return;
     }
-    let from_us = i64::try_from(from.as_micros()).unwrap_or(i64::MAX);
     // Every run seeks, so what was read ahead is from before wherever the
     // seek goes.
     pending.clear();
@@ -464,6 +536,22 @@ pub fn repackage<P: Packets, K: Sink>(
         let packet = match next {
             Next::Packet(packet) => packet,
             Next::End => {
+                if let Some(converter) = &mut converter {
+                    match converter.finish() {
+                        Ok(samples) => {
+                            for sample in samples {
+                                if sink.sample(sample).is_err() {
+                                    return;
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "a rendition's sound could not be converted");
+                            sink.fail(SOUND_FAILED.to_owned());
+                            return;
+                        }
+                    }
+                }
                 sink.end();
                 return;
             }
@@ -483,6 +571,23 @@ pub fn repackage<P: Packets, K: Sink>(
         let Some(pts_us) = clock.pts_us(&packet, stream.time_base) else {
             continue;
         };
+        if let (TrackKind::Audio, Some(converter)) = (track, &mut converter) {
+            match converter.push(pts_us - start, packet) {
+                Ok(samples) => {
+                    for sample in samples {
+                        if sink.sample(sample).is_err() {
+                            return;
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "a rendition's sound could not be converted");
+                    sink.fail(SOUND_FAILED.to_owned());
+                    return;
+                }
+            }
+            continue;
+        }
         let (key, data) = match track {
             TrackKind::Video => (packet.key, chosen.config.sample(packet.data)),
             TrackKind::Audio if chosen.adts => (true, strip_adts(packet.data)),
@@ -538,9 +643,14 @@ struct Chosen {
 
 impl Chosen {
     /// The film's video -- the first video stream that is not a cover
-    /// picture -- and the `audio_track`-th audio stream, each the codec a
-    /// copy can carry; or the sentence for why not.
-    fn of(streams: &[StreamInfo], audio_track: u32) -> Result<Self, String> {
+    /// picture -- and the `audio_track`-th audio stream, the video a codec
+    /// a copy can carry and the audio one too unless `audio` converts it;
+    /// or the sentence for why not.
+    fn of(
+        streams: &[StreamInfo],
+        audio_track: u32,
+        audio_plan: &AudioPlan,
+    ) -> Result<Self, String> {
         let video = streams
             .iter()
             .find(|stream| stream.kind == Kind::Video && !stream.attached_picture)
@@ -562,17 +672,32 @@ impl Chosen {
             .filter(|stream| stream.kind == Kind::Audio)
             .nth(audio_track as usize)
             .ok_or("The sound track being played is not in the film any more.")?;
-        if audio.codec != libav::AV_CODEC_ID_AAC {
-            return Err(audio_refusal(audio.codec));
-        }
+        let (audio_format, adts) = match audio_plan {
+            AudioPlan::Copy if audio.codec != libav::AV_CODEC_ID_AAC => {
+                return Err(audio_refusal(audio.codec));
+            }
+            AudioPlan::Copy => (
+                TrackFormat::Aac {
+                    sample_rate: audio.sample_rate,
+                    channels: audio.channels.max(1),
+                    csd0: audio.extradata.clone(),
+                },
+                audio.extradata.is_empty(),
+            ),
+            // What every conversion makes, whatever the encoder.
+            AudioPlan::AacStereo { .. } => (
+                TrackFormat::Aac {
+                    sample_rate: libav::SOUND_RATE,
+                    channels: libav::SOUND_CHANNELS as u32,
+                    csd0: Bytes::from_static(&sound::AUDIO_SPECIFIC_CONFIG),
+                },
+                false,
+            ),
+        };
         Ok(Self {
             video_format: config.format(video.width, video.height),
-            audio_format: TrackFormat::Aac {
-                sample_rate: audio.sample_rate,
-                channels: audio.channels.max(1),
-                csd0: audio.extradata.clone(),
-            },
-            adts: audio.extradata.is_empty(),
+            audio_format,
+            adts,
             video: video.clone(),
             audio: audio.clone(),
             config,
@@ -1023,6 +1148,9 @@ mod tests {
         /// A seek starts the queue again from this, as a seek to the
         /// start does.
         rewinds_to: Option<Vec<Next>>,
+        /// What [`Packets::sound_converter`] makes, and what it was asked.
+        sound: Option<fn() -> SoundConverter>,
+        converted: RefCell<Vec<(usize, u32, i64)>>,
     }
 
     impl Packets for FakePackets {
@@ -1050,6 +1178,20 @@ mod tests {
         fn index(&mut self, video: &StreamInfo) -> Vec<IndexEntry> {
             self.indexed.push(video.index);
             self.index.clone()
+        }
+        fn sound_converter(
+            &self,
+            audio: &StreamInfo,
+            bitrate: u32,
+            from_us: i64,
+        ) -> Result<SoundConverter, String> {
+            self.converted
+                .borrow_mut()
+                .push((audio.index, bitrate, from_us));
+            match &self.sound {
+                Some(make) => Ok(make()),
+                None => Err(audio_refusal(audio.codec)),
+            }
         }
     }
 
@@ -1146,6 +1288,8 @@ mod tests {
             index: Vec::new(),
             indexed: Vec::new(),
             rewinds_to: None,
+            sound: None,
+            converted: RefCell::default(),
         }
     }
 
@@ -1409,7 +1553,14 @@ mod tests {
         assert_eq!(refusal_for(&spec(0)), None);
         let mut convert = spec(0);
         convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
-        assert_eq!(refusal_for(&convert), Some(NOT_BUILT));
+        assert_eq!(refusal_for(&convert), None, "the sound converted");
+        let mut transcode = spec(0);
+        transcode.video = VideoPlan::H264 {
+            width: 1280,
+            height: 720,
+            bitrate: 4_000_000,
+        };
+        assert_eq!(refusal_for(&transcode), Some(NOT_BUILT));
 
         // Each track it will not copy is named, in plain words.
         let refused = |change: &dyn Fn(&mut FakePackets)| -> Vec<Wrote> {
@@ -1460,6 +1611,127 @@ mod tests {
                 "The sound track being played is not in the film any more.".to_owned()
             )]
         );
+    }
+
+    // --- The sound converted ----------------------------------------------------
+
+    /// A decoder that makes 1536 samples of silence per packet, stamped with
+    /// the packet's time.
+    struct SilentDecoder;
+    impl sound::PcmDecoder for SilentDecoder {
+        fn decode(&mut self, packets: &[libav::Packet]) -> Result<Vec<libav::Pcm>, String> {
+            Ok(packets
+                .iter()
+                .map(|packet| libav::Pcm {
+                    pts: packet.pts,
+                    samples: vec![0.0; 1536 * 2],
+                })
+                .collect())
+        }
+    }
+
+    /// An encoder with FFmpeg's priming whose frames are `b"aac"`.
+    struct FixedEncoder;
+    impl AacEncoder for FixedEncoder {
+        fn delay(&self) -> i64 {
+            1024
+        }
+        fn encode(&mut self, pcm: &[f32]) -> Result<Vec<Bytes>, String> {
+            Ok(vec![Bytes::from_static(b"aac"); pcm.len() / 2048 + 1])
+        }
+    }
+
+    fn silent_converter() -> SoundConverter {
+        SoundConverter::new(
+            Box::new(SilentDecoder),
+            Box::new(FixedEncoder),
+            libav::Rational { num: 1, den: 1000 },
+            -23_000,
+            0,
+        )
+    }
+
+    /// **The sound converted, the picture copied**: a Dolby Digital Plus
+    /// track asked to be converted reports the AAC-LC 48 kHz stereo every
+    /// conversion makes -- not the source's -- the converter is asked for
+    /// the chosen track at the plan's bitrate from the run's start, and the
+    /// sink is handed the picture as it is and the converter's frames on
+    /// the 1024-sample grid, never a source packet.
+    #[test]
+    fn a_run_converting_the_sound_hands_over_the_converters_frames() {
+        let mut queue = vec![packet(1, 0, true, SLICE)];
+        // AC3-like packets every 32 ms for 3 s, on stream 4 (the second
+        // audio track, asked for).
+        queue.extend((0..94).map(|n| packet(4, n * 32 - 23, true, b"eac3")));
+        let mut packets = film(queue);
+        packets.streams[4].codec = 86056;
+        packets.streams[4].channels = 6;
+        packets.streams[4].sample_rate = 44_100;
+        packets.sound = Some(silent_converter);
+        let mut convert = spec(1);
+        convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
+        let sink = FakeSink::new(None);
+        repackage(&mut packets, &convert, Duration::ZERO, false, sink.clone());
+        assert_eq!(*packets.converted.borrow(), vec![(4, 192_000, 0)]);
+        let wrote = sink.wrote.borrow();
+        assert_eq!(
+            wrote[1],
+            Wrote::Format(
+                TrackKind::Audio,
+                TrackFormat::Aac {
+                    sample_rate: 48_000,
+                    channels: 2,
+                    csd0: Bytes::from_static(&[0x11, 0x90]),
+                }
+            )
+        );
+        assert!(matches!(
+            wrote[2],
+            Wrote::Sample(TrackKind::Video, 23_000, true, _)
+        ));
+        let audio: Vec<(i64, Vec<u8>)> = wrote
+            .iter()
+            .filter_map(|wrote| match wrote {
+                Wrote::Sample(TrackKind::Audio, pts, true, data) => Some((*pts, data.clone())),
+                Wrote::Sample(TrackKind::Audio, ..) => panic!("a frame not a sync sample"),
+                _ => None,
+            })
+            .collect();
+        assert!(audio.len() > 100, "{} frames", audio.len());
+        for (n, (pts, data)) in audio.iter().enumerate() {
+            assert_eq!(*pts, sound::frame_us(n as i64));
+            assert_eq!(data, b"aac");
+        }
+        assert_eq!(wrote.last(), Some(&Wrote::End));
+    }
+
+    /// A track this device cannot convert is refused before any format,
+    /// with the converter's sentence; a track copied is never handed to a
+    /// converter.
+    #[test]
+    fn a_track_that_cannot_be_converted_is_refused_before_anything() {
+        let mut packets = film(vec![packet(1, 0, true, SLICE)]);
+        packets.streams[3].codec = 86060;
+        let mut convert = spec(0);
+        convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
+        let sink = FakeSink::new(None);
+        repackage(&mut packets, &convert, Duration::ZERO, false, sink.clone());
+        assert_eq!(
+            *sink.wrote.borrow(),
+            vec![Wrote::Fail(
+                "This film's sound is Dolby TrueHD, which xtremio can't convert for casting yet."
+                    .to_owned()
+            )]
+        );
+        let mut copied = film(vec![packet(1, 0, true, SLICE)]);
+        repackage(
+            &mut copied,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            FakeSink::new(None),
+        );
+        assert!(copied.converted.borrow().is_empty());
     }
 
     // --- HEVC ---------------------------------------------------------------------
