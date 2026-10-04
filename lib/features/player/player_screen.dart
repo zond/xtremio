@@ -885,6 +885,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// the server's phase, while it is; null otherwise. Local playback goes
   /// on meanwhile, and the card over it has a Cancel.
   CastDevice? _castPreparingFor;
+
+  /// The start the rendition on the receiver was published and prepared
+  /// for: what the receiver is told to start at.
+  Duration? _castRenditionStart;
   String _castPreparingPhase = 'index';
 
   /// The wait between two readiness asks, and the completer that ends it

@@ -283,6 +283,13 @@ extension _PlayerCasting on _PlayerScreenState {
       return null;
     }
     final Uri? url;
+    // A rendition is made for one start, the one it is published with: the
+    // preparation below asks the server for what a receiver told to start
+    // there asks first, and the receiver is told exactly that. So local
+    // playback stops here, at that position, rather than drift past it
+    // while the preparation runs.
+    final resumeAfter = rendition && _playing;
+    if (rendition) await _engine?.pause();
     try {
       url = await _castUrl(local, receiver, rendition: rendition);
     } catch (error) {
@@ -321,12 +328,15 @@ extension _PlayerCasting on _PlayerScreenState {
       return null;
     }
     // A rendition is made ready before the receiver hears of it: its first
-    // answer waits for the film's index and its first slot, and a receiver
-    // left on a silent load gives up. Local playback goes on meanwhile.
+    // answer waits for the film's index and its first slots, and a receiver
+    // left on a silent load gives up.
     if (rendition) {
       final ready = await _prepareRendition(device, abandoned);
       if (abandoned()) {
         await _teardownCast();
+        // A Cancel leaves the film here, playing as it was; a leave does
+        // not touch the engine at all.
+        if (_stillOurs && resumeAfter) await _engine?.play();
         return null;
       }
       if (ready != null) {
@@ -335,14 +345,16 @@ extension _PlayerCasting on _PlayerScreenState {
           'a rendition could not be prepared for a receiver: ${ready.phase}',
         );
         await _teardownCast();
+        if (_stillOurs && resumeAfter) await _engine?.play();
         return ready.sentence ??
             'This device could not hand the stream to ${device.name}.';
       }
     }
-    // Taken here, at the load: for a rendition, after the preparation the
-    // phone went on playing through, so the television takes over where
-    // the phone is now.
-    final position = _position.value;
+    // The start the receiver is told: a rendition's is the one it was
+    // published and prepared for.
+    final position = rendition
+        ? (_castRenditionStart ?? _position.value)
+        : _position.value;
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
     await _engine?.pause();
@@ -430,11 +442,13 @@ extension _PlayerCasting on _PlayerScreenState {
   /// measured. So the server is asked to make them first
   /// ([MediaIds.prepareRendition]) and asked how far it has got every
   /// [PlayerScreen.castPreparePoll], with the phase on the card over the
-  /// video. **Local playback goes on**: nicer than a frozen phone, and the
-  /// hand-over position is taken at the load, where the phone is then
-  /// (what its own player just read is on the disk for the receiver's
-  /// first slot). No give-up timer: a stalled source is waited for, and
-  /// the viewer is the one who cancels.
+  /// video. **Local playback is paused meanwhile, at the start the
+  /// rendition is published with**: the server makes what a receiver told
+  /// to start there asks first (the header, slot 0, the slot for the
+  /// start), and the receiver is told exactly that start -- a phone that
+  /// played on would hand over a position nothing was made for. A Cancel or
+  /// a refusal resumes it. No give-up timer: a stalled source is waited
+  /// for, and the viewer is the one who cancels.
   Future<RenditionReadiness?> _prepareRendition(
     CastDevice device,
     bool Function() abandoned,
@@ -620,11 +634,13 @@ extension _PlayerCasting on _PlayerScreenState {
     // is handed out, so one stream is published once.
     await _unpublishCast();
     if (rendition) {
+      final start = _position.value;
+      _castRenditionStart = start;
       final token = await ids.publishRendition(
         id,
         RenditionSpec(
           duration: _duration,
-          start: _position.value,
+          start: start,
           audioTrack: _castAudioTrack,
         ),
       );

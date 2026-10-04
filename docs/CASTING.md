@@ -129,10 +129,13 @@ video -- "Preparing for <receiver>…", then "Reading the film's index…" or
 "Fetching the start…", and the torrent's download speed when there is one
 -- with a **Cancel** that unpublishes, ends the session and leaves the film
 here. A `failed` readiness is shown as a refusal with the server's
-sentence. **Local playback goes on while it prepares**, and the hand-over
-position is taken at the load, where the phone is then (what its own player
-just read is on the disk for the receiver's first slot). No timer gives up:
-the viewer is the one who cancels. A direct (as-is) cast is loaded at once,
+sentence. The server makes only what is asked for -- the receiver is given
+what it requests, as the phone's own player is -- so the preparation is a
+simulated receiver: the header, slot 0 (Chrome's demuxer reads it before it
+seeks) and the slot for the start. **Local playback pauses at publish**,
+at the start the rendition is made for, and the receiver is told exactly
+that start; Cancel or a refusal resumes it. No timer gives up: the viewer
+is the one who cancels. A direct (as-is) cast is loaded at once,
 as before.
 
 **The torrent stays up for as long as anything uses it, because the app

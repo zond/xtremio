@@ -282,8 +282,8 @@ void main() {
       }
 
       testWidgets(
-        'is loaded on the receiver only once its start is ready, the phone '
-        'playing on meanwhile',
+        'is loaded on the receiver only once its start is ready, at the '
+        'start it was prepared for',
         (tester) async {
           useWideViewport(tester);
           final cast = FakeCastClient(devices: const [livingRoom]);
@@ -305,8 +305,8 @@ void main() {
           expect(find.byType(CastRemotePanel), findsNothing);
           expect(
             harness.engine.pauseCalls,
-            pausesBefore,
-            reason: 'still playing here',
+            greaterThan(pausesBefore),
+            reason: 'paused here at the start the rendition is made for',
           );
 
           harness.mediaIds.readiness = const RenditionReadiness('start');
@@ -314,7 +314,8 @@ void main() {
           expect(find.text('Fetching the start…'), findsOneWidget);
           expect(cast.loads, isEmpty);
 
-          // The phone played on; the television takes over where it is now.
+          // A late position report changes nothing: the television is told
+          // the start the rendition was prepared for.
           harness.engine.emitPosition(const Duration(minutes: 13));
           harness.mediaIds.readiness = RenditionReadiness.ready;
           await nextPoll(tester);
@@ -322,10 +323,13 @@ void main() {
           expect(cast.loads, hasLength(1));
           final (media, start) = cast.loads.single;
           expect(media.url, lanBase.resolve('cast/t1/stream.mp4'));
-          expect(start, const Duration(minutes: 13));
+          expect(start, const Duration(minutes: 12));
+          expect(
+            harness.mediaIds.renditions.single.spec.start,
+            const Duration(minutes: 12),
+          );
           expect(find.byType(CastPreparingPanel), findsNothing);
           expect(find.byType(CastRemotePanel), findsOneWidget);
-          expect(harness.engine.pauseCalls, greaterThan(pausesBefore));
         },
       );
 
@@ -339,10 +343,11 @@ void main() {
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
         harness.engine.emitPosition(const Duration(minutes: 12));
+        harness.engine.emitPlaying(true);
         await pumpEvents(tester);
-        final pausesBefore = harness.engine.pauseCalls;
         await castWhilePreparing(tester, harness);
         expect(find.byType(CastPreparingPanel), findsOneWidget);
+        final playsBefore = harness.engine.playCalls;
 
         await tester.tap(find.byKey(const ValueKey('cast-prepare-cancel')));
         await tester.pumpAndSettle();
@@ -353,9 +358,9 @@ void main() {
         expect(find.byType(CastPreparingPanel), findsNothing);
         expect(find.byType(CastRefusedDialog), findsNothing);
         expect(
-          harness.engine.pauseCalls,
-          pausesBefore,
-          reason: 'the film never left',
+          harness.engine.playCalls,
+          greaterThan(playsBefore),
+          reason: 'the film plays on here, as it was',
         );
         // Nothing polls after the cancel.
         final asks = harness.mediaIds.readinessAsks;
@@ -376,7 +381,9 @@ void main() {
         );
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
+        harness.engine.emitPlaying(true);
         await pumpEvents(tester);
+        final playsBefore = harness.engine.playCalls;
         await castWhilePreparing(tester, harness);
         await nextPoll(tester);
         await tester.pumpAndSettle();
@@ -389,6 +396,7 @@ void main() {
         expect(cast.loads, isEmpty);
         expect(harness.mediaIds.unpublished, ['t1']);
         expect(find.byType(CastPreparingPanel), findsNothing);
+        expect(harness.engine.playCalls, greaterThan(playsBefore));
       });
 
       testWidgets('is sought on the receiver, which seeks in it by bytes', (
