@@ -7,6 +7,9 @@ decisions behind it. How the app works is in
 
 ## Prerequisites
 
+`nix develop .#android` provides all of these but rustup's targets
+([OPERATIONS.md](OPERATIONS.md#with-nix)).
+
 - **Android SDK**: platform 36, build-tools 36.0.0, NDK 28.2.13676358 (the
   versions Flutter 3.47 pins; `android/app/build.gradle.kts` takes them from
   the Flutter Gradle plugin, `minSdk` 24).
