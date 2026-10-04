@@ -69,6 +69,23 @@ extension _PlayerCasting on _PlayerScreenState {
     final status = _casting ? _trustedCastStatus(reported) : reported;
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
+    // A direct cast is on trial until the receiver plays: a refusal before
+    // then is the link's (bound to this device's address, expired, a 403),
+    // and the cast is relayed instead. After it, an error is the film's,
+    // and handled as any cast's.
+    if (_castDirectRetry != null) {
+      if (status.state == CastPlayerState.playing ||
+          status.state == CastPlayerState.paused) {
+        _castDirectRetry = null;
+      } else if (status.failed) {
+        unawaited(
+          _fallBackFromDirect('the receiver reported an error')
+              .then((refusal) async {
+                if (refusal != null) await _explainCast(refusal);
+              }),
+        );
+      }
+    }
     final duration = status.duration;
     // Once per length, not per status: a receiver repeats its status every
     // second or so, and a length does not go stale.
@@ -148,7 +165,9 @@ extension _PlayerCasting on _PlayerScreenState {
       StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
 
   /// **What a receiver is sent and what the cast is judged by.** A stream
-  /// played by id is cast by id ([_castUrl] publishes it), so this is the
+  /// played by id is cast by id ([_castUrl] publishes it) -- or, for a link
+  /// the receiver can fetch itself, as that link ([_directCastUrl]), with
+  /// the id kept to fall back on -- so this is the
   /// `xtremio://<id>` the engine reads; a stream read over HTTP is the URL
   /// as the core published it ([_opened]).
   Uri? get _castSource => _playingMediaId != null ? _engineUrl : _opened;
@@ -256,7 +275,6 @@ extension _PlayerCasting on _PlayerScreenState {
     PlayerState? state,
     CastCompatibility compatibility,
   ) async {
-    final rendition = compatibility is CastRendition;
     // Stop stays on the bar while a second receiver is being picked, and
     // pressing it ends the cast, so every step below that finds a Stop has
     // happened unwinds like a leave. The unwinding also settles the
@@ -282,6 +300,39 @@ extension _PlayerCasting on _PlayerScreenState {
       await _teardownCast();
       return null;
     }
+    return _deliverToReceiver(
+      cast,
+      device,
+      receiver,
+      local,
+      state,
+      compatibility,
+      abandoned,
+    );
+  }
+
+  /// [_handToReceiver] once the session with [receiver] is up: works out
+  /// the URL the receiver is to fetch and hands it over, answering why not
+  /// when it could not. Also what a direct cast the receiver refused is
+  /// handed again through ([_fallBackFromDirect]), at [start].
+  ///
+  /// **A plain link the receiver can play as it is goes straight to it**
+  /// ([directCastUrl]): the receiver is handed the link itself, and this
+  /// device serves nothing -- no LAN listener, no publication, so no fetch
+  /// watchdog either. Everything else is relayed: published on the LAN
+  /// listener ([_castUrl]).
+  Future<String?> _deliverToReceiver(
+    CastClient cast,
+    CastDevice device,
+    CastDevice receiver,
+    Uri local,
+    PlayerState? state,
+    CastCompatibility compatibility,
+    bool Function() abandoned, {
+    Duration? start,
+  }) async {
+    final rendition = compatibility is CastRendition;
+    final direct = _directCastUrl(compatibility);
     final Uri? url;
     // A rendition is made for one start, the one it is published with: the
     // preparation below asks the server for what a receiver told to start
@@ -290,20 +341,27 @@ extension _PlayerCasting on _PlayerScreenState {
     // while the preparation runs.
     final resumeAfter = rendition && _playing;
     if (rendition) await _engine?.pause();
-    try {
-      url = await _castUrl(local, receiver, rendition: rendition);
-    } catch (error) {
-      // The server would not publish the stream: an id it let go, a
-      // listener that stopped under the switch. The kind, never a token.
-      DiagnosticsLog.warn(
-        'player',
-        'the stream could not be published for a receiver: '
-            '${error is MediaRefusal ? error.kind : error.runtimeType}',
-      );
+    if (direct != null) {
+      // Nothing to serve from here. A relayed session this one replaces (a
+      // switch of receivers) takes its listener and token with it.
       await _endLanMedia();
-      await cast.disconnect();
-      await _stopCast(disconnect: false);
-      return 'This device could not hand the stream to ${device.name}.';
+      url = direct;
+    } else {
+      try {
+        url = await _castUrl(local, receiver, rendition: rendition);
+      } catch (error) {
+        // The server would not publish the stream: an id it let go, a
+        // listener that stopped under the switch. The kind, never a token.
+        DiagnosticsLog.warn(
+          'player',
+          'the stream could not be published for a receiver: '
+              '${error is MediaRefusal ? error.kind : error.runtimeType}',
+        );
+        await _endLanMedia();
+        await cast.disconnect();
+        await _stopCast(disconnect: false);
+        return 'This device could not hand the stream to ${device.name}.';
+      }
     }
     if (url == null) {
       DiagnosticsLog.warn(
@@ -354,7 +412,7 @@ extension _PlayerCasting on _PlayerScreenState {
     // published and prepared for.
     final position = rendition
         ? (_castRenditionStart ?? _position.value)
-        : _position.value;
+        : (start ?? _position.value);
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
     await _engine?.pause();
@@ -372,6 +430,15 @@ extension _PlayerCasting on _PlayerScreenState {
       _castEnded = false;
       _castHandedAt = position;
       _castReported = false;
+      _castDirect = direct != null;
+      _castDirectRetry = direct == null
+          ? null
+          : (
+              device: device,
+              receiver: receiver,
+              local: local,
+              compatibility: compatibility,
+            );
       _castStatus = CastStatus(
         state: CastPlayerState.buffering,
         position: position,
@@ -380,11 +447,16 @@ extension _PlayerCasting on _PlayerScreenState {
     });
     // What we handed the receiver, and which address it was picked for. Not
     // the receiver's name, which is as often a person's as a room's, and
-    // never a published token's URL, which is a way into this device.
+    // never a published token's URL, which is a way into this device -- nor
+    // an addon's or a debrid link, which carries its key.
+    final handed = direct != null
+        ? 'the stream straight from its source'
+        : _castToken != null
+        ? 'a published stream from ${url.host}:${url.port}'
+        : DiagnosticsLog.url(url);
     DiagnosticsLog.info(
       'player',
-      'casting ${_castToken != null ? 'a published stream from ${url.host}:${url.port}' : DiagnosticsLog.url(url)} '
-          'to a receiver at '
+      'casting $handed to a receiver at '
           '${receiver.address ?? 'an address it did not report'}',
     );
     try {
@@ -415,6 +487,9 @@ extension _PlayerCasting on _PlayerScreenState {
         await _teardownCast();
         return null;
       }
+      if (_castDirectRetry != null) {
+        return _fallBackFromDirect('the platform refused the load');
+      }
       await _stopCast();
       return '${device.name} did not accept the stream.';
     }
@@ -428,6 +503,56 @@ extension _PlayerCasting on _PlayerScreenState {
     }
     _watchCastFetch();
     return null;
+  }
+
+  /// The link to hand a receiver itself, for a stream it can play as it is
+  /// ([directCastUrl]), or null to relay it. Only for a link the server has
+  /// resolved ([_mediaResolution]), so played by id and with the id to fall
+  /// back on; never for the stream a receiver already refused to fetch
+  /// ([_castDirectRefused]).
+  Uri? _directCastUrl(CastCompatibility compatibility) {
+    final opened = _opened;
+    if (opened == null || opened == _castDirectRefused) return null;
+    return directCastUrl(
+      opened: opened,
+      stream: _state?.selectedStream ?? StreamInfo(widget.stream),
+      resolution: _mediaResolution,
+      compatibility: compatibility,
+    );
+  }
+
+  /// **The receiver refused the link it was handed directly** before it
+  /// played any of it, so the same cast is handed again through this
+  /// device -- published on the LAN listener -- at the position it was
+  /// handed, on the session it already has. Once: the stream is relayed
+  /// from now on ([_castDirectRefused]), so a refusal of the relay is
+  /// handled as any cast's. [why] goes to the log; the link never does.
+  ///
+  /// Not a timer: a receiver that is slow to start a link is waited for,
+  /// as any cast is. Only its refusal hands the stream back.
+  Future<String?> _fallBackFromDirect(String why) async {
+    final retry = _castDirectRetry;
+    final cast = _cast;
+    if (retry == null || cast == null) return null;
+    _castDirectRetry = null;
+    _castDirectRefused = _opened;
+    DiagnosticsLog.warn(
+      'player',
+      'the receiver could not load the stream from its source ($why); '
+          'relaying it through this device instead',
+    );
+    final stops = _castStops;
+    bool abandoned() => !_stillOurs || _castStops != stops;
+    return _deliverToReceiver(
+      cast,
+      retry.device,
+      retry.receiver,
+      retry.local,
+      _state,
+      retry.compatibility,
+      abandoned,
+      start: _castHandedAt,
+    );
   }
 
   /// **Makes the published rendition's start before the receiver is told
@@ -587,7 +712,8 @@ extension _PlayerCasting on _PlayerScreenState {
   }
 
   /// The URL to give [device] for the stream this player has open, or null
-  /// when there is none it could fetch.
+  /// when there is none it could fetch. Not asked for a link the receiver
+  /// fetches from its source ([_deliverToReceiver]).
   ///
   /// **A stream played by id is published** ([MediaIds.publish]): the LAN
   /// media listener goes up, and the receiver is handed

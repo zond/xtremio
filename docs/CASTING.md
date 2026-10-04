@@ -225,8 +225,9 @@ never derived from the id, served with the play the screen's own player had
 and nothing else -- no control route, no `/proxy`, no torrent or archive
 route -- so nothing on the network can make this device fetch, add or open
 anything; `rust/tests/lan_media.rs` pins that contract. Every kind casts
-this way: a torrent, a link through the server's cache, a Drive file, a
-download, a file on this device, the film inside an archive. **The token is
+this way: a torrent, a link through the server's cache (one the receiver
+can fetch itself goes to it directly, below), a Drive file, a download, a
+file on this device, the film inside an archive. **The token is
 withdrawn** (`media_unpublish`, which also cuts a body being served) when
 the session ends from any side, when another receiver is picked (which is
 handed a token of its own), when a start fails, when the screen moves to
@@ -234,6 +235,37 @@ another stream and when the player is left; stopping the listener withdraws
 every token besides. A token is never logged. A link the server reads only
 forward is handed over as it is when it is on another internet host, and
 no listener is started for it.
+
+**A plain link the receiver can play as it is goes to it as it is**
+(`directCastUrl`, `lib/features/cast/direct_cast.dart`): relaying it would
+send every byte across the Wi-Fi twice and keep the phone awake for the
+length of the film, and nothing is shared for a link either way. The
+receiver is handed the link itself when all of these hold: an addon's
+`url` stream (no torrent, archive, Drive file, file on this device or
+server route), `http` or `https` with no credentials in it, on a public
+host (not loopback, private, link-local, CGNAT, `.local`, `.lan` or a
+single-label name), with no `behaviorHints.proxyHeaders` and not
+`notWebReady`, resolved by the server to a file it reads in process and
+not to the member of an archive, and `CastReady` -- a film that needs a
+rendition is repackaged here, so it is relayed. No listener is started,
+nothing is published, the watchdog has nothing to count, seeks are the
+receiver's, and Stop brings the film back at the receiver's position as
+for any cast. The remote says *Playing directly from the source* under the
+receiver's name, so a report about a cast says which kind it was. The log
+says "casting the stream straight from its source" and never the link or
+its host.
+
+**A receiver that refuses the link is handed the relay instead, once.**
+A debrid link bound to the phone's address, an expired one, a 403: the
+receiver reports idle with `ERROR` (`CastStatus.failed`) before it has
+played or paused, or the platform refuses the load. The player then
+publishes the same id on the LAN listener and loads that on the same
+session at the position it handed over (`_fallBackFromDirect`), logging why
+and not the link. The stream is relayed from then on, to any receiver,
+until the screen moves to another stream; a refusal of the relay is
+handled as any cast's. An error after the receiver has played is the
+film's and changes nothing. This is a refusal handler, not a timer: a
+receiver slow to start a link is waited for like any other.
 
 **Which address of this device** depends on where the receiver is, and
 Android is asked: `MainActivity.castDeviceAddress` reads the receiver's

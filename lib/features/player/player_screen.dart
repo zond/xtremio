@@ -12,6 +12,7 @@ import '../../widgets/remote_press.dart';
 import '../cast/cast_client.dart';
 import '../cast/cast_compatibility.dart';
 import '../cast/cast_widgets.dart';
+import '../cast/direct_cast.dart';
 import '../details/stream_facts.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
@@ -929,6 +930,31 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool _castReported = false;
 
   bool get _casting => _castingTo != null;
+
+  /// **The receiver fetches the stream from its source itself**
+  /// ([directCastUrl]): it was handed the link, not a token on the LAN
+  /// listener. Nothing is served from this device for it -- no listener,
+  /// no publication, no fetch watchdog -- and the remote says so.
+  bool _castDirect = false;
+
+  /// What a direct cast falls back on if the receiver refuses the link
+  /// before it has played any of it ([_PlayerCasting._fallBackFromDirect]):
+  /// the session it was handed in, to be handed again through the LAN
+  /// listener. Null once the receiver has played (a later error is the
+  /// film's, not the link's), after the fallback, and for a relayed cast.
+  ({
+    CastDevice device,
+    CastDevice receiver,
+    Uri local,
+    CastCompatibility compatibility,
+  })?
+  _castDirectRetry;
+
+  /// The stream ([_opened]) a receiver refused to fetch from its source:
+  /// it is relayed from then on, to that receiver and any other, since a
+  /// link bound to this device's address is refused by all of them alike.
+  /// Another stream is asked about afresh.
+  Uri? _castDirectRefused;
 
   /// How many [_startCast]s are between asking for a session and handing the
   /// receiver the media; see [_onCastSession].
@@ -2383,6 +2409,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                         title: state?.title ?? '',
                         status: _castStatus,
                         note: _castNote,
+                        direct: _castDirect,
                         onPlayPause: _togglePlay,
                         onSeek: _seekTo,
                         onStop: () => unawaited(_stopCast()),

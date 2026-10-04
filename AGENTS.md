@@ -132,7 +132,8 @@ bug report or the text of a logged exception (log the exception's *type*):
   before it becomes a message.
 
 Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
-`test/core/actions_test.dart`, `test/features/player/player_cast_test.dart`.
+`test/core/actions_test.dart`, `test/features/player/player_cast_test.dart`,
+`test/features/player/player_direct_cast_test.dart`.
 
 ## The app never speaks HTTP to the embedded server
 

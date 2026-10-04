@@ -87,12 +87,22 @@ class CastRemotePanel extends StatelessWidget {
     required this.onSeek,
     required this.onStop,
     this.note,
+    this.direct = false,
     this.playPauseFocusNode,
   });
+
+  /// What the remote says under the receiver's name while it fetches the
+  /// stream from its source and nothing comes from this device.
+  static const String directLine = 'Playing directly from the source';
 
   final String deviceName;
   final String title;
   final CastStatus status;
+
+  /// The receiver fetches the stream from its source itself ([directLine]),
+  /// not from this device: what tells a later report about a cast which of
+  /// the two it was.
+  final bool direct;
 
   /// A sentence about the session that is not the receiver's to say: the
   /// receiver reached this device and has not been sent the film yet.
@@ -126,6 +136,15 @@ class CastRemotePanel extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: textTheme.titleMedium?.copyWith(color: Colors.white70),
               ),
+              if (direct) ...[
+                const SizedBox(height: 4),
+                Text(
+                  directLine,
+                  key: const ValueKey('cast-direct'),
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodySmall?.copyWith(color: Colors.white54),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 title,
