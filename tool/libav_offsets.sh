@@ -36,6 +36,7 @@ cat > "$WORK/offsets.c" <<'EOF'
 #include "libavformat/avio.h"
 #include "libavcodec/packet.h"
 #include "libavcodec/codec_par.h"
+#include "libavutil/frame.h"
 #define O(T, f) const unsigned long off_##T##__##f = offsetof(T, f);
 O(AVFormatContext, pb) O(AVFormatContext, nb_streams) O(AVFormatContext, streams)
 O(AVFormatContext, start_time) O(AVFormatContext, duration)
@@ -46,12 +47,16 @@ O(AVCodecParameters, codec_type) O(AVCodecParameters, codec_id)
 O(AVCodecParameters, extradata) O(AVCodecParameters, extradata_size)
 O(AVCodecParameters, width) O(AVCodecParameters, height)
 O(AVCodecParameters, sample_rate) O(AVCodecParameters, ch_layout)
-O(AVChannelLayout, nb_channels)
+O(AVChannelLayout, nb_channels) O(AVChannelLayout, u) O(AVChannelLayout, opaque)
+O(AVCodecParameters, format) O(AVCodecParameters, bit_rate)
+O(AVFrame, extended_data) O(AVFrame, nb_samples) O(AVFrame, format) O(AVFrame, pts)
+O(AVFrame, sample_rate) O(AVFrame, ch_layout)
 O(AVPacket, pts) O(AVPacket, dts) O(AVPacket, data) O(AVPacket, size)
 O(AVPacket, stream_index) O(AVPacket, flags) O(AVPacket, duration)
 O(AVIOContext, buffer)
 const unsigned long off_size_AVPacket = sizeof(AVPacket),
-    off_size_AVPacketSideData = sizeof(AVPacketSideData);
+    off_size_AVPacketSideData = sizeof(AVPacketSideData),
+    off_size_AVChannelLayout = sizeof(AVChannelLayout);
 const unsigned long id_h264 = AV_CODEC_ID_H264, id_hevc = AV_CODEC_ID_HEVC,
     id_aac = AV_CODEC_ID_AAC, id_av1 = AV_CODEC_ID_AV1, id_vp9 = AV_CODEC_ID_VP9,
     id_vp8 = AV_CODEC_ID_VP8, id_mpeg4 = AV_CODEC_ID_MPEG4,

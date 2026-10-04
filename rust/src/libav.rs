@@ -198,14 +198,28 @@ struct AVPacketSideData {
 /// stream's descriptor).
 const AV_PKT_DATA_DOVI_CONF: c_int = 29;
 
-/// `AVChannelLayout`, n6.0, up to its union, whose `uint64_t` is what
-/// aligns the struct -- and so where `ch_layout` sits -- to eight bytes.
+/// `AVChannelLayout`, n6.0, whole: its union's `uint64_t` (the mask, for
+/// the native order) is what aligns the struct -- and so where `ch_layout`
+/// sits -- to eight bytes. Whole, because the sound's conversion hands one
+/// to FFmpeg by pointer ([`STEREO`]).
 #[repr(C)]
-struct AVChannelLayout {
+#[derive(Clone, Copy)]
+pub struct AVChannelLayout {
     order: c_int,
     nb_channels: c_int,
     mask: u64,
+    opaque: *mut c_void,
 }
+
+/// `AV_CHANNEL_ORDER_NATIVE`: positions as a mask.
+const AV_CHANNEL_ORDER_NATIVE: c_int = 1;
+/// `AV_CH_LAYOUT_STEREO`'s layout: front left and right.
+const STEREO: AVChannelLayout = AVChannelLayout {
+    order: AV_CHANNEL_ORDER_NATIVE,
+    nb_channels: 2,
+    mask: 0x3,
+    opaque: std::ptr::null_mut(),
+};
 
 /// `AVCodecParameters`, n6.0 (with `FF_API_OLD_CHANNEL_LAYOUT`, which 6.x
 /// keeps), up to the start of `ch_layout`.
@@ -260,6 +274,64 @@ struct AVPacket {
     opaque: *mut c_void,
     opaque_ref: *mut c_void,
     time_base: Rational,
+}
+
+/// `AVFrame`, n6.0, up to `ch_layout`: the sound the decoder hands out and
+/// the encoder takes. Every field through the deprecated ones 6.x keeps
+/// (`coded_picture_number`, `reordered_opaque`, `channel_layout`,
+/// `pkt_duration`, `channels`), since they come before `ch_layout`.
+#[repr(C)]
+struct AVFrame {
+    data: [*mut u8; 8],
+    linesize: [c_int; 8],
+    extended_data: *mut *mut u8,
+    width: c_int,
+    height: c_int,
+    nb_samples: c_int,
+    format: c_int,
+    key_frame: c_int,
+    pict_type: c_int,
+    sample_aspect_ratio: Rational,
+    pts: i64,
+    pkt_dts: i64,
+    time_base: Rational,
+    coded_picture_number: c_int,
+    display_picture_number: c_int,
+    quality: c_int,
+    opaque: *mut c_void,
+    repeat_pict: c_int,
+    interlaced_frame: c_int,
+    top_field_first: c_int,
+    palette_has_changed: c_int,
+    reordered_opaque: i64,
+    sample_rate: c_int,
+    channel_layout: u64,
+    buf: [*mut c_void; 8],
+    extended_buf: *mut *mut c_void,
+    nb_extended_buf: c_int,
+    side_data: *mut *mut c_void,
+    nb_side_data: c_int,
+    flags: c_int,
+    color_range: c_int,
+    color_primaries: c_int,
+    color_trc: c_int,
+    colorspace: c_int,
+    chroma_location: c_int,
+    best_effort_timestamp: i64,
+    pkt_pos: i64,
+    pkt_duration: i64,
+    metadata: *mut c_void,
+    decode_error_flags: c_int,
+    channels: c_int,
+    pkt_size: c_int,
+    hw_frames_ctx: *mut c_void,
+    opaque_ref: *mut c_void,
+    crop_top: usize,
+    crop_bottom: usize,
+    crop_left: usize,
+    crop_right: usize,
+    private_ref: *mut c_void,
+    ch_layout: AVChannelLayout,
 }
 
 /// `AVIOContext`, up to `buffer`, which the context may have reallocated
@@ -321,7 +393,18 @@ mod layout {
     at!(AVCodecParameters.height, 60, 52);
     at!(AVCodecParameters.sample_rate, 116, 108);
     at!(AVCodecParameters.ch_layout, 144, 136);
+    at!(AVCodecParameters.format, 28, 20);
+    at!(AVCodecParameters.bit_rate, 32, 24);
     at!(AVChannelLayout.nb_channels, 4, 4);
+    at!(AVChannelLayout.mask, 8, 8);
+    at!(AVChannelLayout.opaque, 16, 16);
+    const _: () = assert!(std::mem::size_of::<AVChannelLayout>() == 24);
+    at!(AVFrame.extended_data, 96, 64);
+    at!(AVFrame.nb_samples, 112, 76);
+    at!(AVFrame.format, 116, 80);
+    at!(AVFrame.pts, 136, 104);
+    at!(AVFrame.sample_rate, 208, 168);
+    at!(AVFrame.ch_layout, 448, 328);
     at!(AVPacket.pts, 8, 8);
     at!(AVPacket.dts, 16, 16);
     at!(AVPacket.data, 24, 24);
@@ -378,7 +461,52 @@ pub struct Libav {
     av_packet_unref: unsafe extern "C" fn(*mut AVPacket),
     av_malloc: unsafe extern "C" fn(usize) -> *mut c_void,
     av_free: unsafe extern "C" fn(*mut c_void),
+    /// What converting sound needs (libavcodec's codecs, libswresample),
+    /// looked up apart: a libmpv without them still repackages.
+    codecs: Result<Codecs, String>,
     _library: libloading::Library,
+}
+
+/// The functions that decode, resample and encode sound, resolved from the
+/// same library as [`Libav`]'s.
+struct Codecs {
+    avcodec_find_decoder: unsafe extern "C" fn(c_int) -> *const c_void,
+    avcodec_find_encoder_by_name: unsafe extern "C" fn(*const c_char) -> *const c_void,
+    avcodec_alloc_context3: unsafe extern "C" fn(*const c_void) -> *mut c_void,
+    avcodec_free_context: unsafe extern "C" fn(*mut *mut c_void),
+    avcodec_parameters_alloc: unsafe extern "C" fn() -> *mut AVCodecParameters,
+    avcodec_parameters_free: unsafe extern "C" fn(*mut *mut AVCodecParameters),
+    avcodec_parameters_copy:
+        unsafe extern "C" fn(*mut AVCodecParameters, *const AVCodecParameters) -> c_int,
+    avcodec_parameters_to_context:
+        unsafe extern "C" fn(*mut c_void, *const AVCodecParameters) -> c_int,
+    avcodec_open2: unsafe extern "C" fn(*mut c_void, *const c_void, *mut *mut c_void) -> c_int,
+    avcodec_send_packet: unsafe extern "C" fn(*mut c_void, *const AVPacket) -> c_int,
+    avcodec_receive_frame: unsafe extern "C" fn(*mut c_void, *mut AVFrame) -> c_int,
+    avcodec_send_frame: unsafe extern "C" fn(*mut c_void, *const AVFrame) -> c_int,
+    avcodec_receive_packet: unsafe extern "C" fn(*mut c_void, *mut AVPacket) -> c_int,
+    av_frame_alloc: unsafe extern "C" fn() -> *mut AVFrame,
+    av_frame_free: unsafe extern "C" fn(*mut *mut AVFrame),
+    av_frame_unref: unsafe extern "C" fn(*mut AVFrame),
+    av_frame_get_buffer: unsafe extern "C" fn(*mut AVFrame, c_int) -> c_int,
+    av_new_packet: unsafe extern "C" fn(*mut AVPacket, c_int) -> c_int,
+    #[allow(clippy::type_complexity)]
+    swr_alloc_set_opts2: unsafe extern "C" fn(
+        *mut *mut c_void,
+        *const AVChannelLayout,
+        c_int,
+        c_int,
+        *const AVChannelLayout,
+        c_int,
+        c_int,
+        c_int,
+        *mut c_void,
+    ) -> c_int,
+    swr_init: unsafe extern "C" fn(*mut c_void) -> c_int,
+    swr_convert:
+        unsafe extern "C" fn(*mut c_void, *mut *mut u8, c_int, *const *const u8, c_int) -> c_int,
+    swr_free: unsafe extern "C" fn(*mut *mut c_void),
+    av_opt_set_double: unsafe extern "C" fn(*mut c_void, *const c_char, f64, c_int) -> c_int,
 }
 
 impl Libav {
@@ -436,9 +564,25 @@ impl Libav {
                 av_packet_unref: symbol!("av_packet_unref"),
                 av_malloc: symbol!("av_malloc"),
                 av_free: symbol!("av_free"),
+                codecs: Codecs::load(&library),
                 _library: library,
             })
         }
+    }
+
+    /// The sound conversion's functions, or why this library has none.
+    fn codecs(&self) -> Result<&Codecs, String> {
+        self.codecs.as_ref().map_err(Clone::clone)
+    }
+
+    /// Whether this library has FFmpeg's own AAC encoder: a desktop's
+    /// system FFmpeg does, the libmpv an Android build ships does not
+    /// (`--disable-encoders`), which encodes with `MediaCodec` instead.
+    pub fn has_aac_encoder(&self) -> bool {
+        self.codecs().is_ok_and(|codecs| {
+            // SAFETY: a static string, a lookup that allocates nothing.
+            !unsafe { (codecs.avcodec_find_encoder_by_name)(c"aac".as_ptr()) }.is_null()
+        })
     }
 
     /// The functions from the libmpv the player registered its protocol
@@ -454,6 +598,47 @@ impl Libav {
             return Err("libmpv was loaded from another path in this process".to_owned());
         }
         loaded.as_ref().map_err(Clone::clone)
+    }
+}
+
+impl Codecs {
+    fn load(library: &libloading::Library) -> Result<Self, String> {
+        // SAFETY: each symbol is the FFmpeg function of that name, read as
+        // its n6.0 C signature.
+        unsafe {
+            macro_rules! symbol {
+                ($name:literal) => {
+                    *library
+                        .get(concat!($name, "\0").as_bytes())
+                        .map_err(|error| format!("{}: {error}", $name))?
+                };
+            }
+            Ok(Self {
+                avcodec_find_decoder: symbol!("avcodec_find_decoder"),
+                avcodec_find_encoder_by_name: symbol!("avcodec_find_encoder_by_name"),
+                avcodec_alloc_context3: symbol!("avcodec_alloc_context3"),
+                avcodec_free_context: symbol!("avcodec_free_context"),
+                avcodec_parameters_alloc: symbol!("avcodec_parameters_alloc"),
+                avcodec_parameters_free: symbol!("avcodec_parameters_free"),
+                avcodec_parameters_copy: symbol!("avcodec_parameters_copy"),
+                avcodec_parameters_to_context: symbol!("avcodec_parameters_to_context"),
+                avcodec_open2: symbol!("avcodec_open2"),
+                avcodec_send_packet: symbol!("avcodec_send_packet"),
+                avcodec_receive_frame: symbol!("avcodec_receive_frame"),
+                avcodec_send_frame: symbol!("avcodec_send_frame"),
+                avcodec_receive_packet: symbol!("avcodec_receive_packet"),
+                av_frame_alloc: symbol!("av_frame_alloc"),
+                av_frame_free: symbol!("av_frame_free"),
+                av_frame_unref: symbol!("av_frame_unref"),
+                av_frame_get_buffer: symbol!("av_frame_get_buffer"),
+                av_new_packet: symbol!("av_new_packet"),
+                swr_alloc_set_opts2: symbol!("swr_alloc_set_opts2"),
+                swr_init: symbol!("swr_init"),
+                swr_convert: symbol!("swr_convert"),
+                swr_free: symbol!("swr_free"),
+                av_opt_set_double: symbol!("av_opt_set_double"),
+            })
+        }
     }
 }
 
@@ -765,6 +950,11 @@ impl<S: Source> Demuxer<S> {
         Ok(demuxer)
     }
 
+    /// The FFmpeg it reads with.
+    pub fn libav(&self) -> &'static Libav {
+        self.libav
+    }
+
     /// Every stream the header names, in the file's order.
     pub fn streams(&self) -> &[StreamInfo] {
         &self.streams
@@ -993,6 +1183,510 @@ impl<S: Source> Drop for Demuxer<S> {
             }
             if !self.packet.is_null() {
                 (self.libav.av_packet_free)(&mut self.packet);
+            }
+        }
+    }
+}
+
+// --- Sound ----------------------------------------------------------------------
+
+/// `AV_SAMPLE_FMT_FLT`: interleaved 32-bit float, what the decoded sound is
+/// converted to.
+const AV_SAMPLE_FMT_FLT: c_int = 3;
+/// `AV_SAMPLE_FMT_FLTP`: planar float, what FFmpeg's AAC encoder takes.
+const AV_SAMPLE_FMT_FLTP: c_int = 8;
+/// `AVERROR(EAGAIN)`.
+const AVERROR_EAGAIN: c_int = -11;
+/// The rate converted sound is made at: what a Cast receiver's AAC is, and
+/// what Dolby and DTS tracks are already.
+pub const SOUND_RATE: u32 = 48_000;
+/// The channels of converted sound, interleaved: left, right.
+pub const SOUND_CHANNELS: usize = 2;
+
+/// One stream's codec parameters, copied out of its demuxer, so a decoder
+/// can be opened on them again and again while the demuxer reads on.
+pub struct CodecParameters {
+    libav: &'static Libav,
+    par: *mut AVCodecParameters,
+}
+
+// SAFETY: the copy is this value's alone, and FFmpeg's codec parameters
+// are plain data with no thread affinity.
+unsafe impl Send for CodecParameters {}
+
+impl Drop for CodecParameters {
+    fn drop(&mut self) {
+        if let Ok(codecs) = self.libav.codecs() {
+            // SAFETY: allocated by `avcodec_parameters_alloc`, freed once.
+            unsafe { (codecs.avcodec_parameters_free)(&mut self.par) };
+        }
+    }
+}
+
+impl<S: Source> Demuxer<S> {
+    /// Stream `stream`'s codec parameters, copied.
+    pub fn codec_parameters(&self, stream: usize) -> Result<CodecParameters, String> {
+        let codecs = self.libav.codecs()?;
+        // SAFETY: `ctx` is the open context and `stream` checked against
+        // its count; the copy is a fresh allocation this value owns.
+        unsafe {
+            let ctx = &*self.ctx;
+            if ctx.streams.is_null() || stream >= ctx.nb_streams as usize {
+                return Err(format!("no stream {stream}"));
+            }
+            let source = (**ctx.streams.add(stream)).codecpar;
+            let par = (codecs.avcodec_parameters_alloc)();
+            if par.is_null() {
+                return Err("no memory for codec parameters".to_owned());
+            }
+            let copy = CodecParameters {
+                libav: self.libav,
+                par,
+            };
+            if (codecs.avcodec_parameters_copy)(par, source) < 0 {
+                return Err("the codec parameters could not be copied".to_owned());
+            }
+            Ok(copy)
+        }
+    }
+}
+
+/// Decoded sound: 48 kHz stereo, interleaved float, and the presentation
+/// time of its first sample in the stream's time base ([`NOPTS`] when the
+/// decoder said none, or for what a resampler held back to the end).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pcm {
+    pub pts: i64,
+    pub samples: Vec<f32>,
+}
+
+/// **A decoder of one stream's sound to 48 kHz stereo**, opened afresh for
+/// every call to [`SoundDecoder::decode`], so what it makes of the same
+/// packets is the same whichever call it is: no state crosses from one
+/// call to the next, in the decoder or in the resampler.
+///
+/// The downmix is libswresample's default matrix (centre and surrounds at
+/// -3 dB into each side, LFE left out), **normalised** so no sum clips
+/// (`rematrix_maxval` 1): the stereo a 16-bit encoder is handed never
+/// exceeds full scale, at the cost of a quieter mix than the source's
+/// front pair alone.
+pub struct SoundDecoder {
+    libav: &'static Libav,
+    decoder: *const c_void,
+    par: CodecParameters,
+}
+
+// SAFETY: the decoder is a static description FFmpeg never frees; the
+// parameters are owned (see `CodecParameters`).
+unsafe impl Send for SoundDecoder {}
+
+impl SoundDecoder {
+    /// A decoder for `par`'s codec, or `None` when this FFmpeg has none.
+    pub fn new(par: CodecParameters) -> Result<Option<Self>, String> {
+        let libav = par.libav;
+        let codecs = libav.codecs()?;
+        // SAFETY: `par` is live; the lookup allocates nothing.
+        let decoder = unsafe { (codecs.avcodec_find_decoder)((*par.par).codec_id) };
+        Ok((!decoder.is_null()).then_some(Self {
+            libav,
+            decoder,
+            par,
+        }))
+    }
+
+    /// `packets` (one stream's, in order) decoded from a fresh decoder, and
+    /// the sound converted to 48 kHz stereo by a fresh resampler; a packet
+    /// the decoder refuses is skipped.
+    pub fn decode(&mut self, packets: &[Packet]) -> Result<Vec<Pcm>, String> {
+        let codecs = self.libav.codecs()?;
+        let mut run = DecodeRun {
+            libav: self.libav,
+            codecs,
+            ctx: std::ptr::null_mut(),
+            frame: std::ptr::null_mut(),
+            packet: std::ptr::null_mut(),
+            swr: std::ptr::null_mut(),
+            swr_for: None,
+        };
+        // SAFETY: FFmpeg's decoding sequence on objects `run` owns and frees
+        // in its `Drop`, whatever returns early.
+        unsafe {
+            run.ctx = (codecs.avcodec_alloc_context3)(self.decoder);
+            run.frame = (codecs.av_frame_alloc)();
+            run.packet = (self.libav.av_packet_alloc)();
+            if run.ctx.is_null() || run.frame.is_null() || run.packet.is_null() {
+                return Err("no memory for a decoder".to_owned());
+            }
+            if (codecs.avcodec_parameters_to_context)(run.ctx, self.par.par) < 0 {
+                return Err("the decoder could not be configured".to_owned());
+            }
+            let opened = (codecs.avcodec_open2)(run.ctx, self.decoder, std::ptr::null_mut());
+            if opened < 0 {
+                return Err(format!("the decoder could not be opened ({opened})"));
+            }
+            let mut out = Vec::new();
+            for packet in packets {
+                run.send(Some(packet), &mut out)?;
+            }
+            run.send(None, &mut out)?;
+            run.drain(&mut out)?;
+            Ok(out)
+        }
+    }
+}
+
+/// One [`SoundDecoder::decode`]'s FFmpeg objects, freed on drop.
+struct DecodeRun {
+    libav: &'static Libav,
+    codecs: &'static Codecs,
+    ctx: *mut c_void,
+    frame: *mut AVFrame,
+    packet: *mut AVPacket,
+    swr: *mut c_void,
+    /// What the resampler was made for: format, rate, layout.
+    swr_for: Option<(c_int, c_int, c_int, c_int, u64)>,
+}
+
+impl DecodeRun {
+    /// Sends `packet` (`None`: the end) and converts every frame it frees.
+    ///
+    /// # Safety
+    ///
+    /// The context is open, the frame and packet allocated.
+    unsafe fn send(&mut self, packet: Option<&Packet>, out: &mut Vec<Pcm>) -> Result<(), String> {
+        // SAFETY: the caller's contract; a packet's buffer holds `size`
+        // bytes once `av_new_packet` succeeds.
+        unsafe {
+            let sent = match packet {
+                Some(packet) => {
+                    let size = c_int::try_from(packet.data.len())
+                        .map_err(|_| "a packet too large to decode".to_owned())?;
+                    if (self.codecs.av_new_packet)(self.packet, size) < 0 {
+                        return Err("no memory for a packet".to_owned());
+                    }
+                    let p = &mut *self.packet;
+                    std::ptr::copy_nonoverlapping(packet.data.as_ptr(), p.data, packet.data.len());
+                    p.pts = packet.pts;
+                    p.dts = packet.dts;
+                    p.duration = packet.duration;
+                    p.flags = if packet.key { AV_PKT_FLAG_KEY } else { 0 };
+                    let sent = (self.codecs.avcodec_send_packet)(self.ctx, self.packet);
+                    (self.libav.av_packet_unref)(self.packet);
+                    sent
+                }
+                None => (self.codecs.avcodec_send_packet)(self.ctx, std::ptr::null()),
+            };
+            // A packet the decoder refuses (a TrueHD frame before its first
+            // major sync, a damaged one) frees no sound: skipped.
+            if sent < 0 && sent != AVERROR_EOF {
+                return Ok(());
+            }
+            loop {
+                let received = (self.codecs.avcodec_receive_frame)(self.ctx, self.frame);
+                if received < 0 {
+                    // EAGAIN (wants the next packet), the end, or an error
+                    // in this packet: nothing more from it.
+                    return Ok(());
+                }
+                let converted = self.convert(out);
+                (self.codecs.av_frame_unref)(self.frame);
+                converted?;
+            }
+        }
+    }
+
+    /// The decoded frame, resampled into `out`.
+    ///
+    /// # Safety
+    ///
+    /// `frame` holds a decoded audio frame.
+    unsafe fn convert(&mut self, out: &mut Vec<Pcm>) -> Result<(), String> {
+        // SAFETY: the caller's contract; the resampler is made for this
+        // frame's format, rate and layout before it reads the frame's
+        // `nb_samples` from `extended_data`, and writes at most `capacity`
+        // stereo samples into a buffer of that many.
+        unsafe {
+            let frame = &*self.frame;
+            // A layout of only a count (PCM that names no speakers) is
+            // libswresample's to read as the usual speakers for it.
+            let layout = frame.ch_layout;
+            let mask = if layout.order == AV_CHANNEL_ORDER_NATIVE {
+                layout.mask
+            } else {
+                0
+            };
+            let wanted = (
+                frame.format,
+                frame.sample_rate,
+                layout.order,
+                layout.nb_channels,
+                mask,
+            );
+            if self.swr_for != Some(wanted) {
+                self.drain(out)?;
+                (self.codecs.swr_free)(&mut self.swr);
+                let made = (self.codecs.swr_alloc_set_opts2)(
+                    &mut self.swr,
+                    &STEREO,
+                    AV_SAMPLE_FMT_FLT,
+                    SOUND_RATE as c_int,
+                    &layout,
+                    frame.format,
+                    frame.sample_rate,
+                    0,
+                    std::ptr::null_mut(),
+                );
+                if made < 0 || self.swr.is_null() {
+                    return Err(format!("no resampler for this sound ({made})"));
+                }
+                (self.codecs.av_opt_set_double)(self.swr, c"rematrix_maxval".as_ptr(), 1.0, 0);
+                let ready = (self.codecs.swr_init)(self.swr);
+                if ready < 0 {
+                    return Err(format!("the resampler could not start ({ready})"));
+                }
+                self.swr_for = Some(wanted);
+            }
+            let rate = i64::from(frame.sample_rate.max(1));
+            let capacity = i64::from(frame.nb_samples) * i64::from(SOUND_RATE) / rate + 256;
+            let mut samples = vec![0f32; capacity as usize * SOUND_CHANNELS];
+            let mut planes = [samples.as_mut_ptr().cast::<u8>()];
+            let made = (self.codecs.swr_convert)(
+                self.swr,
+                planes.as_mut_ptr(),
+                capacity as c_int,
+                frame.extended_data as *const *const u8,
+                frame.nb_samples,
+            );
+            if made < 0 {
+                return Err(format!("the sound could not be resampled ({made})"));
+            }
+            samples.truncate(made as usize * SOUND_CHANNELS);
+            out.push(Pcm {
+                pts: frame.pts,
+                samples,
+            });
+            Ok(())
+        }
+    }
+
+    /// Whatever the resampler still holds, into `out`.
+    ///
+    /// # Safety
+    ///
+    /// `swr` is null or an initialised resampler.
+    unsafe fn drain(&mut self, out: &mut Vec<Pcm>) -> Result<(), String> {
+        if self.swr.is_null() {
+            return Ok(());
+        }
+        loop {
+            const CAPACITY: usize = 4096;
+            let mut samples = vec![0f32; CAPACITY * SOUND_CHANNELS];
+            let mut planes = [samples.as_mut_ptr().cast::<u8>()];
+            // SAFETY: the caller's contract; a buffer of `CAPACITY` stereo
+            // samples, and no input (the flush).
+            let made = unsafe {
+                (self.codecs.swr_convert)(
+                    self.swr,
+                    planes.as_mut_ptr(),
+                    CAPACITY as c_int,
+                    std::ptr::null(),
+                    0,
+                )
+            };
+            if made < 0 {
+                return Err(format!("the sound could not be resampled ({made})"));
+            }
+            if made == 0 {
+                return Ok(());
+            }
+            samples.truncate(made as usize * SOUND_CHANNELS);
+            out.push(Pcm {
+                pts: NOPTS,
+                samples,
+            });
+        }
+    }
+}
+
+impl Drop for DecodeRun {
+    fn drop(&mut self) {
+        // SAFETY: each pointer is null or this run's own, freed once.
+        unsafe {
+            (self.codecs.swr_free)(&mut self.swr);
+            if !self.frame.is_null() {
+                (self.codecs.av_frame_free)(&mut self.frame);
+            }
+            if !self.packet.is_null() {
+                (self.libav.av_packet_free)(&mut self.packet);
+            }
+            if !self.ctx.is_null() {
+                (self.codecs.avcodec_free_context)(&mut self.ctx);
+            }
+        }
+    }
+}
+
+/// **FFmpeg's own AAC encoder** (AAC-LC, 48 kHz stereo), where the library
+/// has one: a desktop's system FFmpeg. Opened afresh for every call to
+/// [`LibavAac::encode`].
+pub struct LibavAac {
+    libav: &'static Libav,
+    encoder: *const c_void,
+    bitrate: u32,
+}
+
+// SAFETY: the encoder is a static description FFmpeg never frees.
+unsafe impl Send for LibavAac {}
+
+impl LibavAac {
+    /// FFmpeg's AAC encoder's priming: its `initial_padding`, one frame.
+    pub const DELAY: u32 = 1024;
+
+    /// The encoder at `bitrate` bits a second, or `None` when the library
+    /// has none.
+    pub fn new(libav: &'static Libav, bitrate: u32) -> Option<Self> {
+        let codecs = libav.codecs().ok()?;
+        // SAFETY: a static string; the lookup allocates nothing.
+        let encoder = unsafe { (codecs.avcodec_find_encoder_by_name)(c"aac".as_ptr()) };
+        (!encoder.is_null()).then_some(Self {
+            libav,
+            encoder,
+            bitrate,
+        })
+    }
+
+    /// `pcm` (48 kHz stereo, interleaved, a whole number of 1024-sample
+    /// frames) encoded from a fresh encoder and flushed: every frame it
+    /// makes, its priming first, raw (no ADTS).
+    pub fn encode(&mut self, pcm: &[f32]) -> Result<Vec<Bytes>, String> {
+        let codecs = self.libav.codecs()?;
+        let mut run = EncodeRun {
+            libav: self.libav,
+            codecs,
+            ctx: std::ptr::null_mut(),
+            frame: std::ptr::null_mut(),
+            packet: std::ptr::null_mut(),
+        };
+        // SAFETY: FFmpeg's encoding sequence on objects `run` owns and frees
+        // in its `Drop`; each frame's planes hold `nb_samples` floats once
+        // `av_frame_get_buffer` succeeds.
+        unsafe {
+            let mut par = (codecs.avcodec_parameters_alloc)();
+            if par.is_null() {
+                return Err("no memory for codec parameters".to_owned());
+            }
+            (*par).codec_type = AVMEDIA_TYPE_AUDIO;
+            (*par).codec_id = AV_CODEC_ID_AAC;
+            (*par).format = AV_SAMPLE_FMT_FLTP;
+            (*par).bit_rate = i64::from(self.bitrate);
+            (*par).sample_rate = SOUND_RATE as c_int;
+            (*par).ch_layout = STEREO;
+            run.ctx = (codecs.avcodec_alloc_context3)(self.encoder);
+            let configured =
+                !run.ctx.is_null() && (codecs.avcodec_parameters_to_context)(run.ctx, par) >= 0;
+            (codecs.avcodec_parameters_free)(&mut par);
+            if !configured {
+                return Err("the AAC encoder could not be configured".to_owned());
+            }
+            let opened = (codecs.avcodec_open2)(run.ctx, self.encoder, std::ptr::null_mut());
+            if opened < 0 {
+                return Err(format!("the AAC encoder could not be opened ({opened})"));
+            }
+            run.frame = (codecs.av_frame_alloc)();
+            run.packet = (self.libav.av_packet_alloc)();
+            if run.frame.is_null() || run.packet.is_null() {
+                return Err("no memory for the AAC encoder".to_owned());
+            }
+            let mut out = Vec::new();
+            for (at, block) in pcm.chunks(1024 * SOUND_CHANNELS).enumerate() {
+                let samples = block.len() / SOUND_CHANNELS;
+                let frame = &mut *run.frame;
+                frame.nb_samples = samples as c_int;
+                frame.format = AV_SAMPLE_FMT_FLTP;
+                frame.sample_rate = SOUND_RATE as c_int;
+                frame.ch_layout = STEREO;
+                frame.pts = (at * 1024) as i64;
+                if (codecs.av_frame_get_buffer)(run.frame, 0) < 0 {
+                    return Err("no memory for a frame".to_owned());
+                }
+                let frame = &mut *run.frame;
+                let left = std::slice::from_raw_parts_mut(frame.data[0].cast::<f32>(), samples);
+                let right = std::slice::from_raw_parts_mut(frame.data[1].cast::<f32>(), samples);
+                for (n, pair) in block.as_chunks::<SOUND_CHANNELS>().0.iter().enumerate() {
+                    left[n] = pair[0];
+                    right[n] = pair[1];
+                }
+                let sent = (codecs.avcodec_send_frame)(run.ctx, run.frame);
+                (codecs.av_frame_unref)(run.frame);
+                if sent < 0 {
+                    return Err(format!("the AAC encoder refused a frame ({sent})"));
+                }
+                run.receive(&mut out)?;
+            }
+            let flushed = (codecs.avcodec_send_frame)(run.ctx, std::ptr::null());
+            if flushed < 0 {
+                return Err(format!("the AAC encoder could not be flushed ({flushed})"));
+            }
+            run.receive(&mut out)?;
+            Ok(out)
+        }
+    }
+}
+
+/// One [`LibavAac::encode`]'s FFmpeg objects, freed on drop.
+struct EncodeRun {
+    libav: &'static Libav,
+    codecs: &'static Codecs,
+    ctx: *mut c_void,
+    frame: *mut AVFrame,
+    packet: *mut AVPacket,
+}
+
+impl EncodeRun {
+    /// Every packet the encoder has ready, into `out`.
+    ///
+    /// # Safety
+    ///
+    /// The context is an open encoder, the packet allocated.
+    unsafe fn receive(&mut self, out: &mut Vec<Bytes>) -> Result<(), String> {
+        loop {
+            // SAFETY: the caller's contract; a received packet's `data`
+            // holds `size` bytes until it is unreferenced.
+            unsafe {
+                let received = (self.codecs.avcodec_receive_packet)(self.ctx, self.packet);
+                if received == AVERROR_EAGAIN || received == AVERROR_EOF {
+                    return Ok(());
+                }
+                if received < 0 {
+                    return Err(format!("the AAC encoder failed ({received})"));
+                }
+                let packet = &*self.packet;
+                out.push(if packet.data.is_null() || packet.size <= 0 {
+                    Bytes::new()
+                } else {
+                    Bytes::copy_from_slice(std::slice::from_raw_parts(
+                        packet.data,
+                        packet.size as usize,
+                    ))
+                });
+                (self.libav.av_packet_unref)(self.packet);
+            }
+        }
+    }
+}
+
+impl Drop for EncodeRun {
+    fn drop(&mut self) {
+        // SAFETY: each pointer is null or this run's own, freed once.
+        unsafe {
+            if !self.frame.is_null() {
+                (self.codecs.av_frame_free)(&mut self.frame);
+            }
+            if !self.packet.is_null() {
+                (self.libav.av_packet_free)(&mut self.packet);
+            }
+            if !self.ctx.is_null() {
+                (self.codecs.avcodec_free_context)(&mut self.ctx);
             }
         }
     }
