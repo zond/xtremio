@@ -316,9 +316,14 @@ class _CatalogRowsState extends State<CatalogRows> {
         }
         return widget.empty ?? const _EmptyBoard();
       }
-      return CustomScrollView(
+      final isTv = DeviceScope.isTv(context);
+      final rowsView = CustomScrollView(
         key: const Key('board-rows'),
         controller: _scroll,
+        // On a television a row's strip is wider than the board, out to
+        // the edge of the screen ([_WiderBy]), so this does not clip: the
+        // board's clip is [_BleedRight], round all of it.
+        clipBehavior: isTv ? Clip.none : Clip.hardEdge,
         slivers: [
           // Every row has the same extent, which is what lets the
           // requested range be read off the scroll offset alone.
@@ -368,8 +373,68 @@ class _CatalogRowsState extends State<CatalogRows> {
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
         ],
       );
+      return isTv ? _BleedRight(child: rowsView) : rowsView;
     },
   );
+}
+
+/// [child] clipped to its own box, except at the right, where it may paint
+/// on to the edge of the screen: through the television's overscan band,
+/// which the shell keeps clear of every control but which a row of posters
+/// runs on under, the way it would off the edge of any TV screen.
+///
+/// A row's strip is [widthIn] wider than the board for that ([_WiderBy]),
+/// and as much longer at its end, so a poster the band crops loses some
+/// picture and nothing else: a focused tile is scrolled to the middle of
+/// the strip ([FocusableTile]), and the last one in a row, which cannot be,
+/// still stops short of the band.
+class _BleedRight extends StatelessWidget {
+  const _BleedRight({required this.child});
+
+  final Widget child;
+
+  /// How far the board's right edge is from the screen's: the band,
+  /// [TvDensity.overscan] of the screen. The board reaches the shell's
+  /// safe area on that side, and the shell is all that keeps out of it.
+  static double widthIn(BuildContext context) =>
+      TvDensity.overscanPadding(MediaQuery.sizeOf(context)).right;
+
+  @override
+  Widget build(BuildContext context) =>
+      ClipRect(clipper: _RightBleedClipper(widthIn(context)), child: child);
+}
+
+/// [child] laid out [extra] wider than the box it is given, out past the
+/// box's right edge: the strip a row scrolls in, reaching the edge of the
+/// screen ([_BleedRight]).
+class _WiderBy extends StatelessWidget {
+  const _WiderBy(this.extra, {required this.child});
+
+  final double extra;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => OverflowBox(
+      alignment: AlignmentDirectional.centerStart,
+      minWidth: constraints.maxWidth + extra,
+      maxWidth: constraints.maxWidth + extra,
+      child: child,
+    ),
+  );
+}
+
+class _RightBleedClipper extends CustomClipper<Rect> {
+  const _RightBleedClipper(this.bleed);
+
+  final double bleed;
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(0, 0, size.width + bleed, size.height);
+
+  @override
+  bool shouldReclip(_RightBleedClipper oldClipper) => oldClipper.bleed != bleed;
 }
 
 sealed class _BoardRow {
@@ -715,10 +780,13 @@ class _PlaceholderStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.surfaceContainerHighest;
-    return ListView.builder(
+    final bleed = DeviceScope.isTv(context)
+        ? _BleedRight.widthIn(context)
+        : 0.0;
+    final list = ListView.builder(
       scrollDirection: Axis.horizontal,
       physics: const NeverScrollableScrollPhysics(),
-      padding: padding,
+      padding: padding + EdgeInsets.only(right: bleed),
       itemCount: count,
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
@@ -737,6 +805,7 @@ class _PlaceholderStrip extends StatelessWidget {
         ),
       ),
     );
+    return bleed > 0 ? _WiderBy(bleed, child: list) : list;
   }
 }
 
@@ -781,17 +850,19 @@ class _HorizontalStripState extends State<_HorizontalStrip> {
       TargetPlatform.windows => true,
       _ => false,
     };
+    final isTv = DeviceScope.isTv(context);
+    final bleed = isTv ? _BleedRight.widthIn(context) : 0.0;
     final list = ListView.builder(
       controller: _controller,
       scrollDirection: Axis.horizontal,
-      padding: widget.padding,
+      padding: widget.padding + EdgeInsets.only(right: bleed),
       itemCount: widget.itemCount,
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
         child: widget.itemBuilder(context, index),
       ),
     );
-    if (DeviceScope.isTv(context)) return list;
+    if (isTv) return _WiderBy(bleed, child: list);
     return Scrollbar(
       controller: _controller,
       thumbVisibility: isDesktop,

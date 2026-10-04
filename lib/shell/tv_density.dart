@@ -11,7 +11,8 @@ import 'device_profile.dart';
 /// theme is one density step roomier than the standard one, every button
 /// keeps a [minTarget] box whatever the icon inside it measures, text is
 /// scaled by [textScale], and the shell holds [overscan] of the panel free
-/// at every edge because a television may not show it.
+/// of controls and headings at every edge because a television may not show
+/// it.
 ///
 /// Nothing here reads the device itself; `XtremioApp` applies [theme] and
 /// [TvMediaQuery] when the [DeviceScope] says television, so every other
@@ -38,10 +39,23 @@ abstract final class TvDensity {
   static const double textScale = 1.15;
 
   /// The fraction of each edge a television may crop (overscan) or bend out
-  /// of sight, kept clear of anything the app draws.
+  /// of sight, kept clear of every control and every heading the app draws.
+  /// A row of posters runs on into it at the right, captions and all, the
+  /// way a row runs off the edge of any TV screen: the tile there is the
+  /// next one along, never the one the remote is on.
   static const double overscan = 0.05;
 
-  /// [base] with the television's density and minimum target size.
+  /// [base] with the television's density and minimum target size, and
+  /// with the shell's surfaces on the scaffold's own ground.
+  ///
+  /// The rail and the app bars would otherwise be Material's `surface`, a
+  /// step lighter than the ground, and the overscan band round them is the
+  /// ground: lighter panels inside a darker margin read as a frame drawn
+  /// round the whole app. On one ground the band is just margin, and the
+  /// rail's divider is what separates it from the screen beside it. An app
+  /// bar also keeps that ground when a screen scrolls under it -- Material
+  /// 3 tints a scrolled-under bar lighter, which brought the frame back on
+  /// every screen that scrolls.
   static ThemeData theme(ThemeData base) => base.copyWith(
     visualDensity: visualDensity,
     materialTapTargetSize: MaterialTapTargetSize.padded,
@@ -49,6 +63,14 @@ abstract final class TvDensity {
       style: ButtonStyle(
         minimumSize: WidgetStatePropertyAll(Size.square(minTarget)),
       ),
+    ),
+    navigationRailTheme: base.navigationRailTheme.copyWith(
+      backgroundColor: base.scaffoldBackgroundColor,
+    ),
+    appBarTheme: base.appBarTheme.copyWith(
+      backgroundColor: base.scaffoldBackgroundColor,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
     ),
   );
 

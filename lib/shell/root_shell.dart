@@ -354,39 +354,58 @@ class _RootShellState extends State<RootShell> {
             ),
         ],
       );
+      // On a television the band comes down as `MediaQuery` padding from
+      // `TvMediaQuery`, and the shell only has to keep out of it: the sides
+      // of it round the whole row, and the top and bottom on either side of
+      // the divider, so that the line between the rail and the screen runs
+      // the full height of the panel rather than stopping at the band as a
+      // third edge of a frame. It is a one-pixel rule, not something a set
+      // that crops it loses anything by.
+      Widget clearOfTopAndBottom(Widget side) =>
+          isTv ? SafeArea(left: false, right: false, child: side) : side;
       final row = Row(
         children: [
-          if (isTv)
-            FocusTraversalGroup(
-              child: Focus(
-                focusNode: _railNode,
-                onKeyEvent: _onRailKey,
-                child: rail,
-              ),
-            )
-          else
-            rail,
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: isTv
+          clearOfTopAndBottom(
+            isTv
                 ? FocusTraversalGroup(
-                    child: FocusScope(
-                      node: _tabScopes[_index],
-                      child: FocusMemory(
-                        store: _tabMemories[_index],
-                        child: body,
-                      ),
+                    child: Focus(
+                      focusNode: _railNode,
+                      onKeyEvent: _onRailKey,
+                      child: rail,
                     ),
                   )
-                : body,
+                : rail,
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: clearOfTopAndBottom(
+              _withLight(
+                isTv
+                    ? FocusTraversalGroup(
+                        child: FocusScope(
+                          node: _tabScopes[_index],
+                          child: FocusMemory(
+                            store: _tabMemories[_index],
+                            child: body,
+                          ),
+                        ),
+                      )
+                    : body,
+                isTv: isTv,
+              ),
+            ),
           ),
         ],
       );
-      final lit = _withLight(row, isTv: isTv);
       return Scaffold(
-        // The band itself comes down as `MediaQuery` padding from
-        // `TvMediaQuery`, so the shell only has to keep out of it.
-        body: isTv ? SafeArea(key: RootShell.overscanKey, child: lit) : lit,
+        body: isTv
+            ? SafeArea(
+                key: RootShell.overscanKey,
+                top: false,
+                bottom: false,
+                child: row,
+              )
+            : row,
       );
     }
 
