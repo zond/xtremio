@@ -18,8 +18,11 @@ import '../../src/rust/api/server.dart' as rust;
 /// and while a torrent download is on its way, whatever this says:
 /// downloading is activity, not idling. What the setting governs is the
 /// rest -- what was watched or downloaded before -- which on, goes on
-/// being shared when nothing is happening, and off, is not. Nothing here
-/// speaks HTTP: what the app adds is somebody deciding what to put in it,
+/// being shared when nothing is happening, and off, is not. "What was
+/// watched" is the last thing the viewer watched, until they start
+/// watching something else: the server keeps it as the viewer's idle
+/// share, and runs its torrent only while the sharing is allowed.
+/// Nothing here speaks HTTP: what the app adds is somebody deciding what to put in it,
 /// which is [IdleSharingPolicy] below. It governs uploading and nothing
 /// else: a title kept offline goes on downloading whatever this says.
 ///
@@ -78,8 +81,8 @@ class IdleSharing {
   /// the behaviour have drifted apart before, leaving a switch drawn that
   /// did nothing.
   static const String description =
-      'Keeps sharing what you have watched and downloaded when nothing is '
-      'playing. Off, Xtremio shares only while you watch and while a '
+      'Keeps sharing your downloads and the last thing you watched when '
+      'nothing is playing. Off, Xtremio shares only while you watch and while a '
       'download is on its way. The light in the corner shows when it is '
       'happening.';
 

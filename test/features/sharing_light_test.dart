@@ -822,8 +822,8 @@ void main() {
       final policy = startedPolicy(prefs, pausesInBackground: true);
       await pumpTile(tester, policy: policy, prefs: prefs);
       const said =
-          'Keeps sharing what you have watched and downloaded when nothing '
-          'is playing. Off, Xtremio shares only while you watch and while a '
+          'Keeps sharing your downloads and the last thing you watched when '
+          'nothing is playing. Off, Xtremio shares only while you watch and while a '
           'download is on its way. The light in the corner shows when it is '
           'happening. In the background, Xtremio shares only while it is '
           'downloading or casting.';

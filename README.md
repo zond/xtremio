@@ -77,8 +77,8 @@ screen-by-screen inventory, and a feature with a design document links it.
   yet are in [docs/CASTING.md](docs/CASTING.md).
 - **Sharing you can see and stop.** Xtremio shares while you watch and
   while a torrent download is on its way. *Share while idle* (Settings, on
-  by default) also keeps sharing what you watched and downloaded when
-  nothing is happening, except on a phone or tablet while the app is in the
+  by default) also keeps sharing your downloads and the last thing you
+  watched, until you watch something else, when nothing is happening, except on a phone or tablet while the app is in the
   background. A status light on the main screens is lit only while the
   server measures bytes moving with nothing playing, never because of the
   setting: an arrow up for uploading, down for bytes coming in (an offline
