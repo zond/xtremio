@@ -141,18 +141,56 @@ void main() {
         reason: 'the subtitle is on the title\'s line',
       );
       // Two-thirds of the height, across: the poster keeps its shape.
-      expect(tester.getSize(find.byType(PosterTile).first).width, 64);
+      expect(
+        tester.getSize(find.byType(PosterTile).first).width,
+        PosterTile.tvImageWidth,
+      );
       expect(
         tester.getSize(find.byType(LibraryItemTile).first).width,
-        64,
+        PosterTile.tvImageWidth,
         reason: 'Continue watching is the same size',
       );
-      // Ten tiles reach the panel's right edge, the last of them in the
-      // band, as a row always has.
+      // Six whole tiles inside the band, and the seventh runs on into it,
+      // as a row always has.
+      final band = logical.width * 0.95;
       expect(
-        tester.getRect(find.byType(PosterTile).at(9)).right,
-        greaterThan(logical.width - logical.width * 0.05),
+        tester.getRect(find.byType(PosterTile).at(5)).right,
+        lessThan(band),
       );
+      expect(
+        tester.getRect(find.byType(PosterTile).at(6)).right,
+        greaterThan(band),
+      );
+    });
+
+    testWidgets('a caption is one line, cut short at its end, never broken '
+        'inside a word', (tester) async {
+      useTv(tester);
+      await pumpApp(tester);
+      // bodySmall's one line at the television's 1.15.
+      const line = 16 * 1.15;
+      for (final item in firstCatalog().items.take(6)) {
+        final caption = find.text(item.name);
+        final text = tester.widget<Text>(caption);
+        expect(text.maxLines, 1, reason: item.name);
+        expect(text.softWrap, isFalse, reason: item.name);
+        expect(text.overflow, TextOverflow.ellipsis, reason: item.name);
+        expect(
+          tester.getSize(caption).height,
+          lessThanOrEqualTo(line + 0.5),
+          reason: item.name,
+        );
+        // Close under its poster.
+        final tile = find.widgetWithText(PosterTile, item.name);
+        final poster = tester.getRect(
+          find.descendant(of: tile, matching: find.byType(PosterImage)),
+        );
+        expect(
+          tester.getRect(caption).top - poster.bottom,
+          closeTo(PosterTile.tvCaptionGap, 0.5),
+          reason: item.name,
+        );
+      }
     });
 
     testWidgets('the remote walks between the types, the rows and the rail', (

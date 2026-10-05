@@ -206,10 +206,13 @@ void main() {
           .getRect(last.evaluate().length > 1 ? last.at(1) : last)
           .bottom;
       expect(secondRowTile, lessThanOrEqualTo(safeBottom));
-      expect(tester.getSize(find.byType(PosterTile).first).width, 64);
+      expect(
+        tester.getSize(find.byType(PosterTile).first).width,
+        PosterTile.tvImageWidth,
+      );
       // The first row runs on into the band at the right, as Discover's do.
       expect(
-        tester.getRect(find.byType(PosterTile).at(9)).right,
+        tester.getRect(find.byType(PosterTile).at(6)).right,
         greaterThan(logical.width * 0.95),
       );
     });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/state/library.dart';
+import '../shell/device_profile.dart';
 import 'focusable_tile.dart';
 import 'poster_tile.dart';
 
@@ -45,6 +46,18 @@ class LibraryItemTile extends StatelessWidget {
     final theme = Theme.of(context);
     final progress = item.progress;
     final episode = item.seasonEpisodeLabel;
+    final isTv = DeviceScope.isTv(context);
+    // On a television the episode line under the focused tile goes to full
+    // strength: a muted caption under a poster is the second thing a
+    // projector in a lit room loses, after the ring itself. Off one there
+    // is no [TileFocus] above and it is the muted colour it has always
+    // been.
+    TextStyle? episodeStyle(BuildContext context) =>
+        theme.textTheme.bodySmall?.copyWith(
+          color: TileFocus.maybeOf(context) ?? false
+              ? theme.colorScheme.onSurface
+              : theme.colorScheme.onSurfaceVariant,
+        );
     return FocusableTile(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -85,7 +98,7 @@ class LibraryItemTile extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isTv ? PosterTile.tvCaptionGap : 6),
           // Held off the tile's edges for the reason [PosterTile] is: the
           // focus ring is drawn over these bounds, and the bold one is
           // eight pixels of it across the first letter.
@@ -96,35 +109,52 @@ class LibraryItemTile extends StatelessWidget {
               PosterTile.captionInset,
               PosterTile.captionInset,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  maxLines: episode.isEmpty ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
-                ),
-                if (episode.isNotEmpty)
-                  Builder(
-                    // On a television the episode line under the focused
-                    // tile goes to full strength: a muted caption under a
-                    // poster is the second thing a projector in a lit room
-                    // loses, after the ring itself. Off one there is no
-                    // [TileFocus] above and it is the muted colour it has
-                    // always been.
-                    builder: (context) => Text(
-                      episode,
-                      maxLines: 1,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: TileFocus.maybeOf(context) ?? false
-                            ? theme.colorScheme.onSurface
-                            : theme.colorScheme.onSurfaceVariant,
+            // One line on a television, as [PosterTile]'s: the name, cut
+            // short at its end, then the episode, which is never cut.
+            child: isTv
+                ? Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.name,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall,
+                        ),
                       ),
-                    ),
+                      if (episode.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Builder(
+                          builder: (context) => Text(
+                            episode,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: episodeStyle(context),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: episode.isEmpty ? 2 : 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      if (episode.isNotEmpty)
+                        Builder(
+                          builder: (context) => Text(
+                            episode,
+                            maxLines: 1,
+                            style: episodeStyle(context),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
         ],
       ),

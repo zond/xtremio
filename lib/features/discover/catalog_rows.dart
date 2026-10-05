@@ -666,9 +666,10 @@ class _RowLayout {
 
   static const double tallHeaderHeight = 52;
 
-  /// [tallHeaderHeight] for a header of one line ([inlineHeader]): 8 of
-  /// padding above and 4 below the 24 of a title.
-  static const double inlineHeaderHeight = 36;
+  /// [tallHeaderHeight] for a header of one line ([inlineHeader]): 2 of
+  /// padding above the 24 of a title, and none below, where the strip's
+  /// [focusSlack] is the gap down to the posters.
+  static const double inlineHeaderHeight = 26;
 
   static const double rowGap = 8;
 
@@ -680,15 +681,17 @@ class _RowLayout {
       inlineHeaderHeight +
       focusRoom * 2 +
       PosterTile.captionInset +
-      PosterTile.captionHeight +
+      PosterTile.tvCaptionHeight +
       PosterTile.tvImageHeight;
   static const double stripSidePadding = 16;
   static const double tileSpacing = 12;
 
-  /// [focusSlack] on a television: half of it covers the zoom (five percent
-  /// of a tile that tall, split between the two edges) and the rest is what
-  /// the shadow under a focused tile needs to be seen at all.
-  static const double focusRoom = 12;
+  /// [focusSlack] on a television: the zoom (five percent of a 172 tile,
+  /// split between the two edges, is 4.3) and a little of the shadow under
+  /// a focused tile. It is also the whole gap between a row's heading and
+  /// its posters, and, with the heading's own 2, between one row's tiles
+  /// and the next row's heading.
+  static const double focusRoom = 6;
 
   /// What a strip insets its tiles by: the side margin, and [focusSlack]
   /// above and below.
@@ -701,8 +704,11 @@ class _RowLayout {
   /// past a 2.1x text scale the height goes negative, which is a
   /// `NOT NORMALIZED` constraints failure, not just a cramped layout.
   double get extent =>
-      baseExtent +
-      (baseHeaderHeight + PosterTile.captionHeight) * (textFactor - 1);
+      baseExtent + (baseHeaderHeight + captionHeight) * (textFactor - 1);
+
+  /// The caption's box at text scale 1: a television's is one line.
+  double get captionHeight =>
+      inlineHeader ? PosterTile.tvCaptionHeight : PosterTile.captionHeight;
 
   double get baseHeaderHeight =>
       inlineHeader ? inlineHeaderHeight : tallHeaderHeight;
@@ -721,7 +727,7 @@ class _RowLayout {
       stripHeight -
       focusSlack * 2 -
       PosterTile.captionInset -
-      PosterTile.captionHeight * textFactor;
+      captionHeight * textFactor;
 
   double tileWidthFor(String posterShape) =>
       (imageHeight * PosterImage.aspectRatioFor(posterShape)).roundToDouble();
@@ -757,7 +763,9 @@ class _RowHeader extends StatelessWidget {
     return SizedBox(
       height: height,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        padding: inline
+            ? const EdgeInsets.fromLTRB(16, 2, 16, 0)
+            : const EdgeInsets.fromLTRB(16, 8, 16, 4),
         child: inline
             ? Align(
                 alignment: AlignmentDirectional.centerStart,
@@ -771,6 +779,7 @@ class _RowHeader extends StatelessWidget {
                     ],
                   ),
                   maxLines: 1,
+                  softWrap: false,
                   overflow: TextOverflow.ellipsis,
                 ),
               )
@@ -974,8 +983,9 @@ class _SeeAllTile extends StatelessWidget {
           ),
           // Stands in for a tile's caption, so this box lines up with the
           // posters beside it: the inset below their words is part of it.
-          const SizedBox(
-            height: PosterTile.captionHeight + PosterTile.captionInset,
+          SizedBox(
+            height:
+                PosterTile.captionHeightOf(context) + PosterTile.captionInset,
           ),
         ],
       ),

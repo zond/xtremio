@@ -34,7 +34,7 @@ Color? episodeColour(WidgetTester tester) =>
     tester.widget<Text>(find.text('S2E3')).style?.color;
 
 void main() {
-  testWidgets('the caption clears the bold focus ring, both lines of it', (
+  testWidgets('the caption clears the bold focus ring, all of it', (
     tester,
   ) async {
     await tester.pumpWidget(harness());
@@ -58,6 +58,20 @@ void main() {
       greaterThanOrEqualTo(FocusRing.boldWidth),
       reason: 'the last line, which the ring runs under',
     );
+  });
+
+  testWidgets('on a television the caption is one line: the name, cut '
+      'short at its end, then the episode', (tester) async {
+    await tester.pumpWidget(harness());
+
+    final name = tester.widget<Text>(find.text('Lanterns'));
+    expect(name.maxLines, 1);
+    expect(name.softWrap, isFalse);
+    expect(name.overflow, TextOverflow.ellipsis);
+    final nameAt = tester.getRect(find.text('Lanterns'));
+    final episodeAt = tester.getRect(find.text('S2E3'));
+    expect(episodeAt.top, lessThan(nameAt.bottom), reason: 'one line');
+    expect(episodeAt.left, greaterThan(nameAt.right));
   });
 
   testWidgets('the focused tile lifts its episode line to full strength', (

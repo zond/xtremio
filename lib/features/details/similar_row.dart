@@ -118,7 +118,7 @@ class SimilarTitlesRow extends StatelessWidget {
   /// The poster [context] draws: [posterWidth] by [posterHeight], or on a
   /// television the size every poster there is.
   static Size posterSizeOf(BuildContext context) => DeviceScope.isTv(context)
-      ? const Size(PosterTile.tvImageHeight * 2 / 3, PosterTile.tvImageHeight)
+      ? const Size(PosterTile.tvImageWidth, PosterTile.tvImageHeight)
       : const Size(posterWidth, posterHeight);
 
   /// The box under it, holding the name and the year at text scale 1.
@@ -135,7 +135,14 @@ class SimilarTitlesRow extends StatelessWidget {
   static double rowHeight(BuildContext context) =>
       TvSourceRows.focusSlack * 2 +
       posterSizeOf(context).height +
-      captionHeight * _textFactor(context);
+      _captionBoxOf(context);
+
+  /// The caption's box, text grown: [captionHeight], or on a television one
+  /// line, as every poster's there is -- the name and then the year, cut
+  /// short at the end ([PosterTile.tvCaptionHeight]) -- and the inset.
+  static double _captionBoxOf(BuildContext context) => DeviceScope.isTv(context)
+      ? PosterTile.tvCaptionHeight * _textFactor(context) + FocusRing.textInset
+      : captionHeight * _textFactor(context);
 
   @override
   Widget build(BuildContext context) {
@@ -169,8 +176,11 @@ class _SimilarPoster extends StatelessWidget {
     final theme = Theme.of(context);
     final item = title.item;
     final year = yearIn(item.releaseInfo);
-    final factor = SimilarTitlesRow._textFactor(context);
     final poster = SimilarTitlesRow.posterSizeOf(context);
+    final isTv = DeviceScope.isTv(context);
+    final yearStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return SizedBox(
       width: poster.width,
       child: FocusableTile(
@@ -195,37 +205,58 @@ class _SimilarPoster extends StatelessWidget {
                 child: PosterImage(url: item.poster),
               ),
               SizedBox(
-                height: SimilarTitlesRow.captionHeight * factor,
+                height: SimilarTitlesRow._captionBoxOf(context),
                 child: Padding(
                   // Held off the tile's edges because the ring is drawn
                   // on them and the bold one lands on the words; the same
                   // inset [PosterTile] gives its caption.
-                  padding: const EdgeInsets.fromLTRB(
+                  padding: EdgeInsets.fromLTRB(
                     FocusRing.textInset,
-                    6,
+                    isTv ? PosterTile.tvCaptionGap : 6,
                     FocusRing.textInset,
                     FocusRing.textInset,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      if (year != null)
-                        Text(
-                          '$year',
-                          maxLines: 1,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                  // The name cut short at its end, then the year, which is
+                  // never cut.
+                  child: isTv
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                item.name,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                            if (year != null) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '$year',
+                                maxLines: 1,
+                                softWrap: false,
+                                style: yearStyle,
+                              ),
+                            ],
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              item.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            if (year != null)
+                              Text('$year', maxLines: 1, style: yearStyle),
+                          ],
                         ),
-                    ],
-                  ),
                 ),
               ),
             ],

@@ -44,12 +44,12 @@ class TvPosterGridDelegate extends SliverGridDelegate {
   /// The gap between tiles, both ways: a row's.
   static const double spacing = 12;
 
-  static const double tileWidth = PosterTile.tvImageHeight * 2 / 3;
+  static const double tileWidth = PosterTile.tvImageWidth;
 
   double get tileHeight =>
       PosterTile.tvImageHeight +
       PosterTile.captionInset +
-      PosterTile.captionHeight * textFactor;
+      PosterTile.tvCaptionHeight * textFactor;
 
   @override
   SliverGridLayout getLayout(SliverConstraints constraints) {
@@ -90,8 +90,22 @@ class PosterTile extends StatelessWidget {
   final String? memoryId;
   final bool defaultFocus;
 
-  /// Height of the caption under the image ([PosterImage] gets the rest).
+  /// Height of the caption under the image ([PosterImage] gets the rest):
+  /// the gap above it and two lines of name.
   static const double captionHeight = 38;
+
+  /// [captionHeight] on a television, where a name is one line, cut short
+  /// at its end rather than broken across two: a [tvCaptionGap] and the
+  /// one line. A column [tvImageWidth] wide holds too few letters for a
+  /// second line to break anywhere but inside a word.
+  static const double tvCaptionHeight = tvCaptionGap + 16;
+
+  /// The gap between a poster and its name on a television.
+  static const double tvCaptionGap = 4;
+
+  /// [captionHeight] or [tvCaptionHeight], for [context].
+  static double captionHeightOf(BuildContext context) =>
+      DeviceScope.isTv(context) ? tvCaptionHeight : captionHeight;
 
   /// How far the name is held off the tile's edges: [FocusRing.textInset],
   /// because the ring is drawn over these bounds and the bold one lands on
@@ -103,17 +117,22 @@ class PosterTile extends StatelessWidget {
   /// How tall a poster is on a television, wherever it is drawn: the one
   /// size, so a title looks the same in a row as it does in a grid.
   ///
-  /// Picked for two whole rows of Discover under its type pills on a
-  /// Google TV -- a 1920x1080 panel at a pixel ratio of 2, so 960x540 to
-  /// lay out on, 430 of it under the pills once the overscan band is kept
-  /// clear -- with every heading and caption at the television's text
-  /// scale: as big as two rows allow, against the 230 of the one row that
-  /// used to fill that screen.
-  static const double tvImageHeight = 96;
+  /// The largest that puts two whole rows of Discover under its type pills
+  /// on a Google TV -- a 1920x1080 panel at a pixel ratio of 2, so 960x540
+  /// to lay out on, 430 of it under the pills once the overscan band is
+  /// kept clear -- with the one-line heading and caption at the
+  /// television's text scale. A row there is 213.9 (`CatalogRows`), two
+  /// of them 427.8; a 142 poster would make it 215.9. Divisible by three,
+  /// so [tvImageWidth] is a whole two-thirds of it.
+  static const double tvImageHeight = 141;
+
+  /// [tvImageHeight]'s width: the poster's 2:3.
+  static const double tvImageWidth = tvImageHeight * 2 / 3;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isTv = DeviceScope.isTv(context);
     return FocusableTile(
       onTap: onTap,
       memoryId: memoryId,
@@ -122,7 +141,7 @@ class PosterTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: PosterImage(url: item.poster)),
-          const SizedBox(height: 6),
+          SizedBox(height: isTv ? tvCaptionGap : 6),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               captionInset,
@@ -132,7 +151,8 @@ class PosterTile extends StatelessWidget {
             ),
             child: Text(
               item.name,
-              maxLines: 2,
+              maxLines: isTv ? 1 : 2,
+              softWrap: !isTv,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall,
             ),

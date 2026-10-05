@@ -32,8 +32,8 @@ List<String> names() => [
 ];
 
 /// Columns of the poster grid at [tvSize]: 1280 wide less the padding, over
-/// the television's 64-wide tiles and the 12 between them.
-const int columns = 16;
+/// the television's 94-wide tiles and the 12 between them.
+const int columns = 11;
 
 void main() {
   testWidgets('the tab: a type, its catalog menu, then its rows, and Back '
@@ -127,11 +127,10 @@ void main() {
   testWidgets('down walks the grid past the rows that were built at first', (
     tester,
   ) async {
-    // Narrow, so that the fixture's fifty posters, four across, run well
-    // past the screen: the television's tiles are small enough that at
-    // 1280 wide they would fit in four rows.
+    // Narrow, so that the fixture's fifty posters, three across, run well
+    // past the screen: at 1280 wide they would fit in five rows.
     const narrow = Size(340, 720);
-    const across = 4;
+    const across = 3;
     const last = 8;
     useScreen(tester, narrow);
     await tester.pumpWidget(harness(fakeCore()));

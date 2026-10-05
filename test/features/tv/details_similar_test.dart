@@ -364,7 +364,13 @@ void main() {
 
     final poster = tester.getRect(find.byType(PosterImage).first);
     expect(poster.height, PosterTile.tvImageHeight);
-    expect(poster.width, PosterTile.tvImageHeight * 2 / 3);
+    expect(poster.width, PosterTile.tvImageWidth);
+    // Its caption is one line, as every poster's on a television: the name
+    // and the year beside it.
+    final name = tester.getRect(find.text('Stalker'));
+    final year = tester.getRect(find.text('1979'));
+    expect(year.top, lessThan(name.bottom));
+    expect(year.left, greaterThan(name.right));
     // Off a television the drawing's own size is kept.
     expect(SimilarTitlesRow.posterWidth, 120);
     expect(SimilarTitlesRow.posterHeight, 180);
