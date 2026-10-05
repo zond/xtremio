@@ -504,9 +504,11 @@ from that guess.
 server where it resumes and the length the last playback reported
 (`media_set_resume`, beside `media_set_play`), and where the viewer left it
 (`media_note_position`, on leaving). The server asks the swarm for the
-region around the resume point once the file's head is in, beside the
-index read, from where the last session ended when that is near the resume
-time and the resume time's share of the file otherwise (stream-server's
+region around the resume point when mpv opens the file, beside the head --
+both are needed before the first frame, so their waits should not add up --
+placed by where the last session ended when that is near the resume time
+and by the resume time's share of the file otherwise, and asked for from
+there outward, 16 MiB at a time (stream-server's
 `docs/design/media-pipeline.md` §2.11).
 
 **An engine error is not a failed playback.** media_kit turns mpv's error

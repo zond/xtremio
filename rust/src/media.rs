@@ -335,9 +335,9 @@ pub fn resume_hint(resume_seconds: f64, runtime_seconds: Option<f64>) -> Option<
 
 /// Tells the server where the playback of `id` resumes and how long the
 /// film is if the app knows (`ServerHandle::set_resume`), before mpv opens
-/// it: a torrent reader then asks the swarm for the resume point once the
-/// file's head is in, instead of only when mpv blocks on it. Errors when
-/// the server is not running or holds nothing under `id`.
+/// it: a torrent reader then asks the swarm for the resume point at its
+/// open, beside the file's head, instead of only when mpv blocks on it.
+/// Errors when the server is not running or holds nothing under `id`.
 pub fn set_resume_in(
     app: &AppState,
     id: &str,
