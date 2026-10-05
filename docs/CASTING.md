@@ -6,8 +6,8 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
 already serves, with no processing anywhere -- or, for an H.264 or HEVC
-film in a Matroska or QuickTime file, or an MP4 whose sound the receiver
-will not take, **repackaged**: the same picture as one fragmented MP4, its
+film in a Matroska file, or an MP4 whose sound the receiver will not take,
+**repackaged**: the same picture as one fragmented MP4, its
 sound copied when it is AAC and **converted to stereo AAC** otherwise, made
 as the receiver reads it ([Renditions](#renditions-the-picture-repackaged-the-sound-converted)).
 It turns the player screen into a remote while the television plays. The
@@ -25,19 +25,31 @@ video half is one list for every device, a known approximation (HEVC and
 VP9 want a Chromecast Ultra or newer), and the comment on the table says why
 fixing it means asking the session what the receiver supports.
 
-- **The container** comes from the name of the file the embedded server says
-  it opened (`streamName` in the `stats.json` the player polls), then the
-  converted stream's filename, then `behaviorHints.filename`, then a URL
-  path ending in a real file name, then the name the server resolved the
-  media id to. The server comes first because a
-  torrent's URL says nothing and the addon may be guessing. A container
-  nothing identifies is a **refusal**, not a maybe.
-- **The codecs** come from mpv while the stream plays locally (`video-codec`
-  and `audio-codec-name`, sampled while the receiver list is open), and
-  otherwise from what the release claims (`StreamFacts` tags, the filename).
-  A claim is believed when it says something is *wrong* and never taken as
-  proof that something is right; mpv overrules a release name that
-  disagrees.
+**mpv is the only authority on what the file is.** A cast starts from the
+player, where mpv is reading the file, and its report -- `file-format` (the
+reader that opened the file), `video-codec` and `audio-codec-name`, sampled
+while the receiver list is open (`PlaybackStats`) -- is all the check
+believes. No file name, URL extension, server-resolved name or release claim
+(`x265`, `DDP5.1`) is read: they are often absent (a debrid link names no
+file at all) and sometimes wrong, and mpv is reading the bytes.
+
+- **The container** is the family of the reader mpv names. libavformat's one
+  reader for MP4, M4V and QuickTime (`mov,mp4,m4a,3gp,3g2,mj2`) is the **MP4
+  family**: handed over as `video/mp4` when its codecs are ones the receiver
+  takes. mpv's own Matroska reader (`mkv`) and libavformat's
+  (`matroska,webm`) are the **Matroska family**: a WebM, handed over as
+  `video/webm`, when it carries VP8 or VP9 with Opus, Vorbis or no sound;
+  otherwise a Matroska file, which a receiver does not take as it is. Any
+  other reader (AVI, a transport stream, Ogg, ...) is refused by name.
+- **The codecs** are mpv's, for the same reason, and decide within a
+  family: a receiver's video list, and the audio the container may carry.
+- **Before mpv has reported** the reader and the video codec, the answer is
+  `CastRefusal.pending`, a "not yet" (below), never a guess.
+- **One wrinkle, untested on a receiver:** mpv cannot tell QuickTime (`.mov`)
+  from MP4 -- one reader opens both -- so a `.mov` of H.264 or HEVC with AAC
+  is now handed over as `video/mp4` as it is, where a file name used to send
+  it to a rendition. A receiver that will not play one would show as a cast
+  that does not start.
 - **A stream this device reads only by URL is refused** before any of
   that when it is on this device: an origin that will not serve ranges
   (read forward through `/proxy`) or a route the server names no id for
@@ -46,35 +58,36 @@ fixing it means asking the session what the receiver supports.
 
 **What is judged is the film, not its container.** The server resolves an
 id that turns out to be an archive or disc image to the member inside it
-(`Resolved.member`), mpv plays the member, and the cast follows:
-`PlayerScreen._castFilename` is the member's own name
-(`MediaResolution.memberName`), and what is published is the same id. So a
-`.rar` holding an MP4 casts, and a Matroska inside a `.rar` is judged as a
-Matroska. A link-borne container's credentials never cross the LAN: the
+(`Resolved.member`), mpv plays the member, and the cast follows: mpv's
+report is about the member, and what is published is the same id. So a
+`.rar` holding an MP4 casts as one, and a Matroska inside a `.rar` is judged
+as a Matroska, whatever either is called. A link-borne container's credentials never cross the LAN: the
 receiver is handed a token, and the session the server made for the
 container stays on this device.
 
 A refusal is a dialog saying what is wrong and that the conversion that
 would fix it does not exist yet; `CastRefusal` names the rule, which is the
-seam the rest of the renditions fill. **One refusal is not a verdict**: in the first
-seconds of a torrent the server has not opened a file yet, which is
-`CastRefusal.containerPending` ("Still working out what this file is"), and
-the poll that names the file makes the same button work. The name is kept
-while the player is on that stream, and taken only from an answer about the
-file being streamed, never the torrent-level fallback's guess. A member is
-never pending: a member whose name says nothing is an unknown file.
+seam the rest of the renditions fill. **One refusal is not a verdict**:
+pressed before mpv has reported what the file is -- the first moments of a
+stream, or the first instant the receiver list is open -- the dialog is
+headed *Still working out what this file is* and says "The player has not
+said yet what kind of file this is, and that is what decides whether a
+Chromecast can play it. Try again once it has started playing."
+(`CastRefusal.pending`). Nothing is connected, published or loaded, and
+the same button works once mpv has reported. A report is about the file mpv
+was reading: when the screen moves to another stream it is dropped, and the
+next cast waits for mpv to report on the new one.
 
 ## Renditions: the picture repackaged, the sound converted
 
 A Chromecast will not open a Matroska file, and most films are one. When
-the film inside is H.264 or HEVC -- **as mpv reports it**, since a copy is
-only as right as the codecs it copies, and a release's claim is not enough
--- `CastCompatibility.of` answers `CastRendition` instead of the container
-refusal, provided the stream is played by id and this device can make one
-(`media_renditions_available`). The same goes for a QuickTime file, and for
-an MP4 or M4V whose picture the receiver takes but whose sound its container
-does not allow (Dolby Digital in an MP4, the common case), which would
-otherwise be refused.
+the film inside is H.264 or HEVC, as mpv reports it, `CastCompatibility.of`
+answers `CastRendition` instead of the container refusal, provided the
+stream is played by id and this device can make one
+(`media_renditions_available`). The same goes for a file of the MP4 family
+whose picture the receiver takes but whose sound its container does not
+allow (Dolby Digital in an MP4, the common case), which would otherwise be
+refused.
 
 **The sound is copied when it is AAC, and converted to stereo AAC
 otherwise** (`CastRendition.convertsSound`, `RenditionSpec.convertSound`:
@@ -98,10 +111,7 @@ names it and why (the sound is never the reason: it converts):
   yet.";
 - video the receiver cannot decode (AV1, MPEG-4 Part 2, MPEG-2, VC-1) --
   "This film's video is AV1, which this receiver can't play, and xtremio
-  can't convert it for casting yet." (step F4);
-- codecs mpv has not reported yet -- a "not yet", headed *Still working out
-  what this file is*: "...which xtremio repackages for casting once the
-  player has said what is in it. Try again once it has started playing."
+  can't convert it for casting yet." (step F4).
 
 What mpv cannot see, the producer refuses when the receiver first asks:
 **Dolby Vision**. mpv reports it as HEVC; the producer reads the container's
@@ -267,8 +277,8 @@ when a fresh rendition's run is started at it, and a seek one jump.
 `cargo test --test rendition_sound serve -- --ignored --nocapture` serves a
 converted rendition for a television.
 
-Video that is neither H.264 nor HEVC, and containers other than Matroska,
-QuickTime and an MP4 with the wrong sound, are still refused; converting
+Video that is neither H.264 nor HEVC, and readers other than the MP4 and
+Matroska families, are still refused; converting
 the picture is step F4 of the renditions design.
 
 ## The URL and the address the receiver is given
@@ -304,8 +314,9 @@ server route), `http` or `https` with no credentials in it, on a public
 host (not loopback, private, link-local, CGNAT, `.local`, `.lan` or a
 single-label name), with no `behaviorHints.proxyHeaders` and not
 `notWebReady`, resolved by the server to a file it reads in process and
-not to the member of an archive, and `CastReady` -- a film that needs a
-rendition is repackaged here, so it is relayed. No listener is started,
+not to the member of an archive, and `CastReady` by mpv's report like any
+cast -- a film that needs a rendition is repackaged here, so it is
+relayed. No listener is started,
 nothing is published, the watchdog has nothing to count, seeks are the
 receiver's, and Stop brings the film back at the receiver's position as
 for any cast. The remote says *Playing directly from the source* under the

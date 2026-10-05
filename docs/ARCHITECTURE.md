@@ -390,9 +390,11 @@ resolves the id**: it reads the head of the file for a container signature
 and, on a hit, indexes it and resolves the id to the member the archive
 routes' rule picks (`Resolved.member`; stream-server
 `docs/design/media-pipeline.md` §2.9). mpv reads the member as ranges of
-the container -- nothing extracted, nothing written -- and the player keeps
-the member's name (`MediaResolution.memberName`) for the cast check, which
-judges the film and not the container (see [CASTING.md](CASTING.md)).
+the container -- nothing extracted, nothing written -- so mpv's report, which
+is what the cast check judges, is about the film and not the container, and
+the player keeps the member's name (`MediaResolution.memberName`) so a
+member is never handed to a receiver as the link it came in (see
+[CASTING.md](CASTING.md)).
 Addon-declared archives (`rarUrls`/`zipUrls`) come as stremio-core's own
 `/create` URL, which registers as an id the same way.
 
@@ -860,7 +862,7 @@ a finished Drive download resolves off the disk with none. `openLinkedDriveFile`
 (`lib/core/drive_playback.dart`) turns `pairAgain` into
 `DriveAccount.notePairAgain`, and the player gets a hand-built stream
 (`driveStreamJson`) named after the file, with the name in
-`behaviorHints.filename` for the cast check.
+`behaviorHints.filename` for the subtitle memory's release key.
 
 **Tracking.** A Drive play of a known title is loaded with a stream request,
 because stremio-core writes the resume position, the watched mark and
