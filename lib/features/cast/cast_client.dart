@@ -72,6 +72,7 @@ final class CastStatus {
     this.duration,
     this.ended = false,
     this.failed = false,
+    this.picture,
   });
 
   final CastPlayerState state;
@@ -94,6 +95,13 @@ final class CastStatus {
   /// `_fallBackFromDirect`).
   final bool failed;
 
+  /// The picture the receiver says it is showing (its media status's
+  /// `videoInfo`), or null when it says none. A receiver decoding the
+  /// film's picture reports it from buffering on; one that cannot decode it
+  /// plays the sound and reports none (measured on a Chromecast with Google
+  /// TV 4K, 2026-10-05). Android only.
+  final CastPicture? picture;
+
   /// The same report at another position: what a seek shows while the
   /// receiver's own answer is still on its way.
   CastStatus at(Duration position) => CastStatus(
@@ -102,6 +110,7 @@ final class CastStatus {
     duration: duration,
     ended: ended,
     failed: failed,
+    picture: picture,
   );
 
   @override
@@ -111,15 +120,73 @@ final class CastStatus {
       other.position == position &&
       other.duration == duration &&
       other.ended == ended &&
-      other.failed == failed;
+      other.failed == failed &&
+      other.picture == picture;
 
   @override
-  int get hashCode => Object.hash(state, position, duration, ended, failed);
+  int get hashCode =>
+      Object.hash(state, position, duration, ended, failed, picture);
 
   @override
   String toString() =>
       'CastStatus($state, $position/$duration${ended ? ', ended' : ''}'
-      '${failed ? ', failed' : ''})';
+      '${failed ? ', failed' : ''}${picture == null ? '' : ', $picture'})';
+}
+
+/// The picture a receiver reports showing: its size, and its HDR type as
+/// the Cast SDK names it (`sdr`, `hdr10`, `dolbyVision`, `hdr`,
+/// `unknown`).
+@immutable
+final class CastPicture {
+  const CastPicture({required this.width, required this.height, this.hdr});
+
+  /// The platform's report (`{width, height, hdr}`), or null for anything
+  /// that is not one.
+  static CastPicture? fromMap(Object? map) {
+    if (map is! Map) return null;
+    final width = map['width'];
+    final height = map['height'];
+    if (width is! int || height is! int || width <= 0 || height <= 0) {
+      return null;
+    }
+    final hdr = map['hdr'];
+    return CastPicture(
+      width: width,
+      height: height,
+      hdr: hdr is String ? hdr : null,
+    );
+  }
+
+  final int width;
+  final int height;
+  final String? hdr;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CastPicture &&
+      other.width == width &&
+      other.height == height &&
+      other.hdr == hdr;
+
+  @override
+  int get hashCode => Object.hash(width, height, hdr);
+
+  @override
+  String toString() => '${width}x$height ${hdr ?? ''}'.trim();
+}
+
+/// **Which receivers showed no picture for which video**, for as long as
+/// the app runs: a receiver that played the sound of an HEVC film and no
+/// picture is not sent HEVC again this session. Keyed by the Cast device
+/// id and the codec's name.
+class ReceiverPictureMemory {
+  final Set<(String, String)> _failed = {};
+
+  void noPicture(String deviceId, String codec) =>
+      _failed.add((deviceId, codec));
+
+  bool showedNoPicture(String deviceId, String codec) =>
+      _failed.contains((deviceId, codec));
 }
 
 /// The media to hand a receiver: a URL it can fetch, what is in it, and what
@@ -197,6 +264,14 @@ abstract interface class CastClient {
   /// ([ReceiverTable.of]). Answers within a couple of seconds at most.
   Future<String?> receiverCodename(CastDevice device);
 
+  /// Which receivers showed no picture for which video, this session.
+  ReceiverPictureMemory get pictureMemory;
+
+  /// Whether [CastStatus.picture] is reported at all on this platform: a
+  /// receiver's silence about its picture means something only where it
+  /// would otherwise speak.
+  bool get reportsPicture;
+
   /// Ends the session. The receiver stops playing.
   Future<void> disconnect();
 
@@ -245,6 +320,13 @@ class UnsupportedCastClient implements CastClient {
 
   @override
   Future<String?> receiverCodename(CastDevice device) async => null;
+
+  /// Nothing is ever cast here, so nothing is remembered.
+  @override
+  ReceiverPictureMemory get pictureMemory => ReceiverPictureMemory();
+
+  @override
+  bool get reportsPicture => false;
 
   @override
   Future<void> disconnect() async {}

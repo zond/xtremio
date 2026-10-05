@@ -252,4 +252,41 @@ void main() {
     expect(reported.skip(1), everyElement(isNull));
     client.dispose();
   });
+
+  group('the picture the receiver reports', () {
+    test('rides on every status until the receiver says otherwise', () {
+      final client = GoogleCastClient();
+      client.onMediaStatus(reported(CastMediaPlayerState.buffering));
+      expect(client.lastStatus.picture, isNull);
+
+      client.onPicture({'width': 1280, 'height': 720, 'hdr': 'sdr'});
+      const picture = CastPicture(width: 1280, height: 720, hdr: 'sdr');
+      expect(client.lastStatus.picture, picture);
+      expect(client.lastStatus.state, CastPlayerState.buffering);
+
+      // A state change and a position tick keep it.
+      client.onMediaStatus(reported(CastMediaPlayerState.playing));
+      client.onPosition(const Duration(seconds: 4));
+      expect(client.lastStatus.picture, picture);
+      expect(client.lastStatus.state, CastPlayerState.playing);
+      expect(client.lastStatus.position, const Duration(seconds: 4));
+
+      // A status with no picture in it is no picture.
+      client.onPicture(null);
+      expect(client.lastStatus.picture, isNull);
+      client.dispose();
+    });
+
+    test('a report that is not a picture is none', () {
+      for (final report in [
+        null,
+        'sdr',
+        {'width': 0, 'height': 720},
+        {'width': 1280},
+        {'width': '1280', 'height': 720},
+      ]) {
+        expect(CastPicture.fromMap(report), isNull, reason: '$report');
+      }
+    });
+  });
 }

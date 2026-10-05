@@ -46,6 +46,9 @@ class MainActivity : FlutterActivity() {
      */
     private var displayRefreshRates: DisplayRefreshRates? = null
 
+    /** The receiver's report of the picture it shows (CastPictureChannel). */
+    private var castPicture: CastPictureChannel? = null
+
     /**
      * The native Drive picker's side of the conversation, alive for as long
      * as the engine is. Held because its result arrives through
@@ -124,6 +127,12 @@ class MainActivity : FlutterActivity() {
         // rather than a call (lib/shell/display_frame_rate.dart).
         displayRefreshRates = DisplayRefreshRates().also {
             EventChannel(flutterEngine.dartExecutor.binaryMessenger, DISPLAY_CHANNEL)
+                .setStreamHandler(it)
+        }
+        // Whether a receiver shows the picture it was handed
+        // (lib/features/cast/google_cast_client.dart).
+        castPicture = CastPictureChannel().also {
+            EventChannel(flutterEngine.dartExecutor.binaryMessenger, CAST_PICTURE_CHANNEL)
                 .setStreamHandler(it)
         }
         // The downloads notification (lib/features/downloads/downloads_service.dart).
@@ -464,6 +473,8 @@ class MainActivity : FlutterActivity() {
         downloads = null
         displayRefreshRates?.detach()
         displayRefreshRates = null
+        castPicture?.detach()
+        castPicture = null
         drivePicker?.detach()
         localMedia?.detach()
         localMedia = null
@@ -493,6 +504,7 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val DEVICE_CHANNEL = "xtremio/device"
         const val DISPLAY_CHANNEL = "xtremio/display"
+        const val CAST_PICTURE_CHANNEL = "xtremio/cast_picture"
         const val REQUEST_TEXT_ENTRY = 4712
     }
 }

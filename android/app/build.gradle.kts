@@ -44,6 +44,11 @@ dependencies {
     // naming it here adds nothing to the APK -- it only reaches our own
     // compile classpath.
     implementation("com.google.android.gms:play-services-cast:21.5.0")
+    // CastContext and RemoteMediaClient, for the receiver's own report of
+    // the picture it shows (CastPictureChannel), which the plugin drops.
+    // The plugin resolves this exact artifact already, as `implementation`
+    // of its own module: naming it adds nothing to the APK.
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     // Google Identity Services, for the native Drive picker (DrivePicker.kt).
     // AuthorizationRequest.ResourceParameter, which carries the picker
     // trigger, exists from 21.6.0 onward, so that is the version floor.

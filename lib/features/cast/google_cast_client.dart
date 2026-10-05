@@ -92,7 +92,42 @@ class GoogleCastClient implements CastClient {
     _subscriptions.addAll([
       client.mediaStatusStream.listen(_onMediaStatus),
       client.playerPositionStream.listen(_onPosition),
+      // The picture the receiver reports, which the plugin drops: the
+      // app's own listener on the same session (CastPictureChannel.kt).
+      // Silence on iOS and on a build without it.
+      if (Platform.isAndroid)
+        _pictureChannel.receiveBroadcastStream().listen(
+          _onPicture,
+          onError: (Object error) {
+            if (kDebugMode) debugPrint('cast picture unavailable: $error');
+          },
+        ),
     ]);
+  }
+
+  static const EventChannel _pictureChannel = EventChannel(
+    'xtremio/cast_picture',
+  );
+
+  /// The picture the receiver last reported, carried on every status.
+  CastPicture? _picture;
+
+  /// [_onPicture] for a test.
+  @visibleForTesting
+  void onPicture(Object? report) => _onPicture(report);
+
+  void _onPicture(Object? report) {
+    _picture = CastPicture.fromMap(report);
+    _emit(
+      CastStatus(
+        state: _last.state,
+        position: _last.position,
+        duration: _last.duration,
+        ended: _last.ended,
+        failed: _last.failed,
+        picture: _picture,
+      ),
+    );
   }
 
   /// [_onMediaStatus] for a test, which has no SDK stream to arrive on.
@@ -179,6 +214,7 @@ class GoogleCastClient implements CastClient {
         failed:
             state == CastPlayerState.idle &&
             status.idleReason == GoogleCastMediaIdleReason.error,
+        picture: _picture,
       ),
     );
   }
@@ -319,6 +355,14 @@ class GoogleCastClient implements CastClient {
   /// receiver is judged by its announced name ([ReceiverTable.of]).
   @override
   Future<String?> receiverCodename(CastDevice device) async => null;
+
+  @override
+  final ReceiverPictureMemory pictureMemory = ReceiverPictureMemory();
+
+  /// Android only: the picture comes from the app's own listener
+  /// (CastPictureChannel.kt), and iOS is not carried.
+  @override
+  bool get reportsPicture => Platform.isAndroid;
 
   @override
   Future<CastDevice?> connect(CastDevice device) async {

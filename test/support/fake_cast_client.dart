@@ -64,6 +64,16 @@ class FakeCastClient implements CastClient {
     return codenames[device.id];
   }
 
+  @override
+  final ReceiverPictureMemory pictureMemory = ReceiverPictureMemory();
+
+  /// Whether this platform reports a receiver's picture
+  /// ([CastStatus.picture]). False unless a test is about the picture
+  /// check: a receiver here reports what the test emits and no more, and
+  /// one that never reports a picture is one the check would end.
+  @override
+  bool reportsPicture = false;
+
   /// When set, `connect` records the device and then answers null.
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
