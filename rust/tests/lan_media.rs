@@ -18,7 +18,8 @@ use tokio::sync::Mutex;
 static SERVER: Mutex<()> = Mutex::const_new(());
 
 use xtremio_core::api::media::{
-    media_publish, media_register_local_path, media_resolve, media_set_play, media_unpublish,
+    media_cast_numbers, media_publish, media_register_local_path, media_resolve, media_set_play,
+    media_unpublish,
 };
 use xtremio_core::api::server::{
     server_lan_media_base_url, server_lan_media_bodies_served, server_lan_media_requests_served,
@@ -222,6 +223,30 @@ async fn a_published_id_is_served_by_its_token_and_nothing_else() -> anyhow::Res
     assert_eq!(body.bytes().await?.as_ref(), film.as_slice());
     assert_eq!(server_lan_media_bodies_served()?, 1);
     assert!(server_lan_media_requests_served()? >= 2);
+    // What the cast panel is told about this one publication: its HEAD and
+    // its GET, the whole film sent, read from a file on the device.
+    // The body ends when the server has dropped it, a moment after the
+    // client has the last byte: a bounded poll for it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let numbers = loop {
+        let numbers: serde_json::Value =
+            serde_json::from_str(&media_cast_numbers(token.clone())?.expect("published"))?;
+        if numbers["delivery"]["bodiesOpen"] == 0 || std::time::Instant::now() > deadline {
+            break numbers;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    };
+    assert_eq!(numbers["kind"], "plain", "{numbers}");
+    assert_eq!(numbers["delivery"]["requests"], 2, "{numbers}");
+    assert_eq!(numbers["delivery"]["bodiesBegun"], 1, "{numbers}");
+    assert_eq!(numbers["delivery"]["bodiesOpen"], 0, "{numbers}");
+    assert_eq!(numbers["delivery"]["bytes"], film.len() as u64, "{numbers}");
+    assert_eq!(
+        numbers["source"]["bytesRead"],
+        film.len() as u64,
+        "{numbers}"
+    );
+    assert_eq!(numbers["rendition"], serde_json::Value::Null, "{numbers}");
     assert_eq!(
         status_of(socket, &format!("/cast/{id}")).await?,
         StatusCode::NOT_FOUND,
@@ -239,6 +264,7 @@ async fn a_published_id_is_served_by_its_token_and_nothing_else() -> anyhow::Res
         status_of(socket, &format!("/cast/{token}")).await?,
         StatusCode::NOT_FOUND
     );
+    assert_eq!(media_cast_numbers(token.clone())?, None, "not published");
     assert!(!tokio::task::spawn_blocking(move || media_unpublish(token)).await??);
 
     tokio::task::spawn_blocking(|| server_set_lan_media(false)).await??;

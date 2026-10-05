@@ -269,6 +269,18 @@ pub fn rendition_readiness_in(app: &AppState, token: &str) -> anyhow::Result<Str
     })
 }
 
+/// What the publication `token` has served, as JSON
+/// (`ServerHandle::cast_numbers`), or `None` for a token not published.
+pub fn cast_numbers_in(app: &AppState, token: &str) -> anyhow::Result<Option<String>> {
+    let token = CastToken::from(token.to_owned());
+    crate::server::with_handle_in(app, |handle| {
+        handle
+            .cast_numbers(&token)
+            .map(|numbers| serde_json::to_string(&numbers).map_err(Into::into))
+            .transpose()
+    })
+}
+
 /// Ends a publication: nothing more is served under `token`, and a body
 /// being served under it is cut. Whether it was published. `false` when
 /// the server is not running, which stopped the listener and every token
@@ -491,6 +503,7 @@ mod tests {
         assert!(read_wait_in(&app, "abc").is_err());
         let spec = r#"{"durationMs":1,"segmentMs":1,"startMs":0,"video":"copy","audio":"copy","audioTrack":0}"#;
         assert!(publish_rendition_in(&app, "abc", spec).is_err());
+        assert!(cast_numbers_in(&app, "a-token").is_err());
         assert!(!unpublish_in(&app, "a-token"));
     }
 

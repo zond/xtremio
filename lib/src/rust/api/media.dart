@@ -80,6 +80,17 @@ bool mediaPrepareRendition({required String token}) =>
 String mediaRenditionReadiness({required String token}) =>
     RustLib.instance.api.crateApiMediaMediaRenditionReadiness(token: token);
 
+/// What the publication `token` has served so far, as JSON -- the
+/// server's `CastNumbers`: `kind` (`plain`, `rendition`), `contentType`,
+/// `delivery` (requests, bodies begun, ended and open, bytes, where the
+/// latest body began, the furthest byte sent), `source` (its kind, bytes
+/// read, opens, seeks) and for a rendition what it has made -- or `None`
+/// once it is not published. Counts that only grow, no rate: the caller
+/// divides two answers by the time between them. Cheap; polled while the
+/// cast panel is up.
+String? mediaCastNumbers({required String token}) =>
+    RustLib.instance.api.crateApiMediaMediaCastNumbers(token: token);
+
 /// Whether this device can make a rendition: a player has loaded libmpv,
 /// and the FFmpeg in it is the one this build is bound to. False until the
 /// first player has registered (`mpv_stream_register`), and on a desktop
