@@ -417,13 +417,21 @@ void main() {
 
       testWidgets('a rendition that fails while prepared is refused with its '
           'sentence', (tester) async {
+        // The producer's own refusal, quoted as `rust/tests/rendition.rs`
+        // quotes it from the readiness: Dolby Vision profile 5, which mpv
+        // does not report, so nothing refuses it before the producer reads
+        // the container's record.
+        const dolbyVision5 =
+            "This film's picture is Dolby Vision profile 5, which has no "
+            'ordinary HDR or SDR picture underneath: the television would '
+            'show it in the wrong colours.';
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final harness = preparingHarness(cast);
         harness.mediaIds.nextReadiness.add(const RenditionReadiness('index'));
         harness.mediaIds.readiness = const RenditionReadiness(
           'failed',
-          sentence: 'This phone cannot repackage this film.',
+          sentence: dolbyVision5,
         );
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
@@ -435,10 +443,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(CastRefusedDialog), findsOneWidget);
-        expect(
-          find.text('This phone cannot repackage this film.'),
-          findsOneWidget,
-        );
+        expect(find.text(dolbyVision5), findsOneWidget);
         expect(cast.loads, isEmpty);
         expect(harness.mediaIds.unpublished, ['t1']);
         expect(find.byType(CastPreparingPanel), findsNothing);

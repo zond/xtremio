@@ -914,6 +914,35 @@ fn hevc_films(
         );
         drop(demuxer);
         let url = publish(&path, 4_000, SEGMENT_MS)?;
+        if refused {
+            // **The app hears it before the receiver does**: what the
+            // player polls while it prepares the cast is the producer's
+            // sentence, which the dialog shows as it is (mpv reports no
+            // Dolby Vision profile, so nothing earlier can refuse it).
+            let token = url
+                .split("/cast/")
+                .nth(1)
+                .and_then(|rest| rest.strip_suffix("/stream.mp4"))
+                .expect("a rendition's URL")
+                .to_owned();
+            assert!(xtremio_core::api::media::media_prepare_rendition(
+                token.clone()
+            )?);
+            let mut readiness = serde_json::Value::Null;
+            wait_for("the prepared rendition to fail", || {
+                readiness = serde_json::from_str(
+                    &xtremio_core::api::media::media_rendition_readiness(token.clone()).unwrap(),
+                )
+                .unwrap();
+                readiness["phase"] == "failed"
+            });
+            assert_eq!(
+                readiness["sentence"],
+                "This film's picture is Dolby Vision profile 5, which has no ordinary HDR or \
+                 SDR picture underneath: the television would show it in the wrong colours.",
+                "{readiness}"
+            );
+        }
         let (status, _, body) = get(runtime, &url, None);
         if refused {
             assert_eq!(status, 503, "profile {profile}");

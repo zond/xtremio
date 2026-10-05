@@ -288,9 +288,13 @@ const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 /// one receiver until the receiver table (step F5 of the renditions design)
 /// makes it a row per model; an HEVC film cast to a receiver without HEVC
 /// (a first- to third-generation Chromecast) is a black screen until then.
-/// Dolby Vision is not visible from here (mpv reports it as HEVC): the
-/// producer copies profiles 7 and 8 as their base layer and refuses
-/// profile 5 with its own sentence.
+/// Dolby Vision is not visible from here: mpv reports it as HEVC, and the
+/// libmpv this app ships (v0.36.0-549, media_kit's
+/// libmpv-android-video-build v1.1.11) has no `dolby-vision-profile`
+/// track property to ask. The producer reads the container's record,
+/// copies profiles 7 and 8 as their base layer and refuses profile 5 with
+/// its own sentence, which reaches the viewer through the readiness the
+/// player polls while it prepares the cast.
 const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 
 /// The video zond's receiver decodes, of the codecs mpv names: what tells a

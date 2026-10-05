@@ -113,18 +113,25 @@ names it and why (the sound is never the reason: it converts):
   "This film's video is AV1, which this receiver can't play, and xtremio
   can't convert it for casting yet." (step F4).
 
-What mpv cannot see, the producer refuses when the receiver first asks:
-**Dolby Vision**. mpv reports it as HEVC; the producer reads the container's
-Dolby Vision record (`StreamInfo::dolby_vision`, from the stream's side
+What mpv cannot see, the producer refuses while the cast is prepared:
+**Dolby Vision**. mpv reports it as HEVC, and the libmpv this app ships
+(v0.36.0-549) has no `dolby-vision-profile` track property to ask; the
+producer reads the container's Dolby Vision record (`StreamInfo::dolby_vision`, from the stream's side
 data) and copies profiles 7 and 8 as the HDR10, SDR or HLG base layer they
 carry, dropping the RPU and enhancement-layer NAL units (types 62 and 63)
 and signalling no Dolby Vision; **profile 5** -- a base layer only a Dolby
 Vision decoder shows right -- fails the rendition with "This film's
 picture is Dolby Vision profile 5, which has no ordinary HDR or SDR picture
 underneath: the television would show it in the wrong colours." The
-server answers the receiver `503` with that sentence; the app does not yet
-read a rendition's state (`rendition_state`, step F5), so on the phone it
-shows as a receiver that did not play. The player then publishes a
+preparation below meets it before the receiver is told anything:
+`media_rendition_readiness` answers `failed` with that sentence, and the
+phone shows it in the refusal dialog (`rust/tests/rendition.rs` and
+`player_cast_test.dart` quote it on both sides). A receiver that asks
+anyway is answered `503` with it. **The gap**: a profile 5 film in an MP4
+with AAC sound is not a rendition, so no producer reads its record; it is
+handed over as it is and shows in the wrong colours. Closing it needs a
+libmpv that reports the profile (a newer mpv's track property), or a
+server-side sniff of the record before the hand-over. The player then publishes a
 **rendition** (`media_publish_rendition`, stream-server's
 `ServerHandle::publish_rendition`) with this player's duration, position and
 audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
