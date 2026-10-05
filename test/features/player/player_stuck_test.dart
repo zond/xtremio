@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_stall_overlay.dart';
@@ -13,11 +14,19 @@ import '../../support/player_harness.dart';
 /// container index arrives the flag clears and the overlay comes down,
 /// even though nothing plays for minutes afterwards -- three and a half,
 /// measured -- with no second stall of mpv's own to show for it.
+///
+/// What says the viewer is waiting on the torrent is the server, which knows
+/// a read is parked ([ReadWait]); a position standing still with every read
+/// answered is a picture that froze for some other reason, and it is
+/// written down rather than called a wait for the torrent.
 void main() {
-  testWidgets('a position that stops moving brings the overlay back', (
-    tester,
-  ) async {
+  /// A read the server says has been parked for two seconds.
+  const parked = ReadWait(waiting: Duration(seconds: 2), offset: 1 << 30);
+
+  testWidgets('a position that stops moving on a parked read brings the '
+      'overlay back', (tester) async {
     final harness = PlayerHarness();
+    harness.streamNumbers.readWait = parked;
     await harness.pump(tester);
     // The file is open and known, so the start-up overlay's own polling
     // is over: what polls from here is the stall's.
@@ -52,6 +61,7 @@ void main() {
 
     // Moving again takes it away. Twice, because the engine's event lands
     // in one frame and the rebuild it asks for happens in the next.
+    harness.streamNumbers.readWait = ReadWait.none;
     harness.engine.emitPosition(const Duration(seconds: 940));
     await tester.pump();
     await tester.pump();
@@ -124,6 +134,7 @@ void main() {
     // twitch.
     final lines = captureDiagnostics();
     final harness = PlayerHarness();
+    harness.streamNumbers.readWait = parked;
     await harness.pump(tester);
     harness.engine.emitDuration(const Duration(seconds: 6669));
     harness.engine.emitPlaying(true);
@@ -144,6 +155,31 @@ void main() {
     harness.engine.emitPosition(const Duration(seconds: 5114));
     await pumpEvents(tester);
     expect(find.textContaining(TorrentStallOverlay.waiting), findsNothing);
+  });
+
+  testWidgets('a picture standing still with every read answered is written '
+      'down, not called a wait for the torrent', (tester) async {
+    // The guess this readout replaced: a frozen picture with no read
+    // parked is a decoder or a display, and "Buffering from the torrent"
+    // would be the wrong thing to tell the viewer.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(seconds: 6669));
+    harness.engine.emitPlaying(true);
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(seconds: 939));
+    await pumpEvents(tester);
+
+    await tester.pump(PlayerScreen.stuckAfter + PlayerScreen.stuckInterval);
+    expect(find.textContaining(TorrentStallOverlay.waiting), findsNothing);
+    expect(
+      lines,
+      contains(
+        'warn player the position has not moved for 5s at 939s, and mpv '
+        'reports no stall',
+      ),
+    );
   });
 
   testWidgets('a paused player is not waiting', (tester) async {

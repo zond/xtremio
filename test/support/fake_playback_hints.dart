@@ -74,4 +74,16 @@ class FakePlaybackHints implements PlaybackHints {
     callLog?.add('stalled');
     mediaStalls.add(id);
   }
+
+  /// Every leaving position reported, as `(id, seconds)`, in order.
+  final List<(String, double)> positions = [];
+
+  @override
+  Future<void> noteMediaPosition({
+    required String id,
+    required double positionSeconds,
+  }) async {
+    callLog?.add('position');
+    positions.add((id, positionSeconds));
+  }
 }

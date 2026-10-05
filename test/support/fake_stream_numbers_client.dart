@@ -51,6 +51,21 @@ class FakeStreamNumbersClient implements StreamNumbersReader {
   Future<StreamNumbers?> mediaStreamNumbers(String id) =>
       streamNumbers(mediaIdUrl(id));
 
+  /// What every read-wait ask answers: nothing waiting unless a test says
+  /// a read is parked.
+  ReadWait readWait = ReadWait.none;
+
+  /// Every id the read-wait readout was asked about, in order.
+  final List<String> readWaitAsks = [];
+
+  @override
+  Future<ReadWait> mediaReadWait(String id) async {
+    readWaitAsks.add(id);
+    final failure = this.failure;
+    if (failure != null) throw failure;
+    return readWait;
+  }
+
   @override
   Future<StreamNumbers?> streamNumbers(Uri url) async {
     requests.add(url);

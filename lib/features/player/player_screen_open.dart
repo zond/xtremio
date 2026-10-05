@@ -146,8 +146,21 @@ extension _PlayerOpen on _PlayerScreenState {
     return id is String ? remember(id) : id.then(remember);
   }
 
-  void _setPlay(String id) =>
-      _mediaIds?.setPlay(id, token: _proxyToken, buffer: _bufferAhead.wire);
+  /// The play goes with the id, and so does where it resumes
+  /// ([MediaIds.setResume]): the server asks the swarm for the resume
+  /// point while mpv is still reading the file's head and index. The
+  /// runtime is the one the last playback reported, when there was one.
+  void _setPlay(String id) {
+    final ids = _mediaIds;
+    if (ids == null) return;
+    ids.setPlay(id, token: _proxyToken, buffer: _bufferAhead.wire);
+    final runtime = _openState?.progress?.duration ?? 0;
+    ids.setResume(
+      id,
+      at: _openStart,
+      runtime: runtime > 0 ? Duration(milliseconds: runtime) : null,
+    );
+  }
 
   /// What the engine is to be handed for [url], registered as [id]: has the
   /// server resolve it first, and answers `xtremio://<id>` for anything

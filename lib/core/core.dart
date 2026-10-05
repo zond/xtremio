@@ -51,6 +51,7 @@ export 'state/remote_addons.dart';
 export 'state/server_storage.dart';
 export 'state/stream.dart';
 export 'state/stream_hints.dart';
+export 'state/read_wait.dart';
 export 'state/stream_numbers.dart';
 export 'stream_order.dart';
 export 'stream_proxy.dart';

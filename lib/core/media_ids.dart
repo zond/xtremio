@@ -229,6 +229,14 @@ abstract interface class MediaIds {
   /// id carries the same play.
   void setPlay(String id, {required String token, required String buffer});
 
+  /// Where the playback mpv's reader over [id] will be resumes ([at];
+  /// zero for one from the top) and how long the film is if the app knows
+  /// ([runtime]). Set right after [setPlay]: a torrent then has the swarm
+  /// asked for the resume point while mpv is still reading the file's head
+  /// and index, rather than only once it blocks there. A hint: never
+  /// throws.
+  void setResume(String id, {required Duration at, Duration? runtime});
+
   /// The viewer changed the read-ahead: the reader open on [id] takes it
   /// at its next seek, and nothing re-opens the player. Throws when the
   /// server holds nothing under [id] or is not running.
@@ -308,6 +316,16 @@ class RustMediaIds implements MediaIds {
   @override
   void setPlay(String id, {required String token, required String buffer}) =>
       rust.mediaSetPlay(id: id, token: token, buffer: buffer);
+
+  @override
+  void setResume(String id, {required Duration at, Duration? runtime}) =>
+      rust.mediaSetResume(
+        id: id,
+        resumeSeconds: at.inMicroseconds / Duration.microsecondsPerSecond,
+        runtimeSeconds: runtime == null
+            ? null
+            : runtime.inMicroseconds / Duration.microsecondsPerSecond,
+      );
 
   @override
   void setBuffer(String id, String buffer) =>

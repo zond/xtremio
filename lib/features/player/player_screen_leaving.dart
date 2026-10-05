@@ -62,6 +62,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     _controlsTimer = null;
     _stuckTimer?.cancel();
     _stuckTimer = null;
+    _readWaitTimer?.cancel();
+    _readWaitTimer = null;
     _subtitleFailureTimer?.cancel();
     _subtitleFailureTimer = null;
   }
@@ -89,6 +91,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     // Reports are a second apart; the viewer's last second is not lost to
     // the throttle, and the stop that follows reports nothing ([_detach]).
     _flushTime();
+    // And to the server, which remembers where its reader was with it.
+    _reportLeavingPosition();
     // Nothing may act on the player from here on, and this is the line
     // that says so: it comes before the first `await` below, because what
     // it stops is precisely what would otherwise get a turn during one.

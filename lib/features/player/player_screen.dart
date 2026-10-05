@@ -139,6 +139,17 @@ class PlayerScreen extends StatefulWidget {
   /// along).
   static const Duration stuckTwitch = Duration(milliseconds: 500);
 
+  /// How often the server is asked whether mpv's reader of the playing
+  /// media id is waiting on a read ([ReadWait]), once the media has loaded.
+  /// A question about memory the server answers without I/O.
+  static const Duration readWaitInterval = Duration(milliseconds: 500);
+
+  /// How long a read has to have waited, with the picture standing still,
+  /// before the viewer is told they are waiting for the torrent. A read off
+  /// the disk returns in microseconds; one a second old is parked on a
+  /// piece the swarm has not delivered.
+  static const Duration readWaitShown = Duration(seconds: 1);
+
   /// How long the stats OSD stays up after the pointer stops moving.
   static const Duration statsHoverTimeout = Duration(seconds: 3);
 
@@ -304,6 +315,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     'playing': _playing,
     'buffering': _buffering,
     'positionStuck': _positionStuck,
+    'readStalled': _readStalled,
     'casting': _casting,
     'leaving': _leaving,
     'engineError': _engineError == null
@@ -533,6 +545,22 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([PlayerScreen.stuckTwitch]).
   Duration _stillFrom = Duration.zero;
   bool _positionStuck = false;
+
+  /// **Whether the viewer is waiting on a read the server knows is
+  /// parked**: mpv's reader of the playing media id has been blocked for
+  /// [PlayerScreen.readWaitShown] and the picture has not moved since the
+  /// last ask. The truth that [_positionStuck] guessed at: mpv blocked in a
+  /// read -- at the start, in the index, at the resume point -- reports no
+  /// stall and no cache to wait for. Asked every
+  /// [PlayerScreen.readWaitInterval] ([_pollReadWait]).
+  bool _readStalled = false;
+  Timer? _readWaitTimer;
+  bool _readWaitFetching = false;
+
+  /// The position at the last read-wait ask, which the next one compares
+  /// against: a read can wait while mpv plays out its own buffer, and
+  /// that is no wait of the viewer's.
+  Duration? _readWaitFrom;
 
   /// Whether the player has reported a position at all yet.
   ///
@@ -1351,6 +1379,18 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       if ((position - _stillFrom).abs() >= PlayerScreen.stuckTwitch) {
         _stillTicks = 0;
         _stillFrom = position;
+        // Film is moving: whatever read the server says is waiting, the
+        // viewer is not waiting on it ([_readStalled]); the next ask
+        // measures again from here.
+        if (_readStalled) {
+          DiagnosticsLog.info(
+            'player',
+            'playing again at ${position.inSeconds}s, after a read waited',
+          );
+          _readWaitFrom = position;
+          setState(() => _readStalled = false);
+          _syncStatsPolls();
+        }
         if (_positionStuck) {
           DiagnosticsLog.info(
             'player',
@@ -1456,8 +1496,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   }
 
   /// Watches for a position that has stopped moving while the player says
-  /// it is playing; see [_positionStuck].
+  /// it is playing ([_positionStuck]), and asks the server whether a read
+  /// is what it is waiting on ([_readStalled]).
   void _startStuckWatch() {
+    _readWaitTimer?.cancel();
+    _readWaitFrom = null;
+    _readWaitTimer = Timer.periodic(
+      PlayerScreen.readWaitInterval,
+      (_) => _pollReadWait(),
+    );
     _stuckTimer?.cancel();
     _stillTicks = 0;
     _stillFrom = Duration.zero;
@@ -1567,8 +1614,17 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool get _startupOverlayShown =>
       _torrentStatsRequest != null && !_mediaLoaded;
 
-  /// Either of the two ways of waiting; see [_positionStuck].
-  bool get _waiting => _buffering || _positionStuck;
+  /// Every way of waiting: mpv's own stall, a read the server says is
+  /// parked ([_readStalled]), and -- only where the server cannot be asked,
+  /// a stream with no media id -- a position standing still
+  /// ([_positionStuck]), which is a guess the readout replaced.
+  bool get _waiting =>
+      _buffering || _readStalled || (_positionStuck && !_readWaitAsked);
+
+  /// Whether the read-wait readout speaks for this playback: a media id
+  /// the server reads, and a server to ask.
+  bool get _readWaitAsked =>
+      _playingMediaId != null && _streamNumbersReader != null;
 
   /// The stall card replaces the plain spinner-and-sentence status once
   /// playback has begun, for a torrent the server can still be asked about.

@@ -6,6 +6,7 @@ import 'diagnostics_log.dart';
 import 'state/background_traffic.dart';
 import 'state/dht_status.dart';
 import 'state/server_storage.dart';
+import 'state/read_wait.dart';
 import 'state/stream_numbers.dart';
 
 /// Control over the server's LAN media listener, which is what a cast
@@ -135,6 +136,12 @@ abstract interface class StreamNumbersReader {
   /// server holds of what [id] resolved to. Null for an id not resolved
   /// yet, and in the same cases as there.
   Future<StreamNumbers?> mediaStreamNumbers(String id);
+
+  /// Whether mpv's reader of [id] is waiting on a read now ([ReadWait]):
+  /// what the player shows its buffering card from while mpv, blocked in
+  /// the read, reports no stall. Cheap; polled. **Throws** when the server
+  /// is not running or holds nothing under [id].
+  Future<ReadWait> mediaReadWait(String id);
 }
 
 /// What the player tells the server about a playback that the server
@@ -193,6 +200,14 @@ abstract interface class PlaybackHints {
 
   /// [notePlayerStalled] for a stream played by id.
   Future<void> noteMediaPlayerStalled({required String id});
+
+  /// The player of [id] is leaving at [positionSeconds] of the film: the
+  /// server remembers it with where its reader was, so the next playback
+  /// of the file resuming near there asks the swarm for that region first.
+  Future<void> noteMediaPosition({
+    required String id,
+    required double positionSeconds,
+  });
 }
 
 /// Changing something about the embedded server, which is one call: a
@@ -305,6 +320,12 @@ class ServerClient
   Future<void> noteMediaPlayerStalled({required String id}) =>
       media.mediaNotePlayerStalled(id: id);
 
+  @override
+  Future<void> noteMediaPosition({
+    required String id,
+    required double positionSeconds,
+  }) => media.mediaNotePosition(id: id, positionSeconds: positionSeconds);
+
   /// The server's settings (`GET /settings` → `values`: `cacheRoot`,
   /// `cacheSize`, `btMaxConnections`, ...). Throws when the server is not
   /// running.
@@ -409,6 +430,10 @@ class ServerClient
     final json = await media.mediaStreamNumbers(id: id);
     return json == null ? null : StreamNumbers.fromJson(jsonDecode(json));
   }
+
+  @override
+  Future<ReadWait> mediaReadWait(String id) async =>
+      ReadWait.fromJson(jsonDecode(await media.mediaReadWait(id: id)));
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's

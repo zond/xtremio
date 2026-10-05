@@ -23,6 +23,9 @@ class FakeMediaIds implements MediaIds {
   /// Every buffer change, in order.
   final List<(String, String)> buffers = [];
 
+  /// Every resume recorded, in order.
+  final List<({String id, Duration at, Duration? runtime})> resumes = [];
+
   /// Every id published, in order, and the tokens handed out for them
   /// (`t1`, `t2`, ...).
   final List<String> published = [];
@@ -117,6 +120,10 @@ class FakeMediaIds implements MediaIds {
   @override
   void setPlay(String id, {required String token, required String buffer}) =>
       plays.add((id: id, token: token, buffer: buffer));
+
+  @override
+  void setResume(String id, {required Duration at, Duration? runtime}) =>
+      resumes.add((id: id, at: at, runtime: runtime));
 
   @override
   void setBuffer(String id, String buffer) => buffers.add((id, buffer));

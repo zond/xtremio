@@ -488,6 +488,27 @@ always with the speed and the swarm, zeros included. The swarm line
 tracker-scraped seeds and swarm size; a scrape that never answered leaves
 those out rather than printing 0.
 
+**The card also comes from the server's word that a read is parked.** mpv
+blocked in a `stream_cb` read reports no stall and no cache to wait for:
+the picture just stops -- after the head, in the container index, at the
+resume point. For a torrent played by id the player asks
+`media_read_wait` every 500 ms once the media has loaded, and the card is
+up while a read has waited a second with the picture still since the last
+ask and mpv saying it plays; it comes down at the first ask that finds
+reads flowing, or the moment film moves. A position standing still with
+every read answered is logged ("the position has not moved…"), not called
+a wait for the torrent; only a stream with no media id still shows the card
+from that guess.
+
+**A resumed torrent asks for its resume point early.** The player tells the
+server where it resumes and the length the last playback reported
+(`media_set_resume`, beside `media_set_play`), and where the viewer left it
+(`media_note_position`, on leaving). The server asks the swarm for the
+region around the resume point once the file's head is in, beside the
+index read, from where the last session ended when that is near the resume
+time and the resume time's share of the file otherwise (stream-server's
+`docs/design/media-pipeline.md` §2.11).
+
 **An engine error is not a failed playback.** media_kit turns mpv's error
 log lines into `errors` events, so "Playback failed" is shown only until the
 file has loaded (a duration or a position past zero); after that an error is
