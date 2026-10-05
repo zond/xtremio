@@ -10,6 +10,7 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_cast_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -41,11 +42,13 @@ void main() {
     Map<String, dynamic>? player,
     CastClient? cast,
     LanMediaControl? lanMedia,
+    PlaybackStats? mpvReport,
   }) async {
     final harness = PlayerHarness(
       player: player,
       cast: cast,
       lanMedia: lanMedia,
+      mpvReport: mpvReport,
       configureEngine: (engine) => engine.disposeGate = wedged,
     );
     await harness.pumpPushed(tester);
@@ -157,23 +160,13 @@ void main() {
     final cast = FakeCastClient(devices: const [livingRoom]);
     final lan = FakeLanMediaControl()
       ..baseUrl = Uri.parse('http://192.168.1.20:39271/');
-    final fixture = loadPlayerFixture();
-    final stream =
-        (fixture['selected'] as Map<String, dynamic>)['stream']
-            as Map<String, dynamic>;
-    stream['behaviorHints'] = {'filename': 'film.mp4'};
-    final content =
-        (fixture['stream'] as Map<String, dynamic>)['content'] as List<dynamic>;
-    (content[1] as Map<String, dynamic>)['behaviorHints'] = {
-      'filename': 'film.mp4',
-    };
     final wedged = Completer<void>();
     final harness = await pumpWatching(
       tester,
       wedged,
-      player: fixture,
       cast: cast,
       lanMedia: lan,
+      mpvReport: mpvMp4H264Aac,
     );
 
     await tester.tap(find.byKey(const ValueKey('cast')));

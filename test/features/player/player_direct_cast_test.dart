@@ -9,6 +9,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/diagnostics_capture.dart';
 import '../../support/fake_cast_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -62,7 +63,7 @@ Future<DirectCast> pumpLink(
   WidgetTester tester, {
   Map<String, dynamic>? player,
   MediaResolution resolution = const MediaResolution(),
-  PlaybackStats? stats,
+  PlaybackStats stats = mpvMp4H264Aac,
 }) async {
   useWideViewport(tester);
   final cast = FakeCastClient(devices: const [livingRoom]);
@@ -71,6 +72,7 @@ Future<DirectCast> pumpLink(
     player: player ?? playerWithLink(),
     cast: cast,
     lanMedia: lan,
+    mpvReport: stats,
   );
   harness.mediaIds.resolution = resolution;
   await harness.pump(tester);
@@ -79,10 +81,6 @@ Future<DirectCast> pumpLink(
   await pumpEvents(tester);
   await tester.tap(find.byKey(const ValueKey('cast')));
   await tester.pumpAndSettle();
-  if (stats != null) {
-    harness.engine.emitStats(stats);
-    await tester.pump();
-  }
   await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
   await tester.pumpAndSettle();
   return DirectCast(harness, cast, lan);
@@ -265,6 +263,7 @@ void main() {
         player: playerWithLink(),
         cast: cast,
         lanMedia: lan,
+        mpvReport: mpvMp4H264Aac,
       );
       await harness.pump(tester);
       await tester.tap(find.byKey(const ValueKey('cast')));
@@ -325,15 +324,15 @@ void main() {
       await expectRelayed(run);
     });
 
-    testWidgets('a Matroska link, which is repackaged here', (tester) async {
-      const mkv = 'https://$debridHost/d/KEY123/Night.of.the.Living.Dead.mkv';
-      final run = await pumpLink(
-        tester,
-        player: playerWithLink(url: mkv),
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'aac'),
-      );
+    testWidgets('a link mpv reads as Matroska, which is repackaged here', (
+      tester,
+    ) async {
+      // Named `.mp4`, which counts for nothing: mpv reads a Matroska.
+      final run = await pumpLink(tester, stats: mpvMkvH264Aac);
       // Not handed over as it is; with no renditions on this "device" it
-      // is not cast at all, and nothing went to the receiver directly.
+      // is refused as the Matroska it is, and nothing went to the receiver
+      // directly.
+      expect(find.textContaining('Matroska'), findsOneWidget);
       expect(run.cast.loads, isEmpty);
       expect(run.lan.toggles, isEmpty);
     });

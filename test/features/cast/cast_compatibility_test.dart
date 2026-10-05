@@ -1,37 +1,35 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_compatibility.dart';
-import 'package:xtremio/features/details/stream_facts.dart';
-import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 
 /// The torrent URL the server serves a stream from: no extension anywhere
-/// in it, which is why the filename is what the check reads.
+/// in it, and nothing the check would read if there were.
 final torrentUrl = Uri.parse(
   'http://127.0.0.1:11470/11ea02584fa6351956f35671962ab46354d99060/0',
 );
 
-StreamFacts factsFor(String name, {String? filename}) => StreamFacts.of(
-  StreamInfo({
-    'name': name,
-    'url': 'http://example.com/x',
-    'behaviorHints': {'filename': ?filename},
-  }),
-);
+/// A stream played by id, which is what a rendition is made from.
+final byId = mediaIdUrl('0123456789abcdef0123456789abcdef');
+
+/// mpv's `file-format` for the two families: libavformat's one reader for
+/// MP4, M4V and QuickTime, and mpv's own Matroska reader.
+const mp4Format = 'mov,mp4,m4a,3gp,3g2,mj2';
+const mkvFormat = 'mkv';
+
+PlaybackStats mp4({String? video = 'h264 (High)', String? audio = 'aac'}) =>
+    PlaybackStats(fileFormat: mp4Format, videoCodec: video, audioCodec: audio);
+
+PlaybackStats mkv({String? video = 'h264 (High)', String? audio = 'aac'}) =>
+    PlaybackStats(fileFormat: mkvFormat, videoCodec: video, audioCodec: audio);
 
 CastCompatibility check({
   Uri? url,
-  StreamFacts? facts,
-  String? filename,
   PlaybackStats? stats,
-  bool containerPending = false,
   bool canRepackage = false,
 }) => CastCompatibility.of(
   url: url ?? torrentUrl,
-  facts: facts,
-  filename: filename,
   stats: stats,
-  containerPending: containerPending,
   canRepackage: canRepackage,
 );
 
@@ -64,84 +62,126 @@ CastRefusal? refusalOf(CastCompatibility result) =>
     result is CastRefused ? result.reason : null;
 
 void main() {
-  group('the container decides first', () {
-    test('an MP4 with nothing said about its codecs is castable', () {
-      final result = check(filename: 'Sintel.2010.1080p.mp4');
-      expect(result, isA<CastReady>());
+  group('mpv says what the file is, and nothing else does', () {
+    test('an MP4 mpv reads as H.264 and AAC is castable', () {
+      final result = check(stats: mp4());
       expect((result as CastReady).contentType, 'video/mp4');
     });
 
-    test('WebM is castable and declares its own type', () {
-      final result = check(filename: 'clip.webm');
-      expect((result as CastReady).contentType, 'video/webm');
-    });
-
-    test('a Matroska file is refused, and the sentence names it', () {
-      final result = check(filename: 'Sintel.2010.1080p.mkv');
-      expect(refusalOf(result), CastRefusal.container);
-      expect((result as CastRefused).explanation, contains('Matroska'));
-      // The refusal has to say the conversion is missing, not just "no".
-      expect(result.explanation, contains('conversion'));
-    });
-
-    test('an unknown container is refused rather than guessed at', () {
-      // A torrent URL with no filename anywhere: the common case, where a
-      // wrong guess cannot be corrected once casting has started.
-      final result = check();
-      expect(refusalOf(result), CastRefusal.unknownContainer);
-      expect((result as CastRefused).explanation, contains('conversion'));
-    });
-
-    test('a URL that ends in a file name is read when nothing else does', () {
-      final result = check(
-        url: Uri.parse('https://cdn.example.com/movies/sintel.mp4'),
-      );
-      expect(result, isA<CastReady>());
-    });
-
-    test('a torrent whose server has not answered is a "not yet"', () {
-      // The first seconds of a torrent: nothing names the file, but the
-      // server is about to. That is a wait, not the verdict below it.
-      final result = check(containerPending: true);
-      expect(refusalOf(result), CastRefusal.containerPending);
-      expect((result as CastRefused).explanation, contains('try again'));
-      // Never the sentence that says conversion is what is missing: what is
-      // missing here is an answer.
-      expect(result.explanation, isNot(contains('conversion')));
-    });
-
-    test('a pending answer cannot rescue a container that is known', () {
-      // The server has not spoken, but the addon has, and it named a
-      // Matroska file. Waiting would not change it.
-      final result = check(filename: 'Sintel.mkv', containerPending: true);
-      expect(refusalOf(result), CastRefusal.container);
-    });
-
-    test('the filename wins over the URL, being about the file itself', () {
-      final result = check(
-        url: Uri.parse('https://cdn.example.com/play.mp4'),
-        filename: 'Sintel.mkv',
-      );
-      expect(refusalOf(result), CastRefusal.container);
-    });
-  });
-
-  group('a Matroska H.264 or HEVC + AAC film played by id is a rendition', () {
-    final byId = mediaIdUrl('0123456789abcdef0123456789abcdef');
-    const h264Aac = PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'aac');
-
-    test('when this device can repackage, and mpv says H.264 and AAC', () {
+    test('the field: a debrid link that names no file, read as Matroska', () {
+      // No filename from the addon, no extension on the URL: the cast was
+      // refused as "nothing here says what kind of file this is" while mpv
+      // was playing it.
       final result = check(
         url: byId,
-        filename: 'Night.of.the.Living.Dead.1080p.mkv',
-        stats: h264Aac,
+        stats: mkv(video: 'hevc (Main 10)', audio: 'eac3'),
+        canRepackage: true,
+      );
+      expect((result as CastRendition).convertsSound, isTrue);
+    });
+
+    test('a name on the URL is not read: mpv calls this .mp4 a Matroska', () {
+      final url = Uri.parse('https://cdn.example.com/movies/sintel.mp4');
+      expect(refusalOf(check(url: url, stats: mkv())), CastRefusal.container);
+      // And the other way: named .mkv, an MP4 inside.
+      expect(
+        check(
+          url: Uri.parse('https://cdn.example.com/movies/sintel.mkv'),
+          stats: mp4(),
+        ),
+        isA<CastReady>(),
+      );
+    });
+
+    test("libavformat's name for Matroska is the same family", () {
+      final result = check(
+        url: byId,
+        stats: const PlaybackStats(
+          fileFormat: 'matroska,webm',
+          videoCodec: 'h264 (High)',
+          audioCodec: 'aac',
+        ),
         canRepackage: true,
       );
       expect(result, isA<CastRendition>());
     });
 
+    test('before mpv has reported, the answer is a "not yet"', () {
+      for (final stats in [
+        null,
+        const PlaybackStats(),
+        // The reader known, the picture not yet.
+        const PlaybackStats(fileFormat: mkvFormat),
+        // The codecs known, the reader not: no guessing the container.
+        const PlaybackStats(videoCodec: 'h264 (High)', audioCodec: 'aac'),
+      ]) {
+        final result = check(url: byId, stats: stats, canRepackage: true);
+        expect(refusalOf(result), CastRefusal.pending, reason: '$stats');
+        final refused = result as CastRefused;
+        expect(
+          refused.explanation,
+          'The player has not said yet what kind of file this is, and that '
+          'is what decides whether a Chromecast can play it. Try again once '
+          'it has started playing.',
+        );
+        expect(refused.title, 'Still working out what this file is');
+      }
+    });
+
+    test('a film with no sound track is not waiting for one', () {
+      expect(check(stats: mp4(audio: null)), isA<CastReady>());
+      final rendition = check(
+        url: byId,
+        stats: mkv(audio: null),
+        canRepackage: true,
+      );
+      expect((rendition as CastRendition).convertsSound, isFalse);
+    });
+  });
+
+  group('a Matroska file with what a WebM carries is a WebM', () {
+    test('VP8 or VP9 with Opus or Vorbis goes as video/webm', () {
+      for (final video in ['vp9', 'vp8']) {
+        for (final audio in ['opus', 'vorbis', null]) {
+          final result = check(
+            stats: mkv(video: video, audio: audio),
+          );
+          expect(
+            (result as CastReady).contentType,
+            'video/webm',
+            reason: '$video/$audio',
+          );
+        }
+      }
+    });
+
+    test('with any other sound it is a Matroska file', () {
+      final result = check(
+        stats: mkv(video: 'vp9', audio: 'mp3'),
+      );
+      expect(refusalOf(result), CastRefusal.container);
+    });
+
+    test('a Matroska file is refused, and the sentence names it', () {
+      final result = check(stats: mkv()) as CastRefused;
+      expect(result.reason, CastRefusal.container);
+      expect(
+        result.explanation,
+        'A Chromecast plays MP4 and WebM files; this stream is a Matroska '
+        '(.mkv) file. Casting it would need conversion, which this app '
+        'cannot do yet.',
+      );
+    });
+  });
+
+  group('a Matroska H.264 or HEVC film played by id is a rendition', () {
+    test('when this device can repackage, and mpv says H.264 and AAC', () {
+      final result = check(url: byId, stats: mkv(), canRepackage: true);
+      expect(result, isA<CastRendition>());
+    });
+
     test('a device that cannot repackage still refuses the container', () {
-      final result = check(url: byId, filename: 'film.mkv', stats: h264Aac);
+      final result = check(url: byId, stats: mkv());
       expect(refusalOf(result), CastRefusal.container);
     });
 
@@ -150,54 +190,15 @@ void main() {
       for (final video in ['hevc (Main 10)', 'hevc (Main)', 'hevc']) {
         final result = check(
           url: byId,
-          filename: 'film.2160p.HDR.x265.mkv',
-          stats: PlaybackStats(videoCodec: video, audioCodec: 'aac'),
+          stats: mkv(video: video),
           canRepackage: true,
         );
         expect(result, isA<CastRendition>(), reason: video);
       }
     });
 
-    test('a release claiming H.264 and AAC is not enough: mpv must say', () {
-      // Until mpv has said, a "not yet" -- never the verdict that the
-      // container cannot be cast, which is what the field saw for a film
-      // that can.
-      final result = check(
-        url: byId,
-        filename: 'film.1080p.x264.AAC.mkv',
-        facts: factsFor('film 1080p x264 AAC'),
-        canRepackage: true,
-      );
-      expect(refusalOf(result), CastRefusal.codecsPending);
-      final refused = result as CastRefused;
-      expect(
-        refused.explanation,
-        'This stream is a Matroska (.mkv) file, which xtremio repackages for '
-        'casting once the player has said what is in it. Try again once it '
-        'has started playing.',
-      );
-      expect(refused.title, 'Still working out what this file is');
-      expect(
-        refusalOf(
-          check(
-            url: byId,
-            filename: 'film.mkv',
-            stats: const PlaybackStats(videoCodec: 'h264 (High)'),
-            canRepackage: true,
-          ),
-        ),
-        CastRefusal.codecsPending,
-        reason: 'the sound not reported yet',
-      );
-    });
-
     test('its sound is copied when it is AAC', () {
-      final result = check(
-        url: byId,
-        filename: 'film.mkv',
-        stats: h264Aac,
-        canRepackage: true,
-      );
+      final result = check(url: byId, stats: mkv(), canRepackage: true);
       expect((result as CastRendition).convertsSound, isFalse);
     });
 
@@ -217,8 +218,7 @@ void main() {
       ]) {
         final result = check(
           url: byId,
-          filename: 'film.mkv',
-          stats: PlaybackStats(videoCodec: 'hevc (Main 10)', audioCodec: codec),
+          stats: mkv(video: 'hevc (Main 10)', audio: codec),
           canRepackage: true,
         );
         expect(result, isA<CastRendition>(), reason: codec);
@@ -229,8 +229,7 @@ void main() {
     test('video the receiver cannot play is named, and why', () {
       final result = check(
         url: byId,
-        filename: 'film.mkv',
-        stats: const PlaybackStats(videoCodec: 'av1 (Main)', audioCodec: 'aac'),
+        stats: mkv(video: 'av1 (Main)'),
         canRepackage: true,
       );
       expect(refusalOf(result), CastRefusal.renditionVideo);
@@ -244,8 +243,7 @@ void main() {
     test('video the receiver plays but a copy cannot carry yet says so', () {
       final result = check(
         url: byId,
-        filename: 'film.mkv',
-        stats: const PlaybackStats(videoCodec: 'vp9', audioCodec: 'aac'),
+        stats: mkv(video: 'vp9'),
         canRepackage: true,
       );
       expect(refusalOf(result), CastRefusal.renditionVideo);
@@ -259,8 +257,7 @@ void main() {
     test('picture a copy cannot carry is named alone: the sound converts', () {
       final result = check(
         url: byId,
-        filename: 'film.mkv',
-        stats: const PlaybackStats(videoCodec: 'mpeg4', audioCodec: 'dts'),
+        stats: mkv(video: 'mpeg4', audio: 'dts'),
         canRepackage: true,
       );
       expect(refusalOf(result), CastRefusal.renditionVideo);
@@ -271,99 +268,78 @@ void main() {
       );
     });
 
-    test('a QuickTime film is repackaged as a Matroska one is', () {
-      final result = check(
-        url: byId,
-        filename: 'film.mov',
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
-        canRepackage: true,
-      );
-      expect((result as CastRendition).convertsSound, isTrue);
-    });
-
     test('an MP4 whose sound the receiver will not take has it converted', () {
       // Dolby Digital in an MP4: a Chromecast takes the file, and zond's
       // plays it silent. The picture is copied, the sound converted.
       for (final codec in ['ac3', 'eac3', 'dts', 'opus']) {
         final result = check(
           url: byId,
-          filename: 'film.mp4',
-          stats: PlaybackStats(videoCodec: 'h264 (High)', audioCodec: codec),
+          stats: mp4(audio: codec),
           canRepackage: true,
         );
         expect(result, isA<CastRendition>(), reason: codec);
         expect((result as CastRendition).convertsSound, isTrue, reason: codec);
       }
-      // Not by id, or on a device that cannot: refused, as before.
+      // Not by id, or on a device that cannot: refused.
       expect(
-        refusalOf(
-          check(
-            filename: 'film.mp4',
-            stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
-            canRepackage: true,
-          ),
-        ),
+        refusalOf(check(stats: mp4(audio: 'ac3'), canRepackage: true)),
         CastRefusal.audioCodec,
       );
       expect(
         refusalOf(
           check(
             url: byId,
-            filename: 'film.mp4',
-            stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'ac3'),
+            stats: mp4(audio: 'ac3'),
           ),
-        ),
-        CastRefusal.audioCodec,
-      );
-      // A release's claim of Dolby is not mpv's word: refused until mpv
-      // says what the picture and the sound are.
-      expect(
-        refusalOf(
-          check(url: byId, filename: 'film.EAC3.mp4', canRepackage: true),
         ),
         CastRefusal.audioCodec,
       );
     });
 
-    test('only Matroska, and only a stream played by id', () {
+    test('an MP4 whose sound needs converting but whose picture a copy '
+        'cannot carry is refused for its sound', () {
+      // VP9 plays out of an MP4, but a rendition copies only H.264 and
+      // HEVC: there is no rendition to make, so the sound is the refusal.
+      final result = check(
+        url: byId,
+        stats: mp4(video: 'vp9', audio: 'ac3'),
+        canRepackage: true,
+      );
+      expect(refusalOf(result), CastRefusal.audioCodec);
+    });
+
+    test('only the two families, and only a stream played by id', () {
       expect(
         refusalOf(
           check(
             url: byId,
-            filename: 'film.avi',
-            stats: h264Aac,
+            stats: const PlaybackStats(
+              fileFormat: 'avi',
+              videoCodec: 'h264 (High)',
+              audioCodec: 'aac',
+            ),
             canRepackage: true,
           ),
         ),
         CastRefusal.container,
       );
       expect(
-        refusalOf(
-          check(filename: 'film.mkv', stats: h264Aac, canRepackage: true),
-        ),
+        refusalOf(check(stats: mkv(), canRepackage: true)),
         CastRefusal.container,
         reason: 'a URL the server serves is not an id it reads',
       );
     });
 
     test('an MP4 the receiver takes as it is stays as it is', () {
-      final result = check(
-        url: byId,
-        filename: 'film.mp4',
-        stats: h264Aac,
-        canRepackage: true,
-      );
+      final result = check(url: byId, stats: mp4(), canRepackage: true);
       expect(result, isA<CastReady>());
     });
   });
 
   group('the sentences of the refusals that are not about a rendition', () {
-    // Each still true now that some Matroska films are repackaged: these are
-    // the files handed over as they are, or not repackaged at all.
-    test('a container no rendition is made from', () {
+    test('a container no receiver takes, named by what it is', () {
       final result = check(
-        filename: 'film.avi',
-        stats: const PlaybackStats(),
+        stats: const PlaybackStats(fileFormat: 'avi', videoCodec: 'mpeg4'),
       ) as CastRefused;
       expect(result.reason, CastRefusal.container);
       expect(
@@ -373,11 +349,40 @@ void main() {
       );
     });
 
-    test('video in an MP4 the receiver cannot decode', () {
+    test('every reader no receiver takes is named by what it opens', () {
+      const named = {
+        'avi': 'an AVI file',
+        'mpegts': 'an MPEG transport stream',
+        'mpeg': 'an MPEG program stream',
+        'asf': 'a Windows Media file',
+        'flv': 'a Flash video file',
+        'ogg': 'an Ogg file',
+        'rm': 'a RealMedia file',
+      };
+      for (final MapEntry(key: reader, value: name) in named.entries) {
+        final result = check(
+          stats: PlaybackStats(fileFormat: reader, videoCodec: 'h264'),
+        ) as CastRefused;
+        expect(result.reason, CastRefusal.container, reason: reader);
+        expect(
+          result.explanation,
+          contains('this stream is $name.'),
+          reason: reader,
+        );
+      }
+    });
+
+    test("a reader with no name here is called by mpv's", () {
       final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'av1'),
+        stats: const PlaybackStats(fileFormat: 'nut', videoCodec: 'h264'),
       ) as CastRefused;
+      expect(result.reason, CastRefusal.container);
+      expect(result.explanation, contains('a file of a kind mpv calls "nut"'));
+    });
+
+    test('video in an MP4 the receiver cannot decode', () {
+      final result = check(stats: mp4(video: 'av1 (Main)')) as CastRefused;
+      expect(result.reason, CastRefusal.videoCodec);
       expect(
         result.explanation,
         'A Chromecast decodes H.264, HEVC, VP8 or VP9 video; this stream is '
@@ -386,10 +391,8 @@ void main() {
     });
 
     test('sound in an MP4 the receiver cannot decode', () {
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'eac3'),
-      ) as CastRefused;
+      final result = check(stats: mp4(audio: 'eac3')) as CastRefused;
+      expect(result.reason, CastRefusal.audioCodec);
       expect(
         result.explanation,
         'A Chromecast decodes AAC or MP3 audio in an MP4 file; this stream is '
@@ -403,7 +406,7 @@ void main() {
     test('a /proxy URL is never cast, MP4 or not', () {
       final result = check(
         url: Uri.parse('http://127.0.0.1:11470/proxy/d/http/host/a.mp4'),
-        filename: 'a.mp4',
+        stats: mp4(),
       );
       expect(refusalOf(result), CastRefusal.proxied);
       expect((result as CastRefused).explanation, contains('local network'));
@@ -412,7 +415,7 @@ void main() {
     test('/ftp goes the same way', () {
       final result = check(
         url: Uri.parse('http://127.0.0.1:11470/ftp/host/a.mp4'),
-        filename: 'a.mp4',
+        stats: mp4(),
       );
       expect(refusalOf(result), CastRefusal.proxied);
     });
@@ -425,157 +428,26 @@ void main() {
     });
   });
 
-  group('codecs are believed when they say something is wrong', () {
-    test('what mpv reports refuses an MP4 the receiver could not decode', () {
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'av1 (Main)'),
-      );
-      expect(refusalOf(result), CastRefusal.videoCodec);
-      expect((result as CastRefused).explanation, contains('AV1'));
-    });
-
-    test('mpv reporting H.264 and AAC lets it through', () {
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(
-          videoCodec: 'h264 (High)',
-          audioCodec: 'aac',
-        ),
-      );
-      expect(result, isA<CastReady>());
-    });
-
-    test('mpv reporting DTS audio refuses it', () {
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'dts'),
-      );
-      expect(refusalOf(result), CastRefusal.audioCodec);
-      expect((result as CastRefused).explanation, contains('DTS'));
-    });
-
-    test('what the release claims counts when mpv has not spoken', () {
-      final result = check(
-        facts: factsFor('Sintel 1080p AV1', filename: 'Sintel.1080p.AV1.mp4'),
-        filename: 'Sintel.1080p.AV1.mp4',
-      );
-      expect(refusalOf(result), CastRefusal.videoCodec);
-    });
-
-    test('an AC3 track named in the filename is refused', () {
-      final result = check(filename: 'Sintel.1080p.WEB-DL.AC3.x264.mp4');
-      expect(refusalOf(result), CastRefusal.audioCodec);
-      expect((result as CastRefused).explanation, contains('Dolby Digital'));
-    });
-
-    test('mpv overrules a release name that claims otherwise', () {
-      // The name says DTS, the file being decoded says AAC: the decoder is
-      // reading the actual bytes and the release name is marketing.
-      final result = check(
-        filename: 'Sintel.1080p.DTS.x264.mp4',
-        facts: factsFor('Sintel 1080p DTS x264'),
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'aac'),
-      );
-      expect(result, isA<CastReady>());
-    });
-
+  group('what an MP4 may carry', () {
     test('HEVC is castable, being one the receiver decodes', () {
-      final result = check(
-        filename: 'Sintel.2160p.HEVC.mp4',
-        stats: const PlaybackStats(videoCodec: 'hevc (Main 10)'),
-      );
-      expect(result, isA<CastReady>());
+      expect(check(stats: mp4(video: 'hevc (Main 10)')), isA<CastReady>());
     });
 
-    test('the video refusal names every codec the gate does take', () {
-      // Read off the same table the check reads, so the sentence cannot go
-      // on naming two codecs after the table grew to four.
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'av1'),
-      ) as CastRefused;
-      expect(result.explanation, contains('H.264, HEVC, VP8 or VP9 video'));
-    });
-  });
-
-  group('what audio a receiver takes depends on the container', () {
-    test('an MP4 with MP3 audio is castable', () {
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'mp3'),
-      );
-      expect(result, isA<CastReady>());
+    test('MP3 audio is castable: the developer torrent, from the field', () {
+      // Big Buck Bunny.mp4 carries H.264 and an MP3 track.
+      expect(check(stats: mp4(audio: 'mp3')), isA<CastReady>());
     });
 
-    test('an MP4 with Opus audio is refused', () {
-      // Opus is a codec a Chromecast decodes, but not out of this box.
-      final result = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'opus'),
-      );
-      expect(refusalOf(result), CastRefusal.audioCodec);
-      expect((result as CastRefused).explanation, contains('Opus'));
-    });
-
-    test('a WebM with Opus audio is castable', () {
-      final result = check(
-        filename: 'clip.webm',
-        stats: const PlaybackStats(audioCodec: 'opus'),
-      );
-      expect(result, isA<CastReady>());
-    });
-
-    test('a WebM with Vorbis audio is castable', () {
-      final result = check(
-        filename: 'clip.webm',
-        stats: const PlaybackStats(audioCodec: 'vorbis'),
-      );
-      expect(result, isA<CastReady>());
-    });
-
-    test('a WebM carrying the video WebM actually carries is castable', () {
-      // The audio table above is unreachable for a real WebM unless the
-      // video check lets VP8 and VP9 through: no WebM in the wild carries
-      // H.264, so a video check limited to H.264 and HEVC would refuse
-      // every one of them before their audio was ever looked at.
-      for (final codec in ['vp9', 'vp8']) {
-        final result = check(
-          filename: 'clip.webm',
-          stats: PlaybackStats(videoCodec: codec, audioCodec: 'opus'),
-        );
-        expect(result, isA<CastReady>(), reason: codec);
+    test('DTS and Opus are refused, each by name', () {
+      for (final (codec, name) in [('dts', 'DTS'), ('opus', 'Opus')]) {
+        final result = check(stats: mp4(audio: codec));
+        expect(refusalOf(result), CastRefusal.audioCodec, reason: codec);
+        expect((result as CastRefused).explanation, contains(name));
       }
     });
-
-    test('a WebM with MP3 audio is refused', () {
-      final result = check(
-        filename: 'clip.webm',
-        stats: const PlaybackStats(audioCodec: 'mp3'),
-      );
-      expect(refusalOf(result), CastRefusal.audioCodec);
-    });
-
-    test('the refusal names this container\'s set and no other', () {
-      // A sentence that names the wrong reason is worse than a vague one,
-      // so each container's refusal recites its own list.
-      final mp4 = check(
-        filename: 'clip.mp4',
-        stats: const PlaybackStats(audioCodec: 'vorbis'),
-      ) as CastRefused;
-      expect(mp4.explanation, contains('AAC or MP3 audio in an MP4 file'));
-      expect(mp4.explanation, isNot(contains('Opus')));
-
-      final webm = check(
-        filename: 'clip.webm',
-        stats: const PlaybackStats(audioCodec: 'aac'),
-      ) as CastRefused;
-      expect(webm.explanation, contains('Opus or Vorbis audio in a WebM file'));
-      expect(webm.explanation, isNot(contains('MP3')));
-    });
   });
 
-  group('the server outranks the addon about the file it opened', () {
+  group('the best name for the file: the server outranks the addon', () {
     test('the server name is used when the addon claimed nothing', () {
       expect(
         castFilename(playerState(), serverFilename: 'Big Buck Bunny.mp4'),
@@ -591,7 +463,6 @@ void main() {
         serverFilename: 'Sintel.2010.1080p.mp4',
       );
       expect(filename, 'Sintel.2010.1080p.mp4');
-      expect(check(filename: filename), isA<CastReady>());
     });
 
     test('and it outranks the converted stream, which is the same claim', () {
@@ -621,33 +492,5 @@ void main() {
     test('no server name falls back to what the addon claimed', () {
       expect(castFilename(playerState(claimed: 'claimed.mp4')), 'claimed.mp4');
     });
-  });
-
-  group('the developer torrent', () {
-    test('is judged castable without waiting for the server', () {
-      // The file inside dd8255ec… really is `Big Buck Bunny.mp4`, and it is
-      // the largest, which is the one the server picks for a stream with no
-      // fileIdx.
-      final stream = StreamInfo(DevStreams.bigBuckBunnyTorrent);
-      expect(stream.filename, 'Big Buck Bunny.mp4');
-      expect(check(filename: stream.filename), isA<CastReady>());
-    });
-
-    test(
-      'its MP3 track does not refuse it, which is the bug from the field',
-      () {
-        // An MP4 carrying H.264 video and an MP3 audio track: what mpv
-        // reports once this file is playing.
-        final stream = StreamInfo(DevStreams.bigBuckBunnyTorrent);
-        final result = check(
-          filename: stream.filename,
-          stats: const PlaybackStats(
-            videoCodec: 'h264 (High)',
-            audioCodec: 'mp3',
-          ),
-        );
-        expect(result, isA<CastReady>());
-      },
-    );
   });
 }

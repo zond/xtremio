@@ -13,6 +13,7 @@ import 'package:xtremio/features/player/up_next_card.dart';
 
 import '../../support/diagnostics_capture.dart';
 import '../../support/fake_cast_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart' show tv;
@@ -35,9 +36,10 @@ const kitchen = CastDevice(
 /// published token's URL is built on.
 final lanBase = Uri.parse('http://192.168.1.20:39271/');
 
-/// The recorded torrent player state with a filename on the stream, which is
-/// the only thing that says what the file is: `/{infoHash}/{fileIdx}` does
-/// not. `.mp4` is a stream a receiver could take.
+/// The recorded torrent player state with a filename on the stream. The
+/// cast check never reads it -- mpv's report says what the file is -- so a
+/// test that names a file either needs the name for something else (a URL
+/// it rewrites) or is proving that the name does not count.
 Map<String, dynamic> playerWithFilename(String filename) {
   final fixture = loadPlayerFixture();
   final selected = fixture['selected'] as Map<String, dynamic>;
@@ -51,8 +53,13 @@ Map<String, dynamic> playerWithFilename(String filename) {
   return fixture;
 }
 
+/// The recorded torrent -- no file name anywhere, which casting does not
+/// need -- on an engine whose mpv reports [mpv] when the receiver list
+/// opens: by default an MP4 of H.264 and AAC, which a receiver takes as it
+/// is. Null is a file mpv has not reported on yet.
 PlayerHarness castHarness({
-  String? filename = 'Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
+  PlaybackStats? mpv = mpvMp4H264Aac,
+  String? filename,
   FakeCastClient? cast,
   FakeLanMediaControl? lanMedia,
   Map<String, dynamic>? player,
@@ -62,6 +69,7 @@ PlayerHarness castHarness({
   cast: cast ?? FakeCastClient(devices: const [livingRoom]),
   lanMedia: lanMedia ?? (FakeLanMediaControl()..baseUrl = lanBase),
   device: onTv ? tv : null,
+  mpvReport: mpv,
 );
 
 Finder get castButton => find.byKey(const ValueKey('cast'));
@@ -180,25 +188,15 @@ void main() {
     });
 
     group('an H.264 + AAC Matroska film', () {
-      const mkv = 'Night.of.the.Living.Dead.1080p.x264.AAC.mkv';
-      const h264Aac = PlaybackStats(
-        videoCodec: 'h264 (High)',
-        audioCodec: 'aac',
-      );
-
       /// [castTo], with mpv reporting [stats] while the list is up -- the
       /// only time the screen samples it.
       Future<void> castWithStats(
         WidgetTester tester,
         PlayerHarness harness, {
-        PlaybackStats stats = h264Aac,
+        PlaybackStats stats = mpvMkvH264Aac,
       }) async {
-        await tester.tap(castButton);
-        await tester.pumpAndSettle();
-        harness.engine.emitStats(stats);
-        await tester.pump();
-        await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
-        await tester.pumpAndSettle();
+        harness.engine.report = stats;
+        await castTo(tester, livingRoom);
       }
 
       testWidgets('is cast as a rendition, from where it is playing', (
@@ -207,7 +205,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         harness.mediaIds.renditionsAvailable = true;
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
@@ -257,7 +259,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         harness.mediaIds.renditionsAvailable = true;
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
@@ -268,6 +274,7 @@ void main() {
           tester,
           harness,
           stats: const PlaybackStats(
+            fileFormat: 'mkv',
             videoCodec: 'h264 (High)',
             audioCodec: 'eac3',
           ),
@@ -295,8 +302,6 @@ void main() {
       ) async {
         await tester.tap(castButton);
         await tester.pumpAndSettle();
-        harness.engine.emitStats(h264Aac);
-        await tester.pump();
         await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
         for (var i = 0; i < 10; i++) {
           await tester.pump(const Duration(milliseconds: 50));
@@ -313,7 +318,11 @@ void main() {
 
       PlayerHarness preparingHarness(FakeCastClient cast) {
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         harness.mediaIds.renditionsAvailable = true;
         return harness;
       }
@@ -442,7 +451,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         harness.mediaIds.renditionsAvailable = true;
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
@@ -476,7 +489,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         harness.mediaIds.renditionsAvailable = true;
         await harness.pump(tester);
 
@@ -493,7 +510,11 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        final harness = castHarness(cast: cast, lanMedia: lan, filename: mkv);
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          mpv: mpvMkvH264Aac,
+        );
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
         await pumpEvents(tester);
@@ -537,7 +558,11 @@ void main() {
       final harness = castHarness(
         cast: cast,
         lanMedia: lan,
-        filename: 'Night.of.the.Living.Dead.1080p.x264.DTS.mkv',
+        mpv: const PlaybackStats(
+          fileFormat: 'mkv',
+          videoCodec: 'h264 (High)',
+          audioCodec: 'dts',
+        ),
       );
       await harness.pump(tester);
 
@@ -553,215 +578,101 @@ void main() {
       expect(find.byType(CastRemotePanel), findsNothing);
     });
 
-    testWidgets('a torrent nothing has named yet is a "not yet"', (
+    testWidgets('a cast pressed before mpv has reported is a "not yet"', (
       tester,
     ) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      // The recorded fixture as it is: a torrent URL, no filename anywhere,
-      // and a server that has not said what it opened. That is a question
-      // still open, not a stream that cannot be cast.
-      final harness = castHarness(cast: cast, filename: null);
-      await harness.pump(tester);
-
-      await castTo(tester, livingRoom);
-
-      expect(find.byType(CastRefusedDialog), findsOneWidget);
-      expect(find.text(CastRefusedDialog.defaultTitle), findsNothing);
-      expect(find.textContaining('try again'), findsOneWidget);
-      expect(cast.loads, isEmpty);
-    });
-
-    testWidgets('the server naming the file makes it castable, in place', (
-      tester,
-    ) async {
+      // mpv is the only word on what the file is, and it has not said:
+      // a question still open, not a stream that cannot be cast.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
+      final harness = castHarness(cast: cast, lanMedia: lan, mpv: null);
       await harness.pump(tester);
 
       await castTo(tester, livingRoom);
+
       expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(find.text('Still working out what this file is'), findsOneWidget);
+      expect(find.text(CastRefusedDialog.defaultTitle), findsNothing);
+      expect(
+        find.text(
+          'The player has not said yet what kind of file this is, and that '
+          'is what decides whether a Chromecast can play it. Try again once '
+          'it has started playing.',
+        ),
+        findsOneWidget,
+      );
+      expect(cast.connectAttempts, isEmpty);
+      expect(cast.loads, isEmpty);
+      expect(lan.toggles, isEmpty);
+      expect(harness.mediaIds.published, isEmpty);
+      expect(harness.mediaIds.renditions, isEmpty);
+    });
+
+    testWidgets('the same stream casts once mpv has reported', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, mpv: null);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
 
-      // The server answers the next poll with the file it actually opened.
-      // Nothing is reopened and no screen is left: the same player learns
-      // what it is playing.
-      harness.torrentStats.response = const TorrentStats(
-        phase: TorrentPhase.buffering,
-        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
-        initialWindowReadyBytes: 0,
-        initialWindowBytes: 4194304,
-      );
-      await tester.pump(PlayerScreen.torrentStatsInterval);
+      // Nothing is reopened and no screen is left: the list is opened
+      // again, mpv reports while it is up, and the same player casts.
+      await tester.tap(castButton);
+      await tester.pumpAndSettle();
+      harness.engine.emitStats(mpvMp4H264Aac);
       await tester.pump();
-
-      await castTo(tester, livingRoom);
+      await tester.tap(find.byKey(ValueKey('cast-device-${livingRoom.id}')));
+      await tester.pumpAndSettle();
 
       expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.loads, hasLength(1));
+      expect(harness.mediaIds.published, ['m1']);
       expect(cast.loads.single.$1.contentType, 'video/mp4');
     });
 
-    testWidgets('a torrent that played before it was named is still named', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
-      await harness.pump(tester);
-      harness.torrentStats.response = const TorrentStats(
-        phase: TorrentPhase.ready,
-        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
-      );
-
-      // Playback begins before a poll has come back with a name -- a
-      // torrent already on this disk starts in well under the start-up
-      // interval -- and the start-up polling stops there for good: nothing
-      // is stalled and no stats panel is up. The name is asked for once
-      // more anyway, because "try again in a moment" is a promise nothing
-      // else would keep.
-      harness.engine.emitPlaying(true);
-      await pumpEvents(tester);
-
-      await castTo(tester, livingRoom);
-
-      expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.loads.single.$1.contentType, 'video/mp4');
-    });
-
-    testWidgets('a name that arrives after the polling stopped still counts', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
-      final stats = harness.torrentStats;
-      await harness.pump(tester);
-
-      // A poll goes out and the server takes its time over it.
-      stats.holdAnswers = true;
-      await tester.pump(PlayerScreen.torrentStatsInterval);
-      expect(stats.heldCount, 1);
-
-      // The media loads while that poll is still out, which stops the
-      // polling: the numbers it comes back with describe a moment that has
-      // passed, but the name of the file the server opened does not expire,
-      // and this is the only answer there will ever be.
-      stats.response = const TorrentStats(
-        phase: TorrentPhase.ready,
-        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
-      );
-      harness.engine.emitPlaying(true);
-      await pumpEvents(tester);
-      stats.answer();
-      await pumpEvents(tester);
-
-      await castTo(tester, livingRoom);
-
-      expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.loads.single.$1.contentType, 'video/mp4');
-    });
-
-    testWidgets('a later answer with no name does not take the name back', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
-      harness.torrentStats.response = const TorrentStats(
-        phase: TorrentPhase.buffering,
-        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
-        initialWindowReadyBytes: 0,
-        initialWindowBytes: 4194304,
-      );
-      await harness.pump(tester);
-      await tester.pump(PlayerScreen.torrentStatsInterval);
-      await tester.pump();
-
-      // A restarted engine, a torrent-level answer, a server that has
-      // forgotten: whatever the reason, an answer that names nothing says
-      // nothing about which file this is. Which file it is does not expire.
-      harness.torrentStats.response = const TorrentStats(
-        phase: TorrentPhase.buffering,
-        initialWindowReadyBytes: 1024,
-        initialWindowBytes: 4194304,
-      );
-      await tester.pump(PlayerScreen.torrentStatsInterval);
-      await tester.pump();
-
-      await castTo(tester, livingRoom);
-
-      expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.loads.single.$1.contentType, 'video/mp4');
-    });
-
-    testWidgets('a torrent-level answer never names the file', (tester) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final harness = castHarness(cast: cast, filename: null);
-      // The server has nothing for this file and answers only about the
-      // torrent, where `streamName` is the file it *guessed* -- the largest
-      // one, which is not what `/{infoHash}/0` streams. Judging the
-      // container by it would be the same mistake in mirror image.
-      harness.torrentStats
-        ..response = null
-        ..responses[const TorrentStatsRequest(
-          infoHash: '11ea02584fa6351956f35671962ab46354d99060',
-        )] = const TorrentStats(
-          phase: TorrentPhase.buffering,
-          streamName: 'The.Biggest.File.mp4',
-          initialWindowReadyBytes: 0,
-          initialWindowBytes: 4194304,
+    group('mpv outranks any name', () {
+      testWidgets('a file named .mkv that mpv reads as an MP4 is an MP4', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          filename: 'Night.of.the.Living.Dead.1080p.x265.DTS.mkv',
         );
-      // Mounted by hand: until the fallback answers, the start-up overlay
-      // is an indeterminate spinner and `pumpAndSettle` never settles.
-      await tester.pumpWidget(harness.build());
-      await tester.pump();
-      await tester.pump(PlayerScreen.torrentStatsInterval);
-      await tester.pump();
+        await harness.pump(tester);
 
-      await castTo(tester, livingRoom);
+        await castTo(tester, livingRoom);
 
-      expect(find.byType(CastRefusedDialog), findsOneWidget);
-      expect(find.textContaining('try again'), findsOneWidget);
-      expect(cast.loads, isEmpty);
-    });
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(cast.loads.single.$1.contentType, 'video/mp4');
+      });
 
-    testWidgets('the server outranks the addon about the container', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      // The addon claims a Matroska file; the server opened an MP4. The
-      // addon is guessing about a torrent it linked to, the server has the
-      // file open.
-      final harness = castHarness(
-        cast: cast,
-        lanMedia: lan,
-        filename: 'Night.of.the.Living.Dead.1080p.mkv',
-      );
-      harness.torrentStats.response = const TorrentStats(
-        phase: TorrentPhase.buffering,
-        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
-        initialWindowReadyBytes: 0,
-        initialWindowBytes: 4194304,
-      );
-      await harness.pump(tester);
-      // One poll: the server's answer lands before anything is cast.
-      await tester.pump(PlayerScreen.torrentStatsInterval);
-      await tester.pump();
+      testWidgets('a file named .mp4 that mpv reads as Matroska is Matroska', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(
+          cast: cast,
+          lanMedia: lan,
+          filename: 'Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
+          mpv: mpvMkvH264Aac,
+        );
+        await harness.pump(tester);
 
-      await castTo(tester, livingRoom);
+        await castTo(tester, livingRoom);
 
-      expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.loads.single.$1.contentType, 'video/mp4');
+        expect(find.byType(CastRefusedDialog), findsOneWidget);
+        expect(find.textContaining('Matroska'), findsOneWidget);
+        expect(cast.loads, isEmpty);
+      });
     });
 
     testWidgets('a /proxy stream is published like any other', (tester) async {
@@ -787,11 +698,11 @@ void main() {
       expect(cast.loads.single.$1.url, lanBase.resolve('cast/t1'));
     });
 
-    testWidgets('a stream nothing else names is judged by the server\'s name', (
+    testWidgets('a Drive file nobody named casts by what mpv reads', (
       tester,
     ) async {
-      // A Drive file the addon never named: the server resolved it, and
-      // the name it resolved is the file's own.
+      // A Drive file the addon never named and the server resolved to no
+      // name either: mpv reading it is all a cast needs.
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
@@ -806,7 +717,6 @@ void main() {
         ],
       };
       final harness = castHarness(cast: cast, lanMedia: lan, player: fixture);
-      harness.mediaIds.resolution = const MediaResolution(name: 'Clip.mp4');
       await harness.pump(tester);
 
       await castTo(tester, livingRoom);
@@ -979,12 +889,10 @@ void main() {
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
       final harness = PlayerHarness(
-        player: playerWithFilename(
-          'Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
-        ),
         cast: cast,
         lanMedia: lan,
         embeddedServer: false,
+        mpvReport: mpvMp4H264Aac,
       );
       await harness.pump(tester);
 
@@ -1512,17 +1420,17 @@ void main() {
   });
 
   // A container is played as the film inside it, and so is cast: the server
-  // resolved the id to its member (`Resolved.member`), and that member's
-  // name is what the compatibility check judges. Without this, `_startCast`
-  // would judge the container by its own name, refusing every one of these
-  // on the strength of an extension the viewer never chose ("a Chromecast
-  // plays MP4 and WebM files; this stream is a .rar file").
+  // resolved the id to its member (`Resolved.member`), and mpv reads that
+  // member, so its report is about the film and not the archive. Judging
+  // the archive would refuse every one of these on the strength of an
+  // extension the viewer never chose ("this stream is a .rar file").
   group('a container casts as the film inside it', () {
     /// The recorded torrent, whose file is [container] and which the server
-    /// resolved to [member].
+    /// resolved to [member], played by an engine whose mpv reports [mpv].
     PlayerHarness torrentContainer({
       required String container,
       required String member,
+      required PlaybackStats mpv,
       required FakeCastClient cast,
       required FakeLanMediaControl lan,
     }) {
@@ -1530,6 +1438,7 @@ void main() {
         player: playerWithFilename(container),
         cast: cast,
         lanMedia: lan,
+        mpvReport: mpv,
       );
       harness.mediaIds.resolution = MediaResolution(
         name: member.split('/').last,
@@ -1542,13 +1451,16 @@ void main() {
       return harness;
     }
 
-    testWidgets('a .rar is cast as its .mp4 member, by its id', (tester) async {
+    testWidgets('a .rar whose member mpv reads as an MP4 is cast as one, by '
+        'its id', (tester) async {
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      // A member whose name says nothing: what it is, mpv says.
       final harness = torrentContainer(
         container: 'Night.of.the.Living.Dead.1080p.x264.AAC.rar',
-        member: 'Feature/Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
+        member: 'Feature/FEATURE',
+        mpv: mpvMp4H264Aac,
         cast: cast,
         lan: lan,
       );
@@ -1557,8 +1469,6 @@ void main() {
 
       await castTo(tester, livingRoom);
 
-      // No refusal: what was judged is the member's `.mp4`, not the
-      // container's `.rar`.
       expect(find.byType(CastRefusedDialog), findsNothing);
       final media = cast.loads.single.$1;
       expect(media.contentType, 'video/mp4');
@@ -1573,13 +1483,18 @@ void main() {
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final lan = FakeLanMediaControl()..baseUrl = lanBase;
-        // The container is a `.rar`; the film inside it is a Matroska. The
-        // refusal has to name the Matroska -- that is what the receiver
-        // would have to decode, and it is the reason another source would
-        // help.
+        // The container is a `.rar`; the film inside it, as mpv reads it,
+        // is a Matroska. The refusal has to name the Matroska -- that is
+        // what the receiver would have to decode, and it is the reason
+        // another source would help.
         final harness = torrentContainer(
           container: 'Night.of.the.Living.Dead.1080p.x264.AAC.rar',
           member: 'Night.of.the.Living.Dead.1080p.x264.AAC.mkv',
+          mpv: const PlaybackStats(
+            fileFormat: 'mkv',
+            videoCodec: 'h264 (High)',
+            audioCodec: 'dts',
+          ),
           cast: cast,
           lan: lan,
         );
@@ -1598,31 +1513,6 @@ void main() {
         expect(harness.mediaIds.published, isEmpty);
       },
     );
-
-    testWidgets('a member with no name to read is an answer, not a "not yet"', (
-      tester,
-    ) async {
-      // The server has opened the container and said what is inside it,
-      // and this member is what it said: a member whose name says nothing
-      // is an unknown file, not a wait that would never end.
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = torrentContainer(
-        container: 'Night.of.the.Living.Dead.1080p.x264.AAC.rar',
-        member: 'FEATURE',
-        cast: cast,
-        lan: lan,
-      );
-      await harness.pump(tester);
-
-      await castTo(tester, livingRoom);
-
-      expect(find.byType(CastRefusedDialog), findsOneWidget);
-      expect(find.textContaining('Nothing here says'), findsOneWidget);
-      expect(find.textContaining('try again'), findsNothing);
-      expect(cast.loads, isEmpty);
-    });
   });
 
   group('while a receiver has the stream', () {

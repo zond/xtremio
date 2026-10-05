@@ -11,6 +11,7 @@ import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_cast_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
@@ -115,22 +116,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(group));
     await tester.pumpAndSettle();
-  }
-
-  /// The recorded fixture with a filename a receiver would accept, which
-  /// is what the compatibility check wants before any session starts.
-  Map<String, dynamic> castableFixture() {
-    final fixture = loadPlayerFixture();
-    final selected =
-        (fixture['selected'] as Map<String, dynamic>)['stream']
-            as Map<String, dynamic>;
-    selected['behaviorHints'] = {'filename': 'film.mp4'};
-    final content =
-        (fixture['stream'] as Map<String, dynamic>)['content'] as List<dynamic>;
-    (content[1] as Map<String, dynamic>)['behaviorHints'] = {
-      'filename': 'film.mp4',
-    };
-    return fixture;
   }
 
   /// Everything a screen that still thought it was in charge would move.
@@ -385,7 +370,9 @@ void main() {
         final lan = FakeLanMediaControl()
           ..baseUrl = Uri.parse('http://192.168.1.20:39271/');
         final harness = PlayerHarness(
-          player: castableFixture(),
+          // A file a receiver takes as it is, which is what the
+          // compatibility check wants before any session starts.
+          mpvReport: mpvMp4H264Aac,
           cast: cast,
           lanMedia: lan,
           configureEngine: (engine) => engine.disposeGate = wedged,
@@ -427,7 +414,9 @@ void main() {
         final lan = FakeLanMediaControl()
           ..baseUrl = Uri.parse('http://192.168.1.20:39271/');
         final harness = PlayerHarness(
-          player: castableFixture(),
+          // A file a receiver takes as it is, which is what the
+          // compatibility check wants before any session starts.
+          mpvReport: mpvMp4H264Aac,
           cast: cast,
           lanMedia: lan,
           configureEngine: (engine) => engine
@@ -461,7 +450,9 @@ void main() {
         final lan = FakeLanMediaControl()
           ..baseUrl = Uri.parse('http://192.168.1.20:39271/');
         final harness = PlayerHarness(
-          player: castableFixture(),
+          // A file a receiver takes as it is, which is what the
+          // compatibility check wants before any session starts.
+          mpvReport: mpvMp4H264Aac,
           cast: cast,
           lanMedia: lan,
           configureEngine: (engine) => engine.disposeGate = wedged,

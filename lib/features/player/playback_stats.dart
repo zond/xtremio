@@ -41,6 +41,7 @@ class PlaybackStats {
     this.hwdec,
     this.videoCodec,
     this.audioCodec,
+    this.fileFormat,
     this.width,
     this.height,
     this.videoBitrate,
@@ -64,6 +65,7 @@ class PlaybackStats {
     'hwdec-current',
     'video-codec',
     'audio-codec-name',
+    'file-format',
     'video-params/w',
     'video-params/h',
     'video-bitrate',
@@ -111,6 +113,7 @@ class PlaybackStats {
       hwdec: text('hwdec-current'),
       videoCodec: text('video-codec'),
       audioCodec: text('audio-codec-name'),
+      fileFormat: text('file-format'),
       width: integer('video-params/w'),
       height: integer('video-params/h'),
       videoBitrate: integer('video-bitrate'),
@@ -167,6 +170,13 @@ class PlaybackStats {
   /// about the audio, the one place the file itself can be believed over
   /// what a release name claims.
   final String? audioCodec;
+
+  /// `file-format`: the reader that opened the file, which names a family
+  /// of containers and not one -- `mkv` (mpv's own Matroska reader, WebM
+  /// included), `matroska,webm` or `mov,mp4,m4a,3gp,3g2,mj2` (libavformat's).
+  /// Not shown anywhere: with the two codecs it is all the cast
+  /// compatibility check believes about a file.
+  final String? fileFormat;
 
   /// Decoded picture size (`video-params/w`, `video-params/h`).
   final int? width;
@@ -277,6 +287,7 @@ class PlaybackStats {
       other.hwdec == hwdec &&
       other.videoCodec == videoCodec &&
       other.audioCodec == audioCodec &&
+      other.fileFormat == fileFormat &&
       other.width == width &&
       other.height == height &&
       other.videoBitrate == videoBitrate &&
@@ -300,6 +311,7 @@ class PlaybackStats {
     hwdec,
     videoCodec,
     audioCodec,
+    fileFormat,
     width,
     height,
     videoBitrate,
@@ -317,7 +329,7 @@ class PlaybackStats {
       'PlaybackStats(fps: $outputFps/$containerFps, dropped: $droppedFrames'
       '/$decoderDroppedFrames, display: $displayFps'
       ', hwdec: $hwdec, codec: $videoCodec'
-      '/$audioCodec, '
+      '/$audioCodec, format: $fileFormat, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
       'seekable: $seekable, partiallySeekable: $partiallySeekable, '

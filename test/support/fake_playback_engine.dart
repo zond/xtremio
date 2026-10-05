@@ -4,6 +4,22 @@ import 'package:flutter/widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/display_frame_rate.dart';
 
+/// What mpv reports for an MP4 of H.264 and AAC (libavformat's reader for
+/// the MP4 family): a file a receiver takes as it is.
+const PlaybackStats mpvMp4H264Aac = PlaybackStats(
+  fileFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+  videoCodec: 'h264 (High)',
+  audioCodec: 'aac',
+);
+
+/// What mpv reports for a Matroska film of H.264 and AAC (mpv's own
+/// reader): a file a receiver takes only as a rendition.
+const PlaybackStats mpvMkvH264Aac = PlaybackStats(
+  fileFormat: 'mkv',
+  videoCodec: 'h264 (High)',
+  audioCodec: 'aac',
+);
+
 /// [PlaybackEngine] for widget tests: records every call and lets the test
 /// feed position/playing/tracks/... events. No libmpv.
 class FakePlaybackEngine implements PlaybackEngine {
@@ -18,10 +34,24 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
   final _videoFrameRate = StreamController<double>.broadcast();
-  late final _stats = StreamController<PlaybackStats>.broadcast(
-    onListen: () => statsListeners++,
-    onCancel: () => statsListeners--,
-  );
+  late final StreamController<PlaybackStats> _stats =
+      StreamController.broadcast(
+        onListen: () {
+          statsListeners++;
+          // The real engine samples at once when [stats] gains a listener, and
+          // answers a moment later: a microtask, not in the subscriber's call.
+          final sample = report;
+          if (sample != null) scheduleMicrotask(() => _stats.add(sample));
+        },
+        onCancel: () => statsListeners--,
+      );
+
+  /// What mpv says about the open file, as the real engine's first sample
+  /// to a new listener of [stats] carries it: `file-format` and the two
+  /// codecs, which is all the cast check believes ([mpvMp4H264Aac] and
+  /// friends). Null is a file mpv has not reported on yet; [emitStats]
+  /// still says anything a test likes.
+  PlaybackStats? report;
 
   /// Live subscribers to [stats]; > 0 means the screen is sampling.
   int statsListeners = 0;

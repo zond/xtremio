@@ -158,12 +158,6 @@ extension _PlayerCasting on _PlayerScreenState {
     _castStatsSubscription = null;
   }
 
-  /// What the stream says about itself, for the compatibility check: the
-  /// stream the engine resolved when there is one, else the one this screen
-  /// was opened with.
-  StreamFacts get _streamFacts =>
-      StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
-
   /// **What a receiver is sent and what the cast is judged by.** A stream
   /// played by id is cast by id ([_castUrl] publishes it) -- or, for a link
   /// the receiver can fetch itself, as that link ([_directCastUrl]), with
@@ -171,23 +165,6 @@ extension _PlayerCasting on _PlayerScreenState {
   /// `xtremio://<id>` the engine reads; a stream read over HTTP is the URL
   /// as the core published it ([_opened]).
   Uri? get _castSource => _playingMediaId != null ? _engineUrl : _opened;
-
-  /// The name the compatibility check reads: **the film, not the container
-  /// it came in.** For an id the server found to be an archive or a disc
-  /// image, the member's own name ([MediaResolution.memberName]); judging
-  /// the container would refuse a `.rar` whose one member is an MP4 the
-  /// receiver plays fine. Otherwise [castFilename], and failing that the
-  /// name the server resolved the stream to (a torrent file's, a link's
-  /// last segment). A name with no extension yields no container, and the
-  /// check refuses an unknown one, which is a real answer, not a "not
-  /// yet".
-  String? get _castFilename {
-    final resolution = _mediaResolution;
-    final member = resolution?.memberName;
-    if (member != null) return member.split('/').last;
-    return castFilename(_state, serverFilename: _serverFilename) ??
-        resolution?.name;
-  }
 
   /// Hands the stream to [device], or explains why it cannot be.
   ///
@@ -211,21 +188,10 @@ extension _PlayerCasting on _PlayerScreenState {
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,
-      // Still the stream's own facts, and right for a member too: a
-      // container is named after the release it holds, so the tags that
-      // say HEVC or DTS are claims about the film inside it. They are
-      // claims either way, believed only when they say something is
-      // wrong.
-      facts: _streamFacts,
-      filename: _castFilename,
+      // mpv's word on the file it is reading, and the only word taken: no
+      // name, no release's claim. Null until its first report, which the
+      // check answers with a "not yet".
       stats: _lastStats,
-      // A torrent the server has not named the file of yet: "not until it
-      // has", answered without reopening anything, since the poll that names
-      // it rebuilds this screen. A member is judged the same way:
-      // [_reopenAt] restores the request ([_restoreTorrentStats]) that
-      // [_failPlayback] cleared, so a member of a torrent is pending until a
-      // poll names the file.
-      containerPending: _torrentStatsRequest != null && _serverFilename == null,
       // A rendition needs the film's length for its playlist, and a device
       // that can make one; asked now, since a player registering libmpv is
       // what makes it so.

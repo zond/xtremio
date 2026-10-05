@@ -7,10 +7,10 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_cast_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
-import 'player_cast_test.dart'
-    show castTo, lanBase, livingRoom, playerWithFilename;
+import 'player_cast_test.dart' show castTo, lanBase, livingRoom;
 
 /// A seek made before the file is in belongs to the viewer, not to the
 /// resume point the open started from.
@@ -289,11 +289,10 @@ void main() {
     final harness = await opening(
       tester,
       harness: PlayerHarness(
-        player: resumable(
-          playerWithFilename('Night.of.the.Living.Dead.1080p.x264.AAC.mp4'),
-        ),
+        player: resumable(),
         cast: cast,
         lanMedia: FakeLanMediaControl()..baseUrl = lanBase,
+        mpvReport: mpvMp4H264Aac,
       ),
     );
     probe(tester).seekTo(sought);
@@ -314,11 +313,10 @@ void main() {
     final harness = await opening(
       tester,
       harness: PlayerHarness(
-        player: resumable(
-          playerWithFilename('Night.of.the.Living.Dead.1080p.x264.AAC.mp4'),
-        ),
+        player: resumable(),
         cast: cast,
         lanMedia: FakeLanMediaControl()..baseUrl = lanBase,
+        mpvReport: mpvMp4H264Aac,
       ),
     );
     await castTo(tester, livingRoom);

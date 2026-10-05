@@ -15,6 +15,8 @@ void main() {
       'display-fps': '23.976025',
       'hwdec-current': 'vaapi',
       'video-codec': 'hevc (Main 10)',
+      'audio-codec-name': 'eac3',
+      'file-format': 'mov,mp4,m4a,3gp,3g2,mj2',
       'video-params/w': '3840',
       'video-params/h': '2160',
       'video-bitrate': '15234567',
@@ -30,11 +32,32 @@ void main() {
     expect(stats.hwdec, 'vaapi');
     expect(stats.isSoftwareDecoding, isFalse);
     expect(stats.videoCodec, 'hevc (Main 10)');
+    expect(stats.audioCodec, 'eac3');
+    expect(stats.fileFormat, 'mov,mp4,m4a,3gp,3g2,mj2');
     expect((stats.width, stats.height), (3840, 2160));
     expect(stats.videoBitrate, 15234567);
     expect(stats.cacheDuration, const Duration(milliseconds: 12346));
     expect(stats.pausedForCache, isFalse);
     expect(stats.cacheBufferingState, 100);
+  });
+
+  test('the file format is polled and tells two samples apart', () {
+    // The cast check believes nothing else about what a file is, so it is
+    // asked of mpv with the rest, and a sample that changed only in it is
+    // a different sample.
+    expect(PlaybackStats.mpvProperties, contains('file-format'));
+    expect(
+      const PlaybackStats(videoCodec: 'h264', fileFormat: 'mkv'),
+      isNot(const PlaybackStats(videoCodec: 'h264', fileFormat: 'mov,mp4')),
+    );
+    expect(
+      const PlaybackStats(videoCodec: 'h264', fileFormat: 'mkv'),
+      const PlaybackStats(videoCodec: 'h264', fileFormat: 'mkv'),
+    );
+    expect(
+      const PlaybackStats(fileFormat: 'mkv').toString(),
+      contains('format: mkv'),
+    );
   });
 
   test('treats empty, missing and unparsable properties as unknown', () {

@@ -43,6 +43,7 @@ class PlayerHarness {
     this.driveOpener,
     this.localMedia,
     this.navigatorObservers = const [],
+    this.mpvReport,
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
     bool embeddedServer = true,
@@ -130,6 +131,11 @@ class PlayerHarness {
   /// `'close-streams'`, `'dispose'`), in the order they happened.
   final List<String> calls = [];
 
+  /// What mpv says about the file on every engine this harness makes
+  /// ([FakePlaybackEngine.report]): what the cast check judges a stream by.
+  /// Null, the default, is an engine that has not reported yet.
+  final PlaybackStats? mpvReport;
+
   /// Applied to every engine before the screen gets it: how a test makes
   /// the first `open` fail, which happens during the first pump.
   final void Function(FakePlaybackEngine engine)? configureEngine;
@@ -192,7 +198,9 @@ class PlayerHarness {
       ),
       child: PlaybackScope(
         createEngine: () {
-          final engine = FakePlaybackEngine()..callLog = calls;
+          final engine = FakePlaybackEngine()
+            ..callLog = calls
+            ..report = mpvReport;
           configureEngine?.call(engine);
           engines.add(engine);
           return engine;
