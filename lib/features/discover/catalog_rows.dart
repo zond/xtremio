@@ -54,10 +54,14 @@ class CatalogRows extends StatefulWidget {
   /// rows follow from the scroll offset alone. A tile's width follows from
   /// it (the strip is what is left under the header, and the poster's shape
   /// turns that height into a width), so this is also how big the posters
-  /// are: on a television they are read from across the room, and a 1080p
-  /// set has the pixels to spare.
+  /// are.
+  ///
+  /// A television's is the other way round: the poster is
+  /// [PosterTile.tvImageHeight], every television screen's one size, and
+  /// the row is that and what goes round it -- which is what puts two whole
+  /// rows on a Google TV's screen ([PosterTile.tvImageHeight] says how).
   static double rowExtentFor(double width, {bool isTv = false}) => isTv
-      ? 360
+      ? _RowLayout.tvBaseExtent
       : width >= 720
       ? 260
       : 200;
@@ -457,7 +461,12 @@ final class _CatalogRow extends _BoardRow {
 /// Shared geometry of one row: a header, then a horizontal strip whose tile
 /// width follows from the strip height and the poster shape.
 class _RowLayout {
-  const _RowLayout(this.baseExtent, {this.textFactor = 1, this.focusSlack = 0});
+  const _RowLayout(
+    this.baseExtent, {
+    this.textFactor = 1,
+    this.focusSlack = 0,
+    this.inlineHeader = false,
+  });
 
   /// The row's height at text scale 1: what [CatalogRows.rowExtentFor]
   /// picked for this window.
@@ -485,6 +494,13 @@ class _RowLayout {
   /// poster height on the room.
   final double focusSlack;
 
+  /// The header is one line, the catalog's subtitle after its title rather
+  /// than under it, and the rows have no gap of their own between them (the
+  /// strip's [focusSlack] and the header's padding are gap enough): a
+  /// television's, whose rows share the screen two at a time, and for
+  /// which these are height off the poster.
+  final bool inlineHeader;
+
   /// The row geometry [context] is in.
   static _RowLayout of(BuildContext context) {
     final isTv = DeviceScope.isTv(context);
@@ -492,11 +508,28 @@ class _RowLayout {
       CatalogRows.rowExtentFor(MediaQuery.sizeOf(context).width, isTv: isTv),
       textFactor: math.max(1, TvDensity.textFactorOf(context)),
       focusSlack: isTv ? focusRoom : 0,
+      inlineHeader: isTv,
     );
   }
 
-  static const double baseHeaderHeight = 52;
-  static const double bottomPadding = 8;
+  static const double tallHeaderHeight = 52;
+
+  /// [tallHeaderHeight] for a header of one line ([inlineHeader]): 8 of
+  /// padding above and 4 below the 24 of a title.
+  static const double inlineHeaderHeight = 36;
+
+  static const double rowGap = 8;
+
+  /// A television's row at text scale 1: a [PosterTile.tvImageHeight]
+  /// poster and everything round it -- the one-line header, the room a
+  /// focused tile grows into above and below, and the caption's box and
+  /// inset.
+  static const double tvBaseExtent =
+      inlineHeaderHeight +
+      focusRoom * 2 +
+      PosterTile.captionInset +
+      PosterTile.captionHeight +
+      PosterTile.tvImageHeight;
   static const double stripSidePadding = 16;
   static const double tileSpacing = 12;
 
@@ -519,6 +552,11 @@ class _RowLayout {
       baseExtent +
       (baseHeaderHeight + PosterTile.captionHeight) * (textFactor - 1);
 
+  double get baseHeaderHeight =>
+      inlineHeader ? inlineHeaderHeight : tallHeaderHeight;
+
+  double get bottomPadding => inlineHeader ? 0 : rowGap;
+
   double get headerHeight => baseHeaderHeight * textFactor;
 
   double get stripHeight => extent - headerHeight - bottomPadding;
@@ -538,7 +576,12 @@ class _RowLayout {
 }
 
 class _RowHeader extends StatelessWidget {
-  const _RowHeader({required this.title, required this.height, this.subtitle});
+  const _RowHeader({
+    required this.title,
+    required this.height,
+    this.subtitle,
+    this.inline = false,
+  });
 
   final String title;
 
@@ -548,34 +591,56 @@ class _RowHeader extends StatelessWidget {
 
   final String? subtitle;
 
+  /// [_RowLayout.inlineHeader]: the subtitle on the title's line.
+  final bool inline;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final subtitle = this.subtitle;
+    final hasSubtitle = subtitle != null && subtitle.isNotEmpty;
+    final subtitleStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return SizedBox(
       height: height,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium,
-            ),
-            if (subtitle != null && subtitle!.isNotEmpty)
-              Text(
-                subtitle!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+        child: inline
+            ? Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text.rich(
+                  TextSpan(
+                    text: title,
+                    style: theme.textTheme.titleMedium,
+                    children: [
+                      if (hasSubtitle)
+                        TextSpan(text: '   $subtitle', style: subtitleStyle),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  if (hasSubtitle)
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: subtitleStyle,
+                    ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }
@@ -607,7 +672,11 @@ class _ContinueWatchingRowView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _RowHeader(title: 'Continue watching', height: layout.headerHeight),
+        _RowHeader(
+          title: 'Continue watching',
+          height: layout.headerHeight,
+          inline: layout.inlineHeader,
+        ),
         Expanded(
           child: _HorizontalStrip(
             padding: layout.stripPadding,
@@ -628,7 +697,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
             },
           ),
         ),
-        const SizedBox(height: _RowLayout.bottomPadding),
+        SizedBox(height: layout.bottomPadding),
       ],
     );
   }
@@ -660,9 +729,10 @@ class _CatalogRowView extends StatelessWidget {
           title: row.title,
           subtitle: row.subtitle,
           height: layout.headerHeight,
+          inline: layout.inlineHeader,
         ),
         Expanded(child: _content(layout)),
-        const SizedBox(height: _RowLayout.bottomPadding),
+        SizedBox(height: layout.bottomPadding),
       ],
     );
   }

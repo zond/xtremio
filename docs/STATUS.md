@@ -276,3 +276,10 @@ each edge clear of overscan; and controls a remote cannot work (the volume
 slider, the fullscreen toggle, scrollbar thumbs) are not drawn. Text is
 typed on a screen of its own
 ([ANDROID.md](ANDROID.md#typing-with-a-remote)).
+
+Discover has no title there: the rail already says which tab is open, so
+the types are the top of the screen, and the rows below them share the
+board two at a time -- a heading of one line, the catalog's subtitle after
+its title, and posters sized so that two whole rows show before the remote
+moves (64 x 96 dp, on a 1080p Google TV's 960 x 540, against the 153 x 230
+of the one row that used to fill it).

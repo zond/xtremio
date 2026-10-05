@@ -298,16 +298,18 @@ void main() {
   });
 
   group('CatalogRows', () {
-    testWidgets('a television gets bigger posters than a window of the same '
-        'size', (tester) async {
+    testWidgets('a television draws its own poster size, whatever the '
+        'window', (tester) async {
       await pumpBoard(tester, device: DeviceProfile.fallback);
       final onDesktop = tester.getSize(find.byType(PosterTile).first);
 
       await pumpBoard(tester, device: tv);
       final onTv = tester.getSize(find.byType(PosterTile).first);
 
-      expect(onTv.width, greaterThan(onDesktop.width));
-      expect(onTv.height, greaterThan(onDesktop.height));
+      // Two-thirds of the poster's height across, and nothing to do with
+      // how wide the window is: the size every television screen shares.
+      expect(onTv.width, PosterTile.tvImageHeight * 2 / 3);
+      expect(onDesktop.width, isNot(onTv.width));
     });
 
     testWidgets('the rows have room for the scaled-up text', (tester) async {
@@ -373,7 +375,11 @@ void main() {
       final (posterAtOne, rowAtOne) = await measure(1);
       final (posterHuge, rowHuge) = await measure(3);
 
-      expect(posterAtOne, greaterThan(100), reason: 'a real picture');
+      expect(
+        posterAtOne,
+        greaterThanOrEqualTo(PosterTile.tvImageHeight),
+        reason: 'a real picture',
+      );
       expect(
         posterHuge,
         greaterThanOrEqualTo(posterAtOne),

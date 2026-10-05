@@ -42,6 +42,17 @@ class PosterTile extends StatelessWidget {
   /// anyone can see, while eight pixels across a title is the title.
   static const double captionInset = FocusRing.textInset;
 
+  /// How tall a poster is on a television, wherever it is drawn: the one
+  /// size, so a title looks the same in a row as it does in a grid.
+  ///
+  /// Picked for two whole rows of Discover under its type pills on a
+  /// Google TV -- a 1920x1080 panel at a pixel ratio of 2, so 960x540 to
+  /// lay out on, 430 of it under the pills once the overscan band is kept
+  /// clear -- with every heading and caption at the television's text
+  /// scale: as big as two rows allow, against the 230 of the one row that
+  /// used to fill that screen.
+  static const double tvImageHeight = 96;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

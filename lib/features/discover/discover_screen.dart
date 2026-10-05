@@ -263,13 +263,18 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       },
       child: TvSafeArea(
         child: Scaffold(
-          appBar: AppBar(
-            title: Text(
-              showsCatalog
-                  ? (state?.selectedCatalogName ?? 'Discover')
-                  : 'Discover',
-            ),
-          ),
+          // A television has no title: the rail beside it already says
+          // which tab this is, the catalog menu which catalog, and the
+          // height is the second row of posters'.
+          appBar: isTv
+              ? null
+              : AppBar(
+                  title: Text(
+                    showsCatalog
+                        ? (state?.selectedCatalogName ?? 'Discover')
+                        : 'Discover',
+                  ),
+                ),
           body: Column(
             children: [
               _tvGroup(
@@ -568,7 +573,12 @@ class _BrowseHeader extends StatelessWidget {
     // rows -- stepping over the menus a press down was meant for. The rows
     // are no rung: a press down off the menus falls through to them.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      // A television's types are the top of the screen, at the edge of
+      // the band the shell keeps clear, with no title above them to keep a
+      // gap from.
+      padding: DeviceScope.isTv(context)
+          ? const EdgeInsets.fromLTRB(12, 0, 12, 4)
+          : const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: TvLadder(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
