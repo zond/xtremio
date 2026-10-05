@@ -35,19 +35,33 @@ than dropping them without a word.
 
 ## Subtitles that are inside the file
 
-The step after the one above, and a much bigger one: a receiver does not
-render a text track embedded in an MKV or an MP4 at all, so those would
-have to be read out of the container and served as WebVTT. The translated
-sources layer already reads containers by byte range, which is the half
-that exists; a Matroska subtitle track reader is the half that does not.
+About casting only: on the device mpv shows an embedded text track as it
+shows any other. A receiver does not render a text track embedded in an
+MKV or an MP4 at all, so on a cast it would have to be read out of the
+container and served as WebVTT, beside the step above. Nearer than it
+looks: the rendition producer (`rust/src/rendition.rs`) already demuxes
+the film on the phone through libavformat, reading every packet of every
+stream -- a subtitle track's included -- and throwing away all but the
+picture and the sound. Keeping the text track's packets as well, turning
+them into WebVTT cues and serving those beside the rendition is the
+missing half; a film that goes to the receiver as it is (an MP4, a WebM)
+would need the same demuxer run for its subtitles alone.
 
 ## Transcoding for a cast
 
-What would make casting work for the files a receiver turns down -- HEVC,
-Matroska, TrueHD -- instead of refusing them with a sentence. stream-server
-already advertises HLS transcoding support, so this may be wiring rather
-than building; scope it before estimating. Wanted, and deferred every time
-because direct play covers what is actually watched.
+What a cast does today ([CASTING.md](CASTING.md)): H.264 and HEVC in
+Matroska or MP4 are repackaged with the picture copied and any sound the
+receiver may not get converted to stereo AAC; a plain link the receiver
+can fetch goes to it straight. What is still refused is a **picture** the
+cast cannot carry as it is: video a receiver cannot decode at all (AV1 on
+most, 10-bit H.264, MPEG-4 Part 2), VP9 in a Matroska file that is not a
+WebM (a copy does not carry it), a 4K film for a 1080p receiver, Dolby
+Vision profile 5. Re-encoding the picture is what would cast those. It
+would also give a film with no index exact seek positions on a cast: a
+re-encode puts its key frames where it chooses, so each slot's real start
+is known before the slot is made, which an estimated layout cannot know
+(stream-server `docs/design/renditions.md` §2.8). Wanted,
+and deferred because the copy covers what is actually watched.
 
 ## Speak to search
 
@@ -81,30 +95,6 @@ shows Watch Next entries from an app that is not on the Play Store, or now
 requires Google's Engage SDK / a partnership -- measure on zond's Chromecast
 with a single hand-published entry before building the sync. One to two
 days if the plain API is honoured.
-
-## A discover-only torrent state
-
-**Being scoped -- zond wants this built, not wished for.** What follows is
-the reason; the design is in hand.
-
-An engine with no reader wants every file, and the want set only narrows
-when a stream arrives -- so anything that creates an engine early fetches
-the whole torrent until a reader shows up (546 MB at ~50 MB/s). It is not
-hit today only because the player's stream request follows its open by
-about 160 ms.
-
-The fix needs a state where a torrent finds peers and metadata without
-wanting data, and rqbit drops peers when neither side is interested, so
-only addresses and metadata would survive it. That is a change in the
-fork, not here. It is also what "start the engine when a source is picked"
-waits on.
-
-## Drive as an addon
-
-Whether Google Drive belongs behind an addon seam rather than in the app.
-The translated-sources work makes the case stronger -- a Drive file is
-another source of byte ranges, which is exactly what that seam takes --
-but nothing has been designed.
 
 ## Shrinking the stremio-core fork to nothing
 
@@ -147,7 +137,8 @@ that names every volume and this becomes an afternoon.**
 
 ## Audio a receiver cannot have
 
-Dolby Atmos objects fold to the channel bed on every build there is,
+About playing on the device into an AV receiver (an amplifier), not about
+casting. Dolby Atmos objects fold to the channel bed on every build there is,
 ffmpeg having no renderer for them; nothing to do until it does. TrueHD
 *passthrough* is a different matter: the shipped libmpv has `ad_spdif`
 and `spdif-truehd` compiled in, so `--audio-spdif=truehd` could bitstream
@@ -160,3 +151,12 @@ viewers with an AVR that takes it.
   [OPERATIONS.md](OPERATIONS.md#building-for-ios) has the two proven
   changes, and the CI job is red by design.
 * **Browser clients.** Closed by zond.
+* **Drive as an addon.** Closed by zond (2026-10-05): the app's own Drive
+  support -- remote files read by range, linked once, offline downloads --
+  is better than anything an addon seam would give it.
+* **A discover-only torrent state** (finding peers and metadata for a
+  source before it is picked). Closed by zond (2026-10-05): people scroll
+  around among sources before selecting one, and starting and stopping
+  torrents for that pollutes the swarm and our own compute and memory. A
+  torrent is on because something explicit holds it -- a player screen, a
+  cast, a download -- and for no other reason.

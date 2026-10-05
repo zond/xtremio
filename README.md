@@ -172,13 +172,11 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 
 ## What is next
 
-What is genuinely not built:
-
-- **Media3 remuxing for casting**, to let a receiver play a stream it cannot
-  decode as it stands. It would run on the sending device with its platform
-  hardware codec (Android MediaCodec first) -- never ffmpeg, never software
-  transcoding in the Rust core. Until then such a stream is refused rather
-  than mangled.
+What is genuinely not built, and why, is in
+[docs/WISHLIST.md](docs/WISHLIST.md). Most of it is about the cast: a
+subtitle is not sent to a receiver, and a picture a receiver cannot decode
+(AV1 on most, Dolby Vision profile 5, a 4K film for a 1080p receiver) is
+refused rather than re-encoded.
 
 ## What is written down where
 
@@ -189,7 +187,7 @@ What is genuinely not built:
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Setting up, building and running, re-recording fixtures, server storage, diagnostics, the stats OSD, and what an iOS build needs. |
 | [docs/ANDROID.md](docs/ANDROID.md) | Android and Android TV: prerequisites, the APK, manifest and channels, display frame rate, downloads in the background, emulators, a real box. |
 | [docs/DRIVING.md](docs/DRIVING.md) | Driving a running app from a terminal or an agent: the side-by-side debug app, `tool/drive-start`, `tool/drive`. |
-| [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
+| [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, what it repackages, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
 | [docs/WISHLIST.md](docs/WISHLIST.md) | What is deliberately not built yet, and why. |
