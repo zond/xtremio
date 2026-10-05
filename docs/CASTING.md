@@ -34,9 +34,9 @@ receiver announces ([The receiver table](#the-receiver-table)).
 
 **mpv is the only authority on what the file is.** A cast starts from the
 player, where mpv is reading the file, and its report -- `file-format` (the
-reader that opened the file), `video-codec` and `audio-codec-name`, sampled
-while the receiver list is open (`PlaybackStats`) -- is all the check
-believes. No file name, URL extension, server-resolved name or release claim
+reader that opened the file), `video-codec`, `audio-codec-name` and
+`video-params/pixelformat`, sampled while the receiver list is open
+(`PlaybackStats`) -- is all the check believes. No file name, URL extension, server-resolved name or release claim
 (`x265`, `DDP5.1`) is read: they are often absent (a debrid link names no
 file at all) and sometimes wrong, and mpv is reading the bytes.
 
@@ -50,6 +50,25 @@ file at all) and sometimes wrong, and mpv is reading the bytes.
   other reader (AVI, a transport stream, Ogg, ...) is refused by name.
 - **The codecs** are mpv's, for the same reason, and decide within a
   family: a receiver's video list, and the audio the container may carry.
+- **A picture no receiver decodes is refused up front**, for every
+  receiver and whether the film would go as it is or repackaged (a
+  rendition copies the picture): H.264 that is not 8-bit 4:2:0 (High 10,
+  "Hi10P", common in anime releases; High 4:2:2; High 4:4:4), and HEVC
+  beyond Main 10 (12 bits, 4:2:2, 4:4:4). Google lists H.264 as High
+  Profile only and HEVC as Main and Main 10 on every receiver that has it
+  (`ReceiverTable.deepestPicture`, all 4:2:0). The sentence names it:
+  "This film's video is 10-bit H.264, which no Chromecast can play, and
+  xtremio can't convert it for casting yet." (`CastRefusal.pictureFormat`).
+  **mpv says which by its pixels**, not a profile: the libmpv this app
+  ships (v0.36.0-549) names no profile anywhere -- its `video-codec` is
+  the decoder and its description, `h264 (H.264 / AVC / MPEG-4 AVC /
+  MPEG-4 part 10)`, and its track list has no `codec-profile` (mpv 0.37)
+  -- so the check reads `video-params/pixelformat` (`yuv420p10`,
+  `yuv422p`, `yuv444p`, ...; measured with libmpv on a file ffmpeg made in
+  each profile), or, when that is a hardware surface (`mediacodec`), what
+  the surface holds (`video-params/hw-pixelformat`, `p010`). A surface
+  that does not say is not held against the film
+  ([Known limits](#known-limits)).
 - **Before mpv has reported** the reader and the video codec, the answer is
   `CastRefusal.pending`, a "not yet" (below), never a guess.
 - **QuickTime is MP4 here**: one reader opens both, so a `.mov` of H.264 or
@@ -552,6 +571,14 @@ What a cast still gets wrong, knowingly:
 - **A QuickTime (`.mov`) file of H.264 or HEVC with AAC is handed over as
   `video/mp4`**, as mpv cannot tell it from an MP4. Untested on a
   receiver; one that will not play it shows as a cast that does not start.
+- **10-bit H.264 decoded in hardware may not be caught up front.** The
+  pixel format is the check's only word on it, and a hardware decoder
+  hands mpv a `mediacodec` surface that may not say what it holds. Most
+  phones' decoders do not take High 10 and mpv decodes it in software,
+  which names `yuv420p10`; a phone whose decoder does take it leaves the
+  film to the receiver's report of its picture
+  ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
+  Unmeasured on a phone.
 - **Subtitles are not sent** to the receiver ([WISHLIST.md](WISHLIST.md#subtitles-on-a-cast)).
 
 ## The pieces, and what is verified

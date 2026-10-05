@@ -46,6 +46,8 @@ class PlaybackStats {
     this.videoTrack,
     this.width,
     this.height,
+    this.pixelFormat,
+    this.hwPixelFormat,
     this.videoBitrate,
     this.cacheDuration,
     this.pausedForCache,
@@ -72,6 +74,8 @@ class PlaybackStats {
     'current-tracks/video/codec',
     'video-params/w',
     'video-params/h',
+    'video-params/pixelformat',
+    'video-params/hw-pixelformat',
     'video-bitrate',
     'demuxer-cache-duration',
     'paused-for-cache',
@@ -122,6 +126,8 @@ class PlaybackStats {
       videoTrack: text('current-tracks/video/codec'),
       width: integer('video-params/w'),
       height: integer('video-params/h'),
+      pixelFormat: text('video-params/pixelformat'),
+      hwPixelFormat: text('video-params/hw-pixelformat'),
       videoBitrate: integer('video-bitrate'),
       cacheDuration: cache == null
           ? null
@@ -168,7 +174,10 @@ class PlaybackStats {
   /// `vaapi`, or `no` when decoding in software; `null` when unknown.
   final String? hwdec;
 
-  /// `video-codec`, e.g. `h264 (High)`.
+  /// `video-codec`: the decoder and its description, as the libmpv this
+  /// app ships writes them (`"%s (%s)"`), e.g. `h264 (H.264 / AVC /
+  /// MPEG-4 AVC / MPEG-4 part 10)`. It names no profile: what the picture
+  /// is, 10-bit or 4:2:2, is [pixelFormat]'s to say.
   final String? videoCodec;
 
   /// `audio-codec-name`: the bare codec, e.g. `aac`, `eac3`, `dts`. Not
@@ -201,6 +210,20 @@ class PlaybackStats {
   /// Decoded picture size (`video-params/w`, `video-params/h`).
   final int? width;
   final int? height;
+
+  /// The decoded picture's pixel format as mpv names it
+  /// (`video-params/pixelformat`): `yuv420p` for 8-bit 4:2:0, `yuv420p10`
+  /// for 10-bit, `yuv422p`, `yuv444p`, ... -- or, out of a hardware
+  /// decoder, the surface's name (`mediacodec`), with what it holds in
+  /// [hwPixelFormat] when mpv knows it. Mpv's word on what the film's
+  /// picture is, which the cast check holds against what receivers decode;
+  /// not shown anywhere.
+  final String? pixelFormat;
+
+  /// `video-params/hw-pixelformat`: what a hardware surface holds (`nv12`,
+  /// `p010`), or null for a picture decoded in software or a surface that
+  /// does not say.
+  final String? hwPixelFormat;
 
   /// Video bitrate estimate in bits per second (`video-bitrate`).
   final int? videoBitrate;
@@ -312,6 +335,8 @@ class PlaybackStats {
       other.videoTrack == videoTrack &&
       other.width == width &&
       other.height == height &&
+      other.pixelFormat == pixelFormat &&
+      other.hwPixelFormat == hwPixelFormat &&
       other.videoBitrate == videoBitrate &&
       other.cacheDuration == cacheDuration &&
       other.pausedForCache == pausedForCache &&
@@ -338,6 +363,8 @@ class PlaybackStats {
     videoTrack,
     width,
     height,
+    pixelFormat,
+    hwPixelFormat,
     videoBitrate,
     cacheDuration,
     pausedForCache,
@@ -355,7 +382,7 @@ class PlaybackStats {
       ', hwdec: $hwdec, codec: $videoCodec'
       '/$audioCodec ($audioChannels ch), track: $videoTrack, '
       'format: $fileFormat, '
-      '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
+      '${width}x$height $pixelFormat/$hwPixelFormat, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
       'seekable: $seekable, partiallySeekable: $partiallySeekable, '
       'ranges: $seekableRanges)';

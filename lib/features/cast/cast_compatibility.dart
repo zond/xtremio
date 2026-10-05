@@ -112,6 +112,10 @@ sealed class CastCompatibility {
       return const CastRefused._pending();
     }
     if (video == null) return _soundAlone(readers, audio!);
+    // A picture no receiver decodes, whatever it is: 10-bit H.264 and the
+    // like. As it is or repackaged alike, since a rendition copies it.
+    final unpictured = _pictureFormatRefusal(video, stats);
+    if (unpictured != null) return unpictured;
 
     final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
@@ -272,6 +276,13 @@ final class CastRefused extends CastCompatibility {
         'would need conversion, which this app cannot do yet.',
       );
 
+  const CastRefused._pictureFormat(String picture)
+    : this._(
+        CastRefusal.pictureFormat,
+        "This film's video is $picture, which no Chromecast can play, and "
+        "xtremio can't convert it for casting yet.",
+      );
+
   /// A film that would be repackaged but whose picture a copy cannot
   /// carry: [sentence] names it.
   const CastRefused._rendition(CastRefusal reason, String sentence)
@@ -295,6 +306,8 @@ final class CastRefused extends CastCompatibility {
 /// the receiver would be handed as it is; [videoCodec] and [pictureSize]
 /// about a picture the receiver does not decode, or not that big or that
 /// fast, whether handed as it is or copied into a rendition;
+/// [pictureFormat] about a picture no receiver decodes at all, 10-bit
+/// H.264 and the like ([ReceiverTable.deepestPicture]), either way;
 /// [renditionVideo]
 /// about one that would be repackaged but whose picture a copy cannot carry
 /// (what a transcode, step F4 of the renditions design, would answer); a
@@ -307,6 +320,7 @@ enum CastRefusal {
   container,
   videoCodec,
   pictureSize,
+  pictureFormat,
   audioCodec,
   renditionVideo,
 }
@@ -437,6 +451,76 @@ CastRefused? _pictureRefusal(
   );
 }
 
+/// The refusal for a [video] picture no receiver decodes, by mpv's pixel
+/// format ([_pixelsOf]), or null for one some receiver does -- or one mpv
+/// has not described, which is not held against the film.
+CastRefused? _pictureFormatRefusal(String video, PlaybackStats? stats) {
+  final pixels =
+      _pixelsOf(stats?.pixelFormat) ?? _pixelsOf(stats?.hwPixelFormat);
+  if (pixels == null) return null;
+  final (:depth, :chroma) = pixels;
+  if (ReceiverTable.decodesPicture(video, depth: depth, chroma: chroma)) {
+    return null;
+  }
+  final bits = depth == 8 ? '' : '$depth-bit ';
+  final sampling = chroma == '4:2:0' ? '' : '$chroma ';
+  return CastRefused._pictureFormat('$bits$sampling$video');
+}
+
+/// **What a picture is, by mpv's name for its pixels**
+/// (`video-params/pixelformat`): bit depth and chroma subsampling, or null
+/// for a name that does not say -- a hardware surface (`mediacodec`), a
+/// grey or packed format nothing here needs. mpv is the only authority:
+/// the libmpv this app ships (v0.36.0-549) names no profile anywhere,
+/// neither in `video-codec` (`"%s (%s)"`, the decoder and its description)
+/// nor in the track list (no `codec-profile` before mpv 0.37), so the
+/// pixels its decoder hands out are its one word on 10-bit H.264.
+/// Measured with libmpv on files ffmpeg made in each profile: High
+/// `yuv420p`, High 10 and High 10 Intra `yuv420p10`, High 4:2:2 (Intra)
+/// `yuv422p` and `yuv422p10`, High 4:4:4 Predictive, High 4:4:4 Intra and
+/// CAVLC 4:4:4 `yuv444p`; HEVC Main 10 `yuv420p10`, its range extensions
+/// `yuv420p12`, `yuv422p10` and `yuv444p`. FFmpeg's own names (`le`/`be`
+/// suffixed) and the semi-planar ones a hardware surface holds (`nv12`,
+/// `p010`) read the same.
+({int depth, String chroma})? _pixelsOf(String? name) {
+  if (name == null) return null;
+  final format = name.toLowerCase().trim().replaceFirst(
+    RegExp(r'(le|be)$'),
+    '',
+  );
+  final planar = RegExp(r'^yuva?j?(420|422|444|440|411|410)p(\d+)?$')
+      .firstMatch(format);
+  if (planar != null) {
+    final sampling = planar.group(1)!;
+    return (
+      depth: int.parse(planar.group(2) ?? '8'),
+      chroma: '${sampling[0]}:${sampling[1]}:${sampling[2]}',
+    );
+  }
+  final semiPlanar = RegExp(r'^p([024])(\d\d)$').firstMatch(format);
+  if (semiPlanar != null) {
+    return (
+      depth: int.parse(semiPlanar.group(2)!),
+      chroma: const {
+        '0': '4:2:0',
+        '2': '4:2:2',
+        '4': '4:4:4',
+      }[semiPlanar.group(1)]!,
+    );
+  }
+  final rgb = RegExp(r'^gbra?p(\d+)?$').firstMatch(format);
+  if (rgb != null) {
+    return (depth: int.parse(rgb.group(1) ?? '8'), chroma: '4:4:4');
+  }
+  return switch (format) {
+    'nv12' || 'nv21' => (depth: 8, chroma: '4:2:0'),
+    'nv16' || 'nv61' || 'yuyv422' || 'uyvy422' => (depth: 8, chroma: '4:2:2'),
+    'nv20' || 'y210' => (depth: 10, chroma: '4:2:2'),
+    'nv24' || 'nv42' => (depth: 8, chroma: '4:4:4'),
+    _ => null,
+  };
+}
+
 /// The `/proxy` or `/ftp` prefix [url] is served under, or null.
 ///
 /// Matched on the path's first segment, whatever host it is on: this is
@@ -452,8 +536,9 @@ String? _proxyPrefix(Uri url) {
   };
 }
 
-/// mpv's `video-codec` (`h264 (High)`, `hevc (Main 10)`) as a name the
-/// sentence can use; null when mpv said nothing.
+/// mpv's `video-codec` as a name the sentence can use, by its first word
+/// (`h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)`, `hevc (...)`, a
+/// hardware decoder's `h264_mediacodec`); null when mpv said nothing.
 String? _canonicalVideo(String? codec) {
   if (codec == null) return null;
   final text = codec.toLowerCase();

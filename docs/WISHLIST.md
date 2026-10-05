@@ -54,7 +54,9 @@ Matroska or MP4 are repackaged with the picture copied and any sound the
 receiver may not get converted to stereo AAC; a plain link the receiver
 can fetch goes to it straight. What is still refused is a **picture** the
 cast cannot carry as it is: video a receiver cannot decode at all (AV1 on
-most, 10-bit H.264, MPEG-4 Part 2), VP9 in a Matroska file that is not a
+most, MPEG-4 Part 2, and H.264 that is not 8-bit 4:2:0 -- "Hi10P", common
+in anime releases -- or HEVC beyond Main 10, which no receiver decodes),
+VP9 in a Matroska file that is not a
 WebM (a copy does not carry it), a 4K film for a 1080p receiver, Dolby
 Vision profile 5. Re-encoding the picture is what would cast those. It
 would also give a film with no index exact seek positions on a cast: a

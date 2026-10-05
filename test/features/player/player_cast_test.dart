@@ -611,6 +611,45 @@ void main() {
       });
     });
 
+    testWidgets('10-bit H.264 is refused up front: nothing is published, '
+        'nothing connected', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(
+        cast: cast,
+        lanMedia: lan,
+        mpv: const PlaybackStats(
+          fileFormat: 'mkv',
+          videoCodec: 'h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)',
+          audioCodec: 'aac',
+          pixelFormat: 'yuv420p10',
+          width: 1920,
+          height: 1080,
+        ),
+      );
+      harness.mediaIds.renditionsAvailable = true;
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 24));
+      await pumpEvents(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(
+        find.text(
+          "This film's video is 10-bit H.264, which no Chromecast can play, "
+          "and xtremio can't convert it for casting yet.",
+        ),
+        findsOneWidget,
+      );
+      expect(harness.mediaIds.renditions, isEmpty);
+      expect(harness.mediaIds.published, isEmpty);
+      expect(cast.connectAttempts, isEmpty);
+      expect(cast.loads, isEmpty);
+      expect(lan.toggles, isEmpty);
+    });
+
     group('the receiver decides what it decodes', () {
       const hevc4k = PlaybackStats(
         fileFormat: 'mkv',

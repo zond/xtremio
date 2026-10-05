@@ -21,6 +21,8 @@ void main() {
       'current-tracks/video/codec': 'hevc',
       'video-params/w': '3840',
       'video-params/h': '2160',
+      'video-params/pixelformat': 'mediacodec',
+      'video-params/hw-pixelformat': 'p010',
       'video-bitrate': '15234567',
       'demuxer-cache-duration': '12.345678',
       'paused-for-cache': 'no',
@@ -39,6 +41,8 @@ void main() {
     expect(stats.audioChannels, 6);
     expect(stats.videoTrack, 'hevc');
     expect((stats.width, stats.height), (3840, 2160));
+    expect(stats.pixelFormat, 'mediacodec');
+    expect(stats.hwPixelFormat, 'p010');
     expect(stats.videoBitrate, 15234567);
     expect(stats.cacheDuration, const Duration(milliseconds: 12346));
     expect(stats.pausedForCache, isFalse);

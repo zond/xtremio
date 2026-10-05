@@ -685,6 +685,149 @@ void main() {
     });
   });
 
+  group('a picture no Cast receiver decodes is refused up front', () {
+    // Google's table: H.264 High, 8-bit 4:2:0, on every receiver; HEVC Main
+    // and Main 10 on those that decode HEVC. mpv says which by the picture
+    // its decoder hands out (`video-params/pixelformat`): the libmpv this
+    // app ships names no profile anywhere -- its `video-codec` is
+    // "h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)".
+    const h264 = 'h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)';
+    const hevc = 'hevc (H.265 / HEVC (High Efficiency Video Coding))';
+
+    PlaybackStats film(
+      String format, {
+      String video = h264,
+      String? pixels,
+      String? hwPixels,
+    }) => PlaybackStats(
+      fileFormat: format,
+      videoCodec: video,
+      audioCodec: 'aac',
+      pixelFormat: pixels,
+      hwPixelFormat: hwPixels,
+    );
+
+    String refusal(String picture) =>
+        "This film's video is $picture, which no Chromecast can play, and "
+        "xtremio can't convert it for casting yet.";
+
+    final receivers = [
+      ultraByName,
+      ReceiverTable.of(announced: 'Chromecast'),
+      ReceiverTable.of(announced: 'Google TV Streamer'),
+      ReceiverTable.unknown,
+    ];
+
+    /// Every way the film could have gone: as it is or repackaged, to
+    /// every kind of receiver.
+    void refusedEverywhere(
+      PlaybackStats Function(String format) stats,
+      String picture,
+    ) {
+      for (final receiver in receivers) {
+        for (final format in [mp4Format, mkvFormat]) {
+          for (final repackage in [false, true]) {
+            final result = check(
+              url: byId,
+              stats: stats(format),
+              canRepackage: repackage,
+              receiver: receiver,
+            );
+            final reason = '${receiver.subject} $format $repackage';
+            expect(result, isA<CastRefused>(), reason: reason);
+            result as CastRefused;
+            expect(result.reason, CastRefusal.pictureFormat, reason: reason);
+            expect(result.explanation, refusal(picture), reason: reason);
+          }
+        }
+      }
+    }
+
+    test('H.264 that is not 8-bit 4:2:0, as mpv names its pixels', () {
+      for (final (pixels, picture) in [
+        // High 10 and High 10 Intra ("Hi10P"), as mpv and as ffmpeg name it.
+        ('yuv420p10', '10-bit H.264'),
+        ('yuv420p10le', '10-bit H.264'),
+        // High 4:2:2 and High 4:2:2 Intra, 8 and 10 bits.
+        ('yuv422p', '4:2:2 H.264'),
+        ('yuv422p10', '10-bit 4:2:2 H.264'),
+        // High 4:4:4 Predictive, High 4:4:4 Intra, CAVLC 4:4:4 Intra.
+        ('yuv444p', '4:4:4 H.264'),
+        ('yuv444p10', '10-bit 4:4:4 H.264'),
+        ('gbrp', '4:4:4 H.264'),
+      ]) {
+        refusedEverywhere((format) => film(format, pixels: pixels), picture);
+      }
+    });
+
+    test('a hardware decoder\'s picture is judged by what it holds', () {
+      refusedEverywhere(
+        (format) => film(format, pixels: 'mediacodec', hwPixels: 'p010'),
+        '10-bit H.264',
+      );
+      // A surface that says nothing of what it holds is not held against
+      // the film: the receiver's report of its picture is the check then.
+      expect(
+        check(stats: film(mp4Format, pixels: 'mediacodec')),
+        isA<CastReady>(),
+      );
+    });
+
+    test('8-bit 4:2:0 H.264 goes as it did', () {
+      for (final pixels in ['yuv420p', 'yuvj420p', 'nv12', 'nv21', null]) {
+        expect(
+          check(stats: film(mp4Format, pixels: pixels)),
+          isA<CastReady>(),
+          reason: '$pixels',
+        );
+        expect(
+          check(
+            url: byId,
+            stats: film(mkvFormat, pixels: pixels),
+            canRepackage: true,
+          ),
+          isA<CastRendition>(),
+          reason: '$pixels',
+        );
+      }
+      // The names the tests elsewhere use, profile and all, and none.
+      for (final video in ['h264 (High)', 'h264 (Main)', 'h264']) {
+        expect(check(stats: mp4(video: video)), isA<CastReady>());
+      }
+    });
+
+    test('HEVC Main 10 goes as it did; 12 bits, 4:2:2 and 4:4:4 do not', () {
+      for (final pixels in ['yuv420p', 'yuv420p10', 'p010', null]) {
+        expect(
+          check(
+            stats: film(mp4Format, video: hevc, pixels: pixels),
+          ),
+          isA<CastReady>(),
+          reason: '$pixels',
+        );
+        expect(
+          check(
+            url: byId,
+            stats: film(mkvFormat, video: hevc, pixels: pixels),
+            canRepackage: true,
+          ),
+          isA<CastRendition>(),
+          reason: '$pixels',
+        );
+      }
+      for (final (pixels, picture) in [
+        ('yuv420p12', '12-bit HEVC'),
+        ('yuv422p10', '10-bit 4:2:2 HEVC'),
+        ('yuv444p', '4:4:4 HEVC'),
+      ]) {
+        refusedEverywhere(
+          (format) => film(format, video: hevc, pixels: pixels),
+          picture,
+        );
+      }
+    });
+  });
+
   group('a file of sound alone', () {
     PlaybackStats sound(String format, String audio, {String? track}) =>
         PlaybackStats(fileFormat: format, audioCodec: audio, videoTrack: track);

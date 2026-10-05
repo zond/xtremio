@@ -239,6 +239,38 @@ abstract final class ReceiverTable {
     ),
   );
 
+  /// **The deepest picture any receiver decodes, by codec**: its bit
+  /// depth, always 4:2:0. Google's table lists H.264 as High Profile only --
+  /// 8-bit 4:2:0, so High 10 ("Hi10P", common in anime releases), High
+  /// 4:2:2 and High 4:4:4 are decoded by no Chromecast; HEVC as Main and
+  /// Main 10, so 12 bits, 4:2:2 and 4:4:4 (the range extensions) by none
+  /// either; VP9 as profiles 0 and 2 (8 and 10 bits, 4:2:0); AV1 as Main
+  /// (8 and 10 bits, 4:2:0); VP8 is 8-bit 4:2:0 by definition. One table
+  /// for every row, since a row's limits are size and rate and what no
+  /// receiver decodes is refused whatever the receiver: a model whose row
+  /// holds less (a Nest Hub's VP9) is left to its own report of the
+  /// picture.
+  static const Map<String, int> deepestPicture = {
+    'H.264': 8,
+    'HEVC': 10,
+    'VP8': 8,
+    'VP9': 10,
+    'AV1': 10,
+  };
+
+  /// Whether some receiver decodes [codec] in a picture of [depth] bits
+  /// with [chroma] subsampling (`4:2:0`, `4:2:2`, `4:4:4`). A codec this
+  /// table does not name is not judged here.
+  static bool decodesPicture(
+    String codec, {
+    required int depth,
+    required String chroma,
+  }) {
+    final deepest = deepestPicture[codec];
+    if (deepest == null) return true;
+    return chroma == '4:2:0' && depth <= deepest;
+  }
+
   /// The row for a receiver that announced [announced] as its model.
   static ReceiverRow of({String? announced}) {
     final name = announced?.trim().toLowerCase();
