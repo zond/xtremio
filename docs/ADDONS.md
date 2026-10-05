@@ -117,3 +117,62 @@ failure at the 60-second client timeout, and nothing else is claimed), any
 event log or per-title history, an active prober (traffic nobody asked for,
 and it tests the manifest rather than the resource), and auto-uninstall or
 auto-disable — the whole ask was to *decide*.
+
+## What addons are told
+
+Besides the questions it asks them, stremio-core (from 0.64) **tells** an
+installed addon what the viewer does, if the addon asks to be told: one
+whose manifest declares the `player` resource hears about playback, and
+one that declares `library` hears about the library. An addon that
+declares neither is told nothing, and that is every addon in a default
+profile. The manifest's `types` and `idPrefixes` apply as for any
+resource, so an addon declaring `player` for `series` with `tt` hears
+only about IMDb episodes.
+
+**What it hears is an ordinary resource request**, through the same
+transport and `Env::fetch` as a stream request, to the addon's own
+transport URL: `player/{type}/{videoId}/action=start&currentTime=…&duration=….json`
+and `library/{type}/{id}/action=watched&videoId=….json`. Nothing new rides
+along: no stream, no stream URL, no Stremio auth key and no device name --
+the type, the id and the extras below. The addon's own URL carries
+whatever configuration the addon put in it, exactly as every request to it
+does. The embedded server's bearer token is added only for the embedded
+server's own address, which serves no addon, so no addon request can
+carry it; and the profile's Local Files addon is answered on the device
+(`local_addon_answer`) and never asked.
+
+| Request | Sent when |
+| --- | --- |
+| `player` `start` | Playback begins or resumes (`PausedChanged` to playing), and on every `Seek` while playing |
+| `player` `pause` | Playback pauses once it has begun, and on every `Seek` while paused |
+| `player` `stop` | The video ends (`Ended`), or the player is left or loads another stream before it ended |
+| `library` `libraryAdd` / `libraryRemove` | A title is added that was not in the library, or one that was is removed |
+| `library` `watched` / `unwatched` | A title, a video or a season is marked by hand, from the library or the details page |
+
+`currentTime` and `duration` are milliseconds, the player's last report
+(0 before the first); `videoId` is the episode or film being played. A
+season marked watched sends the ids of the videos whose mark actually
+changed, comma-separated, a hundred to a request. **A `player` request
+goes to every addon that declares the resource, whatever the stream came
+from**: a downloaded, local or Drive play is loaded with a stream request
+too (so the core keeps its progress), and that request is what names the
+video. A play with no stream request tells nobody.
+
+**Volume.** `TimeChanged`, which the player sends once a second, tells
+addons nothing, and neither does the core's own watched mark when a video
+is played past the threshold -- only a mark by hand does. The player
+reports a pause or resume once per change, so an addon hears one request
+per pause, per resume and per end. A seek is the busy case: every seek
+the player reports (`Seek`, one per step of a held key, and one when a
+rewind is noticed from positions) is one request per player addon. Titles
+that are in the Library because they were downloaded or linked are never
+`AddToLibrary`'d, so they send no `libraryAdd`.
+
+**A failure goes nowhere.** Each request is fire-and-forget: its answer
+comes back as `Internal::AddonEventResult`, which no model handles, so a
+failing or slow addon raises no event, shows the viewer nothing, and is
+not retried. It is not counted in the health record either -- the record
+is built from the answers the model fields hold, and these are held by
+none -- which is right: an acknowledgement says nothing about whether the
+addon's catalogs or streams work. A failed fetch logs its host at debug,
+as every fetch does, and never its URL.
