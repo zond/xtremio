@@ -208,12 +208,18 @@ void main() {
   });
 
   group('a long press on a continue-watching tile', () {
+    /// What taking a title off Continue watching sends: what stremio-web's
+    /// "Dismiss" does.
+    List<Map<String, dynamic>> dismissal(String id) => [
+      CoreActions.rewindLibraryItem(id).action,
+      CoreActions.dismissNotificationItem(id).action,
+    ];
+
     // The default fixture's one item (`continue_watching_preview.json`) is
-    // exactly today's bug: `removed: true, temp: true` -- never added to
-    // the library.
+    // `removed: true, temp: true` -- never added to the library.
     testWidgets(
-      'for a title not in the library offers only "Remove from Continue '
-      'watching", and that rewinds it',
+      'for a title not in the library asks first, and removing it rewinds '
+      'it and dismisses its notifications',
       (tester) async {
         final core = fakeCore();
         await tester.pumpWidget(harness(core));
@@ -225,25 +231,39 @@ void main() {
         // Not the full library menu: nothing here could add the title to
         // the library or mark it watched by surprise.
         expect(find.text('Remove from Continue watching'), findsOneWidget);
+        expect(find.text('Cancel'), findsOneWidget);
         expect(find.text('Remove from library'), findsNothing);
         expect(find.text('Mark as watched'), findsNothing);
         expect(find.text('Rewind'), findsNothing);
+        expect(ctxActions(core), isEmpty, reason: 'the press alone is not it');
 
         await tester.tap(find.text('Remove from Continue watching'));
         await tester.pumpAndSettle();
 
-        expect(ctxActions(core), hasLength(1));
-        expect(
-          ctxActions(core).single.action,
-          CoreActions.rewindLibraryItem('tt0063350').action,
-        );
+        expect([
+          for (final action in ctxActions(core)) action.action,
+        ], dismissal('tt0063350'));
         expect(find.byType(BottomSheet), findsNothing);
       },
     );
 
+    testWidgets('Cancel sends nothing', (tester) async {
+      final core = fakeCore();
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Night of the Living Dead'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(ctxActions(core), isEmpty);
+      expect(find.byType(BottomSheet), findsNothing);
+    });
+
     testWidgets(
-      'for a title in the library offers the same menu the Library screen '
-      'does',
+      'for a title in the library offers the Library screen\'s menu and one '
+      'more entry, which asks first too',
       (tester) async {
         final preview = loadContinueWatchingFixture();
         final item =
@@ -257,21 +277,62 @@ void main() {
         await tester.longPress(find.text('Night of the Living Dead'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Remove from Continue watching'), findsNothing);
         expect(find.text('Mark as watched'), findsOneWidget);
         expect(find.text('Rewind'), findsOneWidget);
         expect(find.text('Remove from library'), findsOneWidget);
+        expect(find.text('Remove from Continue watching'), findsOneWidget);
 
-        await tester.tap(find.text('Remove from library'));
+        await tester.tap(find.text('Remove from Continue watching'));
+        await tester.pumpAndSettle();
+        expect(ctxActions(core), isEmpty, reason: 'not yet: it asks');
+        expect(find.text('Cancel'), findsOneWidget);
+        await tester.tap(find.text('Remove from Continue watching'));
         await tester.pumpAndSettle();
 
-        expect(ctxActions(core), hasLength(1));
-        expect(
-          ctxActions(core).single.action,
-          CoreActions.removeFromLibrary('tt0063350').action,
-        );
+        expect([
+          for (final action in ctxActions(core)) action.action,
+        ], dismissal('tt0063350'));
       },
     );
+
+    testWidgets('the library menu\'s own entries still go straight through', (
+      tester,
+    ) async {
+      final preview = loadContinueWatchingFixture();
+      final item =
+          (preview['items'] as List<dynamic>).single as Map<String, dynamic>;
+      item['removed'] = false;
+      item['temp'] = false;
+      final core = fakeCore(continueWatching: preview);
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Night of the Living Dead'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from library'));
+      await tester.pumpAndSettle();
+
+      expect(ctxActions(core), hasLength(1));
+      expect(
+        ctxActions(core).single.action,
+        CoreActions.removeFromLibrary('tt0063350').action,
+      );
+    });
+
+    testWidgets('a catalog row\'s tile has no such menu', (tester) async {
+      final core = fakeCore();
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text(firstPopularName()));
+      // Not settled: the press goes through as a tap and opens the
+      // title's details, whose loading never does.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(ctxActions(core), isEmpty);
+    });
   });
 
   testWidgets('the continue watching row disappears when the list empties', (

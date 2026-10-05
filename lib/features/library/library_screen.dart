@@ -748,7 +748,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       builder: (_) => LibraryItemActionsSheet(item: item),
     );
     if (action == null) return;
-    _client?.dispatch(libraryItemActionFor(action, item));
+    for (final each in libraryItemActionsFor(action, item)) {
+      _client?.dispatch(each);
+    }
   }
 
   /// The matched linked files that belong in the body being drawn, after the

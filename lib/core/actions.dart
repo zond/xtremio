@@ -330,6 +330,22 @@ abstract final class CoreActions {
   static CoreAction rewindLibraryItem(String id) =>
       _ctx('RewindLibraryItem', id);
 
+  /// Drops the new-episode notifications of the item [id]
+  /// (`ActionCtx::DismissNotificationItem`): a series with one stays in
+  /// Continue watching whatever its progress.
+  static CoreAction dismissNotificationItem(String id) =>
+      _ctx('DismissNotificationItem', id);
+
+  /// Takes the item [id] off Continue watching, as Stremio's own clients
+  /// do it (stremio-web's `LibItem` "Dismiss"): its progress back to the
+  /// start, and its new-episode notifications dismissed, the two things
+  /// `ContinueWatchingPreview` keeps an item for. Neither touches whether
+  /// it is in the library or whether it is watched.
+  static List<CoreAction> dismissFromContinueWatching(String id) => [
+    rewindLibraryItem(id),
+    dismissNotificationItem(id),
+  ];
+
   /// Flags the whole item watched or not (`is_watched` on the wire).
   static CoreAction libraryItemMarkAsWatched(
     String id, {

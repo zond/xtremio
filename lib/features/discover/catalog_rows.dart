@@ -130,7 +130,7 @@ class _CatalogRowsState extends State<CatalogRows> {
       _continueWatching = CoreFieldNotifier(
         client,
         CoreField.continueWatchingPreview,
-      );
+      )..addListener(_onContinueWatchingChanged);
       _ctx = null;
       _requestedStart = null;
       _requestedEnd = null;
@@ -166,6 +166,7 @@ class _CatalogRowsState extends State<CatalogRows> {
     _board?.dispose();
     _continueWatching?.dispose();
     _ctx?.dispose();
+    _boardFocus.dispose();
     super.dispose();
   }
 
@@ -298,8 +299,64 @@ class _CatalogRowsState extends State<CatalogRows> {
     );
   }
 
-  void _continueWatchingLongPress(LibraryItemView item) {
-    unawaited(showContinueWatchingActions(context, _client, item));
+  /// Above every tile of the board, so a lost remote can be put back on
+  /// one of them ([_refocusAfterRemoval]). Not focusable itself.
+  final FocusNode _boardFocus = FocusNode(
+    debugLabel: 'board',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+
+  /// A Continue-watching tile the remote was on has just been taken off
+  /// the row: its id, and where it was on screen. Null otherwise.
+  ({String id, Rect at})? _removed;
+
+  Future<void> _continueWatchingLongPress(LibraryItemView item) async {
+    final focused = FocusManager.instance.primaryFocus;
+    final at = _boardFocus.hasFocus ? focused?.rect : null;
+    final removed = await showContinueWatchingActions(context, _client, item);
+    if (!removed || at == null || !mounted) return;
+    _removed = (id: item.id, at: at);
+    _onContinueWatchingChanged();
+  }
+
+  /// Once the row no longer has the title the remote was on, the remote
+  /// goes to the tile nearest where it was.
+  void _onContinueWatchingChanged() {
+    final removed = _removed;
+    if (removed == null ||
+        _continueWatchingState.items.any((item) => item.id == removed.id)) {
+      return;
+    }
+    _removed = null;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _refocusAfterRemoval(removed.at),
+    );
+  }
+
+  /// Puts the remote on the board's tile nearest [at], if it was left on
+  /// nothing.
+  ///
+  /// A strip's tiles are not keyed, so a tile taken out of the middle of
+  /// the row hands its place, and the remote with it, to the one after it,
+  /// and nothing needs doing. The last tile of a row has no one after it,
+  /// and the row's only tile takes the row with it; there the remote would
+  /// be left on the tab's bare scope, with no ring anywhere. Nearest is
+  /// the tile before it in the row, or, with the row gone, the tile of the
+  /// row that moved up into its place.
+  void _refocusAfterRemoval(Rect at) {
+    if (!mounted || _boardFocus.hasFocus) return;
+    FocusNode? nearest;
+    var best = double.infinity;
+    for (final node in _boardFocus.traversalDescendants) {
+      if (!node.canRequestFocus || node.context == null) continue;
+      final distance = (node.rect.center - at.center).distance;
+      if (distance < best) {
+        best = distance;
+        nearest = node;
+      }
+    }
+    nearest?.requestFocus();
   }
 
   @override
@@ -345,7 +402,8 @@ class _CatalogRowsState extends State<CatalogRows> {
                   videoId: item.videoId,
                   openedFrom: DetailsOpenedFrom.continueWatching,
                 ),
-                onLongPress: _continueWatchingLongPress,
+                onLongPress: (item) =>
+                    unawaited(_continueWatchingLongPress(item)),
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
@@ -377,7 +435,8 @@ class _CatalogRowsState extends State<CatalogRows> {
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
         ],
       );
-      return isTv ? _BleedRight(child: rowsView) : rowsView;
+      final focusable = Focus(focusNode: _boardFocus, child: rowsView);
+      return isTv ? _BleedRight(child: focusable) : focusable;
     },
   );
 }

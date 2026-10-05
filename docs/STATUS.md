@@ -24,7 +24,13 @@ Android TV layout are all built. What is not is in the README's
   offers every catalog that opens without a search -- one that needs a
   genre opens on its first -- which is stremio-core's own rule for
   Discover. A Discover opened from a title's genre chip is that catalog
-  alone. (It replaced a separate Board tab, whose rows were All's.)
+  alone. (It replaced a separate Board tab, whose rows were All's.) A long
+  press on a Continue watching tile (a held select on a television) offers
+  **Remove from Continue watching** -- beside the Library's own menu when
+  the title is in the library -- and asks once more, on **Cancel**, before
+  it rewinds the title and dismisses its new-episode notifications, as
+  Stremio's own "Dismiss" does; the library and the watched marks are left
+  alone.
 - **Search** asks every addon that supports it, groups the hits per addon,
   and accounts for the addons that could not be searched the same way.
 
