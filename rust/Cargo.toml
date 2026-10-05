@@ -48,7 +48,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "ac9f8342b73f6
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
 # the Runtime can live on a multithreaded host.
 #
-# Pinned to our fork's `pinned` branch: upstream 0.63.2 plus one commit
+# Pinned to our fork's `pinned` branch: upstream 0.64.1 plus one commit
 # that keeps the addon-specific properties of a subtitle (`fpsMilli`,
 # `subtitleFileName`, `releaseGroup`, ...) in a flattened `other` map
 # instead of letting serde drop them, which is what lets the app name and
@@ -62,7 +62,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "ac9f8342b73f6
 # and Cargo will not pick two 1.x versions, so without that commit this
 # graph does not resolve at all; it used to be a vendored copy of the
 # crate wired in with `[patch]`.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "f2cc08bf9dbf1124acf6342abaa957917a7a4306", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "a98918c291aba93b0e11222a3a9a4762694af77b", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"

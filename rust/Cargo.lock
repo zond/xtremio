@@ -3911,7 +3911,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
+source = "git+https://github.com/zond/stremio-core?rev=a98918c291aba93b0e11222a3a9a4762694af77b#a98918c291aba93b0e11222a3a9a4762694af77b"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3957,7 +3957,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
+source = "git+https://github.com/zond/stremio-core?rev=a98918c291aba93b0e11222a3a9a4762694af77b#a98918c291aba93b0e11222a3a9a4762694af77b"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -3987,7 +3987,7 @@ dependencies = [
 [[package]]
 name = "stremio-watched-bitfield"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
+source = "git+https://github.com/zond/stremio-core?rev=a98918c291aba93b0e11222a3a9a4762694af77b#a98918c291aba93b0e11222a3a9a4762694af77b"
 dependencies = [
  "base64 0.13.1",
  "flate2",
