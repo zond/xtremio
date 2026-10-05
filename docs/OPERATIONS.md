@@ -25,6 +25,45 @@ which also needs a keyring daemon -- `gnome-keyring`, KWallet or another --
 (`DriveLinkOutcome.thisRunOnly`) and the app says so. Building without the
 dev package fails in cmake.
 
+### With Nix
+
+`flake.nix` has the same tools as development shells, for Linux (x86_64,
+aarch64) and Apple-silicon macOS -- the systems nixpkgs builds Flutter 3.47
+for:
+
+```bash
+nix develop               # Flutter, rustup, FRB codegen + cargo-expand, ffmpeg,
+                          # libmpv; on Linux the desktop libraries above
+nix develop .#android     # ...plus JDK 21, the SDK and NDK docs/ANDROID.md names,
+                          # the emulator and a phone and a TV image for this host
+nix develop .#xervice     # Node 22 and firebase-tools, for xtremio-xervice/
+```
+
+The shells provide tools and nothing else; `make` builds as it does outside
+them. Three things are worth knowing:
+
+- **Rust is rustup's, not Nix's.** cargokit builds with `rustup run stable
+  cargo build` and adds targets with `rustup target add`, so the shell
+  provides `rustup` and the toolchain lives in `~/.rustup` as usual. On
+  entry it says so if `stable` is missing or older than `rust-version`.
+- **libmpv is built against FFmpeg 6.** `rust/src/libav.rs` refuses any
+  other FFmpeg major, and nixpkgs' own mpv links a newer one, so the shell
+  rebuilds mpv (a few minutes, once) and points `XTREMIO_LIBMPV` at it. The
+  FFmpeg tests in `rust/tests/` then run rather than print `SKIPPED`.
+- **macOS builds still need Xcode**, from the App Store. There the shell
+  has no Nix C compiler, unsets `DEVELOPER_DIR` and `SDKROOT`, and takes
+  the Nix GNU userland (`sed`, `cut`, `find`, ...) off `PATH`, so
+  `xcodebuild`, CocoaPods and plugin scripts get the Xcode and BSD tools
+  they are written for. `media_kit_libs_macos_video`'s podspec runs a
+  Makefile that GNU `sed` and `cut` fail, which surfaces only at link time
+  as `ld: framework 'Mpv' not found`. A pub cache that a shell without this
+  fix got to first keeps the failure (Flutter skips `pod install` when
+  nothing changed), so repair it once from inside the shell:
+  `make -C ~/.pub-cache/hosted/pub.dev/media_kit_libs_macos_video-*/macos -B Frameworks/.symlinks`.
+
+The `android` shell accepts the Android SDK licence on the user's behalf:
+androidenv refuses to compose an SDK until it is.
+
 ## Building and running
 
 ```bash
