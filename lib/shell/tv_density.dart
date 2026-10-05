@@ -99,6 +99,16 @@ abstract final class TvDensity {
   static double textFactorOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
 
+  /// The band across the top of a screen that has no app bar on a
+  /// television -- Discover's type pills, Search's field -- which is as
+  /// tall as a segmented button is there. The shell centres its status
+  /// light on it, at its right end (`RootShell`).
+  static const double topBandHeight = 52;
+
+  /// What such a screen keeps clear at the right end of [topBandHeight]
+  /// for the status light: the light's [minTarget] and a gap before it.
+  static const double lightRoom = minTarget + 8;
+
   /// [overscan] of the given screen, as padding.
   static EdgeInsets overscanPadding(Size screen) => EdgeInsets.symmetric(
     horizontal: screen.width * overscan,

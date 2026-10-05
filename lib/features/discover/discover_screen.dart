@@ -575,9 +575,10 @@ class _BrowseHeader extends StatelessWidget {
     return Padding(
       // A television's types are the top of the screen, at the edge of
       // the band the shell keeps clear, with no title above them to keep a
-      // gap from.
+      // gap from, and clear of the status light at the right end of their
+      // band.
       padding: DeviceScope.isTv(context)
-          ? const EdgeInsets.fromLTRB(12, 0, 12, 4)
+          ? const EdgeInsets.fromLTRB(12, 0, TvDensity.lightRoom, 4)
           : const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: TvLadder(
         child: Column(

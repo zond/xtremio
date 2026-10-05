@@ -13,12 +13,22 @@ import 'tv_density.dart';
 
 /// A top-level navigation destination and the screen it shows.
 class _Destination {
-  const _Destination(this.label, this.icon, this.selectedIcon, this.screen);
+  const _Destination(
+    this.label,
+    this.icon,
+    this.selectedIcon,
+    this.screen, {
+    this.barlessOnTv = false,
+  });
 
   final String label;
   final IconData icon;
   final IconData selectedIcon;
   final Widget screen;
+
+  /// The screen has no app bar on a television, and a band of controls
+  /// [TvDensity.topBandHeight] tall across its top instead.
+  final bool barlessOnTv;
 }
 
 /// Responsive navigation shell: a rail on wide layouts (desktop/tablet) and a
@@ -170,8 +180,15 @@ class _RootShellState extends State<RootShell> {
       Icons.explore_outlined,
       Icons.explore,
       DiscoverScreen(),
+      barlessOnTv: true,
     ),
-    _Destination('Search', Icons.search, Icons.search, SearchScreen()),
+    _Destination(
+      'Search',
+      Icons.search,
+      Icons.search,
+      SearchScreen(),
+      barlessOnTv: true,
+    ),
     _Destination(
       'Library',
       Icons.video_library_outlined,
@@ -309,11 +326,23 @@ class _RootShellState extends State<RootShell> {
   /// there at all -- it is reached from the rail and pressed with select --
   /// so what it clips is pixels, and the chip stays where the D-pad finds
   /// it.
-  Widget _withLight(Widget content, {required bool isTv}) => Stack(
+  ///
+  /// **A screen with no app bar on a television** (Discover, Search) has a
+  /// band of its own controls across the top instead, and the light sits
+  /// at that band's right end, centred on it, in the room the screen keeps
+  /// clear there ([TvDensity.lightRoom]): a toolbar's height down would be
+  /// over its first row of posters.
+  Widget _withLight(
+    Widget content, {
+    required bool isTv,
+    bool onBand = false,
+  }) => Stack(
     children: [
       content,
       Positioned(
-        top: kToolbarHeight,
+        top: onBand
+            ? (TvDensity.topBandHeight - TvDensity.minTarget) / 2
+            : kToolbarHeight,
         right: 0,
         child: SharingLight(
           focusNode: _lightNode,
@@ -392,6 +421,7 @@ class _RootShellState extends State<RootShell> {
                       )
                     : body,
                 isTv: isTv,
+                onBand: isTv && _destinations[_index].barlessOnTv,
               ),
             ),
           ),

@@ -286,11 +286,12 @@ typed on a screen of its own
 Discover has no title there: the rail already says which tab is open, so
 the types are the top of the screen, and the rows below them share the
 board two at a time -- a heading of one line, the catalog's subtitle after
-its title, and posters sized so that two whole rows show before the remote
-moves (64 x 96 dp, on a 1080p Google TV's 960 x 540, against the 153 x 230
-of the one row that used to fill it). Search is laid out the same way:
-its field is the top of the screen and its hits are those rows, one per
-catalog, the field typed on the platform's screen or straight into with a
-hardware keyboard. That poster size is a television's everywhere: the
-Library's grid, a catalog's grid and **More like this** draw the same
-64 x 96.
+its title, a caption of one line cut short at its end, and posters as big
+as two whole rows allow (94 x 141 dp, on a 1080p Google TV's 960 x 540,
+against the 153 x 230 of the one row that used to fill it). Search is laid
+out the same way: its field is the top of the screen and its hits are
+those rows, one per catalog, the field typed on the platform's screen or
+straight into with a hardware keyboard. On those two screens the status
+light sits at the right end of the pills' or the field's band. That
+poster and its one-line caption are a television's everywhere: the
+Library's grid, a catalog's grid and **More like this** draw the same.

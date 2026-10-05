@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/tv_text_field.dart';
@@ -263,12 +264,18 @@ class _SearchScreenState extends State<SearchScreen> {
               );
         if (DeviceScope.isTv(context)) {
           // At the edge of the band the shell keeps clear, as Discover's
-          // types are.
+          // types are, and clear of the status light at the right end of
+          // the field's band.
           return Scaffold(
             body: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                  padding: const EdgeInsets.fromLTRB(
+                    12,
+                    0,
+                    TvDensity.lightRoom,
+                    4,
+                  ),
                   child: field,
                 ),
                 progress,
@@ -315,8 +322,9 @@ class _SearchField extends StatelessWidget {
       controller: controller,
       // A keyboard is right there on a desktop or phone. On a TV taking
       // focus as soon as the tab is selected would pull it off the rail,
-      // which no other tab does, and open the IME; the D-pad enters the
-      // field instead.
+      // which no other tab does; the D-pad enters the field instead. (It
+      // would not open a keyboard there: on a television only select on
+      // the field opens the text-entry screen.)
       autofocus: !isTv,
       textInputAction: TextInputAction.search,
       onChanged: onChanged,
@@ -329,6 +337,9 @@ class _SearchField extends StatelessWidget {
         // says it is one.
         border: isTv ? const OutlineInputBorder() : InputBorder.none,
         prefixIcon: const Icon(Icons.search),
+        // As tall as Discover's type pills, the band the shell centres its
+        // status light on ([TvDensity.topBandHeight]).
+        contentPadding: isTv ? const EdgeInsets.symmetric(vertical: 10) : null,
       ),
     );
   }
