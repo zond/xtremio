@@ -58,6 +58,8 @@ tool/drive tap Torrentio H265 --not "Torrentio RD"   # find, then tap the first 
 tool/drive wait "1080p" --timeout 30     # poll until something matches
 tool/drive player                        # what the player opened, position, state, errors
 tool/drive log 80                        # the last lines of the diagnostics ring
+tool/drive streams x265 1080p --not 2160p  # every source of the open title, numbered
+tool/drive play 2                        # play stream #2 as a tap on its row would
 tool/drive --json screen                 # the raw answer
 ```
 
@@ -67,9 +69,53 @@ in logical pixels, grouped under the nearest header. Ids are semantics node
 ids: stable while the node lives, so read a fresh `screen` after a
 navigation. A node marked `hidden` is built but scrolled out of view; a
 list builds only what is near the viewport, so scroll (`act <id>
-scrollUp`) to reach rows further down. `act`, `tap` and `go` wait for the
+scrollUp`) to reach rows further down -- or, for a title's sources, read
+them all with `streams`. `act`, `tap` and `go` wait for the
 screen to settle (at most three seconds, so a spinner does not hang them)
 and answer the new screen.
+
+`streams [<text>...] [--not <text>]` lists every source the open details
+screen offers -- or the one under the player -- read from the list's own
+derivation (`SourcesProbe` in `lib/features/details/meta_details_screen.dart`)
+rather than from the rows built near the viewport, so a collapsed section or
+a stream far down a list of a hundred is there too. One line per stream:
+its index, its kind (torrent, link, YouTube, external ...; `not playable`
+when its row takes no tap), the addon (`Google Drive` and `This device` for
+the viewer's own files), what the row says, what was read out of it
+(resolution, size, seeders, the source, codec and audio tags, the flags)
+and the file the addon names. Filter words work as `find`'s and keep the
+unfiltered indices. It never prints a stream's URL, info hash or headers:
+addon and debrid URLs carry keys, and a link an addon wrote into its text
+is cut to its origin as a log line's is. While addons are still answering
+it says which, and the list can still grow and its numbers shift; list again
+before `play`.
+
+`play <index>` plays that stream through the same dispatcher a tap on its
+row calls, so it needs no scrolling; it refuses a stream whose row takes no
+tap, and refuses while another page (the player) is over the details
+screen. A worked example: list, narrow to a 1080p x265 DDP release, play
+it:
+
+```bash
+$ tool/drive go details movie tt0063350
+$ tool/drive streams
+Night of the Living Dead (tt0063350), sectioned: 10 of 10 streams
+  #0 torrent | debrid.example | Night.of.the.Living.Dead.1968.2160p.UHD.HDR.DV.x265.Atmos | 👤 12 💾 30 GB | [2160p, 30 GB, 12 seeders, HDR, DV, HEVC, Atmos]
+  #1 torrent | Public Domain Movies | 1080p | 💾 1.51 GB | [1080p, 1.51 GB]
+  #2 link | debrid.example | Night.of.the.Living.Dead.1968.1080p.BluRay.x265.DDP5.1-GRP | 💾 4.2 GB | via https://debrid.example/… | [1080p, 4.2 GB, BluRay, HEVC] | file Night.of.the.Living.Dead.1968.1080p.BluRay.x265.DDP5.1-GRP.mkv
+  #3 torrent | debrid.example | Night.of.the.Living.Dead.1968.720p.x264.DTS | 👤 3 ⚙️ 1337x | [720p, 3 seeders, AVC, DTS]
+  #4 external (not playable) | WatchHub | Amazon Prime Video | Subscription
+  ...
+$ tool/drive streams 1080p x265 ddp --not 2160p
+Night of the Living Dead (tt0063350), sectioned: 1 of 10 streams
+  #2 link | debrid.example | Night.of.the.Living.Dead.1968.1080p.BluRay.x265.DDP5.1-GRP | 💾 4.2 GB | via https://debrid.example/… | [1080p, 4.2 GB, BluRay, HEVC] | file Night.of.the.Living.Dead.1968.1080p.BluRay.x265.DDP5.1-GRP.mkv
+$ tool/drive play 2
+played #2 link | debrid.example | Night.of.the.Living.Dead.1968.1080p.BluRay.x265.DDP5.1-GRP | ...
+routes: ... > MetaDetailsScreen > PlayerScreen (player) *
+...
+```
+
+(The output is the test fixture's, `test/dev/app_driver_test.dart`.)
 
 `seek <h:mm:ss|m:ss|seconds|N%>` moves the player the way its seek bar
 does; the bar itself takes a tap at a place, which semantics cannot aim.

@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../core/diagnostics_log.dart';
+import '../../core/core.dart' show StreamKind;
 import '../../features/details/meta_details_screen.dart';
+import '../../features/details/stream_facts.dart' show StreamPresentation;
+import '../../features/details/stream_list.dart' show SourceRow;
 import '../../features/diagnostics/diagnostics_report.dart' show redactSecrets;
 import '../../features/player/player_screen.dart' show PlayerProbe;
 import '../../src/rust/api/diagnostics.dart' as rust;
@@ -101,6 +104,10 @@ class AppDriver {
         return seek('${message['to']}');
       case 'log':
         return log(message['n'] as int? ?? 50);
+      case 'streams':
+        return streams(_strings(message['text']), _strings(message['not']));
+      case 'play':
+        return play(_int(message['index']));
       default:
         throw FormatException('unknown command: $cmd');
     }
@@ -576,6 +583,147 @@ class AppDriver {
     }
     probe.seekTo(target);
     return {'seekedTo': target.inMilliseconds, ...player()};
+  }
+
+  // --------------------------------------------------------------- streams
+
+  /// Every source the open details screen offers, straight from the list's
+  /// own derivation ([SourcesProbe]) rather than the rows built near the
+  /// viewport: one entry per row, in the order the list draws them, each
+  /// with its index for [play]. [all] and [none] filter as [find] does;
+  /// the indices stay the unfiltered ones.
+  ///
+  /// Only what the row shows and what it reads out of the stream: never a
+  /// URL, an info hash or a header, which carry addon and debrid keys.
+  Map<String, Object?> streams(List<String> all, List<String> none) {
+    final (probe, _) = _sourcesProbe();
+    final offer = probe.sourcesOnScreen();
+    final wanted = [for (final t in all) t.toLowerCase()];
+    final unwanted = [for (final t in none) t.toLowerCase()];
+    final listed = [
+      for (var i = 0; i < offer.rows.length; i++)
+        if (_describeSource(i, offer.rows[i]) case final source
+            when _sourceMatches(source, wanted, unwanted))
+          source,
+    ];
+    final String? note;
+    if (offer.title == null) {
+      note = 'the title has not loaded yet';
+    } else if (offer.awaiting) {
+      note = 'an episode was picked and its streams have not come back yet';
+    } else if (offer.noEpisode) {
+      note = 'no episode is picked yet';
+    } else {
+      note = null;
+    }
+    return {
+      'title': offer.title,
+      'videoId': offer.videoId,
+      'layout': offer.sectioned ? 'sectioned' : 'grouped',
+      'loading':
+          offer.title == null || offer.awaiting || offer.waitingFor.isNotEmpty,
+      'waitingFor': offer.waitingFor,
+      'note': note,
+      'total': offer.rows.length,
+      'streams': listed,
+    };
+  }
+
+  /// Plays stream [index] of [streams] the way a tap on its row does, so a
+  /// row far down the list plays without scrolling to it. Answers the
+  /// screen after, as [act] does.
+  Future<Map<String, Object?>> play(int index) async {
+    final (probe, route) = _sourcesProbe();
+    final rows = probe.sourcesOnScreen().rows;
+    if (index < 0 || index >= rows.length) {
+      throw StateError(
+        'no stream $index: the details screen lists ${rows.length}',
+      );
+    }
+    final row = rows[index];
+    if (!row.stream.isPlayable) {
+      throw StateError(
+        'stream $index is ${_sourceKind(row)}, which its row does not play',
+      );
+    }
+    if (route != null && !route.isCurrent) {
+      throw StateError(
+        'the details screen is under another page; go back to it first',
+      );
+    }
+    // Completes when the player it pushes is popped.
+    unawaited(probe.playSource(row));
+    await _settle();
+    return {'played': _describeSource(index, row), ...screen()};
+  }
+
+  /// The details screen [streams] and [play] mean, and its route: the
+  /// uppermost one, which a player may be over. A navigator's overlay
+  /// builds its routes bottom first, so that is the last one found.
+  static (SourcesProbe, ModalRoute<dynamic>?) _sourcesProbe() {
+    final found = <(SourcesProbe, ModalRoute<dynamic>?)>[];
+    void visit(Element element) {
+      if (element is StatefulElement && element.state is SourcesProbe) {
+        found.add((element.state as SourcesProbe, ModalRoute.of(element)));
+      }
+      element.visitChildren(visit);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(visit);
+    if (found.isEmpty) {
+      throw StateError(
+        'no details screen is open: go details <type> <id> first',
+      );
+    }
+    return found.last;
+  }
+
+  static Map<String, Object?> _describeSource(int index, SourceRow row) {
+    final facts = row.facts;
+    final shown = StreamPresentation.of(row.stream, addonName: facts.addonName);
+    final filename = facts.filename;
+    return {
+      'index': index,
+      'kind': _sourceKind(row),
+      'addon': facts.addonName,
+      'title': _rowText(shown.lead),
+      'text': [for (final line in shown.rest) _rowText(line)],
+      'resolution': facts.resolutionLabel,
+      'size': facts.sizeLabel,
+      'seeders': facts.seeders,
+      'tags': facts.tags,
+      'languages': facts.languages,
+      'filename': filename == null ? null : _rowText(filename),
+      'alsoFrom': row.alsoFrom,
+      'playable': row.stream.isPlayable,
+    };
+  }
+
+  /// One line of what a row shows, on one line, and scrubbed as a log line
+  /// is: an addon that wrote a link into its text does not get it printed.
+  static String _rowText(String text) =>
+      redactSecrets(text.replaceAll(RegExp(r'\s+'), ' ').trim());
+
+  /// What a row plays through. A linked Drive file and a video on this
+  /// device are links, named by their addon slot (`Google Drive`, `This
+  /// device`).
+  static String _sourceKind(SourceRow row) => switch (row.stream.kind) {
+    StreamKind.url => 'link',
+    StreamKind.youtube => 'YouTube',
+    final kind => kind.label.toLowerCase(),
+  };
+
+  static bool _sourceMatches(
+    Map<String, Object?> source,
+    List<String> wanted,
+    List<String> unwanted,
+  ) {
+    final text = [
+      for (final MapEntry(:key, :value) in source.entries)
+        if (key != 'index' && key != 'playable')
+          if (value is List) ...value else ?value,
+    ].join('\n').toLowerCase();
+    return wanted.every(text.contains) && !unwanted.any(text.contains);
   }
 
   // ------------------------------------------------------------------- log

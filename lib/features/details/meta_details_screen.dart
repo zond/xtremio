@@ -278,11 +278,107 @@ class MetaDetailsScreen extends StatefulWidget {
   State<MetaDetailsScreen> createState() => _MetaDetailsScreenState();
 }
 
+/// The sources a details screen offers right now, as [SourcesProbe] reads
+/// them: the title, the rows of the list in the order it draws them --
+/// every row, including the ones a collapsed section or a lazy list has
+/// not built -- and what is still on its way.
+typedef SourcesOnScreen = ({
+  /// The title's name; null while its meta has not arrived.
+  String? title,
+
+  /// The video the rows are for: the episode's id, or the film's.
+  String? videoId,
+
+  /// Whether the list is sectioned by resolution (else grouped by addon).
+  bool sectioned,
+
+  /// A tapped episode whose streams have not come back yet: [rows] is
+  /// empty rather than the previous episode's.
+  bool awaiting,
+
+  /// A series with no episode picked, so nothing has been asked for.
+  bool noEpisode,
+
+  /// The addons asked that have not answered.
+  List<String> waitingFor,
+  List<SourceRow> rows,
+});
+
+/// What a details screen says about its sources when asked from outside
+/// the widget tree: the app driver's `streams` and `play` commands
+/// (`lib/dev/driver/`, docs/DRIVING.md) and nothing else, the way
+/// [PlayerProbe] is the player's. It reads the derivation the list is
+/// drawn from and nothing in the app calls it.
+abstract interface class SourcesProbe {
+  SourcesOnScreen sourcesOnScreen();
+
+  /// Plays [row] the way a tap on it does: the same dispatcher every
+  /// layout's row calls. Completes when the player it pushed is popped.
+  Future<void> playSource(SourceRow row);
+}
+
 /// Two of these screens can be on the stack at once (a genre chip opens
 /// Discover, whose posters open another title), both on the one
 /// `meta_details` field: see [SharedFieldScreen].
 class _MetaDetailsScreenState extends State<MetaDetailsScreen>
-    with SharedFieldScreen<MetaDetailsScreen, MetaDetailsState> {
+    with SharedFieldScreen<MetaDetailsScreen, MetaDetailsState>
+    implements SourcesProbe {
+  @override
+  SourcesOnScreen sourcesOnScreen() {
+    final isSectioned = _prefs?.streamsSectioned ?? true;
+    final state = _state;
+    final meta = state?.meta;
+    if (state == null || meta == null) {
+      return (
+        title: null,
+        videoId: null,
+        sectioned: isSectioned,
+        awaiting: false,
+        noEpisode: false,
+        waitingFor: const [],
+        rows: const [],
+      );
+    }
+    final videoId = state.streamPath?.id ?? meta.id;
+    final awaiting = _isAwaitingStreams(state);
+    final derived = _deriveStreams(
+      state,
+      isSectioned: isSectioned,
+      order: _prefs?.streamsOrder ?? StreamOrder.peersPerSize,
+      driveFiles: _driveFilesFor(videoId),
+      localFiles: _localFilesFor(videoId),
+    );
+    return (
+      title: meta.name,
+      videoId: awaiting ? _awaitingVideoId : videoId,
+      sectioned: isSectioned,
+      awaiting: awaiting,
+      noEpisode:
+          state.hasVideos &&
+          state.streamPath == null &&
+          state.allStreamGroups.isEmpty,
+      waitingFor: [
+        for (final group in state.allStreamGroups)
+          if (group.isLoading) _addonNameOf(derived.profile, group),
+      ],
+      rows: awaiting
+          ? const []
+          : [
+              if (isSectioned)
+                for (final section in derived.sections) ...section.rows
+              else
+                for (final group in derived.grouped) ...group.rows,
+            ],
+    );
+  }
+
+  @override
+  Future<void> playSource(SourceRow row) async {
+    final state = _state;
+    if (state == null) return;
+    await _playRow(state, row);
+  }
+
   CoreClient? _client;
   CoreFieldNotifier? _details;
 

@@ -24,6 +24,11 @@ usage: tool/drive [--json] <command>
   player                          what the player screen opened, and how it is doing
   seek <h:mm:ss|m:ss|s|N%>        seek the player as its seek bar does
   log [n]                         the last n diagnostics lines (default 50)
+  streams [<text>...] [--not <text>]
+                                  every source the open details screen offers,
+                                  built or not, numbered; filtered like find
+  play <index>                    play stream <index> of `streams` as a tap
+                                  on its row would
 
 --json prints the raw answer.''';
 
@@ -49,7 +54,7 @@ Future<void> main(List<String> argv) async {
   }
   final Map<String, Object?> message;
   try {
-    message = _message(args);
+    message = messageOf(args);
   } on FormatException catch (error) {
     stderr.writeln('${error.message}\n\n$_usage');
     exitCode = 64;
@@ -74,7 +79,7 @@ Future<void> main(List<String> argv) async {
     if (json) {
       stdout.writeln(const JsonEncoder.withIndent('  ').convert(answer));
     } else {
-      stdout.write(_human(message['cmd']! as String, answer));
+      stdout.write(human(message['cmd']! as String, answer));
     }
     if (answer.containsKey('error')) exitCode = 1;
   } finally {
@@ -82,7 +87,9 @@ Future<void> main(List<String> argv) async {
   }
 }
 
-Map<String, Object?> _message(List<String> args) {
+/// The command [args] name, as the JSON the driver takes. Public for
+/// test/dev/app_driver_test.dart.
+Map<String, Object?> messageOf(List<String> args) {
   final cmd = args.first;
   final rest = args.sublist(1);
   switch (cmd) {
@@ -100,6 +107,7 @@ Map<String, Object?> _message(List<String> args) {
     case 'find':
     case 'tap':
     case 'wait':
+    case 'streams':
       final text = <String>[];
       final not = <String>[];
       int? timeout;
@@ -112,13 +120,18 @@ Map<String, Object?> _message(List<String> args) {
           text.add(rest[i]);
         }
       }
-      if (text.isEmpty) throw FormatException('$cmd needs some text');
+      if (text.isEmpty && cmd != 'streams') {
+        throw FormatException('$cmd needs some text');
+      }
       return {'cmd': cmd, 'text': text, 'not': not, 'timeout': ?timeout};
     case 'go':
       if (rest.isEmpty) throw const FormatException('go where?');
       return {'cmd': 'go', 'args': rest};
     case 'log':
       return {'cmd': 'log', 'n': rest.isEmpty ? 50 : int.parse(rest.first)};
+    case 'play':
+      if (rest.length != 1) throw const FormatException('play <index>');
+      return {'cmd': 'play', 'index': int.parse(rest.single)};
     case 'seek':
       if (rest.length != 1) throw const FormatException('seek <h:mm:ss|s|N%>');
       return {'cmd': 'seek', 'to': rest.single};
@@ -127,13 +140,17 @@ Map<String, Object?> _message(List<String> args) {
   }
 }
 
-String _human(String cmd, Map<String, dynamic> answer) {
+/// [answer] as a person reads it: what `tool/drive` prints without
+/// `--json`. Public for test/dev/app_driver_test.dart.
+String human(String cmd, Map<String, dynamic> answer) {
   final out = StringBuffer();
   if (answer['error'] != null) {
     out.writeln('error: ${answer['error']}');
     return '$out';
   }
-  if (answer['tapped'] != null) {
+  if (answer['played'] != null) {
+    out.writeln('played ${_source(answer['played'] as Map<String, dynamic>)}');
+  } else if (answer['tapped'] != null) {
     out.writeln(
       'tapped "${_oneLine(answer['tapped'] as String)}" '
       '(${answer['matches']} tappable matches)',
@@ -173,6 +190,7 @@ String _human(String cmd, Map<String, dynamic> answer) {
         ..writeln('open error:   ${p['openError']}');
     }
   }
+  if (answer['streams'] != null) _streams(out, answer);
   if (answer['lines'] != null) {
     for (final line in answer['lines'] as List) {
       out.writeln(line);
@@ -204,6 +222,47 @@ void _screen(StringBuffer out, Map<String, dynamic> answer) {
       out.writeln(_node(node as Map<String, dynamic>));
     }
   }
+}
+
+void _streams(StringBuffer out, Map<String, dynamic> answer) {
+  final listed = answer['streams'] as List;
+  out.writeln(
+    '${answer['title'] ?? '(no title yet)'} (${answer['videoId']}), '
+    '${answer['layout']}: ${listed.length} of ${answer['total']} streams',
+  );
+  if (answer['note'] != null) out.writeln('${answer['note']}');
+  final waiting = (answer['waitingFor'] as List).cast<String>();
+  if (waiting.isNotEmpty) {
+    out.writeln(
+      'still loading, waiting for ${waiting.join(', ')}: the list will grow '
+      'and the numbers shift',
+    );
+  }
+  for (final source in listed) {
+    out.writeln('  ${_source(source as Map<String, dynamic>)}');
+  }
+}
+
+/// One stream of `streams` on one line: index, kind, addon, what the row
+/// says, what was read out of it, and the file the addon names.
+String _source(Map<String, dynamic> s) {
+  final facts = [
+    ?s['resolution'],
+    ?s['size'],
+    if (s['seeders'] != null) '${s['seeders']} seeders',
+    ...(s['tags'] as List),
+    ...(s['languages'] as List),
+  ];
+  final also = (s['alsoFrom'] as List).cast<String>();
+  return [
+    '#${s['index']} ${s['kind']}${s['playable'] == true ? '' : ' (not playable)'}',
+    ?s['addon'],
+    s['title'],
+    ...(s['text'] as List),
+    if (facts.isNotEmpty) '[${facts.join(', ')}]',
+    if (s['filename'] != null) 'file ${s['filename']}',
+    if (also.isNotEmpty) 'also from ${also.join(', ')}',
+  ].join(' | ');
 }
 
 String _node(Map<String, dynamic> node) {
