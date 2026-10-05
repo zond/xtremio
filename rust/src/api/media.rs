@@ -134,6 +134,53 @@ pub fn media_set_buffer(id: String, buffer: String) -> anyhow::Result<()> {
     guarded(|| crate::media::set_buffer_in(&crate::state::state(), &id, &buffer))
 }
 
+/// Where the playback of `id` resumes, in seconds, and how long the film
+/// is if the app knows: set right after [`media_set_play`], before mpv is
+/// handed the id. A resume of zero is a playback from the top. A hint:
+/// never errors.
+#[frb(sync)]
+pub fn media_set_resume(
+    id: String,
+    resume_seconds: f64,
+    runtime_seconds: Option<f64>,
+) -> anyhow::Result<()> {
+    guarded_ok(move || {
+        let Some(app) = crate::state::current() else {
+            return;
+        };
+        if let Err(error) = crate::media::set_resume_in(&app, &id, resume_seconds, runtime_seconds)
+        {
+            tracing::debug!(%error, "a resume hint did not arrive");
+        }
+    })
+}
+
+/// The player of `id` is leaving at `position_seconds` of the film:
+/// remembered by the server for the next playback resuming near there. A
+/// hint: never errors.
+pub fn media_note_position(id: String, position_seconds: f64) -> anyhow::Result<()> {
+    guarded_ok(move || {
+        if !position_seconds.is_finite() || position_seconds <= 0.0 {
+            return;
+        }
+        let Some(app) = crate::state::current() else {
+            return;
+        };
+        let position = std::time::Duration::from_secs_f64(position_seconds);
+        if let Err(error) = crate::media::note_position_in(&app, &id, position) {
+            tracing::debug!(%error, "a leaving position did not arrive");
+        }
+    })
+}
+
+/// Whether mpv's reader of `id` is waiting on a read now, as JSON
+/// (`{waitingMs, offset}`, both null when nothing waits): what the player
+/// shows its buffering card from while mpv reports no stall. Cheap; polled.
+/// Errors when the server is not running or holds nothing under `id`.
+pub fn media_read_wait(id: String) -> anyhow::Result<String> {
+    guarded(|| crate::media::read_wait_in(&crate::state::state(), &id))
+}
+
 /// `server_stream_numbers` for what `id` resolved to, as JSON, or null
 /// for an id not resolved yet. Errors when the server is not running.
 pub fn media_stream_numbers(id: String) -> anyhow::Result<Option<String>> {

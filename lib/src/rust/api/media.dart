@@ -121,6 +121,38 @@ void mediaSetPlay({
 void mediaSetBuffer({required String id, required String buffer}) =>
     RustLib.instance.api.crateApiMediaMediaSetBuffer(id: id, buffer: buffer);
 
+/// Where the playback of `id` resumes, in seconds, and how long the film
+/// is if the app knows: set right after [`media_set_play`], before mpv is
+/// handed the id. A resume of zero is a playback from the top. A hint:
+/// never errors.
+void mediaSetResume({
+  required String id,
+  required double resumeSeconds,
+  double? runtimeSeconds,
+}) => RustLib.instance.api.crateApiMediaMediaSetResume(
+  id: id,
+  resumeSeconds: resumeSeconds,
+  runtimeSeconds: runtimeSeconds,
+);
+
+/// The player of `id` is leaving at `position_seconds` of the film:
+/// remembered by the server for the next playback resuming near there. A
+/// hint: never errors.
+Future<void> mediaNotePosition({
+  required String id,
+  required double positionSeconds,
+}) => RustLib.instance.api.crateApiMediaMediaNotePosition(
+  id: id,
+  positionSeconds: positionSeconds,
+);
+
+/// Whether mpv's reader of `id` is waiting on a read now, as JSON
+/// (`{waitingMs, offset}`, both null when nothing waits): what the player
+/// shows its buffering card from while mpv reports no stall. Cheap; polled.
+/// Errors when the server is not running or holds nothing under `id`.
+Future<String> mediaReadWait({required String id}) =>
+    RustLib.instance.api.crateApiMediaMediaReadWait(id: id);
+
 /// `server_stream_numbers` for what `id` resolved to, as JSON, or null
 /// for an id not resolved yet. Errors when the server is not running.
 Future<String?> mediaStreamNumbers({required String id}) =>

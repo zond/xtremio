@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use enginefs::backend::priorities::BufferProfile;
 use stream_server::{
     CastToken, LocalFile, MediaId, MediaReader, MediaSpec, PlayToken, Refusal, RenditionSpec,
+    ResumeHint,
 };
 use url::Url;
 
@@ -318,6 +319,62 @@ pub fn set_buffer_in(app: &AppState, id: &str, buffer: &str) -> anyhow::Result<(
     })
 }
 
+/// Where the playback of `id` resumes, as the server's [`ResumeHint`]:
+/// `None` for one from the top -- a resume time that is no time past zero
+/// -- and no runtime for one that is not a length.
+pub fn resume_hint(resume_seconds: f64, runtime_seconds: Option<f64>) -> Option<ResumeHint> {
+    let millis = |seconds: f64| {
+        (seconds.is_finite() && seconds > 0.0).then(|| (seconds * 1000.0).round() as u64)
+    };
+    let at_ms = millis(resume_seconds).filter(|ms| *ms > 0)?;
+    Some(ResumeHint {
+        at_ms,
+        runtime_ms: runtime_seconds.and_then(millis).filter(|ms| *ms > 0),
+    })
+}
+
+/// Tells the server where the playback of `id` resumes and how long the
+/// film is if the app knows (`ServerHandle::set_resume`), before mpv opens
+/// it: a torrent reader then asks the swarm for the resume point once the
+/// file's head is in, instead of only when mpv blocks on it. Errors when
+/// the server is not running or holds nothing under `id`.
+pub fn set_resume_in(
+    app: &AppState,
+    id: &str,
+    resume_seconds: f64,
+    runtime_seconds: Option<f64>,
+) -> anyhow::Result<()> {
+    let resume = resume_hint(resume_seconds, runtime_seconds);
+    let id = MediaId::from(id.to_owned());
+    crate::server::with_handle_in(app, |handle| {
+        handle.set_resume(&id, resume).map_err(refusal_error)
+    })
+}
+
+/// The player of `id` is leaving at `position` of the film
+/// (`ServerHandle::note_media_position`): remembered with where its reader
+/// was, so the next playback resuming near there asks for it first. A
+/// no-op for anything not a torrent.
+pub fn note_position_in(
+    app: &AppState,
+    id: &str,
+    position: std::time::Duration,
+) -> anyhow::Result<()> {
+    let id = MediaId::from(id.to_owned());
+    crate::server::with_handle_in(app, |handle| handle.note_media_position(&id, position))
+}
+
+/// Whether a reader of `id` is waiting on a read now, as the server's
+/// `ReadWait` JSON (`{waitingMs, offset}`). Errors when the server is not
+/// running or holds nothing under `id`.
+pub fn read_wait_in(app: &AppState, id: &str) -> anyhow::Result<String> {
+    let id = MediaId::from(id.to_owned());
+    crate::server::with_handle_in(app, |handle| {
+        let wait = handle.media_read_wait(&id).map_err(refusal_error)?;
+        Ok(serde_json::to_string(&wait)?)
+    })
+}
+
 /// What the server holds of what `id` resolved to, as JSON, or `None`
 /// for an id not resolved yet. Errors when the server is not running.
 pub fn stream_numbers_in(app: &AppState, id: &str) -> anyhow::Result<Option<String>> {
@@ -430,6 +487,8 @@ mod tests {
         assert!(open_for_player_in(&app, "abc").is_err());
         assert!(resolve_in(&app, "abc").is_err());
         assert!(publish_in(&app, "abc").is_err());
+        assert!(set_resume_in(&app, "abc", 152.0, None).is_err());
+        assert!(read_wait_in(&app, "abc").is_err());
         let spec = r#"{"durationMs":1,"segmentMs":1,"startMs":0,"video":"copy","audio":"copy","audioTrack":0}"#;
         assert!(publish_rendition_in(&app, "abc", spec).is_err());
         assert!(!unpublish_in(&app, "a-token"));
@@ -447,6 +506,34 @@ mod tests {
         assert_eq!(register_drive_in(&app, "a-file-id", None).unwrap(), "an-id");
         // Taken: without a server the next one has nowhere to register.
         assert!(register_drive_in(&app, "a-file-id", None).is_err());
+    }
+
+    /// **A resume is a time past zero, and a runtime a length**: anything
+    /// else is said as nothing, so the server plans from what it has.
+    #[test]
+    fn a_resume_is_a_time_past_zero_and_a_runtime_a_length() {
+        assert_eq!(
+            resume_hint(152.4, Some(7200.0)),
+            Some(ResumeHint {
+                at_ms: 152_400,
+                runtime_ms: Some(7_200_000),
+            })
+        );
+        assert_eq!(
+            resume_hint(152.0, Some(f64::NAN)),
+            Some(ResumeHint {
+                at_ms: 152_000,
+                runtime_ms: None,
+            })
+        );
+        assert_eq!(resume_hint(152.0, Some(0.0)).unwrap().runtime_ms, None);
+        for from_the_top in [0.0, -3.0, 0.0001, f64::INFINITY, f64::NAN] {
+            assert_eq!(
+                resume_hint(from_the_top, Some(7200.0)),
+                None,
+                "{from_the_top}"
+            );
+        }
     }
 
     #[test]
