@@ -1,7 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../core/image_disk_cache.dart';
 import '../core/state/meta_item_preview.dart';
+import '../shell/device_profile.dart';
+import '../shell/tv_density.dart';
 import 'focusable_tile.dart';
 
 /// The grid a page of [PosterTile]s is laid out in: a poster and its name
@@ -13,6 +18,59 @@ const SliverGridDelegateWithMaxCrossAxisExtent posterGridDelegate =
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
     );
+
+/// The grid of posters [context] draws: [posterGridDelegate], or on a
+/// television [TvPosterGridDelegate] -- the television's one poster size,
+/// the same as a row's ([PosterTile.tvImageHeight]), rather than whatever
+/// width the window divides into.
+SliverGridDelegate posterGridDelegateOf(BuildContext context) =>
+    DeviceScope.isTv(context)
+    ? TvPosterGridDelegate(
+        textFactor: math.max(1, TvDensity.textFactorOf(context)),
+      )
+    : posterGridDelegate;
+
+/// A grid of tiles exactly as big as a television row's: a
+/// [PosterTile.tvImageHeight] poster, two-thirds as wide, over the caption
+/// a row gives it -- its box grown with the text, as a row's is -- and as
+/// many across as fit, from the left.
+@immutable
+class TvPosterGridDelegate extends SliverGridDelegate {
+  const TvPosterGridDelegate({this.textFactor = 1});
+
+  /// [TvDensity.textFactorOf], never below 1.
+  final double textFactor;
+
+  /// The gap between tiles, both ways: a row's.
+  static const double spacing = 12;
+
+  static const double tileWidth = PosterTile.tvImageHeight * 2 / 3;
+
+  double get tileHeight =>
+      PosterTile.tvImageHeight +
+      PosterTile.captionInset +
+      PosterTile.captionHeight * textFactor;
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) {
+    final across = math.max(
+      1,
+      ((constraints.crossAxisExtent + spacing) / (tileWidth + spacing)).floor(),
+    );
+    return SliverGridRegularTileLayout(
+      crossAxisCount: across,
+      mainAxisStride: tileHeight + spacing,
+      crossAxisStride: tileWidth + spacing,
+      childMainAxisExtent: tileHeight,
+      childCrossAxisExtent: tileWidth,
+      reverseCrossAxis: axisDirectionIsReversed(constraints.crossAxisDirection),
+    );
+  }
+
+  @override
+  bool shouldRelayout(TvPosterGridDelegate oldDelegate) =>
+      oldDelegate.textFactor != textFactor;
+}
 
 /// A poster with the item's name underneath; falls back to a neutral box
 /// when there is no poster or it fails to load.

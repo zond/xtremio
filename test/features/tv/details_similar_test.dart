@@ -354,17 +354,18 @@ void main() {
     expect(walk, ['Stalker', 'eXistenZ', 'eXistenZ']);
   });
 
-  testWidgets('the poster is the size the drawing settled on', (tester) async {
-    // Small enough that seven fit across a 720p panel, with room under
-    // each for the name of a film the viewer has not seen.
+  testWidgets('the poster is the television\'s one size', (tester) async {
+    // The same as Discover's, the Library's and Search's: a title looks
+    // the same wherever a television draws it.
     await mount(tester);
     await land(tester, [stalker, existenz]);
     await stepDownToRung(tester, kMoreLikeThisLabel);
     await press(tester, LogicalKeyboardKey.select);
 
     final poster = tester.getRect(find.byType(PosterImage).first);
-    expect(poster.width, SimilarTitlesRow.posterWidth);
-    expect(poster.height, SimilarTitlesRow.posterHeight);
+    expect(poster.height, PosterTile.tvImageHeight);
+    expect(poster.width, PosterTile.tvImageHeight * 2 / 3);
+    // Off a television the drawing's own size is kept.
     expect(SimilarTitlesRow.posterWidth, 120);
     expect(SimilarTitlesRow.posterHeight, 180);
   });

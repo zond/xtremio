@@ -1188,7 +1188,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
-        gridDelegate: posterGridDelegate,
+        gridDelegate: posterGridDelegateOf(context),
         itemCount: afterUnmatched + unmatchedLocal.length,
         itemBuilder: (context, index) {
           if (index >= afterUnmatched) {

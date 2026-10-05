@@ -291,4 +291,6 @@ moves (64 x 96 dp, on a 1080p Google TV's 960 x 540, against the 153 x 230
 of the one row that used to fill it). Search is laid out the same way:
 its field is the top of the screen and its hits are those rows, one per
 catalog, the field typed on the platform's screen or straight into with a
-hardware keyboard.
+hardware keyboard. That poster size is a television's everywhere: the
+Library's grid, a catalog's grid and **More like this** draw the same
+64 x 96.

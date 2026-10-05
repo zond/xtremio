@@ -20,9 +20,11 @@
 /// screen reader has it and the layout does not have to grow a line for
 /// it.
 ///
-/// The row draws the same on a television and on a phone. [FocusableTile]
-/// is an [InkWell] off a television and [TvCardStrip] is a plain sideways
-/// scroll there, so the difference is the remote, which is where it
+/// The row draws the same on a television and on a phone but for the
+/// poster's size: a television's posters are its one size everywhere
+/// ([PosterTile.tvImageHeight]), these included. [FocusableTile] is an
+/// [InkWell] off a television and [TvCardStrip] is a plain sideways scroll
+/// there, so the other difference is the remote, which is where it
 /// belongs.
 library;
 
@@ -31,6 +33,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/poster_tile.dart';
@@ -107,9 +110,16 @@ class SimilarTitlesRow extends StatelessWidget {
   final ValueChanged<MetaItemPreview> onOpen;
 
   /// The poster, at the size the drawing settled on: small enough that
-  /// seven fit across a 720p panel with the ladder above them.
+  /// seven fit across a 720p panel with the ladder above them. Off a
+  /// television; see [posterSizeOf].
   static const double posterWidth = 120;
   static const double posterHeight = 180;
+
+  /// The poster [context] draws: [posterWidth] by [posterHeight], or on a
+  /// television the size every poster there is.
+  static Size posterSizeOf(BuildContext context) => DeviceScope.isTv(context)
+      ? const Size(PosterTile.tvImageHeight * 2 / 3, PosterTile.tvImageHeight)
+      : const Size(posterWidth, posterHeight);
 
   /// The box under it, holding the name and the year at text scale 1.
   /// Two lines, the gap above them and the inset the focus ring needs.
@@ -124,7 +134,7 @@ class SimilarTitlesRow extends StatelessWidget {
   /// included. What the spinner stands in at.
   static double rowHeight(BuildContext context) =>
       TvSourceRows.focusSlack * 2 +
-      posterHeight +
+      posterSizeOf(context).height +
       captionHeight * _textFactor(context);
 
   @override
@@ -160,8 +170,9 @@ class _SimilarPoster extends StatelessWidget {
     final item = title.item;
     final year = yearIn(item.releaseInfo);
     final factor = SimilarTitlesRow._textFactor(context);
+    final poster = SimilarTitlesRow.posterSizeOf(context);
     return SizedBox(
-      width: SimilarTitlesRow.posterWidth,
+      width: poster.width,
       child: FocusableTile(
         onTap: onOpen,
         // The whole of what the model said, where the layout has no room
@@ -179,9 +190,8 @@ class _SimilarPoster extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: SimilarTitlesRow.posterWidth,
-                height: SimilarTitlesRow.posterHeight,
+              SizedBox.fromSize(
+                size: poster,
                 child: PosterImage(url: item.poster),
               ),
               SizedBox(

@@ -107,7 +107,7 @@ Future<FakeCoreClient> mountOnFirstTile(WidgetTester tester) async {
   for (var i = 0; i < 6 && focusedTileName(tester) == null; i++) {
     await press(tester, LogicalKeyboardKey.arrowDown);
   }
-  for (var i = 0; i < 2 && focusedTileName(tester) != 'Lanterns'; i++) {
+  for (var i = 0; i < 20 && focusedTileName(tester) != 'Lanterns'; i++) {
     await press(tester, LogicalKeyboardKey.arrowLeft);
   }
   expect(focusedTileName(tester), 'Lanterns');
@@ -181,7 +181,7 @@ void main() {
     // row directly above the grid, whichever of its chips geometry picks.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), isNotNull, reason: 'down enters the grid');
-    for (var i = 0; i < 3 && focusedTileName(tester) != 'Lanterns'; i++) {
+    for (var i = 0; i < 20 && focusedTileName(tester) != 'Lanterns'; i++) {
       await press(tester, LogicalKeyboardKey.arrowLeft);
     }
     expect(focusedTileName(tester), 'Lanterns');
@@ -523,7 +523,7 @@ void main() {
     // complete and an in-progress download are merged in beside them): walk
     // left to the row's known first tile, then right once onto the one
     // this test is about.
-    for (var i = 0; i < 3 && focusedTileName(tester) != 'Lanterns'; i++) {
+    for (var i = 0; i < 20 && focusedTileName(tester) != 'Lanterns'; i++) {
       await press(tester, LogicalKeyboardKey.arrowLeft);
     }
     expect(focusedTileName(tester), 'Lanterns');

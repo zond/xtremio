@@ -32,8 +32,8 @@ List<String> names() => [
 ];
 
 /// Columns of the poster grid at [tvSize]: 1280 wide less the padding, over
-/// tiles at most 160 wide.
-const int columns = 8;
+/// the television's 64-wide tiles and the 12 between them.
+const int columns = 16;
 
 void main() {
   testWidgets('the tab: a type, its catalog menu, then its rows, and Back '
@@ -127,26 +127,34 @@ void main() {
   testWidgets('down walks the grid past the rows that were built at first', (
     tester,
   ) async {
-    useScreen(tester, tvSize);
+    // Narrow, so that the fixture's fifty posters, four across, run well
+    // past the screen: the television's tiles are small enough that at
+    // 1280 wide they would fit in four rows.
+    const narrow = Size(340, 720);
+    const across = 4;
+    const last = 8;
+    useScreen(tester, narrow);
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
     final items = names();
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    for (var i = 0; i < columns && focusedTileName(tester) != items[0]; i++) {
+    // Down through the filter bar, which wraps at this width.
+    for (var i = 0; i < 8 && focusedTileName(tester) == null; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    for (var i = 0; i < across && focusedTileName(tester) != items[0]; i++) {
       await press(tester, LogicalKeyboardKey.arrowLeft);
     }
     expect(focusedTileName(tester), items[0]);
-    // Row 6 (index 40) is well past a 720 px viewport plus its cache: each
-    // step has to scroll the grid so the next row exists to move to.
-    expect(find.text(items[5 * columns]), findsNothing);
-    for (var row = 1; row <= 5; row++) {
+    // Row 8 is well past a 720 px viewport plus its cache: each step has
+    // to scroll the grid so the next row exists to move to.
+    expect(find.text(items[last * across]), findsNothing);
+    for (var row = 1; row <= last; row++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedTileName(tester), items[row * columns], reason: 'row $row');
+      expect(focusedTileName(tester), items[row * across], reason: 'row $row');
     }
-    final focused = tester.getRect(find.text(items[5 * columns]));
+    final focused = tester.getRect(find.text(items[last * across]));
     expect(focused.top, greaterThan(0));
-    expect(focused.bottom, lessThan(tvSize.height));
+    expect(focused.bottom, lessThan(narrow.height));
     expect(find.text(items[0]), findsNothing, reason: 'the grid scrolled');
   });
 

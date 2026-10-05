@@ -362,7 +362,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
-        gridDelegate: posterGridDelegate,
+        gridDelegate: posterGridDelegateOf(context),
         itemCount: items.length + (state.isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= items.length) {
