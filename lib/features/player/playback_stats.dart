@@ -42,6 +42,7 @@ class PlaybackStats {
     this.videoCodec,
     this.audioCodec,
     this.fileFormat,
+    this.audioChannels,
     this.width,
     this.height,
     this.videoBitrate,
@@ -66,6 +67,7 @@ class PlaybackStats {
     'video-codec',
     'audio-codec-name',
     'file-format',
+    'current-tracks/audio/demux-channel-count',
     'video-params/w',
     'video-params/h',
     'video-bitrate',
@@ -114,6 +116,7 @@ class PlaybackStats {
       videoCodec: text('video-codec'),
       audioCodec: text('audio-codec-name'),
       fileFormat: text('file-format'),
+      audioChannels: integer('current-tracks/audio/demux-channel-count'),
       width: integer('video-params/w'),
       height: integer('video-params/h'),
       videoBitrate: integer('video-bitrate'),
@@ -176,6 +179,14 @@ class PlaybackStats {
   /// Not shown anywhere: with the two codecs it is all the cast
   /// compatibility check believes about a file.
   final String? fileFormat;
+
+  /// `current-tracks/audio/demux-channel-count`: how many channels the
+  /// playing sound track has in the file, as its container declares them
+  /// -- not `audio-params/channel-count`, which is what mpv's decoder
+  /// hands on and may already be mixed down for this device's output. Not
+  /// shown anywhere: the cast check copies AAC to a receiver only when it
+  /// is one or two channels.
+  final int? audioChannels;
 
   /// Decoded picture size (`video-params/w`, `video-params/h`).
   final int? width;
@@ -287,6 +298,7 @@ class PlaybackStats {
       other.videoCodec == videoCodec &&
       other.audioCodec == audioCodec &&
       other.fileFormat == fileFormat &&
+      other.audioChannels == audioChannels &&
       other.width == width &&
       other.height == height &&
       other.videoBitrate == videoBitrate &&
@@ -311,6 +323,7 @@ class PlaybackStats {
     videoCodec,
     audioCodec,
     fileFormat,
+    audioChannels,
     width,
     height,
     videoBitrate,
@@ -328,7 +341,7 @@ class PlaybackStats {
       'PlaybackStats(fps: $outputFps/$containerFps, dropped: $droppedFrames'
       '/$decoderDroppedFrames, display: $displayFps'
       ', hwdec: $hwdec, codec: $videoCodec'
-      '/$audioCodec, format: $fileFormat, '
+      '/$audioCodec ($audioChannels ch), format: $fileFormat, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
       'seekable: $seekable, partiallySeekable: $partiallySeekable, '

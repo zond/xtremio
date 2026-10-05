@@ -17,11 +17,27 @@ final byId = mediaIdUrl('0123456789abcdef0123456789abcdef');
 const mp4Format = 'mov,mp4,m4a,3gp,3g2,mj2';
 const mkvFormat = 'mkv';
 
-PlaybackStats mp4({String? video = 'h264 (High)', String? audio = 'aac'}) =>
-    PlaybackStats(fileFormat: mp4Format, videoCodec: video, audioCodec: audio);
+PlaybackStats mp4({
+  String? video = 'h264 (High)',
+  String? audio = 'aac',
+  int? channels,
+}) => PlaybackStats(
+  fileFormat: mp4Format,
+  videoCodec: video,
+  audioCodec: audio,
+  audioChannels: channels,
+);
 
-PlaybackStats mkv({String? video = 'h264 (High)', String? audio = 'aac'}) =>
-    PlaybackStats(fileFormat: mkvFormat, videoCodec: video, audioCodec: audio);
+PlaybackStats mkv({
+  String? video = 'h264 (High)',
+  String? audio = 'aac',
+  int? channels,
+}) => PlaybackStats(
+  fileFormat: mkvFormat,
+  videoCodec: video,
+  audioCodec: audio,
+  audioChannels: channels,
+);
 
 CastCompatibility check({
   Uri? url,
@@ -202,6 +218,28 @@ void main() {
       expect((result as CastRendition).convertsSound, isFalse);
     });
 
+    test('AAC is copied in one or two channels and converted in more', () {
+      for (final (channels, converts) in [
+        (1, false),
+        (2, false),
+        (6, true),
+        (8, true),
+        // mpv silent about the count: copied, as before it was asked.
+        (null, false),
+      ]) {
+        final result = check(
+          url: byId,
+          stats: mkv(channels: channels),
+          canRepackage: true,
+        );
+        expect(
+          (result as CastRendition).convertsSound,
+          converts,
+          reason: '$channels channels',
+        );
+      }
+    });
+
     test('any other sound is converted to stereo AAC (the field: E-AC3)', () {
       // Dolby cast to zond's television plays silent over its Bluetooth
       // sound, so surround is converted whatever the receiver claims.
@@ -333,6 +371,37 @@ void main() {
     test('an MP4 the receiver takes as it is stays as it is', () {
       final result = check(url: byId, stats: mp4(), canRepackage: true);
       expect(result, isA<CastReady>());
+      expect(
+        check(url: byId, stats: mp4(channels: 2), canRepackage: true),
+        isA<CastReady>(),
+      );
+    });
+
+    test('an MP4 with AAC in more than two channels has it mixed down', () {
+      final result = check(
+        url: byId,
+        stats: mp4(channels: 6),
+        canRepackage: true,
+      );
+      expect((result as CastRendition).convertsSound, isTrue);
+      // No rendition to be had -- not by id, a device that cannot, a
+      // picture a copy cannot carry -- and it goes as it is: AAC is a sound
+      // the receiver decodes.
+      for (final (url, canRepackage, video) in [
+        (torrentUrl, true, 'h264 (High)'),
+        (byId, false, 'h264 (High)'),
+        (byId, true, 'vp9'),
+      ]) {
+        expect(
+          check(
+            url: url,
+            stats: mp4(video: video, channels: 6),
+            canRepackage: canRepackage,
+          ),
+          isA<CastReady>(),
+          reason: '$url $canRepackage $video',
+        );
+      }
     });
   });
 

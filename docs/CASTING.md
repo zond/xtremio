@@ -87,17 +87,23 @@ stream is played by id and this device can make one
 (`media_renditions_available`). The same goes for a file of the MP4 family
 whose picture the receiver takes but whose sound its container does not
 allow (Dolby Digital in an MP4, the common case), which would otherwise be
-refused.
+refused, or allows in more than two channels (AAC 5.1), which would
+otherwise be a gamble on the receiver's sound.
 
-**The sound is copied when it is AAC, and converted to stereo AAC
-otherwise** (`CastRendition.convertsSound`, `RenditionSpec.convertSound`:
-`{"aacStereo": {"bitrate": 192000}}`) -- Dolby Digital, Dolby Digital Plus,
-DTS, TrueHD, Opus, FLAC, MP3, PCM: whatever mpv names, since the producer
-decodes with the same FFmpeg mpv played it with. **Surround is converted
-whatever the receiver says it plays**: zond's television sends its sound
-over Bluetooth, and Dolby cast to it plays silent. (AAC with more than two
-channels is still copied: mpv's report has no channel count until step F5.) HEVC (Main and Main 10, so
-HDR10 and HLG too) is allowed because zond's receiver, a Chromecast with
+**The sound is copied when it is AAC in one or two channels, and converted
+to stereo AAC otherwise** (`CastRendition.convertsSound`,
+`RenditionSpec.convertSound`: `{"aacStereo": {"bitrate": 192000}}`) --
+Dolby Digital, Dolby Digital Plus, DTS, TrueHD, Opus, FLAC, MP3, PCM, AAC
+5.1: whatever mpv names, since the producer decodes with the same FFmpeg mpv
+played it with. **Surround is converted whatever the receiver says it
+plays**: zond's television sends its sound over Bluetooth, and Dolby cast
+to it plays silent. The channel count is mpv's
+`current-tracks/audio/demux-channel-count` -- the track's own, as the
+container declares it, not `audio-params/channel-count`, which is what
+mpv's decoder hands on for this device's output -- and AAC whose count mpv
+has not reported is copied, as it was before the count was asked for (an
+MP4 with AAC 5.1 that cannot be a rendition goes as it is). HEVC (Main and
+Main 10, so HDR10 and HLG too) is allowed because zond's receiver, a Chromecast with
 Google TV 4K (`sabrina`), decodes it up to 4K: `_repackagedVideo` is a
 constant for that receiver until the receiver table (step F5) makes it a
 row per model, and until then an HEVC film cast to a receiver without HEVC
@@ -275,8 +281,8 @@ picture by about 1.5 s of film, which the server's cut rule already waits
 for.
 
 `rust/tests/rendition_sound.rs` makes H.264 films with Dolby Digital Plus
-5.1, Dolby Digital 5.1, DTS 5.1 and TrueHD 5.1 in Matroska and Dolby
-Digital in MP4, flashing white and clicking on every channel at each whole
+5.1, Dolby Digital 5.1, DTS 5.1, TrueHD 5.1 and AAC 5.1 in Matroska and
+Dolby Digital and AAC 5.1 in MP4, flashing white and clicking on every channel at each whole
 second, and checks what comes back: AAC-LC stereo 48 kHz, decoding clean,
 every click within 3 ms of where the source's is against its flash (whole,
 and in every slot read alone after the header), every slot byte-identical

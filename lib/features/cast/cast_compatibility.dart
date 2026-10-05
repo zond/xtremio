@@ -47,15 +47,16 @@ import '../player/playback_stats.dart';
 /// [CastRendition] when this device can make one (`canRepackage`): the
 /// server repackages the film's own picture into one fragmented MP4 as the
 /// receiver asks for it (stream-server `docs/design/renditions.md`, step
-/// F2), **with its sound copied when it is AAC and converted to stereo AAC
-/// otherwise** (step F3: Dolby Digital, Dolby Digital Plus, DTS, TrueHD,
-/// Opus, FLAC, MP3, PCM -- whatever mpv itself decodes, the producer
-/// decodes with the same FFmpeg). **Surround is converted whatever the
-/// receiver says it plays**: zond's television sends its sound over
-/// Bluetooth, and a Dolby track cast to it plays silent. So a file of the
-/// MP4 family whose picture the receiver takes but whose sound the
-/// container does not allow (Dolby Digital in an MP4, the common case) is a
-/// rendition too, not a refusal. A rendition is only for a stream played by
+/// F2), **with its sound copied when it is AAC in one or two channels and
+/// converted to stereo AAC otherwise** (step F3: Dolby Digital, Dolby
+/// Digital Plus, DTS, TrueHD, Opus, FLAC, MP3, PCM, AAC 5.1 -- whatever mpv
+/// itself decodes, the producer decodes with the same FFmpeg). **Surround
+/// is converted whatever the receiver says it plays**: zond's television
+/// sends its sound over Bluetooth, and a Dolby track cast to it plays
+/// silent. So a file of the MP4 family whose picture the receiver takes but
+/// whose sound the container does not allow (Dolby Digital in an MP4, the
+/// common case), or allows in more than two channels (AAC 5.1), is a
+/// rendition too, not a refusal or a gamble. A rendition is only for a stream played by
 /// id, since the server reads the film through its id. A film that would be
 /// repackaged but whose picture a copy cannot carry is refused with a
 /// sentence that names it and why ([CastRefusal.renditionVideo]).
@@ -81,6 +82,7 @@ sealed class CastCompatibility {
     final video = _canonicalVideo(stats?.videoCodec);
     if (readers == null || video == null) return const CastRefused._pending();
     final audio = _canonicalAudio(stats?.audioCodec);
+    final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
 
     if (readers.any(_matroskaReaders.contains)) {
@@ -90,7 +92,7 @@ sealed class CastCompatibility {
           (audio == null || _webm.audio.contains(audio))) {
         return CastReady(contentType: _webm.contentType);
       }
-      if (repackages) return _rendition(video, audio);
+      if (repackages) return _rendition(video, audio, surround: surround);
       return const CastRefused._container('a Matroska (.mkv) file');
     }
     if (!readers.any(_mp4Readers.contains)) {
@@ -107,6 +109,14 @@ sealed class CastCompatibility {
         return const CastRendition(convertsSound: true);
       }
       return CastRefused._audio(audio, _describeAudioSupport(_mp4));
+    }
+    // AAC the receiver takes, but in more than two channels: zond's
+    // television sends its sound over Bluetooth, and multichannel AAC is not
+    // known to play there, so it is mixed down as any other sound would
+    // be. Where no rendition can be made it goes as it is, AAC being a
+    // sound the receiver decodes.
+    if (surround && repackages && _repackagedVideo.contains(video)) {
+      return const CastRendition(convertsSound: true);
     }
     return CastReady(contentType: _mp4.contentType);
   }
@@ -125,8 +135,8 @@ final class CastReady extends CastCompatibility {
 
 /// The stream goes to a receiver as a rendition: the same H.264 or HEVC,
 /// repackaged by the server into one fragmented MP4 the receiver plays as a
-/// file (`MediaIds.publishRendition`), its sound copied when it is AAC and
-/// converted to stereo AAC when [convertsSound].
+/// file (`MediaIds.publishRendition`), its sound copied when it is stereo
+/// (or mono) AAC and converted to stereo AAC when [convertsSound].
 final class CastRendition extends CastCompatibility {
   const CastRendition({this.convertsSound = false});
 
@@ -301,19 +311,26 @@ const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 /// codec it cannot play from one only the repackaging cannot carry yet.
 const Set<String> _receiverVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 
-/// The sound a rendition copies. Anything else is converted to stereo AAC
-/// (step F3). AAC with more than two channels is copied too: mpv's report
-/// carries no channel count yet (step F5 adds it).
+/// The sound a rendition copies, in one or two channels
+/// ([PlaybackStats.audioChannels]). Anything else is converted to stereo
+/// AAC (step F3), AAC with more than two channels included. AAC whose
+/// channels mpv has not reported is copied, as it was before mpv was asked:
+/// a count nobody knows is not a reason to convert.
 const String _repackagedAudio = 'AAC';
 
 /// What a Matroska film played by id is when this device can repackage:
 /// [CastRendition] when its video is one a copy carries -- its sound copied
-/// when AAC, converted otherwise -- and a sentence naming the video when a
-/// copy cannot carry it. A film with no sound track has nothing to convert.
-CastCompatibility _rendition(String video, String? audio) {
+/// when it is AAC in one or two channels, converted otherwise ([surround]:
+/// more than two) -- and a sentence naming the video when a copy cannot
+/// carry it. A film with no sound track has nothing to convert.
+CastCompatibility _rendition(
+  String video,
+  String? audio, {
+  required bool surround,
+}) {
   if (_repackagedVideo.contains(video)) {
     return CastRendition(
-      convertsSound: audio != null && audio != _repackagedAudio,
+      convertsSound: audio != null && (audio != _repackagedAudio || surround),
     );
   }
   return CastRefused._rendition(

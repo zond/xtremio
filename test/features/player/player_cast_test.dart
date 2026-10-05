@@ -294,6 +294,35 @@ void main() {
         expect(cast.loads.single.$1.url, lanBase.resolve('cast/t1/stream.mp4'));
       });
 
+      testWidgets('an MP4 with 5.1 AAC is a rendition with its sound mixed '
+          'down', (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        final harness = castHarness(cast: cast, lanMedia: lan);
+        harness.mediaIds.renditionsAvailable = true;
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+
+        await castWithStats(
+          tester,
+          harness,
+          stats: const PlaybackStats(
+            fileFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+            videoCodec: 'h264 (High)',
+            audioCodec: 'aac',
+            audioChannels: 6,
+          ),
+        );
+
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(harness.mediaIds.renditions.single.spec.toJson()['audio'], {
+          'aacStereo': {'bitrate': 192000},
+        });
+        expect(cast.loads.single.$1.url, lanBase.resolve('cast/t1/stream.mp4'));
+      });
+
       /// [castWithStats] without settling: a rendition being prepared draws
       /// a spinner, which never settles, and a poll on a timer.
       Future<void> castWhilePreparing(

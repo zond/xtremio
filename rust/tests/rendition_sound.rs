@@ -1,9 +1,10 @@
 //! **A rendition whose sound is converted, end to end on this machine**
 //! (stream-server `docs/design/renditions.md`, step F3): H.264 films with
-//! Dolby Digital Plus 5.1, Dolby Digital 5.1, DTS 5.1 and TrueHD 5.1 sound
-//! in Matroska, and Dolby Digital in MP4, made by `ffmpeg`, published as
-//! renditions that convert the sound to stereo AAC and copy the picture,
-//! and read as a Cast receiver reads them, off the LAN listener -- with the
+//! Dolby Digital Plus 5.1, Dolby Digital 5.1, DTS 5.1, TrueHD 5.1 and AAC
+//! 5.1 sound in Matroska, and Dolby Digital and AAC 5.1 in MP4, made by
+//! `ffmpeg`, published as renditions that convert the sound to stereo AAC
+//! and copy the picture, and read as a Cast receiver reads them, off the
+//! LAN listener -- with the
 //! app's producer decoding through the FFmpeg in a real libmpv and encoding
 //! with that FFmpeg's own AAC encoder (a desktop's; a phone's is
 //! `MediaCodec`).
@@ -82,7 +83,7 @@ struct Sound {
     args: &'static [&'static str],
 }
 
-const SOUNDS: [Sound; 4] = [
+const SOUNDS: [Sound; 5] = [
     Sound {
         name: "eac3",
         args: &["-c:a", "eac3", "-ac", "6"],
@@ -98,6 +99,13 @@ const SOUNDS: [Sound; 4] = [
     Sound {
         name: "truehd",
         args: &["-c:a", "truehd", "-strict", "-2", "-ac", "6"],
+    },
+    // AAC itself, with six channels: copied it would reach a receiver as
+    // 5.1, which zond's television (sound over Bluetooth) is not known to
+    // play, so the app asks for it converted like any other.
+    Sound {
+        name: "aac51",
+        args: &["-c:a", "aac", "-ac", "6"],
     },
 ];
 
@@ -419,6 +427,8 @@ fn dolby_and_dts_sound_is_converted_to_stereo_aac_in_step_with_the_picture() -> 
     }
     let mp4 = tmp.path().join("ac3.mp4");
     make(&mp4, SECONDS, SOUNDS[1]).expect("ffmpeg made the MP4");
+    let aac_mp4 = tmp.path().join("aac51.mp4");
+    make(&aac_mp4, SECONDS, SOUNDS[4]).expect("ffmpeg made the 5.1 AAC MP4");
     let runtime = tokio::runtime::Runtime::new()?;
     xtremio_core::server::start(StartConfig {
         config_dir: tmp.path().join("server"),
@@ -441,7 +451,10 @@ fn dolby_and_dts_sound_is_converted_to_stereo_aac_in_step_with_the_picture() -> 
     for (sound, path) in films
         .iter()
         .map(|(sound, path)| (sound.name, path.clone()))
-        .chain(std::iter::once(("ac3 in mp4", mp4.clone())))
+        .chain([
+            ("ac3 in mp4", mp4.clone()),
+            ("aac51 in mp4", aac_mp4.clone()),
+        ])
     {
         let url = publish(&path)?;
         let (status, whole) = get(&runtime, &url, None);
