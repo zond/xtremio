@@ -40,17 +40,22 @@ PlaybackStats mkv({
   audioChannels: channels,
 );
 
-/// [CastCompatibility.of] for a Chromecast Ultra unless [receiver] says
-/// otherwise: the row that decodes H.264, HEVC, VP8 and VP9 alike, so the
-/// tests of the container and sound rules are not about the receiver.
+/// A receiver announcing "Chromecast Ultra", a name only that model
+/// announces: the row that decodes H.264, HEVC, VP8 and VP9 alike, with
+/// nothing to try.
+final ultraByName = ReceiverTable.of(announced: 'Chromecast Ultra');
+
+/// [CastCompatibility.of] for a "Chromecast Ultra" unless [receiver] says
+/// otherwise, so the tests of the container and sound rules are not about
+/// the receiver.
 CastCompatibility check({
   Uri? url,
   PlaybackStats? stats,
   bool canRepackage = false,
-  ReceiverRow receiver = ReceiverTable.ultra,
+  ReceiverRow? receiver,
 }) => CastCompatibility.of(
   url: url ?? torrentUrl,
-  receiver: receiver,
+  receiver: receiver ?? ultraByName,
   stats: stats,
   canRepackage: canRepackage,
 );
@@ -460,9 +465,9 @@ void main() {
       expect(result.reason, CastRefusal.videoCodec);
       expect(
         result.explanation,
-        'This receiver, a Chromecast Ultra, plays H.264, VP8, HEVC or VP9 '
-        "video; this film's video is AV1. Casting it would need conversion, "
-        'which this app cannot do yet.',
+        'Every receiver that calls itself "Chromecast Ultra" plays H.264, '
+        "VP8, HEVC or VP9 video; this film's video is AV1. Casting it would "
+        'need conversion, which this app cannot do yet.',
       );
     });
 
@@ -480,18 +485,21 @@ void main() {
 
   group('what the receiver decodes is its row\'s to say', () {
     final chromecastByName = ReceiverTable.of(announced: 'Chromecast');
+    final nestHubByName = ReceiverTable.of(announced: 'Google Nest Hub');
 
-    test('HEVC is a rendition on a Chromecast with Google TV (4K)', () {
+    test('HEVC is a rendition, and no trial, on a name whose one model '
+        'decodes it', () {
       final result = check(
         url: byId,
         stats: mkv(video: 'hevc (Main 10)'),
         canRepackage: true,
-        receiver: ReceiverTable.googleTv4k,
+        receiver: ultraByName,
       );
-      expect(result, isA<CastRendition>());
+      expect((result as CastRendition).tentative, isFalse);
     });
 
-    test('HEVC where only the name is known is tried, not refused', () {
+    test('HEVC where only some models with the name decode it is tried, '
+        'not refused', () {
       // Every "Chromecast" decodes H.264; the best of them HEVC too. The
       // cast is a trial, which the receiver's report of its picture ends.
       final rendition = check(
@@ -512,14 +520,6 @@ void main() {
       final h264 = check(url: byId, stats: mp4(), receiver: chromecastByName);
       expect((h264 as CastReady).tentative, isFalse);
       expect(h264.video, 'H.264');
-      // Nor is HEVC on a receiver identified as decoding it.
-      final identified = check(
-        url: byId,
-        stats: mkv(video: 'hevc (Main)'),
-        canRepackage: true,
-        receiver: ReceiverTable.googleTv4k,
-      );
-      expect((identified as CastRendition).tentative, isFalse);
     });
 
     test(
@@ -540,29 +540,30 @@ void main() {
       },
     );
 
-    test('a receiver identified as unable is refused, not tried', () {
+    test('a name whose one model cannot decode the film is refused, not '
+        'tried', () {
       final result = check(
         url: byId,
         stats: mkv(video: 'hevc (Main)'),
         canRepackage: true,
-        receiver: ReceiverTable.thirdGeneration,
+        receiver: nestHubByName,
       );
       expect(refusalOf(result), CastRefusal.videoCodec);
       expect(
         (result as CastRefused).explanation,
-        'This receiver, a 3rd generation Chromecast, plays H.264 or VP8 '
-        "video; this film's video is HEVC. Casting it would need conversion, "
-        'which this app cannot do yet.',
+        'Every receiver that calls itself "Google Nest Hub" plays H.264 or '
+        "VP9 video; this film's video is HEVC. Casting it would need "
+        'conversion, which this app cannot do yet.',
       );
     });
 
     test('a WebM the receiver does not decode is refused, not handed over', () {
       final result = check(
-        stats: mkv(video: 'vp9', audio: 'opus'),
-        receiver: ReceiverTable.firstGeneration,
+        stats: mkv(video: 'vp8', audio: 'opus'),
+        receiver: nestHubByName,
       );
       expect(refusalOf(result), CastRefusal.videoCodec);
-      // Where only the name is known, tried.
+      // Where only some models with the name decode it, tried.
       final tried = check(
         stats: mkv(video: 'vp9', audio: 'opus'),
         receiver: chromecastByName,
@@ -571,8 +572,30 @@ void main() {
       expect(tried.tentative, isTrue);
     });
 
-    test('a 4K film on a 1080p receiver is refused with its size', () {
+    test('a film bigger than the one model with the name shows is refused '
+        'with its size', () {
       const stats = PlaybackStats(
+        fileFormat: mp4Format,
+        videoCodec: 'h264 (High)',
+        audioCodec: 'aac',
+        width: 1920,
+        height: 1080,
+        containerFps: 23.976,
+      );
+      final result = check(stats: stats, receiver: nestHubByName);
+      expect(refusalOf(result), CastRefusal.pictureSize);
+      expect(
+        (result as CastRefused).explanation,
+        'Every receiver that calls itself "Google Nest Hub" plays H.264 up '
+        "to 1280x720 at 60 frames a second; this film's picture is "
+        '1920x1080 at 24 frames a second. xtremio sends the picture as it '
+        'is, so this receiver cannot show it.',
+      );
+    });
+
+    test('a film bigger than the best model with the name shows is refused '
+        'with its size; within it, tried', () {
+      const film4k = PlaybackStats(
         fileFormat: mkvFormat,
         videoCodec: 'hevc (Main 10)',
         audioCodec: 'eac3',
@@ -580,55 +603,84 @@ void main() {
         height: 2160,
         containerFps: 23.976,
       );
+      expect(
+        (check(
+          url: byId,
+          stats: film4k,
+          canRepackage: true,
+          receiver: chromecastByName,
+        ) as CastRendition).tentative,
+        isTrue,
+      );
+      const film8k = PlaybackStats(
+        fileFormat: mkvFormat,
+        videoCodec: 'hevc (Main 10)',
+        audioCodec: 'eac3',
+        width: 7680,
+        height: 4320,
+        containerFps: 23.976,
+      );
       final result = check(
         url: byId,
-        stats: stats,
+        stats: film8k,
         canRepackage: true,
-        receiver: ReceiverTable.googleTvHd,
+        receiver: chromecastByName,
       );
       expect(refusalOf(result), CastRefusal.pictureSize);
       expect(
         (result as CastRefused).explanation,
-        'This receiver, a Chromecast with Google TV (HD), plays HEVC up to '
-        "1920x1080 at 60 frames a second; this film's picture is 3840x2160 "
-        'at 24 frames a second. xtremio sends the picture as it is, so this '
-        'receiver cannot show it.',
-      );
-      // The same film on the 4K model.
-      expect(
-        check(
-          url: byId,
-          stats: stats,
-          canRepackage: true,
-          receiver: ReceiverTable.googleTv4k,
-        ),
-        isA<CastRendition>(),
+        'The best of the receivers that call themselves "Chromecast" plays '
+        "HEVC up to 3840x2160 at 60 frames a second; this film's picture is "
+        '7680x4320 at 24 frames a second. xtremio sends the picture as it '
+        'is, so this receiver cannot show it.',
       );
     });
 
-    test('a receiver that names two limits is held to either', () {
-      const fast = PlaybackStats(
+    test('a row that names two limits is held to either', () {
+      // "Chromecast": H.264 at 720p60 or 1080p30 for certain, and at its
+      // best 4K30 or 1080p60.
+      PlaybackStats h264({
+        required int width,
+        required int height,
+        required double fps,
+      }) => PlaybackStats(
         fileFormat: mp4Format,
         videoCodec: 'h264 (High)',
         audioCodec: 'aac',
-        width: 1920,
-        height: 1080,
-        containerFps: 59.94,
+        width: width,
+        height: height,
+        containerFps: fps,
       );
+      for (final (width, height, fps) in [
+        (1920, 1080, 29.97),
+        (1280, 720, 59.94),
+      ]) {
+        final certain = check(
+          stats: h264(width: width, height: height, fps: fps),
+          receiver: chromecastByName,
+        );
+        expect((certain as CastReady).tentative, isFalse, reason: '$height');
+      }
+      for (final (width, height, fps) in [
+        (1920, 1080, 59.94),
+        (3840, 2160, 29.97),
+      ]) {
+        final tried = check(
+          stats: h264(width: width, height: height, fps: fps),
+          receiver: chromecastByName,
+        );
+        expect((tried as CastReady).tentative, isTrue, reason: '$height');
+      }
       final result = check(
-        stats: fast,
-        receiver: ReceiverTable.firstGeneration,
+        stats: h264(width: 3840, height: 2160, fps: 59.94),
+        receiver: chromecastByName,
       );
       expect(
         (result as CastRefused).explanation,
         contains(
-          'plays H.264 up to 1280x720 at 60 frames a second, or 1920x1080 at '
-          '30 frames a second;',
+          'plays H.264 up to 3840x2160 at 30 frames a second, or 1920x1080 at '
+          '60 frames a second;',
         ),
-      );
-      expect(
-        check(stats: fast, receiver: ReceiverTable.thirdGeneration),
-        isA<CastReady>(),
       );
     });
   });

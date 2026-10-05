@@ -342,20 +342,6 @@ class GoogleCastClient implements CastClient {
     return answer;
   }
 
-  /// **Not identified yet: always null.** The Cast SDK does not say which
-  /// hardware a receiver is -- `CastDevice` carries the announced model
-  /// name, a protocol version and capability bits every video receiver
-  /// shares (play-services-cast 21.5.0) -- and a Chromecast with Google TV
-  /// announces "Chromecast" as a 2013 dongle does. What does say is the
-  /// receiver's own setup endpoint (port 8443,
-  /// `/setup/eureka_info?params=device_info`, `product_name`), whose
-  /// certificate the
-  /// receiver signs itself; asking it means accepting that certificate for
-  /// that one request, which is waiting on a decision. Until then every
-  /// receiver is judged by its announced name ([ReceiverTable.of]).
-  @override
-  Future<String?> receiverCodename(CastDevice device) async => null;
-
   @override
   final ReceiverPictureMemory pictureMemory = ReceiverPictureMemory();
 

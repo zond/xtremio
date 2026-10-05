@@ -83,8 +83,9 @@ sealed class CastCompatibility {
   /// what the best model announcing that name decodes
   /// ([ReceiverRow.atBest]): the answer is then [tentative], and the player
   /// watches the receiver's own report of the picture to catch one that
-  /// plays the sound over a black screen. A receiver identified as unable
-  /// is refused.
+  /// plays the sound over a black screen. What is refused up front is what
+  /// no model announcing the name decodes -- for a name that names one
+  /// model, anything beyond that model's row.
   ///
   /// A file mpv reads no video track in at all (audio alone) is judged by
   /// its container and sound.

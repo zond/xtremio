@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/receiver_table.dart';
 
-/// Every model Google's table lists, exactly identified.
-const exactRows = [
+/// Every model Google's table lists.
+const modelRows = [
   ReceiverTable.firstGeneration,
   ReceiverTable.thirdGeneration,
   ReceiverTable.ultra,
@@ -28,36 +28,16 @@ bool coveredBy(ReceiverRow narrow, ReceiverRow wide) =>
 
 void main() {
   group('which row', () {
-    test('a codename names the model, whatever it announces', () {
-      for (final (codename, row) in [
-        ('sabrina', ReceiverTable.googleTv4k),
-        ('boreal', ReceiverTable.googleTvHd),
-        ('kirkwood', ReceiverTable.streamer),
-        (' Sabrina ', ReceiverTable.googleTv4k),
-      ]) {
-        final found = ReceiverTable.of(
-          codename: codename,
-          announced: 'Chromecast',
-        );
-        expect(found, same(row), reason: codename);
-        expect(found.exact, isTrue);
-      }
-    });
-
-    test('no codename, or one the table does not know: the announced name', () {
-      for (final codename in [null, 'chorizo']) {
-        final row = ReceiverTable.of(
-          codename: codename,
-          announced: 'Chromecast',
-        );
-        expect(row.exact, isFalse);
-        expect(row.decodes('H.264'), isTrue);
-        expect(row.decodes('HEVC'), isFalse, reason: '$codename');
-        expect(row.decodes('VP9'), isFalse);
+    test('the announced name, compared without case', () {
+      for (final announced in ['Chromecast', ' chromecast ', 'CHROMECAST']) {
+        final row = ReceiverTable.of(announced: announced);
+        expect(row, same(ReceiverTable.byAnnouncedName['chromecast']));
+        expect(row.decodes('H.264'), isTrue, reason: announced);
+        expect(row.decodes('HEVC'), isFalse, reason: announced);
+        expect(row.decodes('VP9'), isFalse, reason: announced);
       }
       final ultra = ReceiverTable.of(announced: 'chromecast ultra');
       expect(ultra.video, ReceiverTable.ultra.video);
-      expect(ultra.exact, isFalse);
       expect(
         ReceiverTable.of(announced: 'Google TV Streamer').decodes('AV1'),
         isTrue,
@@ -77,7 +57,7 @@ void main() {
         );
       }
       // What every model in the table decodes, and nothing more.
-      for (final row in exactRows) {
+      for (final row in modelRows) {
         expect(
           coveredBy(ReceiverTable.unknown, row),
           isTrue,
@@ -118,7 +98,7 @@ void main() {
         expect(coveredBy(row, byName.atBest!), isTrue, reason: row.subject);
       }
       expect(byName.atBest!.decodes('AV1'), isFalse);
-      for (final row in exactRows) {
+      for (final row in modelRows) {
         expect(
           coveredBy(row, ReceiverTable.unknown.atBest!),
           isTrue,
@@ -127,16 +107,29 @@ void main() {
       }
       // A name that names one model has nothing better to try.
       expect(ReceiverTable.of(announced: 'Chromecast Ultra').atBest, isNull);
-      for (final row in exactRows) {
+      for (final row in modelRows) {
         expect(row.atBest, isNull, reason: row.subject);
       }
     });
 
+    test('a model\'s row is labelled by the model alone: no receiver is '
+        'identified as one', () {
+      expect(modelRows.map((row) => row.subject), [
+        'A 1st or 2nd generation Chromecast',
+        'A 3rd generation Chromecast',
+        'A Chromecast Ultra',
+        'A Chromecast with Google TV (4K)',
+        'A Chromecast with Google TV (HD)',
+        'A Google TV Streamer',
+        'A Nest Hub',
+        'A Nest Hub Max',
+      ]);
+    });
+
     test('a row known by its name covers what that model decodes', () {
       for (final row in ReceiverTable.byAnnouncedName.values) {
-        expect(row.exact, isFalse, reason: row.subject);
         expect(
-          exactRows.any((exact) => coveredBy(row, exact)),
+          modelRows.any((model) => coveredBy(row, model)),
           isTrue,
           reason: row.subject,
         );

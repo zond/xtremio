@@ -241,21 +241,10 @@ extension _PlayerCasting on _PlayerScreenState {
     // below -- the check, the publication, the load -- is about this.
     final local = _castSource;
     if (cast == null || local == null || !_stillOurs) return;
-    // Which receiver this is decides what it decodes: its hardware when
-    // that can be found out silently, else what every model announcing its
-    // name has in common.
-    final codename = await cast.receiverCodename(device);
-    if (!_stillOurs) return;
-    final receiver = ReceiverTable.of(
-      codename: codename,
-      announced: device.model,
-    );
-    DiagnosticsLog.info(
-      'player',
-      codename == null
-          ? 'the receiver was not identified: judged by its announced name'
-          : 'the receiver is a $codename',
-    );
+    // What the receiver decodes is judged by the model name it announces:
+    // what every model announcing that name has in common, and what the
+    // best of them decodes is tried ([ReceiverTable.of]).
+    final receiver = ReceiverTable.of(announced: device.model);
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,

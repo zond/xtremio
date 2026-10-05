@@ -578,62 +578,51 @@ void main() {
         return harness;
       }
 
-      testWidgets('an HEVC film is a rendition on a receiver identified as '
-          'a Chromecast with Google TV (4K)', (tester) async {
+      testWidgets(
+        'a name only some models that decode it announce: HEVC is tried',
+        (tester) async {
+          final lines = captureDiagnostics();
+          useWideViewport(tester);
+          final cast = FakeCastClient(devices: const [livingRoom]);
+          final harness = hevcHarness(cast);
+          await harness.pump(tester);
+          harness.engine.emitDuration(const Duration(minutes: 90));
+          await pumpEvents(tester);
+
+          await castTo(tester, livingRoom);
+
+          expect(find.byType(CastRefusedDialog), findsNothing);
+          expect(harness.mediaIds.renditions, hasLength(1));
+          expect(cast.loads, hasLength(1));
+          expect(lines, anyElement(contains('trying HEVC on a receiver')));
+        },
+      );
+
+      testWidgets('a name whose one model cannot decode the film is refused '
+          'up front', (tester) async {
         useWideViewport(tester);
-        final cast = FakeCastClient(devices: const [livingRoom])
-          ..codenames['device-1'] = 'sabrina';
+        const hub = CastDevice(
+          id: 'device-2',
+          name: 'Kitchen display',
+          model: 'Google Nest Hub',
+        );
+        final cast = FakeCastClient(devices: const [hub]);
         final harness = hevcHarness(cast);
         await harness.pump(tester);
         harness.engine.emitDuration(const Duration(minutes: 90));
         await pumpEvents(tester);
 
-        await castTo(tester, livingRoom);
-
-        expect(cast.codenameAsks, ['device-1']);
-        expect(find.byType(CastRefusedDialog), findsNothing);
-        expect(harness.mediaIds.renditions, hasLength(1));
-        expect(cast.loads, hasLength(1));
-      });
-
-      testWidgets('the same name, not identified: HEVC is tried', (
-        tester,
-      ) async {
-        final lines = captureDiagnostics();
-        useWideViewport(tester);
-        final cast = FakeCastClient(devices: const [livingRoom]);
-        final harness = hevcHarness(cast);
-        await harness.pump(tester);
-        harness.engine.emitDuration(const Duration(minutes: 90));
-        await pumpEvents(tester);
-
-        await castTo(tester, livingRoom);
-
-        expect(find.byType(CastRefusedDialog), findsNothing);
-        expect(harness.mediaIds.renditions, hasLength(1));
-        expect(cast.loads, hasLength(1));
-        expect(lines, anyElement(contains('trying HEVC on a receiver')));
-      });
-
-      testWidgets('a 4K film on a receiver identified as 1080p is refused '
-          'with its size', (tester) async {
-        useWideViewport(tester);
-        final cast = FakeCastClient(devices: const [livingRoom])
-          ..codenames['device-1'] = 'boreal';
-        final harness = hevcHarness(cast);
-        await harness.pump(tester);
-        harness.engine.emitDuration(const Duration(minutes: 90));
-        await pumpEvents(tester);
-
-        await castTo(tester, livingRoom);
+        await castTo(tester, hub);
 
         expect(
           find.textContaining(
-            "plays HEVC up to 1920x1080 at 60 frames a second; this film's "
-            'picture is 3840x2160',
+            'Every receiver that calls itself "Google Nest Hub" plays H.264 '
+            "or VP9 video; this film's video is HEVC.",
           ),
           findsOneWidget,
         );
+        expect(harness.mediaIds.renditions, isEmpty);
+        expect(cast.connectAttempts, isEmpty);
         expect(cast.loads, isEmpty);
       });
 

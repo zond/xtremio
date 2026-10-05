@@ -21,8 +21,8 @@ is a receiver, not a sender.
 MP4 or WebM, video the receiver decodes at the film's size and rate, and
 audio the container may carry -- AAC or MP3 in an MP4, Opus or Vorbis in a
 WebM. The audio half is keyed on the container because that is where a
-receiver draws the line; the video half is keyed on the receiver's model
-([The receiver table](#the-receiver-table)).
+receiver draws the line; the video half is keyed on the model name the
+receiver announces ([The receiver table](#the-receiver-table)).
 
 **mpv is the only authority on what the file is.** A cast starts from the
 player, where mpv is reading the file, and its report -- `file-format` (the
@@ -85,58 +85,59 @@ of stream-server's `docs/design/renditions.md`), from Google's table
 (developers.google.com/cast/docs/media): the codecs, and per codec the
 biggest picture at the fastest rate.
 
-| Model (codename) | H.264 | HEVC | VP8 | VP9 | AV1 |
+| Model | H.264 | HEVC | VP8 | VP9 | AV1 |
 | --- | --- | --- | --- | --- | --- |
 | Chromecast 1st/2nd gen | 720p60 or 1080p30 | -- | 720p60 or 1080p30 | -- | -- |
 | Chromecast 3rd gen | 1080p60 | -- | 720p60 or 1080p30 | -- | -- |
 | Chromecast Ultra | 1080p60 | 4K60 | 4K30 | 4K60 | -- |
-| Chromecast with Google TV 4K (`sabrina`) | 4K30 or 1080p60 | 4K60 | -- | 4K60 | -- |
-| Chromecast with Google TV HD (`boreal`) | 1080p60 | 1080p60 | -- | 1080p60 | -- |
-| Google TV Streamer (`kirkwood`, believed) | 4K60 | 4K60 | -- | 4K60 | 4K60 |
+| Chromecast with Google TV 4K | 4K30 or 1080p60 | 4K60 | -- | 4K60 | -- |
+| Chromecast with Google TV HD | 1080p60 | 1080p60 | -- | 1080p60 | -- |
+| Google TV Streamer | 4K60 | 4K60 | -- | 4K60 | 4K60 |
 | Nest Hub | 720p60 | -- | -- | 720p60 | -- |
 | Nest Hub Max | 720p30 | -- | -- | 720p30 | -- |
 
-**Which row, without the viewer doing anything** (`ReceiverTable.of`): the
-receiver's hardware codename when it can be found out silently, else the
-model name it announces -- whose row holds only what is **common to every
-model announcing that name**. "Chromecast" is announced by the three
-dongle generations and both Chromecasts with Google TV (zond's 4K one
+**A receiver is judged by the model name it announces**
+(`ReceiverTable.of`), the one thing the Cast SDK says about its hardware
+(`CastDevice` in play-services-cast 21.5.0 has that name, a protocol
+version and capability bits every video receiver shares). A name's row
+holds what is **common to every model announcing it**, and what the best
+of them decodes (`ReceiverRow.atBest`). "Chromecast" is announced by the
+three dongle generations and both Chromecasts with Google TV (zond's 4K one
 says "Chromecast" like a 2015 dongle), so by name it is H.264 at 720p60 or
-1080p30 and nothing else (Google lists no VP8 for the Google TV models).
-"Chromecast Ultra", "Google TV Streamer", "(Google) Nest Hub" / "Google
-Home Hub" and "Google Nest Hub Max" name one model each. A name the table
-does not know -- a television with Cast built in -- gets what every row
-decodes: H.264 at 720p30.
+1080p30 for certain (Google lists no VP8 for the Google TV models), and at
+best H.264 at 4K30 or 1080p60, VP8, and HEVC and VP9 at 4K60. "Chromecast
+Ultra", "Google TV Streamer", "(Google) Nest Hub" / "Google Home Hub" and
+"Google Nest Hub Max" name one model each, so their rows are that model's
+and have nothing better to try. A name the table does not know -- a
+television with Cast built in -- gets H.264 at 720p30 for certain (what
+every row decodes) and, at best, everything any row decodes.
 
-**A receiver identified as unable is refused** with a sentence that says
-what it plays -- for a file handed over as it is and for a rendition alike,
-since a rendition copies the picture (`CastRefusal.videoCodec`,
-`CastRefusal.pictureSize`): "This receiver, a Chromecast with Google TV
-(HD), plays HEVC up to 1920x1080 at 60 frames a second; this film's picture
-is 3840x2160 at 24 frames a second. ...". A size or rate mpv has not
-reported is not held against a film.
+The picture of a film decides one of three things, for a file handed over
+as it is and for a rendition alike (a rendition copies the picture):
 
-**A receiver known only by its name is tried instead** (zond: "we could
-e.g. try HEVC if we are uncertain"): a film beyond what every model with
-that name decodes, but within what the best of them does
-(`ReceiverRow.atBest`: for "Chromecast", HEVC and VP9 at 4K60), is sent as
-a trial (`CastReady.tentative`, `CastRendition.tentative`; the log says
-"trying HEVC on a receiver ...") and the receiver's own report of its
-picture decides ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
-Only what no model with the name decodes is refused: 'The best of the
-receivers that call themselves "Chromecast" plays H.264, VP8, HEVC or VP9
-video; this film's video is AV1. ...'.
+- **Within what every model with the name decodes: sent.**
+- **Beyond that, but within what the best of them decodes: tried** (zond:
+  "we could e.g. try HEVC if we are uncertain"). The cast is sent as a
+  trial (`CastReady.tentative`, `CastRendition.tentative`; the log says
+  "trying HEVC on a receiver ...") and the receiver's own report of its
+  picture decides ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
+  An HEVC film on zond's television is such a trial.
+- **Beyond what any model with the name decodes: refused up front**, with
+  a sentence that says what the best of them plays (`CastRefusal.videoCodec`,
+  `CastRefusal.pictureSize`): 'The best of the receivers that call
+  themselves "Chromecast" plays H.264, VP8, HEVC or VP9 video; this film's
+  video is AV1. ...'. For a name that names one model that is anything
+  beyond its row: 'Every receiver that calls itself "Google Nest Hub" plays
+  H.264 up to 1280x720 at 60 frames a second; this film's picture is
+  1920x1080 at 24 frames a second. ...'.
 
-**The codename is not found out yet.** The Cast SDK does not carry it
-(`CastDevice` in play-services-cast 21.5.0 has the announced model name, a
-protocol version and capability bits every video receiver shares). The
-receiver's own setup endpoint does (`https://<receiver>:8443/setup/
-eureka_info?params=device_info`, `product_name`), with a certificate the
-receiver signs itself; asking it means accepting that certificate for that
-one request, which is waiting on a decision. Until then
-`GoogleCastClient.receiverCodename` answers null and every receiver is
-judged by its announced name -- so on zond's television an HEVC film is a
-trial, which its report of the picture settles.
+A size or rate mpv has not reported is not held against a film.
+
+**There is no lookup of the exact model.** The receiver's own setup
+endpoint would name it (`https://<receiver>:8443/setup/eureka_info`), but
+only through a self-signed certificate the app keeps no exception for, and
+with an uncertain receiver tried and ended when it shows no picture, all
+it would save an unable one is three seconds of black screen.
 
 ## A receiver that shows no picture
 

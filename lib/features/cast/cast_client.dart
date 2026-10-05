@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import '../../core/core.dart';
-import 'receiver_table.dart' show ReceiverTable;
 
 /// A receiver on the local network, as far as the app cares: something with
 /// a name that can be picked from a list and connected to.
@@ -258,12 +257,6 @@ abstract interface class CastClient {
   /// in the device list this was called with.
   Future<CastDevice?> connect(CastDevice device);
 
-  /// The codename of [device]'s hardware (`sabrina`, `boreal`, ...), when
-  /// it can be found out without the viewer doing anything, else null --
-  /// which leaves the receiver judged by the model name it announces
-  /// ([ReceiverTable.of]). Answers within a couple of seconds at most.
-  Future<String?> receiverCodename(CastDevice device);
-
   /// Which receivers showed no picture for which video, this session.
   ReceiverPictureMemory get pictureMemory;
 
@@ -317,9 +310,6 @@ class UnsupportedCastClient implements CastClient {
 
   @override
   Future<CastDevice?> connect(CastDevice device) async => null;
-
-  @override
-  Future<String?> receiverCodename(CastDevice device) async => null;
 
   /// Nothing is ever cast here, so nothing is remembered.
   @override
