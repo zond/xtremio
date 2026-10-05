@@ -168,6 +168,19 @@ class FakeMediaIds implements MediaIds {
     return nextReadiness.isNotEmpty ? nextReadiness.removeAt(0) : readiness;
   }
 
+  /// What [castNumbers] answers for a published token, as a test sets it;
+  /// null (no server rows) unless one does.
+  CastNumbers? numbers;
+
+  /// Every token [castNumbers] was asked about, in order.
+  final List<String> numbersAsked = [];
+
+  @override
+  CastNumbers? castNumbers(String token) {
+    numbersAsked.add(token);
+    return unpublished.contains(token) ? null : numbers;
+  }
+
   @override
   Future<bool> unpublish(String token) async {
     unpublished.add(token);

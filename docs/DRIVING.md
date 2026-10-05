@@ -127,6 +127,11 @@ buffer, playing, buffering, a stuck position and the last engine and open
 errors. Every URL in it, and every `log` line unless Verbose logging is on,
 goes through the same redaction as the diagnostics report.
 
+The stats panel's rows -- local playback's, and the cast panel's on the
+casting view ([CASTING.md](CASTING.md#the-stats-panel-while-casting)) --
+are text nodes, so `screen` reads them as they are drawn; `tap "Playback
+stats"` turns the panel on and off.
+
 The debug app plays as whatever account is signed in to it: a play is
 watch progress on that account, and a long press can mark something
 watched. On somebody's real account, play something they have not

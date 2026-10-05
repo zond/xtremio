@@ -283,10 +283,12 @@ and `rust/tests/subtitle_threshold.rs`.
 
 ## The stats panel draws a reading or nothing at all
 
-`lib/features/player/playback_stats_overlay.dart`: a number that does not
-exist takes its row (or its half of one) away, never a dash. Tests:
+`lib/features/player/playback_stats_overlay.dart`, and its cast twin
+`cast_stats_overlay.dart`: a number that does not exist takes its row (or
+its half of one) away, never a dash. Tests:
 `test/features/player/player_stats_osd*_test.dart`,
-`test/features/player/playback_stats_test.dart`. What each row means is in
+`test/features/player/playback_stats_test.dart`,
+`test/features/player/player_cast_stats_test.dart`. What each row means is in
 [The stats OSD](docs/OPERATIONS.md#the-stats-osd).
 
 - No retention policy, no window; no bitrate, no time. A proxied stream has

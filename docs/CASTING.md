@@ -540,6 +540,73 @@ never ran. The widget tests could not see it, since their fake reports
 statuses directly; `google_cast_client_test.dart` sends the measured shape
 through the plugin's own channel.
 
+### The stats panel while casting
+
+The stats button and **Shift+I** work while casting as they do for local
+play, and show a panel of their own on the phone's casting view
+(`CastStatsOverlay`, `lib/features/player/cast_stats_overlay.dart`): never
+on the television, and never over the remote -- on a narrow phone the
+remote keeps the height it needs and the panel scrolls in the rest. Its
+look is the local panel's, and so is the rule: a row with nothing measured
+is absent. It asks the server once a second
+(`ServerHandle::cast_numbers` through `media_cast_numbers`; stream-server
+`docs/lan-media.md`) while it is on screen and a cast is live, and not
+while the app is hidden; every rate is two answers over the time between
+them, on the screen's clock (`PlayerScreen.now`).
+
+```
+receiver Living Room TV · Chromecast · HEVC sent · playing · 1920x1040 sdr
+sending  rendition (video/mp4) · video hevc copied · audio eac3 5.1 → aac 2.0 192 kbps
+position 2:10 / 2:00:00
+buffered 2 times · 6.0 s
+requests 6 · 5 bodies · 1 open
+re-req.  1 in the last 30 s
+sent     3.0 MB · 8.0 Mbps
+made     36 s ahead · 1.5x
+runs     at 2:06, 67 slots · 2 started
+layout   3363 slots, exact
+source   torrent · 16.0 Mbps · 2 opens · 14 seeks
+```
+
+- `receiver`: its name and the model it announced; the picture's codec as
+  [the receiver table](#the-receiver-table) judged it, `sent` when every
+  model with that name decodes it and `tried` when only some do; what it
+  says it is doing; and the picture it reports, or `no picture reported`
+  where the platform would report one.
+- `sending`: `from its source, not through this device` for a link handed
+  straight over, `as it is` with the type the receiver is answered with, or
+  `rendition (video/mp4)`; the picture and the sound, mpv's word on the
+  source's sound (taken when the cast was handed over) beside what the
+  server makes of it.
+- `position`: the receiver's, of its length.
+- `buffered`: how often the receiver stopped to buffer since the cast
+  began, and for how long in all, a stop still going included. The load
+  is not a stop.
+- `requests`: every request under the token, the bodies begun, and those
+  being read now. `re-req.` is the requests of the last thirty seconds
+  (or of as long as the panel has watched): **a healthy receiver asks once
+  per seek**, so several a minute with nobody seeking is a receiver that
+  keeps losing its stream.
+- `sent`: bytes sent to the receiver, and the rate now.
+- For a rendition: `made`, how much film past the receiver's position is
+  made, unbroken, from where it last asked, and the production speed as a
+  multiple of real time (absent while the run waits at its lookahead and
+  makes nothing); `runs`, each live run's start and the slots it has made,
+  and how many runs were started (one more for each seek); `layout`, the
+  slots, their length when they are all one, and whether they mirror the
+  film's index (`exact`) or are estimated.
+- `source`: what was read for the receiver -- the kind of source, the
+  read rate, the opens and the seeks -- and, for a torrent, the swarm rows
+  the local panel shows.
+
+The panel never shows the LAN URL or the token. When a cast ends -- Stop,
+the session ending elsewhere, another receiver picked, leaving the player
+-- one INFO line says how it went, for a pasted diagnostics log:
+
+```
+the cast ended after 12 min: the receiver buffered 1 time, 41 s in all; 14 requests, 1.2 GB sent
+```
+
 **Casts do not binge**, by decision: `Ended` from the receiver shows no
 up-next card and never starts the next episode, whatever `bingeWatching`
 says. The viewer is at the television, not at the phone to cancel a

@@ -67,7 +67,12 @@ extension _PlayerCasting on _PlayerScreenState {
   void _onCastStatus(CastStatus reported) {
     if (!mounted) return;
     final status = _casting ? _trustedCastStatus(reported) : reported;
-    setState(() => _castStatus = status);
+    setState(() {
+      _castStatus = status;
+      if (_casting) {
+        _castBuffering = _castBuffering.note(status.state, widget.now());
+      }
+    });
     if (!_casting || _opened == null) return;
     // A direct cast is on trial until the receiver plays: a refusal before
     // then is the link's (bound to this device's address, expired, a 403),
@@ -352,6 +357,9 @@ extension _PlayerCasting on _PlayerScreenState {
     if (receiver == null) {
       return 'Could not start a session with ${device.name}.';
     }
+    // A session on this receiver has ended the one that was running: that
+    // cast is over, whatever becomes of this one.
+    if (_casting) _logCastEnd();
     // Starting a session is a round trip to the platform and then to the
     // receiver, and the viewer can leave the player during it. Every step
     // below acts -- on the engine, on the LAN listener, on the receiver --
@@ -492,7 +500,34 @@ extension _PlayerCasting on _PlayerScreenState {
       await _teardownCast();
       return null;
     }
+    final mpv = _lastStats;
     setState(() {
+      // A cast handed again through this device after the receiver refused
+      // its source is the same cast, and keeps its clock and its count.
+      if (_castBeganAt == null) {
+        _castBeganAt = widget.now();
+        _castBuffering = const CastBuffering();
+      }
+      _castFacts = CastFacts(
+        deviceName: device.name,
+        model: device.model,
+        video: switch (compatibility) {
+          CastReady(:final video) || CastRendition(:final video) => video,
+          _ => null,
+        },
+        tentative: switch (compatibility) {
+          CastReady(:final tentative) ||
+          CastRendition(:final tentative) => tentative,
+          _ => false,
+        },
+        direct: direct != null,
+        rendition: rendition,
+        convertsSound:
+            compatibility is CastRendition && compatibility.convertsSound,
+        sourceAudio: mpv?.audioCodec,
+        sourceChannels: mpv?.audioChannels,
+        reportsPicture: cast.reportsPicture,
+      );
       _castingTo = device;
       _castNote = null;
       _castEnded = false;
@@ -897,6 +932,7 @@ extension _PlayerCasting on _PlayerScreenState {
   /// elsewhere) and there is nothing left to end.
   Future<void> _stopCast({bool disconnect = true}) async {
     if (!_casting) return;
+    _logCastEnd();
     _castStops++;
     _cancelCastFetch();
     final position = _castStatus.position;
@@ -940,9 +976,53 @@ extension _PlayerCasting on _PlayerScreenState {
   /// leaving a socket open to the network for it, which is exactly what
   /// must not outlive a session.
   Future<void> _teardownCast() async {
+    _logCastEnd();
     _castingTo = null;
     await _cast?.disconnect();
     await _endLanMedia();
+  }
+
+  /// **One line when a cast ends**, so a pasted diagnostics log says how it
+  /// went: how long it lasted, how often and for how long the receiver
+  /// stopped to buffer, and what this device served it -- requests and
+  /// bytes, read off the publication before it is withdrawn. Nothing that
+  /// names the receiver, the stream or its token. Once per cast: it forgets
+  /// the cast's start, which every way out of a cast comes through here
+  /// first to read.
+  void _logCastEnd() {
+    final began = _castBeganAt;
+    if (began == null) return;
+    _castBeganAt = null;
+    _castFacts = null;
+    final now = widget.now();
+    final buffering = _castBuffering;
+    final token = _castToken;
+    CastNumbers? numbers;
+    if (token != null) {
+      try {
+        numbers = _mediaIds?.castNumbers(token);
+      } on Object {
+        numbers = null;
+      }
+    }
+    final stops = buffering.count == 0
+        ? 'never buffered'
+        : 'buffered ${buffering.count} '
+              '${buffering.count == 1 ? 'time' : 'times'}, '
+              '${PlaybackStatsOverlay.formatAge(buffering.totalAt(now))} in all';
+    final served = numbers == null
+        ? (_castDirect
+              ? 'it read the stream from its source'
+              : 'no numbers from this device')
+        : '${numbers.delivery.requests} '
+              '${numbers.delivery.requests == 1 ? 'request' : 'requests'}, '
+              '${formatBytes(numbers.delivery.bytes)} sent';
+    DiagnosticsLog.info(
+      'player',
+      'the cast ended after '
+          '${PlaybackStatsOverlay.formatAge(now.difference(began))}: '
+          'the receiver $stops; $served',
+    );
   }
 
   /// Says why casting did not happen. A dialog, because it is the answer to

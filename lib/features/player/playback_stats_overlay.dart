@@ -96,42 +96,51 @@ class PlaybackStatsOverlay extends StatelessWidget {
     ),
   );
 
+  /// The panel's text for [context]: the monospace above, at
+  /// [tvFontSize] on a television. Shared with the cast panel
+  /// (`CastStatsOverlay`), which is this panel's look on the phone while a
+  /// receiver has the film.
+  static TextStyle styleOf(BuildContext context) => DeviceScope.isTv(context)
+      ? _style.copyWith(fontSize: tvFontSize)
+      : _style;
+
+  /// The panel's box around [rows]: translucent black, never a target for
+  /// a tap.
+  static Widget box(List<Widget> rows) => IgnorePointer(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final style = DeviceScope.isTv(context)
-        ? _style.copyWith(fontSize: tvFontSize)
-        : _style;
+    final style = styleOf(context);
     return StreamBuilder<PlaybackStats>(
       stream: stats,
       builder: (context, snapshot) {
         final sample = snapshot.data;
-        return IgnorePointer(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final line in describe(sample, held: held))
-                  Text(line, style: style),
-                if (isTorrent) ...[
-                  for (final line in describeTorrent(torrent))
-                    Text(line, style: style),
-                  if (describeTorrentError(torrent) case final error?)
-                    _wideRow(error, style, maxLines: 2),
-                  if (dht?.unavailable ?? false)
-                    Text(describeDht(dht!), style: style),
-                ],
-                if (source != null)
-                  _wideRow('url      $source', style, maxLines: 1),
-              ],
-            ),
-          ),
-        );
+        return box([
+          for (final line in describe(sample, held: held))
+            Text(line, style: style),
+          if (isTorrent) ...[
+            for (final line in describeTorrent(torrent))
+              Text(line, style: style),
+            if (describeTorrentError(torrent) case final error?)
+              _wideRow(error, style, maxLines: 2),
+            if (dht?.unavailable ?? false)
+              Text(describeDht(dht!), style: style),
+          ],
+          if (source != null) _wideRow('url      $source', style, maxLines: 1),
+        ]);
       },
     );
   }

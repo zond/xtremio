@@ -18,6 +18,7 @@ import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
+import 'cast_stats_overlay.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
@@ -81,6 +82,7 @@ class PlayerScreen extends StatefulWidget {
     this.metaRequest,
     this.subtitlesPath,
     this.driveOpener = const ServerDriveFileOpener(),
+    this.now = DateTime.now,
   });
 
   /// Raw stream JSON as it came out of `meta_details.streams` (or a
@@ -101,6 +103,10 @@ class PlayerScreen extends StatefulWidget {
   /// to one ([_PlayerScreenState._playNext]). A parameter for the reason
   /// `MetaDetailsScreen.driveOpener` is: a test plays a file without FFI.
   final DriveFileOpener driveOpener;
+
+  /// The wall clock the cast panel's rates and the cast's buffering time are
+  /// read on ([CastStatsOverlay], [CastBuffering]): a test winds it.
+  final DateTime Function() now;
 
   /// The name every route that mounts this screen is pushed under, so
   /// whoever is about to open something over the player can tell there is
@@ -978,6 +984,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   String _castSent = 'the film as it is';
   bool _castPictureSeen = false;
   Duration? _castPlayingFrom;
+
+  /// What the cast panel is told about the cast on the receiver
+  /// ([CastStatsOverlay]): what was known at the hand-over, how often the
+  /// receiver has stopped to buffer since, and when the cast began --
+  /// null when no cast is live, which is also what says its ending has
+  /// been logged ([_PlayerCasting._logCastEnd]).
+  CastFacts? _castFacts;
+  CastBuffering _castBuffering = const CastBuffering();
+  DateTime? _castBeganAt;
 
   bool get _casting => _castingTo != null;
 
@@ -2484,20 +2499,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                   // it: its buttons are the only thing on screen while a
                   // receiver has the stream, and they must not have to win an
                   // arena against the video's double-tap-to-seek first.
-                  if (casting)
-                    SafeArea(
-                      child: CastRemotePanel(
-                        deviceName: _castingTo!.name,
-                        title: state?.title ?? '',
-                        status: _castStatus,
-                        note: _castNote,
-                        direct: _castDirect,
-                        onPlayPause: _togglePlay,
-                        onSeek: _seekTo,
-                        onStop: () => unawaited(_stopCast()),
-                        playPauseFocusNode: _isTv ? _playPauseFocus : null,
-                      ),
-                    ),
+                  if (casting) SafeArea(child: _castingView(state)),
                   if (_castPreparingFor case final device? when !casting)
                     SafeArea(
                       child: CastPreparingPanel(
@@ -2745,6 +2747,61 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
           ),
         ),
       ),
+    );
+  }
+
+  /// The remote a receiver's film is driven from, and the cast panel above
+  /// it while the stats are on ([_statsVisible], the same button and
+  /// Shift+I as for local play).
+  ///
+  /// **The panel never covers the remote.** On a narrow phone the two
+  /// stack: the remote takes the height it needs, and the panel the rest,
+  /// below the top bar, scrolling when its rows do not fit.
+  Widget _castingView(PlayerState? state) {
+    final remote = CastRemotePanel(
+      deviceName: _castingTo!.name,
+      title: state?.title ?? '',
+      status: _castStatus,
+      note: _castNote,
+      direct: _castDirect,
+      onPlayPause: _togglePlay,
+      onSeek: _seekTo,
+      onStop: () => unawaited(_stopCast()),
+      playPauseFocusNode: _isTv ? _playPauseFocus : null,
+    );
+    final facts = _castFacts;
+    if (!_statsVisible || facts == null) return remote;
+    final token = _castToken;
+    final ids = _mediaIds;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12, right: 12, top: 64),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SingleChildScrollView(
+                child: CastStatsOverlay(
+                  // A new publication is another history: a rate across
+                  // two of them is no reading.
+                  key: ValueKey(('cast stats', token)),
+                  facts: facts,
+                  status: _castStatus,
+                  buffering: _castBuffering,
+                  now: widget.now,
+                  numbers: token == null || ids == null
+                      ? null
+                      : () => ids.castNumbers(token),
+                  isTorrent: _torrentStatsRequest != null,
+                  torrent: _torrentStats,
+                ),
+              ),
+            ),
+          ),
+        ),
+        remote,
+      ],
     );
   }
 

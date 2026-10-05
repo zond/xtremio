@@ -44,6 +44,7 @@ class PlayerHarness {
     this.localMedia,
     this.navigatorObservers = const [],
     this.mpvReport,
+    this.now,
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
     bool embeddedServer = true,
@@ -184,6 +185,10 @@ class PlayerHarness {
   /// player pushes over itself.
   final List<NavigatorObserver> navigatorObservers;
 
+  /// The screen's wall clock ([PlayerScreen.now]), for a test that winds it;
+  /// the real one otherwise.
+  final DateTime Function()? now;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -267,6 +272,7 @@ class PlayerHarness {
     metaRequest: metaRequest,
     subtitlesPath: subtitlesPath,
     driveOpener: driveOpener ?? const ServerDriveFileOpener(),
+    now: now ?? DateTime.now,
   );
 
   /// Mounts the screen and lets it open the stream.

@@ -218,7 +218,9 @@ frames, the **hwdec** in use (or `software`), codec and resolution, video
 bitrate, sampled twice a second while it is on screen
 (`PlaybackEngine.statsInterval`). On a television it is set larger. A row
 with nothing measured is absent, never a dash (the rule is in
-[AGENTS.md](../AGENTS.md#the-stats-panel-draws-a-reading-or-nothing-at-all)).
+[AGENTS.md](../AGENTS.md#the-stats-panel-draws-a-reading-or-nothing-at-all)). While
+casting, the same button shows the cast panel instead
+([CASTING.md](CASTING.md#the-stats-panel-while-casting)).
 
 **`cache` is two caches at two cadences.** First mpv's own demuxer cache,
 labelled `mpv`; then the retention window -- what this device's server holds

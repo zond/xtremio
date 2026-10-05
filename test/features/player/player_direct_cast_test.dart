@@ -64,6 +64,7 @@ Future<DirectCast> pumpLink(
   Map<String, dynamic>? player,
   MediaResolution resolution = const MediaResolution(),
   PlaybackStats stats = mpvMp4H264Aac,
+  DateTime Function()? now,
 }) async {
   useWideViewport(tester);
   final cast = FakeCastClient(devices: const [livingRoom]);
@@ -73,6 +74,7 @@ Future<DirectCast> pumpLink(
     cast: cast,
     lanMedia: lan,
     mpvReport: stats,
+    now: now,
   );
   harness.mediaIds.resolution = resolution;
   await harness.pump(tester);
@@ -227,6 +229,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(run.cast.loads, hasLength(3));
       expect(run.cast.loads.last.$1.url, lanBase.resolve('cast/t2'));
+    });
+
+    testWidgets('is one cast in the log, from the link to the relay\'s end', (
+      tester,
+    ) async {
+      final lines = captureDiagnostics();
+      var now = DateTime(2026, 10, 5, 20);
+      final run = await pumpLink(tester, now: () => now);
+      now = now.add(const Duration(seconds: 30));
+      run.cast.emitStatus(
+        const CastStatus(state: CastPlayerState.idle, failed: true),
+      );
+      await tester.pumpAndSettle();
+      expect(run.cast.loads, hasLength(2), reason: 'relayed');
+      expect(lines.where((line) => line.contains('the cast ended')), isEmpty);
+
+      now = DateTime(2026, 10, 5, 20, 5);
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pumpAndSettle();
+      expect(lines.where((line) => line.contains('the cast ended')), [
+        'info player the cast ended after 5 min: the receiver never '
+            'buffered; no numbers from this device',
+      ]);
     });
 
     testWidgets('after it has played is not second-guessed', (tester) async {

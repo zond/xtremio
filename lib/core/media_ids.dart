@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import '../src/rust/api/media.dart' as rust;
+import 'state/cast_numbers.dart';
 
 /// The scheme of the URL mpv is handed for a stream played by id:
 /// `xtremio://<id>`. libmpv reads it through the protocol
@@ -268,6 +269,11 @@ abstract interface class MediaIds {
   /// How far [token]'s preparation has got. Cheap; polled.
   Future<RenditionReadiness> renditionReadiness(String token);
 
+  /// What the publication [token] has served so far ([CastNumbers]), or
+  /// null once it is not published. Cheap and synchronous: polled once a
+  /// second while the cast panel is up, and read once as a cast ends.
+  CastNumbers? castNumbers(String token);
+
   /// Ends the publication [token]; a body being served under it is cut.
   Future<bool> unpublish(String token);
 }
@@ -350,6 +356,12 @@ class RustMediaIds implements MediaIds {
       RenditionReadiness.fromJson(
         jsonDecode(rust.mediaRenditionReadiness(token: token)) as Map,
       );
+
+  @override
+  CastNumbers? castNumbers(String token) {
+    final json = rust.mediaCastNumbers(token: token);
+    return json == null ? null : CastNumbers.fromJson(jsonDecode(json));
+  }
 
   @override
   Future<bool> unpublish(String token) => rust.mediaUnpublish(token: token);
