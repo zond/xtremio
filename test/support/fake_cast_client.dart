@@ -107,16 +107,21 @@ class FakeCastClient implements CastClient {
   /// Whether discovery is running now: the last of a start and a stop.
   bool discovering = false;
 
+  /// Whether the discovery running now was asked to scan actively.
+  bool activeScan = false;
+
   @override
-  Future<void> startDiscovery() async {
+  Future<void> startDiscovery({bool activeScan = false}) async {
     discoveryStarts++;
     discovering = true;
+    this.activeScan = activeScan;
   }
 
   @override
   Future<void> stopDiscovery() async {
     discoveryStops++;
     discovering = false;
+    activeScan = false;
   }
 
   @override

@@ -235,7 +235,14 @@ abstract interface class CastClient {
   /// The receivers found so far, without waiting for an event.
   List<CastDevice> get currentDevices;
 
-  Future<void> startDiscovery();
+  /// Starts looking for receivers, or changes how: a start while one is
+  /// running replaces it.
+  ///
+  /// [activeScan] asks for an active scan (Android's MediaRouter
+  /// `CALLBACK_FLAG_PERFORM_ACTIVE_SCAN`), which finds receivers the
+  /// passive search misses and costs power for as long as it runs: only
+  /// while a list of receivers is on screen, which is what Android asks.
+  Future<void> startDiscovery({bool activeScan = false});
   Future<void> stopDiscovery();
 
   /// The connected receiver, or null; re-emitted as the session changes.
@@ -300,7 +307,7 @@ class UnsupportedCastClient implements CastClient {
   List<CastDevice> get currentDevices => const [];
 
   @override
-  Future<void> startDiscovery() async {}
+  Future<void> startDiscovery({bool activeScan = false}) async {}
 
   @override
   Future<void> stopDiscovery() async {}

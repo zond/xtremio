@@ -264,10 +264,14 @@ class GoogleCastClient implements CastClient {
   );
 
   @override
-  Future<void> startDiscovery() async {
+  Future<void> startDiscovery({bool activeScan = false}) async {
     await _ensureInitialised();
     if (!_initialised) return;
-    await GoogleCastDiscoveryManager.instance.startDiscovery();
+    // The plugin's Android side re-registers its MediaRouter callback with
+    // the flags asked for; iOS ignores the flag.
+    await GoogleCastDiscoveryManager.instance.startDiscovery(
+      activeScan: activeScan,
+    );
   }
 
   @override

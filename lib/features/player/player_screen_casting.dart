@@ -189,10 +189,17 @@ extension _PlayerCasting on _PlayerScreenState {
   /// the only thing the compatibility check believes about the file: until
   /// its first sample lands a cast is a "not yet". The subscription is what makes the engine sample
   /// at all, so it is held for exactly as long as the list is open.
+  ///
+  /// **Discovery scans actively while the list is open** and goes back to
+  /// the passive search when it closes, however it closes: a passive
+  /// search can miss a receiver that is there, and the active one costs
+  /// power for as long as it runs, so it runs while someone is looking
+  /// for a receiver (what Android's MediaRouter asks of an app).
   Future<void> _openCastSheet() async {
     _castStatsSubscription = _engine?.stats.listen((stats) {
       _lastStats = stats;
     });
+    _cast?.startDiscovery(activeScan: true).ignore();
     await _showSheet(
       (context) => ValueListenableBuilder<List<CastDevice>>(
         valueListenable: _castDeviceList,
@@ -210,6 +217,9 @@ extension _PlayerCasting on _PlayerScreenState {
         ),
       ),
     );
+    // Not for a screen already gone: its dispose stopped the search, and a
+    // start from here would leave it running with no player to stop it.
+    if (mounted) _cast?.startDiscovery().ignore();
     await _castStatsSubscription?.cancel();
     _castStatsSubscription = null;
   }

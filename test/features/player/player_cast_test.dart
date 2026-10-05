@@ -147,6 +147,55 @@ void main() {
       await tester.pumpAndSettle();
       expect(cast.discoveryStops, 1);
     });
+
+    testWidgets('scans actively only while the receiver list is open', (
+      tester,
+    ) async {
+      // A passive search can miss a receiver that is there; an active one
+      // finds it, and costs the radio for as long as it runs -- which is
+      // for as long as someone is looking at the list.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      expect(cast.discovering, isTrue);
+      expect(cast.activeScan, isFalse);
+
+      await tester.tap(castButton);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('cast-device-${livingRoom.id}')),
+        findsOneWidget,
+      );
+      expect(cast.activeScan, isTrue);
+
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('cast-device-${livingRoom.id}')),
+        findsNothing,
+      );
+      expect(cast.discovering, isTrue);
+      expect(cast.activeScan, isFalse);
+    });
+
+    testWidgets('a receiver picked from the list ends the active scan too', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 90));
+      await pumpEvents(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(cast.loads, hasLength(1));
+      expect(cast.discovering, isTrue);
+      expect(cast.activeScan, isFalse);
+    });
   });
 
   group('starting a session', () {

@@ -15,6 +15,14 @@ picture is never decoded or encoded for a receiver yet, so the honest part
 of this is still the refusal. The button is never built on Android TV: a TV
 is a receiver, not a sender.
 
+Receivers are looked for while a player is open, with the platform's
+passive search, and with an active scan while the receiver list is on
+screen (`startDiscovery(activeScan: true)`, Android's MediaRouter
+`CALLBACK_FLAG_PERFORM_ACTIVE_SCAN`): the passive search can miss a
+receiver that is there, and the active one costs power for as long as it
+runs, so it runs while someone is choosing. A receiver the passive search
+misses altogether still leaves the button off the bar.
+
 ## What can be cast
 
 **The compatibility rule** (`lib/features/cast/cast_compatibility.dart`):
