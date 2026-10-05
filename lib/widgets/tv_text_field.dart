@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
 import '../shell/tv_text_entry.dart';
@@ -24,6 +25,11 @@ import 'remote_press.dart';
 /// [onChanged] and [onSubmitted], because confirming on that screen is the
 /// remote's version of pressing Done. A cancelled screen returns nothing
 /// and neither the value nor the focus here moves.
+///
+/// A field that [typesInPlace] also takes a hardware keyboard's typing
+/// while it has focus, with no screen at all: each character, and
+/// Backspace, changes the value and is announced to [onChanged] alone, the
+/// way a keystroke is in the plain field.
 class TvTextField extends StatefulWidget {
   const TvTextField({
     super.key,
@@ -37,6 +43,7 @@ class TvTextField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.onClear,
+    this.typesInPlace = false,
   });
 
   final TextEditingController controller;
@@ -66,6 +73,16 @@ class TvTextField extends StatefulWidget {
   /// descendant of it can. A button drawn where a remote cannot go is
   /// worse than no button.
   final VoidCallback? onClear;
+
+  /// On a television, a hardware keyboard types straight into the field
+  /// while it has focus, rather than only select opening the text-entry
+  /// screen. For a field whose every change is acted on as it is typed
+  /// (Search); a field that only means something once it is finished keeps
+  /// to the screen, whose confirming is the submit.
+  ///
+  /// Only printable characters and Backspace are taken: the D-pad, select,
+  /// Enter and Back carry no character and go where they always went.
+  final bool typesInPlace;
 
   /// What the text-entry screen is headed with: whatever this field is
   /// already labelled, so nothing has to be named twice.
@@ -109,6 +126,37 @@ class _TvTextFieldState extends State<TvTextField> {
     widget.onChanged?.call(typed);
     widget.onSubmitted?.call(typed);
   }
+
+  /// A hardware key while the field has focus ([TvTextField.typesInPlace]).
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent || !widget.enabled) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    final text = widget.controller.text;
+    final String typed;
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (text.isEmpty) return KeyEventResult.handled;
+      typed = text.characters.skipLast(1).string;
+    } else {
+      final character = event.character;
+      if (character == null || !_printable(character)) {
+        return KeyEventResult.ignored;
+      }
+      typed = text + character;
+    }
+    widget.controller.text = typed;
+    widget.onChanged?.call(typed);
+    return KeyEventResult.handled;
+  }
+
+  /// Something that is written, rather than a control character (Enter's
+  /// carriage return, Tab, Delete).
+  static bool _printable(String character) =>
+      character.runes.every((rune) => rune >= 0x20 && rune != 0x7f);
 
   /// The Clear button, or nothing when there is nothing to clear.
   ///
@@ -176,24 +224,32 @@ class _TvTextFieldState extends State<TvTextField> {
         final field = FocusMarked(
           child: RemotePress(
             onTap: onTap,
-            child: InkWell(
-              onTap: onTap,
-              focusNode: _fieldFocus,
-              autofocus: widget.autofocus,
-              onFocusChange: (focused) {
-                if (mounted) setState(() => _focused = focused);
-              },
-              child: InputDecorator(
-                decoration: widget.decoration.copyWith(enabled: widget.enabled),
-                isFocused: _focused,
-                isEmpty: text.isEmpty,
-                child: Text(
-                  widget.kind.isSecret
-                      ? TvTextField.obscuringCharacter * text.length
-                      : text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium,
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              includeSemantics: false,
+              onKeyEvent: widget.typesInPlace ? _onKey : null,
+              child: InkWell(
+                onTap: onTap,
+                focusNode: _fieldFocus,
+                autofocus: widget.autofocus,
+                onFocusChange: (focused) {
+                  if (mounted) setState(() => _focused = focused);
+                },
+                child: InputDecorator(
+                  decoration: widget.decoration.copyWith(
+                    enabled: widget.enabled,
+                  ),
+                  isFocused: _focused,
+                  isEmpty: text.isEmpty,
+                  child: Text(
+                    widget.kind.isSecret
+                        ? TvTextField.obscuringCharacter * text.length
+                        : text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
               ),
             ),

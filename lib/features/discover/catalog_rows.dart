@@ -382,6 +382,99 @@ class _CatalogRowsState extends State<CatalogRows> {
   );
 }
 
+/// One row of [PosterRows]: a heading over posters.
+@immutable
+class PosterRow {
+  const PosterRow({
+    required this.title,
+    required this.items,
+    this.subtitle,
+    this.posterShape = 'poster',
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<MetaItemPreview> items;
+
+  /// The `posterShape` the row's catalog declares, which sets the tiles'
+  /// width ([PosterImage.aspectRatioFor]).
+  final String posterShape;
+}
+
+/// Rows of posters in Discover's geometry -- the same extent, heading,
+/// tiles and focus room, and on a television the same run into the band at
+/// the right -- for a screen whose rows are already in hand rather than
+/// planned and fetched as the board's are: Search's hits, on a television.
+///
+/// [before] and [after] are slivers drawn above and below the rows, in the
+/// same scroll.
+class PosterRows extends StatelessWidget {
+  const PosterRows({
+    super.key,
+    required this.rows,
+    required this.onOpen,
+    this.before = const [],
+    this.after = const [],
+  });
+
+  final List<PosterRow> rows;
+  final ValueChanged<MetaItemPreview> onOpen;
+  final List<Widget> before;
+  final List<Widget> after;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = _RowLayout.of(context);
+    final isTv = DeviceScope.isTv(context);
+    final view = CustomScrollView(
+      // As the board's: the strips reach the band, and [_BleedRight] is
+      // the clip.
+      clipBehavior: isTv ? Clip.none : Clip.hardEdge,
+      slivers: [
+        ...before,
+        SliverFixedExtentList.builder(
+          itemExtent: layout.extent,
+          itemCount: rows.length,
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            final tileWidth = layout.tileWidthFor(row.posterShape);
+            return Column(
+              children: [
+                _RowHeader(
+                  title: row.title,
+                  subtitle: row.subtitle,
+                  height: layout.headerHeight,
+                  inline: layout.inlineHeader,
+                ),
+                Expanded(
+                  child: _HorizontalStrip(
+                    padding: layout.stripPadding,
+                    itemCount: row.items.length,
+                    itemBuilder: (context, index) {
+                      final item = row.items[index];
+                      return SizedBox(
+                        width: tileWidth,
+                        child: PosterTile(
+                          item: item,
+                          onTap: () => onOpen(item),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(height: layout.bottomPadding),
+              ],
+            );
+          },
+        ),
+        ...after,
+        const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
+      ],
+    );
+    return isTv ? _BleedRight(child: view) : view;
+  }
+}
+
 /// [child] clipped to its own box, except at the right, where it may paint
 /// on to the edge of the screen: through the television's overscan band,
 /// which the shell keeps clear of every control but which a row of posters

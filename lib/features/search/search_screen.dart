@@ -9,6 +9,7 @@ import '../../widgets/poster_tile.dart';
 import '../../widgets/tv_text_field.dart';
 import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
+import '../discover/catalog_rows.dart';
 
 /// Searches every installed addon that supports the `search` extra
 /// (`search`, a `CatalogsWithExtra` like the board).
@@ -24,6 +25,13 @@ import '../details/meta_details_screen.dart';
 /// this screen promises results from every addon that supports search, so
 /// the ones it could not ask are part of the answer. An empty query unloads
 /// the field, as does leaving the screen.
+///
+/// A television lays it out as Discover: no app bar, the field the top of
+/// the screen where Discover has its types, and the results as Discover's
+/// rows ([PosterRows]), one per catalog, rather than grids. The field is
+/// typed on the platform's own screen ([TvTextField]) or straight into
+/// with a hardware keyboard, and both go down the same debounced path as
+/// a phone's keystrokes.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -228,40 +236,56 @@ class _SearchScreenState extends State<SearchScreen> {
             query != null &&
             (current == null ||
                 current.rows.any((row) => row.isPlanned || row.isLoading));
+        final field = _SearchField(
+          controller: _controller,
+          onChanged: _onTextChanged,
+          onSubmitted: _onSubmitted,
+          onClear: _clearField,
+        );
+        final progress = isLoading
+            ? const LinearProgressIndicator(minHeight: _progressHeight)
+            : const SizedBox(height: _progressHeight);
+        final body = query == null
+            ? const _SearchHint()
+            : current == null
+            ? const SizedBox.expand()
+            : _Results(
+                query: query,
+                state: current,
+                isLoading: isLoading,
+                failures: addonFailuresOf(current.failedRows, _profile),
+                locked: _profile?.addonsLocked ?? false,
+                onOpen: _openDetails,
+                onCheck: (failure) =>
+                    openAddonDetails(context, failure.transportUrl),
+                onUninstall: (failure) =>
+                    confirmAndUninstallAddon(context, _client, failure.addon!),
+              );
+        if (DeviceScope.isTv(context)) {
+          // At the edge of the band the shell keeps clear, as Discover's
+          // types are.
+          return Scaffold(
+            body: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                  child: field,
+                ),
+                progress,
+                Expanded(child: body),
+              ],
+            ),
+          );
+        }
         return Scaffold(
           appBar: AppBar(
-            title: _SearchField(
-              controller: _controller,
-              onChanged: _onTextChanged,
-              onSubmitted: _onSubmitted,
-              onClear: _clearField,
-            ),
+            title: field,
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(_progressHeight),
-              child: isLoading
-                  ? const LinearProgressIndicator(minHeight: _progressHeight)
-                  : const SizedBox(height: _progressHeight),
+              child: progress,
             ),
           ),
-          body: query == null
-              ? const _SearchHint()
-              : current == null
-              ? const SizedBox.expand()
-              : _Results(
-                  query: query,
-                  state: current,
-                  isLoading: isLoading,
-                  failures: addonFailuresOf(current.failedRows, _profile),
-                  locked: _profile?.addonsLocked ?? false,
-                  onOpen: _openDetails,
-                  onCheck: (failure) =>
-                      openAddonDetails(context, failure.transportUrl),
-                  onUninstall: (failure) => confirmAndUninstallAddon(
-                    context,
-                    _client,
-                    failure.addon!,
-                  ),
-                ),
+          body: body,
         );
       },
     );
@@ -298,10 +322,13 @@ class _SearchField extends StatelessWidget {
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       onClear: onClear,
-      decoration: const InputDecoration(
+      typesInPlace: true,
+      decoration: InputDecoration(
         hintText: 'Search',
-        border: InputBorder.none,
-        prefixIcon: Icon(Icons.search),
+        // Off the app bar on a television, the field's own box is what
+        // says it is one.
+        border: isTv ? const OutlineInputBorder() : InputBorder.none,
+        prefixIcon: const Icon(Icons.search),
       ),
     );
   }
@@ -348,14 +375,44 @@ class _Results extends StatelessWidget {
     if (sections.isEmpty && failures.isEmpty) {
       return isLoading ? const SizedBox.expand() : _NoResults(query: query);
     }
+    // Nothing to show and something that failed: saying "no results" here
+    // would blame the query for a network or an addon being down, which is
+    // the one thing this screen must never do.
+    final nothingAnswered = sections.isEmpty && !isLoading
+        ? SliverToBoxAdapter(child: _NothingAnswered(query: query))
+        : null;
+    final failed = failures.isEmpty
+        ? null
+        : SliverToBoxAdapter(
+            child: FailedAddonsSection(
+              failures: failures,
+              summaryLabel: SearchScreen.failedAddonsLabel(failures.length),
+              collapseSingle: true,
+              locked: locked,
+              onCheck: onCheck,
+              onUninstall: onUninstall,
+            ),
+          );
+    if (DeviceScope.isTv(context)) {
+      return PosterRows(
+        key: const Key('search-results'),
+        rows: [
+          for (final (row, items) in sections)
+            PosterRow(
+              title: _SectionHeader.titleFor(row),
+              items: items,
+              posterShape: row.posterShape,
+            ),
+        ],
+        onOpen: onOpen,
+        before: [?nothingAnswered],
+        after: [?failed],
+      );
+    }
     return CustomScrollView(
       key: const Key('search-results'),
       slivers: [
-        // Nothing to show and something that failed: saying "no results"
-        // here would blame the query for a network or an addon being down,
-        // which is the one thing this screen must never do.
-        if (sections.isEmpty && !isLoading)
-          SliverToBoxAdapter(child: _NothingAnswered(query: query)),
+        ?nothingAnswered,
         for (final (row, items) in sections) ...[
           SliverToBoxAdapter(child: _SectionHeader(row: row)),
           SliverPadding(
@@ -370,17 +427,7 @@ class _Results extends StatelessWidget {
             ),
           ),
         ],
-        if (failures.isNotEmpty)
-          SliverToBoxAdapter(
-            child: FailedAddonsSection(
-              failures: failures,
-              summaryLabel: SearchScreen.failedAddonsLabel(failures.length),
-              collapseSingle: true,
-              locked: locked,
-              onCheck: onCheck,
-              onUninstall: onUninstall,
-            ),
-          ),
+        ?failed,
         const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
       ],
     );

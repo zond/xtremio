@@ -200,6 +200,14 @@ personalized learning and autofill, and runs behind `FLAG_SECURE`. A
 field's clear button sits *beside* the box on a television, never inside
 it. Off a television `TvTextField` is an ordinary `TextField`.
 
+Search's field also `typesInPlace`: while it has focus a hardware
+keyboard's characters and Backspace change it directly, each announced to
+`onChanged` as a phone's keystroke is, so the results follow the typing
+through the same pause. The remote never reaches that path -- the D-pad,
+select, Enter and Back carry no character -- and whether a keyboard paired
+with a television delivers its keys to Flutter this way is untested on a
+device.
+
 ## Telling the television what rate the film is
 
 A 23.976 fps film on a 59.94 Hz output lands on a 3:2 cadence, which is the
