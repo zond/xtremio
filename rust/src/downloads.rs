@@ -47,6 +47,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -167,6 +168,9 @@ pub struct DownloadsState {
     event_sink: RwLock<Option<EventSink>>,
     /// Whether a [`ticker`] task is running for this state.
     ticking: Mutex<bool>,
+    /// How many [`reconcile_pins_in`] runs are under way for this state.
+    /// Read by [`is_reconciling`] and nothing else.
+    reconciling: AtomicUsize,
 }
 
 /// A poisoned lock only means a previous holder panicked; the value behind
@@ -2727,6 +2731,35 @@ pub fn is_ticking() -> bool {
     crate::state::current().is_some_and(|app| *app.downloads.ticking())
 }
 
+/// Whether a [`reconcile_pins_in`] is still running -- the one `core_init`
+/// starts behind itself, above all. Nothing on the FFI surface needs it;
+/// the integration test does, because the re-pin landing on the server is
+/// not the end of that work: once the pin answers, the row is asked again
+/// whether it still wants the file, and a registry changed in between has
+/// the pin released (the window [`repin_unfinished_with`] closes). A test
+/// that waits for the pin alone and then rewrites the file races that
+/// question.
+pub fn is_reconciling() -> bool {
+    crate::state::current().is_some_and(|app| app.downloads.reconciling.load(Ordering::SeqCst) > 0)
+}
+
+/// Counts one [`reconcile_pins_in`] run for [`is_reconciling`], however it
+/// returns.
+struct Reconciling<'a>(&'a AtomicUsize);
+
+impl<'a> Reconciling<'a> {
+    fn start(count: &'a AtomicUsize) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(count)
+    }
+}
+
+impl Drop for Reconciling<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// True while any entry of `app`'s registry is neither complete nor paused —
 /// an errored one counts, because peers can still turn up and the poll is
 /// one cheap call.
@@ -3023,6 +3056,7 @@ pub fn repin_drive_downloads() {
 /// re-pinned only to be dropped again; the pins of swapped-out files last,
 /// once the re-pin has put the swap's new pin in place.
 pub fn reconcile_pins_in(app: &Arc<AppState>) {
+    let _running = Reconciling::start(&app.downloads.reconciling);
     finish_pending_removals_in(app);
     let items = match load_in(app) {
         Ok(registry) => registry.items,

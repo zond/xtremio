@@ -949,6 +949,22 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         assert!(Instant::now() < deadline, "init never re-pinned: {pins:?}");
         std::thread::sleep(Duration::from_millis(100));
     }
+    // And the boot's work finished, not only its pin: once the pin answers,
+    // the re-pin asks the registry once more whether a row still wants the
+    // file, and releases it -- bytes and all -- if none does. The registry
+    // is rewritten right below, so a check still to come would find no
+    // row and take the pin the rest of this test starts from. On a slow
+    // runner the server's reconciler had stopped the unpinned torrent, the
+    // pin restarted it, and the poll above saw the pin inside that restart.
+    // The pin is only ever issued from inside that work, so having seen it
+    // means the count below has already been taken.
+    while xtremio_core::downloads::is_reconciling() {
+        assert!(
+            Instant::now() < deadline,
+            "the boot's reconciliation never finished"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
 
     // A refresh that finds work re-arms the progress poll. With nothing
     // unfinished on record the ticker stops; the next list -- which flips an
