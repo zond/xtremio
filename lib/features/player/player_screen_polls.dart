@@ -246,11 +246,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
         : null;
     if (cadence == null) {
       _pauseTorrentStats();
-      // Nobody wants numbers, but the cast check still wants the name of the
-      // file the server opened, and a torrent that loaded before the first
-      // poll came back has never been told one: this is the one ask that
-      // would otherwise never happen. Not in the background, which asks the
-      // server for nothing; coming back runs this again.
+      // Nobody wants numbers, but the subtitle memory still wants the name
+      // of the file the server opened (the release a shift is keyed on),
+      // and a torrent that loaded before the first poll came back has never
+      // been told one: this is the one ask that would otherwise never
+      // happen. Not in the background, which asks the server for nothing;
+      // coming back runs this again.
       if (!_appHidden && _serverFilename == null) _pollTorrentStats();
       return;
     }

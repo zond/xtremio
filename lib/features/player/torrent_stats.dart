@@ -188,7 +188,8 @@ final class TorrentStats {
   /// to `""` and only fills it once the torrent's metadata lists files.
   ///
   /// It is the one answer about *this file* that does not come from an
-  /// addon, which is why the cast check reads it before
+  /// addon, which is why the player's best name for the file
+  /// (`castFilename`, the subtitle memory's release key) reads it before
   /// `behaviorHints.filename`: the addon says what it believes it linked
   /// to, this is what was opened.
   final String? streamName;

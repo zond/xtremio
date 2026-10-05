@@ -20,8 +20,8 @@ abstract final class DevStreams {
     'name': 'Big Buck Bunny (torrent)',
     'description': 'Public torrent via the embedded stream-server',
     // A real property of this torrent: the largest file the server picks is
-    // `Big Buck Bunny.mp4`. Saying so lets the cast check judge the stream
-    // from the first frame instead of waiting for the server's own answer.
+    // `Big Buck Bunny.mp4`. The name the subtitle memory keys a release on;
+    // the cast check reads what mpv reports, not this.
     'behaviorHints': {'filename': 'Big Buck Bunny.mp4'},
   };
 

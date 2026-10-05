@@ -166,9 +166,8 @@ class PlaybackStats {
   final String? videoCodec;
 
   /// `audio-codec-name`: the bare codec, e.g. `aac`, `eac3`, `dts`. Not
-  /// shown anywhere -- it is what the cast compatibility check asks mpv
-  /// about the audio, the one place the file itself can be believed over
-  /// what a release name claims.
+  /// shown anywhere -- with [fileFormat] and [videoCodec] it is all the
+  /// cast compatibility check believes about a file.
   final String? audioCodec;
 
   /// `file-format`: the reader that opened the file, which names a family

@@ -241,11 +241,10 @@ Future<DriveOpened> openLinkedDriveFile({
 /// leave five linked files looking identical on screen.
 ///
 /// `behaviorHints.filename` is the same name and is not decoration: the
-/// stream URL has no extension on it, the cast check reads the container
-/// off a filename or refuses the cast outright (`castFilename`,
-/// `CastCompatibility`), and it is the name the player registers the file
-/// under. The name is Drive's own
-/// and carries the real suffix.
+/// stream URL has no extension on it, it is the release the subtitle
+/// memory keys on (`castFilename`), and it is the name the player
+/// registers the file under. The name is Drive's own and carries the real
+/// suffix. (The cast check reads none of it: mpv says what the file is.)
 Map<String, dynamic> driveStreamJson({
   required LinkedDriveFile file,
   required DriveFilePlayable playable,

@@ -753,8 +753,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// The name of the file the server says it opened for this torrent
   /// ([TorrentStats.streamName]), kept from the last answer that carried
-  /// one. It is what the cast check judges the container by, above the
-  /// addon's `behaviorHints.filename`: the addon claims, the server serves.
+  /// one. It names the video release the subtitle memory keys a shift on
+  /// ([castFilename]), above the addon's `behaviorHints.filename`: the
+  /// addon claims, the server serves. The cast check does not read it:
+  /// mpv says what a file is.
   ///
   /// Sticky on purpose. [_torrentStats] describes a moment and is dropped
   /// when it would state the past as the present, but which file this is

@@ -129,9 +129,9 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// The receivers, and Stop when one of them has the stream.
   ///
-  /// mpv is sampled while the sheet is up, because the compatibility check
-  /// would rather hear what the decoder is actually reading than what the
-  /// release name claims. The subscription is what makes the engine sample
+  /// mpv is sampled while the sheet is up, because what it is reading is
+  /// the only thing the compatibility check believes about the file: until
+  /// its first sample lands a cast is a "not yet". The subscription is what makes the engine sample
   /// at all, so it is held for exactly as long as the list is open.
   Future<void> _openCastSheet() async {
     _castStatsSubscription = _engine?.stats.listen((stats) {
