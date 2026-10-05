@@ -218,15 +218,22 @@ fn slots(file: &[u8]) -> Vec<(usize, usize)> {
     let first_offset = u64::from_be_bytes(body[20..28].try_into().unwrap()) as usize;
     let count = u16::from_be_bytes(body[30..32].try_into().unwrap()) as usize;
     let mut start = at + size + first_offset;
-    (0..count)
-        .map(|k| {
-            let size = (u32::from_be_bytes(body[32 + k * 12..36 + k * 12].try_into().unwrap())
-                & 0x7fff_ffff) as usize;
-            let slot = (start, size);
-            start += size;
-            slot
-        })
-        .collect()
+    let mut slots: Vec<(usize, usize)> = Vec::new();
+    for k in 0..count {
+        let entry = 32 + k * 12;
+        let size =
+            (u32::from_be_bytes(body[entry..entry + 4].try_into().unwrap()) & 0x7fff_ffff) as usize;
+        let duration = u32::from_be_bytes(body[entry + 4..entry + 8].try_into().unwrap());
+        // A slot is two references: its opening `moof`, which carries its
+        // duration, and the rest of it, which lasts nothing (`sidx_slots`
+        // in tests/rendition.rs says why).
+        match slots.last_mut() {
+            Some(slot) if duration == 0 => slot.1 += size,
+            _ => slots.push((start, size)),
+        }
+        start += size;
+    }
+    slots
 }
 
 fn stream_start(file: &str, kind: &str) -> f64 {

@@ -31,6 +31,14 @@ use film::{
 
 /// Three-second segments over the 13 s film ([`film::FILM_SECONDS`]).
 const SEGMENT_MS: u64 = 3000;
+/// How long before its key is shown a slot begins, in seconds: a slot's
+/// picture decodes half a second before it is shown, so that no sample's
+/// composition offset is negative (stream-server `mux::DECODE_AHEAD_US`),
+/// and a demuxer picks a slot by where its decode times begin. A seek to
+/// the last half second before a key therefore lands on that key -- this
+/// much after the time asked for, at most -- and any other on the key at
+/// or before it.
+const SLOT_EARLY_S: f64 = 0.5;
 /// mpv's duration of it: the container's, from the AAC priming on.
 const DURATION_MS: u64 = 13_021;
 /// The long films: six minutes, so a seek to 5:00 is a jump.
@@ -195,14 +203,12 @@ impl Layout {
         assert_eq!(kinds, [b"ftyp", b"moov", b"sidx"]);
         let (_, sidx, sidx_size) = top[2];
         let body = &file[sidx + 8..sidx + sidx_size];
-        let count = u16::from_be_bytes([body[30], body[31]]) as usize;
         let mut offset = sidx + sidx_size;
-        let slots = (0..count)
-            .map(|k| {
-                let at = 32 + k * 12;
-                let size = u32::from_be_bytes(body[at..at + 4].try_into().unwrap()) as usize;
-                let slot = (offset, size);
-                offset += size;
+        let slots = sidx_slots(body)
+            .into_iter()
+            .map(|size| {
+                let slot = (offset, size as usize);
+                offset += size as usize;
                 slot
             })
             .collect();
@@ -221,14 +227,33 @@ impl Layout {
     /// It opens with its `moof` -- no `styp` -- where the slot opens at its
     /// `sidx` label (a mirrored layout's): FFmpeg read a `moof` a `styp`
     /// kept apart from its `sidx` reference twice, and lost its index's
-    /// order on a seek back.
+    /// order on a seek back. **And it is a run of `moof` + `mdat` pairs**,
+    /// half a second of picture with its sound in each (stream-server
+    /// `media_segment`): with a whole slot's picture ahead of its sound, a
+    /// receiver's demuxer hopped between the two, a request a hop. **The
+    /// first `moof` is padded to 8 KiB**, which is the slot's first `sidx`
+    /// reference: what a seek reads, after which it goes on into the rest
+    /// of this slot and not the next one.
     fn fragment<'a>(&self, file: &'a [u8], n: usize) -> &'a [u8] {
         let (offset, size) = self.slots[n];
         let slot = &file[offset..offset + size];
         let parts = boxes(slot);
         let kinds: Vec<&[u8; 4]> = parts.iter().map(|(kind, ..)| kind).collect();
-        assert_eq!(kinds, [b"moof", b"mdat", b"free"], "slot {n}");
-        &slot[..parts[2].1]
+        let (pad, chunks) = kinds.split_last().expect("a slot holds boxes");
+        assert_eq!(*pad, b"free", "slot {n} ends with its padding: {kinds:?}");
+        assert!(
+            matches!(chunks, [moof, pad, mdat, ..]
+                if *moof == b"moof" && *pad == b"free" && *mdat == b"mdat"),
+            "slot {n} opens moof, free, mdat: {kinds:?}"
+        );
+        assert_eq!(parts[2].1, 8192, "slot {n}'s first mdat begins 8 KiB in");
+        assert!(
+            chunks[3..]
+                .chunks(2)
+                .all(|pair| matches!(pair, [moof, mdat] if *moof == b"moof" && *mdat == b"mdat")),
+            "slot {n} goes on in moof + mdat pairs: {kinds:?}"
+        );
+        &slot[..parts[parts.len() - 1].1]
     }
 }
 
@@ -255,11 +280,28 @@ fn sidx_sizes(head: &[u8]) -> Vec<u32> {
         .iter()
         .find(|(kind, ..)| kind == b"sidx")
         .expect("a sidx in the first bytes");
-    let body = &head[sidx + 8..];
+    sidx_slots(&head[sidx + 8..])
+}
+
+/// A `sidx` body's slots, each its size. A slot may be two references:
+/// its opening `moof`, which carries the slot's duration, and then the
+/// rest of it, which lasts nothing -- so a demuxer that has read the
+/// opening goes on into the slot's own rest and not into the next slot
+/// (stream-server `docs/design/renditions.md`). A reference that lasts
+/// nothing is the rest of the slot before it.
+fn sidx_slots(body: &[u8]) -> Vec<u32> {
     let count = u16::from_be_bytes([body[30], body[31]]) as usize;
-    (0..count)
-        .map(|k| u32::from_be_bytes(body[32 + k * 12..36 + k * 12].try_into().unwrap()))
-        .collect()
+    let mut slots: Vec<u32> = Vec::new();
+    for k in 0..count {
+        let at = 32 + k * 12;
+        let size = u32::from_be_bytes(body[at..at + 4].try_into().unwrap()) & 0x7fff_ffff;
+        let duration = u32::from_be_bytes(body[at + 4..at + 8].try_into().unwrap());
+        match slots.last_mut() {
+            Some(slot) if duration == 0 => *slot += size,
+            _ => slots.push(size),
+        }
+    }
+    slots
 }
 
 fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
@@ -542,11 +584,14 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
     let dts: Vec<i64> = video.iter().map(|packet| packet.dts_ms.unwrap()).collect();
     assert!(dts.windows(2).all(|pair| pair[0] < pair[1]), "{dts:?}");
 
-    // **Each slot begins at the first indexed key at or after N x T**, each
-    // a different key -- keys every 2 s, slots every 3 s: 0, 4, 6, 10, 12
-    // -- and its slot is that key's span of the source plus the headroom
-    // (8 KiB and a 64th), the key's position moved from its cluster to its
-    // block by the cue.
+    // **Each slot begins at an indexed key**: the first at or after each
+    // second, each a different key, whatever segment length the spec asked
+    // for -- keys every 2 s, so every one of them: 0, 2, ... 12. A seek
+    // reads only the slot's first half second, so the slot's start has to
+    // be the key the seek wants (stream-server `layout::MIRROR_GRID_US`).
+    // Its slot is that key's span of the source plus the headroom (8 KiB
+    // and a 64th), the key's position moved from its cluster to its block
+    // by the cue.
     let keys: Vec<(i64, u64)> = source_video
         .iter()
         .filter(|packet| packet.key)
@@ -556,7 +601,7 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
     for n in 1.. {
         let Some(key) = keys
             .iter()
-            .find(|(pts, _)| *pts >= n * SEGMENT_MS as i64 && *pts > cuts.last().unwrap().0)
+            .find(|(pts, _)| *pts >= n * 1000 && *pts > cuts.last().unwrap().0)
         else {
             break;
         };
@@ -566,25 +611,52 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
     }
     assert_eq!(
         cuts.iter().map(|(pts, _)| pts / 1000).collect::<Vec<_>>(),
-        vec![0, 4, 6, 10, 12]
+        vec![0, 2, 4, 6, 8, 10, 12]
     );
     assert_eq!(layout.slots.len(), cuts.len());
     let film_len = std::fs::metadata(&film)?.len();
     for (n, (pts, pos)) in cuts.iter().enumerate() {
         let fragment = layout.fragment(&whole, n);
+        // **A slot decodes from half a second before its key is shown**
+        // (all but the film's first, which has nothing before it): with
+        // every sample's offset written that much smaller, none is ever
+        // below it, and FFmpeg -- which delays the whole picture by the
+        // most negative offset it has read -- delays it by the same
+        // amount from the first packet to the last.
+        let ahead = if n == 0 { 0 } else { 500 * 90 };
         assert_eq!(
             video_tfdt(fragment),
-            Some(*pts as u64 * 90),
+            Some(*pts as u64 * 90 - ahead),
             "slot {n}'s tfdt"
         );
         let end = cuts.get(n + 1).map_or(film_len, |(_, pos)| *pos);
         let span = end - pos;
-        let mirrored = span + 8 * 1024 + span / 64;
-        let size = layout.slots[n].1 as u64;
+        // And room for its chunks' headers -- 160 bytes for each half
+        // second the segment lasts, and two more -- and for the 8 KiB its
+        // first `moof` is padded to (stream-server
+        // `layout::interleave_room`).
+        let until = cuts.get(n + 1).map_or(DURATION_MS as i64, |(pts, _)| *pts);
+        let chunks = (until - pts) as u64 / 500 + 2;
+        let mirrored = span + 8 * 1024 + span / 64 + chunks * 160 + 8192;
+        // And every slot but the last runs on to the 32 KiB boundary the
+        // next begins on: the block Chrome asks a seek's byte in is then
+        // that slot's own (stream-server `layout::SLOT_ALIGN`).
+        const BLOCK: u64 = 32 * 1024;
+        let (offset, size) = (layout.slots[n].0 as u64, layout.slots[n].1 as u64);
+        let last = n + 1 == cuts.len();
+        let lengthened = if last {
+            mirrored
+        } else {
+            let end = offset + mirrored;
+            mirrored + (BLOCK - end % BLOCK) % BLOCK
+        };
         assert!(
-            size.abs_diff(mirrored) <= 32,
+            size.abs_diff(lengthened) <= 32 + if last { 0 } else { BLOCK },
             "slot {n} is {size} bytes, the source's span mirrored is {mirrored}"
         );
+        if !last {
+            assert_eq!((offset + size) % BLOCK, 0, "slot {n} ends on a block");
+        }
     }
 
     // **And it decodes**: every packet, no error, read as the one file it
@@ -651,7 +723,15 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
         let mirrored = container == Container::Matroska;
         assert_eq!(indexes, if mirrored { 1 } else { 2 }, "{file}");
         let sizes = sidx_sizes(&head);
-        assert_eq!(sizes.len(), LONG_SECONDS as usize / 6, "{file}");
+        // Mirrored, a slot per key (every 2.8 s); estimated, one per
+        // segment the spec asked for.
+        let slots = if mirrored {
+            let (_, packets) = probe(path.to_str().unwrap(), "v");
+            packets.iter().filter(|packet| packet.key).count()
+        } else {
+            LONG_SECONDS as usize / 6
+        };
+        assert_eq!(sizes.len(), slots, "{file}");
         let middle = &sizes[1..sizes.len() - 1];
         let equal = middle.iter().max().unwrap() - middle.iter().min().unwrap() <= 1;
         assert_eq!(equal, container != Container::Matroska, "{file}: {sizes:?}");
@@ -672,23 +752,46 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
             300.0 - 6.0 - 10.0
         };
         assert!(
-            (earliest..=300.0).contains(&landed),
+            (earliest..=300.0 + SLOT_EARLY_S).contains(&landed),
             "{file}: the seek landed at {landed} s"
         );
         // **Every stream sought lands in that slot**: `ffmpeg -ss` seeks the
         // sound too, to the sync sample's time; with no sound at or before
         // it in the slot, it went back to what it read at the start.
-        // So: never back. Mirrored, the start and the jump and nothing
-        // else; estimated (slots labelled a GOP late), on forward from the
-        // slot before to the sync sample.
+        // So: never back to it. Mirrored, the start and the jump and
+        // nothing else; estimated (slots labelled a GOP late), on forward
+        // from the slot before to the sync sample.
+        //
+        // **An estimated slot is read twice at its head, and that is not
+        // going back**: it keeps its `styp`, so FFmpeg parses the slot's
+        // first `moof` a second time (the double entry the mirrored layout
+        // avoids), and with the `moof` now padded to 8 KiB its read buffer
+        // has moved past it -- one more request, from a few KiB before
+        // where the jump landed. Known and costed: one small request a
+        // seek, on films with no index. What must not happen is a request
+        // from before the slot the jump went to.
         let ranges = ffmpeg_seek_ranges(&url, 60);
-        assert!(
-            ranges.windows(2).all(|pair| pair[1] > pair[0]) && (!mirrored || ranges.len() == 2),
-            "{file}: ffmpeg -ss 60 asked {ranges:?}"
-        );
+        if mirrored {
+            assert!(
+                ranges.len() == 2 && ranges[1] > ranges[0],
+                "{file}: ffmpeg -ss 60 asked {ranges:?}"
+            );
+        } else {
+            const REPARSE: u64 = 64 * 1024;
+            let jump = ranges[1];
+            assert!(
+                jump > ranges[0]
+                    && ranges[1..].iter().all(|at| at + REPARSE > jump)
+                    && ranges[1..]
+                        .windows(2)
+                        .all(|pair| pair[1] + REPARSE > pair[0]),
+                "{file}: ffmpeg -ss 60 asked {ranges:?}"
+            );
+        }
         // **Seeks forward, then back to what was not read** (zond's TV:
         // 1:55, 7:05, 8:41, then 0:43, which sat buffering): mirrored,
-        // each lands on the key at or before it, a slot back at most.
+        // each lands on its slot's key -- the key at or before it, a GOP
+        // back at most, or the key just after it ([`SLOT_EARLY_S`]).
         // With a styp before each moof FFmpeg landed the seek back at 16 s,
         // the end of what it read first. Estimated slots keep the styp
         // (FFmpeg 4.4 would time them by their late labels) and still do.
@@ -698,7 +801,7 @@ fn h264_and_hevc_films_are_repackaged_into_files_a_receiver_seeks_in() -> anyhow
             for (at, landed) in seeks.iter().zip(&landed) {
                 let at = f64::from(*at);
                 assert!(
-                    (at - 6.0 - 2.8..=at).contains(landed),
+                    (at - 2.8..=at + SLOT_EARLY_S).contains(landed),
                     "{file}: seeks {seeks:?} landed at {landed:?}"
                 );
             }
@@ -824,8 +927,8 @@ fn hevc_films(
     assert!(keys > 3, "keys every 2 s: {keys}");
     let dts: Vec<i64> = video.iter().map(|packet| packet.dts_ms.unwrap()).collect();
     assert!(dts.windows(2).all(|pair| pair[0] < pair[1]), "{dts:?}");
-    // A slot per key on the 3 s grid, as for the H.264 film.
-    assert_eq!(layout.slots.len(), 5);
+    // A slot per key, as for the H.264 film.
+    assert_eq!(layout.slots.len(), keys);
 
     decodes(out_path);
     for n in 0..layout.slots.len() {
@@ -856,7 +959,7 @@ fn hevc_films(
         "ffprobe made {requests} requests to seek to 5:00"
     );
     assert!(
-        (297.0..=300.0).contains(&landed),
+        (297.0..=300.0 + SLOT_EARLY_S).contains(&landed),
         "the seek landed at {landed} s"
     );
     let ranges = ffmpeg_seek_ranges(&url, 60);
@@ -866,7 +969,7 @@ fn hevc_films(
     for (at, landed) in seeks.iter().zip(&landed) {
         let at = f64::from(*at);
         assert!(
-            (at - 6.0 - 2.8..=at).contains(landed),
+            (at - 2.8..=at + SLOT_EARLY_S).contains(landed),
             "seeks {seeks:?} landed at {landed:?}"
         );
     }
