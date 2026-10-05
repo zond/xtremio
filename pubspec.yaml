@@ -24,7 +24,7 @@ dependencies:
   # The one allocation the forceful destroy needs: an argv for libmpv's
   # `mpv_command_async`, which is reached through media_kit's own handle.
   ffi: ^2.2.0
-  flutter_chrome_cast: ^1.4.8
+  flutter_chrome_cast: ^1.5.0
   # Where a Google Drive pairing's refresh token is kept. The one dependency
   # here that is a different store on every platform: on Android a
   # preferences file of AES-GCM ciphertext whose key is wrapped in the

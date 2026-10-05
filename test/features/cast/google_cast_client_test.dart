@@ -1,9 +1,12 @@
+import 'package:flutter_chrome_cast/_remote_media_client/android_remote_media_client_method_channel.dart';
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
 import 'package:flutter_chrome_cast/models.dart';
 
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/google_cast_client.dart';
@@ -37,6 +40,8 @@ final media = CastMedia(
 /// which is exactly why the one thing `load` decides on its own has to be
 /// decided before that check.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('waiting for the session before anything is loaded', () {
     // A LOAD sent before the session is up reaches nobody: the receiver
     // launches its application, comes up with no media on it, and reports
@@ -288,5 +293,86 @@ void main() {
         expect(CastPicture.fromMap(report), isNull, reason: '$report');
       }
     });
+  });
+  group('the statuses a Default Media Receiver sends', () {
+    // What the Cast SDK on Android hands the plugin (`MediaStatus.toJson()`,
+    // which the plugin forwards as it is) for an MP4 cast to zond's
+    // Chromecast with Google TV, 2026-10-05. BUFFERING carries no tracks;
+    // once it plays, the receiver lists the video track it found in the
+    // file -- with no `trackContentType`, since it is in-band. Up to
+    // flutter_chrome_cast 1.4.8 that track failed to parse, the method
+    // call handler swallowed the error, and no status from PLAYING on ever
+    // reached the stream: the phone's log said "buffering" and never
+    // "playing".
+    Map<String, Object?> status(String state, {bool tracks = false}) => {
+      'mediaSessionId': 1,
+      'playbackRate': 1,
+      'playerState': state,
+      'currentTime': 12.5,
+      'supportedMediaCommands': 274447,
+      'volume': {'level': 1.0, 'muted': false},
+      'repeatMode': 'REPEAT_OFF',
+      'media': {
+        'contentId': 'http://192.168.1.20:39271/cast/token',
+        'streamType': 'BUFFERED',
+        'contentType': 'video/mp4',
+        'duration': 5400.0,
+        if (tracks)
+          'tracks': [
+            {'trackId': 1, 'type': 'VIDEO'},
+          ],
+      },
+      'activeTrackIds': '[]',
+    };
+
+    /// [json] sent over the plugin's own channel, the way its Kotlin does.
+    Future<void> fromAndroid(Map<String, Object?> json) async {
+      const channel = MethodChannel(
+        'com.felnanuke.google_cast.remote_media_client',
+      );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      await messenger.handlePlatformMessage(
+        channel.name,
+        channel.codec.encodeMethodCall(
+          MethodCall('onMediaStatusChanged', jsonEncode(json)),
+        ),
+        (_) {},
+      );
+    }
+
+    test(
+      'PLAYING with an in-band video track arrives, and is playing',
+      () async {
+        final lines = captureDiagnostics();
+        final plugin = GoogleCastRemoteMediaClientAndroidMethodChannel();
+        final client = GoogleCastClient();
+        final seen = <CastStatus>[];
+        client.status.listen(seen.add);
+        final relay = plugin.mediaStatusStream.listen(client.onMediaStatus);
+
+        await fromAndroid(status('BUFFERING'));
+        await pumpEventQueue();
+        await fromAndroid(status('PLAYING', tracks: true));
+        await pumpEventQueue();
+        await fromAndroid(status('PAUSED', tracks: true));
+        await pumpEventQueue();
+
+        expect(seen.map((status) => status.state), [
+          CastPlayerState.buffering,
+          CastPlayerState.playing,
+          CastPlayerState.paused,
+        ]);
+        expect(seen.last.duration, const Duration(minutes: 90));
+        expect(lines, [
+          'info cast the receiver says nothing loaded',
+          'info cast the receiver says buffering',
+          'info cast the receiver says playing',
+          'info cast the receiver says paused',
+        ]);
+        await relay.cancel();
+        client.dispose();
+      },
+    );
   });
 }

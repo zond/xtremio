@@ -240,7 +240,7 @@ release build, and fails: getting past it takes a change to each of two
 upstream dependencies, and this project carries no forks for a platform it
 does not ship. With both of these it compiles, and nothing else is needed:
 
-1. **The Cast plugin's iOS floor.** `flutter_chrome_cast` 1.4.8 declares
+1. **The Cast plugin's iOS floor.** `flutter_chrome_cast` 1.5.0 declares
    iOS 15 in its `Package.swift` and podspec, but the GoogleCast SDK it
    pulls in requires iOS 16, so Xcode refuses the plugin's Swift package
    target. The project's own minimum is already 16 (`ios/Podfile`,

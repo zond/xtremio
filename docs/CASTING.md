@@ -498,6 +498,21 @@ than reading as the start of the film). The core hears the same
 `TimeChanged`, `PausedChanged` and `Ended` local playback sends, so the
 library and continue-watching do not notice.
 
+**On Android all of that rests on `flutter_chrome_cast` 1.5.0**, which
+`pubspec.yaml` requires. Once a Default Media Receiver plays, its status
+lists the video track it found in the file, with no `trackContentType`
+(`"tracks": [{"trackId": 1, "type": "VIDEO"}]`, measured on zond's
+Chromecast with Google TV; the BUFFERING before it lists none). Up to
+1.4.8 the plugin's Dart parser required that field, the method-call
+handler swallowed the error, and no status carrying the track -- PLAYING,
+PAUSED, a rebuffer, and any idle that still carries the media -- reached
+the app: the log said "the receiver says buffering" and never "playing", the
+play/pause button stayed on pause (so it could not resume), the core never
+heard a pause, the direct-cast trial never closed, and the no-picture check
+never ran. The widget tests could not see it, since their fake reports
+statuses directly; `google_cast_client_test.dart` sends the measured shape
+through the plugin's own channel.
+
 **Casts do not binge**, by decision: `Ended` from the receiver shows no
 up-next card and never starts the next episode, whatever `bingeWatching`
 says. The viewer is at the television, not at the phone to cancel a

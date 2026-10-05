@@ -59,7 +59,13 @@ dependencies {
 
 android {
     namespace = "com.zond.xtremio"
-    compileSdk = flutter.compileSdkVersion
+    // Above Flutter's default (36): flutter_chrome_cast 1.5.0 depends on
+    // permission_handler 13, whose Android half is compiled against API 37
+    // and requires every module that depends on it to be too (AGP's AAR
+    // metadata check). Only what the app compiles against; targetSdk, the
+    // runtime behaviour it opts into, stays Flutter's. AGP 9.1.0 warns that
+    // it was tested up to 36.1; 9.2 needs Gradle 9.4.1.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
