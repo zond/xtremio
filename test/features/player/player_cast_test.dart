@@ -633,6 +633,43 @@ void main() {
       expect(cast.loads.single.$1.contentType, 'video/mp4');
     });
 
+    testWidgets('what mpv read of the last stream is not this one', (
+      tester,
+    ) async {
+      // The player moves on to another stream (the next episode) and mpv
+      // has said nothing of the new file yet: the MP4 it reported for the
+      // last one would be a guess about this one.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      await tester.tap(castButton);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('cast-device-${livingRoom.id}')),
+        findsNothing,
+      );
+
+      final next = Map<String, dynamic>.from(harness.fixture);
+      final stream = Map<String, dynamic>.from(next['stream'] as Map);
+      final content = List<Object?>.from(stream['content'] as List);
+      content[0] = {
+        ...content[0]! as Map<String, dynamic>,
+        'streaming_url': 'http://127.0.0.1:39661/next/0?',
+      };
+      next['stream'] = {...stream, 'content': content};
+      harness.engine.report = null;
+      harness.core.setState(CoreField.player, next);
+      await tester.pumpAndSettle();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.text('Still working out what this file is'), findsOneWidget);
+      expect(cast.loads, isEmpty);
+    });
+
     group('mpv outranks any name', () {
       testWidgets('a file named .mkv that mpv reads as an MP4 is an MP4', (
         tester,

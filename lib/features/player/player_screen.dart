@@ -904,8 +904,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   String? _castNote;
 
   /// The last sample mpv gave for the open media, taken while the cast
-  /// sheet is up: the one place the compatibility check can hear what the
-  /// file actually is instead of what its name claims.
+  /// sheet is up: all the compatibility check believes about what the file
+  /// is (its reader and its codecs). Dropped when the screen moves on to
+  /// another stream, since it describes the file mpv was reading then.
   PlaybackStats? _lastStats;
   StreamSubscription<PlaybackStats>? _castStatsSubscription;
 
@@ -1240,6 +1241,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // Another stream, so what the server said of the last one is not this
     // one's, and a receiver handed the last one is not handed this one.
     _mediaResolution = null;
+    // Nor is what mpv read of it: the cast check believes nothing else
+    // about a file, so a report about the last one would be a guess about
+    // this one. Until mpv reports again a cast is a "not yet".
+    _lastStats = null;
     unawaited(_unpublishCast());
     _autoPickedSubtitles = false;
     _autoPickRank = null;
