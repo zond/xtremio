@@ -185,9 +185,25 @@ extension _PlayerCasting on _PlayerScreenState {
     // below -- the check, the publication, the load -- is about this.
     final local = _castSource;
     if (cast == null || local == null || !_stillOurs) return;
+    // Which receiver this is decides what it decodes: its hardware when
+    // that can be found out silently, else what every model announcing its
+    // name has in common.
+    final codename = await cast.receiverCodename(device);
+    if (!_stillOurs) return;
+    final receiver = ReceiverTable.of(
+      codename: codename,
+      announced: device.model,
+    );
+    DiagnosticsLog.info(
+      'player',
+      codename == null
+          ? 'the receiver was not identified: judged by its announced name'
+          : 'the receiver is a $codename',
+    );
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,
+      receiver: receiver,
       // mpv's word on the file it is reading, and the only word taken: no
       // name, no release's claim. Null until its first report, which the
       // check answers with a "not yet".

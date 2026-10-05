@@ -562,6 +562,119 @@ void main() {
       });
     });
 
+    group('the receiver decides what it decodes', () {
+      const hevc4k = PlaybackStats(
+        fileFormat: 'mkv',
+        videoCodec: 'hevc (Main 10)',
+        audioCodec: 'eac3',
+        width: 3840,
+        height: 2160,
+        containerFps: 23.976,
+      );
+
+      PlayerHarness hevcHarness(FakeCastClient cast) {
+        final harness = castHarness(cast: cast, mpv: hevc4k);
+        harness.mediaIds.renditionsAvailable = true;
+        return harness;
+      }
+
+      testWidgets('an HEVC film is a rendition on a receiver identified as '
+          'a Chromecast with Google TV (4K)', (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom])
+          ..codenames['device-1'] = 'sabrina';
+        final harness = hevcHarness(cast);
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+
+        await castTo(tester, livingRoom);
+
+        expect(cast.codenameAsks, ['device-1']);
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(harness.mediaIds.renditions, hasLength(1));
+        expect(cast.loads, hasLength(1));
+      });
+
+      testWidgets('the same name, not identified: refused, saying what every '
+          '"Chromecast" plays', (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final harness = hevcHarness(cast);
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+
+        await castTo(tester, livingRoom);
+
+        expect(
+          find.text(
+            'Every receiver that calls itself "Chromecast" plays H.264 video; '
+            "this film's video is HEVC. Casting it would need conversion, "
+            'which this app cannot do yet.',
+          ),
+          findsOneWidget,
+        );
+        expect(cast.connectAttempts, isEmpty);
+        expect(harness.mediaIds.renditions, isEmpty);
+      });
+
+      testWidgets('a 4K film on a receiver identified as 1080p is refused '
+          'with its size', (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom])
+          ..codenames['device-1'] = 'boreal';
+        final harness = hevcHarness(cast);
+        await harness.pump(tester);
+        harness.engine.emitDuration(const Duration(minutes: 90));
+        await pumpEvents(tester);
+
+        await castTo(tester, livingRoom);
+
+        expect(
+          find.textContaining(
+            "plays HEVC up to 1920x1080 at 60 frames a second; this film's "
+            'picture is 3840x2160',
+          ),
+          findsOneWidget,
+        );
+        expect(cast.loads, isEmpty);
+      });
+
+      testWidgets('a receiver whose name the table does not know gets the '
+          'most conservative row', (tester) async {
+        useWideViewport(tester);
+        const tv = CastDevice(
+          id: 'device-9',
+          name: 'Bedroom TV',
+          model: 'BRAVIA 4K VH2',
+        );
+        final cast = FakeCastClient(devices: const [tv]);
+        final harness = castHarness(
+          cast: cast,
+          mpv: const PlaybackStats(
+            fileFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+            videoCodec: 'h264 (High)',
+            audioCodec: 'aac',
+            width: 1920,
+            height: 1080,
+          ),
+        );
+        await harness.pump(tester);
+
+        await castTo(tester, tv);
+
+        expect(
+          find.textContaining(
+            'Every Cast receiver plays H.264 up to 1280x720 at 30 frames a '
+            'second',
+          ),
+          findsOneWidget,
+        );
+        expect(cast.loads, isEmpty);
+      });
+    });
+
     testWidgets('a stream the server will not publish is said so', (
       tester,
     ) async {

@@ -13,6 +13,7 @@ import '../cast/cast_client.dart';
 import '../cast/cast_compatibility.dart';
 import '../cast/cast_widgets.dart';
 import '../cast/direct_cast.dart';
+import '../cast/receiver_table.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';

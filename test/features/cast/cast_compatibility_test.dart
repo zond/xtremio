@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_compatibility.dart';
+import 'package:xtremio/features/cast/receiver_table.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 
 /// The torrent URL the server serves a stream from: no extension anywhere
@@ -39,12 +40,17 @@ PlaybackStats mkv({
   audioChannels: channels,
 );
 
+/// [CastCompatibility.of] for a Chromecast Ultra unless [receiver] says
+/// otherwise: the row that decodes H.264, HEVC, VP8 and VP9 alike, so the
+/// tests of the container and sound rules are not about the receiver.
 CastCompatibility check({
   Uri? url,
   PlaybackStats? stats,
   bool canRepackage = false,
+  ReceiverRow receiver = ReceiverTable.ultra,
 }) => CastCompatibility.of(
   url: url ?? torrentUrl,
+  receiver: receiver,
   stats: stats,
   canRepackage: canRepackage,
 );
@@ -454,8 +460,9 @@ void main() {
       expect(result.reason, CastRefusal.videoCodec);
       expect(
         result.explanation,
-        'A Chromecast decodes H.264, HEVC, VP8 or VP9 video; this stream is '
-        'AV1. Casting it would need conversion, which this app cannot do yet.',
+        'This receiver, a Chromecast Ultra, plays H.264, VP8, HEVC or VP9 '
+        "video; this film's video is AV1. Casting it would need conversion, "
+        'which this app cannot do yet.',
       );
     });
 
@@ -467,6 +474,121 @@ void main() {
         'A Chromecast decodes AAC or MP3 audio in an MP4 file; this stream is '
         'Dolby Digital Plus (E-AC3). Casting it would need conversion, which '
         'this app cannot do yet.',
+      );
+    });
+  });
+
+  group('what the receiver decodes is its row\'s to say', () {
+    final chromecastByName = ReceiverTable.of(announced: 'Chromecast');
+
+    test('HEVC is a rendition on a Chromecast with Google TV (4K)', () {
+      final result = check(
+        url: byId,
+        stats: mkv(video: 'hevc (Main 10)'),
+        canRepackage: true,
+        receiver: ReceiverTable.googleTv4k,
+      );
+      expect(result, isA<CastRendition>());
+    });
+
+    test('HEVC is refused where only the name is known, in so many words', () {
+      for (final stats in [mkv(video: 'hevc (Main)'), mp4(video: 'hevc')]) {
+        final result = check(
+          url: byId,
+          stats: stats,
+          canRepackage: true,
+          receiver: chromecastByName,
+        );
+        expect(refusalOf(result), CastRefusal.videoCodec, reason: '$stats');
+        expect(
+          (result as CastRefused).explanation,
+          'Every receiver that calls itself "Chromecast" plays H.264 video; '
+          "this film's video is HEVC. Casting it would need conversion, which "
+          'this app cannot do yet.',
+        );
+      }
+      // H.264 still goes, as it is and as a rendition.
+      expect(
+        check(url: byId, stats: mp4(), receiver: chromecastByName),
+        isA<CastReady>(),
+      );
+      expect(
+        check(
+          url: byId,
+          stats: mkv(),
+          canRepackage: true,
+          receiver: chromecastByName,
+        ),
+        isA<CastRendition>(),
+      );
+    });
+
+    test('a WebM the receiver does not decode is refused, not handed over', () {
+      final result = check(
+        stats: mkv(video: 'vp9', audio: 'opus'),
+        receiver: chromecastByName,
+      );
+      expect(refusalOf(result), CastRefusal.videoCodec);
+    });
+
+    test('a 4K film on a 1080p receiver is refused with its size', () {
+      const stats = PlaybackStats(
+        fileFormat: mkvFormat,
+        videoCodec: 'hevc (Main 10)',
+        audioCodec: 'eac3',
+        width: 3840,
+        height: 2160,
+        containerFps: 23.976,
+      );
+      final result = check(
+        url: byId,
+        stats: stats,
+        canRepackage: true,
+        receiver: ReceiverTable.googleTvHd,
+      );
+      expect(refusalOf(result), CastRefusal.pictureSize);
+      expect(
+        (result as CastRefused).explanation,
+        'This receiver, a Chromecast with Google TV (HD), plays HEVC up to '
+        "1920x1080 at 60 frames a second; this film's picture is 3840x2160 "
+        'at 24 frames a second. xtremio sends the picture as it is, so this '
+        'receiver cannot show it.',
+      );
+      // The same film on the 4K model.
+      expect(
+        check(
+          url: byId,
+          stats: stats,
+          canRepackage: true,
+          receiver: ReceiverTable.googleTv4k,
+        ),
+        isA<CastRendition>(),
+      );
+    });
+
+    test('a receiver that names two limits is held to either', () {
+      const fast = PlaybackStats(
+        fileFormat: mp4Format,
+        videoCodec: 'h264 (High)',
+        audioCodec: 'aac',
+        width: 1920,
+        height: 1080,
+        containerFps: 59.94,
+      );
+      final result = check(
+        stats: fast,
+        receiver: ReceiverTable.firstGeneration,
+      );
+      expect(
+        (result as CastRefused).explanation,
+        contains(
+          'plays H.264 up to 1280x720 at 60 frames a second, or 1920x1080 at '
+          '30 frames a second;',
+        ),
+      );
+      expect(
+        check(stats: fast, receiver: ReceiverTable.thirdGeneration),
+        isA<CastReady>(),
       );
     });
   });

@@ -1,5 +1,6 @@
 import '../../core/core.dart';
 import '../player/playback_stats.dart';
+import 'receiver_table.dart';
 
 /// Whether a stream can be handed to a receiver as it is, repackaged, or
 /// not at all, and why.
@@ -22,8 +23,9 @@ import '../player/playback_stats.dart';
 /// the answer is a "not yet" ([CastRefusal.pending]), never a guess.
 ///
 /// What a Chromecast plays without help is an MP4 or WebM file whose video
-/// is H.264, HEVC, VP8 or VP9 and whose audio is one the container is
-/// allowed to carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. mpv
+/// its model decodes ([ReceiverRow]: H.264 everywhere, HEVC, VP8, VP9 and
+/// AV1 on some, each up to a size and rate) and whose audio is one the
+/// container is allowed to carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. mpv
 /// names the reader that opened the file, and a reader opens a family:
 ///
 /// - **the MP4 family** (`mov,mp4,m4a,3gp,3g2,mj2`: MP4, M4V, QuickTime)
@@ -70,8 +72,15 @@ sealed class CastCompatibility {
   /// The result of judging [url] by [stats], mpv's last report while
   /// playing it here; null, or one that does not name the file's format
   /// and its video yet, is a "not yet".
+  ///
+  /// [receiver] is what the receiver being cast to decodes
+  /// ([ReceiverTable.of]): a film whose picture it does not decode, or
+  /// decodes only smaller or slower, is refused with a sentence saying what
+  /// it plays -- as it is or as a rendition alike, since a rendition copies
+  /// the picture.
   factory CastCompatibility.of({
     required Uri url,
+    required ReceiverRow receiver,
     PlaybackStats? stats,
     bool canRepackage = false,
   }) {
@@ -84,24 +93,30 @@ sealed class CastCompatibility {
     final audio = _canonicalAudio(stats?.audioCodec);
     final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
+    // What the receiver makes of the picture: null when it shows it.
+    final picture = _pictureRefusal(receiver, video, stats);
 
     if (readers.any(_matroskaReaders.contains)) {
       // A Matroska file carrying what a WebM carries is a WebM to a
       // receiver: the same container, the codecs it takes from one.
-      if (_webmVideo.contains(video) &&
-          (audio == null || _webm.audio.contains(audio))) {
+      final webm =
+          _webmVideo.contains(video) &&
+          (audio == null || _webm.audio.contains(audio));
+      if (webm && picture == null) {
         return CastReady(contentType: _webm.contentType);
       }
-      if (repackages) return _rendition(video, audio, surround: surround);
+      if (repackages && _repackagedVideo.contains(video)) {
+        return picture ?? _rendition(audio, surround: surround);
+      }
+      if (repackages) return _renditionRefusal(receiver, video);
+      if (webm) return picture!;
       return const CastRefused._container('a Matroska (.mkv) file');
     }
     if (!readers.any(_mp4Readers.contains)) {
       return CastRefused._container(_describeReader(readers.first));
     }
 
-    if (!_castableVideo.contains(video)) {
-      return CastRefused._video(video, _orList(_castableVideo));
-    }
+    if (picture != null) return picture;
     if (audio != null && !_mp4.audio.contains(audio)) {
       // An MP4 whose sound the receiver will not take (or will play
       // silent): the same picture, the sound converted.
@@ -178,11 +193,18 @@ final class CastRefused extends CastCompatibility {
         'Casting it would need conversion, which this app cannot do yet.',
       );
 
-  const CastRefused._video(String codec, String supported)
+  const CastRefused._video(String subject, String supported, String codec)
     : this._(
         CastRefusal.videoCodec,
-        'A Chromecast decodes $supported video; this stream is $codec. '
+        '$subject plays $supported video; this film\'s video is $codec. '
         'Casting it would need conversion, which this app cannot do yet.',
+      );
+
+  const CastRefused._pictureSize(String subject, String limit, String film)
+    : this._(
+        CastRefusal.pictureSize,
+        '$subject plays $limit; this film\'s picture is $film. xtremio sends '
+        'the picture as it is, so this receiver cannot show it.',
       );
 
   const CastRefused._audio(String codec, String supported)
@@ -211,8 +233,11 @@ final class CastRefused extends CastCompatibility {
   final String explanation;
 }
 
-/// Why a stream was refused. [container], [videoCodec] and [audioCodec] are
-/// about a file the receiver would be handed as it is; [renditionVideo]
+/// Why a stream was refused. [container] and [audioCodec] are about a file
+/// the receiver would be handed as it is; [videoCodec] and [pictureSize]
+/// about a picture the receiver does not decode, or not that big or that
+/// fast, whether handed as it is or copied into a rendition;
+/// [renditionVideo]
 /// about one that would be repackaged but whose picture a copy cannot carry
 /// (what a transcode, step F4 of the renditions design, would answer); a
 /// rendition's sound is never refused here, since it is converted when it
@@ -223,6 +248,7 @@ enum CastRefusal {
   pending,
   container,
   videoCodec,
+  pictureSize,
   audioCodec,
   renditionVideo,
 }
@@ -272,33 +298,9 @@ const Map<String, String> _knownReaders = {
   'rm': 'a RealMedia file',
 };
 
-/// The video codecs a receiver decodes. Unlike the table above this one is
-/// a guess, and it errs in both directions rather than only the safe one.
-///
-/// It **leans permissive** over HEVC and VP9: only Chromecast Ultra,
-/// Chromecast with Google TV and the Google TV Streamer decode HEVC, and
-/// VP9 wants one of those or a Nest Hub, so a stream this gate calls ready
-/// still fails on a first- to third-generation Chromecast with nothing
-/// said. Fixing that honestly means asking the session what the receiver in
-/// the room supports -- the Cast SDK reports the device's capabilities --
-/// rather than holding one table for every device, which is a larger change
-/// than any made here.
-///
-/// It also **leans strict** over VP8 and VP9, which is why they are in the
-/// set: no WebM in the wild carries H.264, so a table of only H.264 and
-/// HEVC would refuse every real WebM. Written in both directions, since a
-/// caveat that only leans one way hides exactly that.
-///
-const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
-
 /// The video a rendition copies: what the producer and the server's muxer
-/// carry (`avc1`, `hvc1`), **and what the receiver decodes** -- HEVC is
-/// here for zond's receiver, a Chromecast with Google TV 4K (`sabrina`),
-/// which decodes HEVC Main and Main 10 up to 4K. It is a constant for that
-/// one receiver until the receiver table (step F5 of the renditions design)
-/// makes it a row per model; an HEVC film cast to a receiver without HEVC
-/// (a first- to third-generation Chromecast) is a black screen until then.
-/// Dolby Vision is not visible from here: mpv reports it as HEVC, and the
+/// carry (`avc1`, `hvc1`). Whether the receiver decodes it is its row's
+/// to say ([ReceiverRow]). Dolby Vision is not visible from here: mpv reports it as HEVC, and the
 /// libmpv this app ships (v0.36.0-549, media_kit's
 /// libmpv-android-video-build v1.1.11) has no `dolby-vision-profile`
 /// track property to ask. The producer reads the container's record,
@@ -307,10 +309,6 @@ const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 /// player polls while it prepares the cast.
 const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 
-/// The video zond's receiver decodes, of the codecs mpv names: what tells a
-/// codec it cannot play from one only the repackaging cannot carry yet.
-const Set<String> _receiverVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
-
 /// The sound a rendition copies, in one or two channels
 /// ([PlaybackStats.audioChannels]). Anything else is converted to stereo
 /// AAC (step F3), AAC with more than two channels included. AAC whose
@@ -318,28 +316,51 @@ const Set<String> _receiverVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 /// a count nobody knows is not a reason to convert.
 const String _repackagedAudio = 'AAC';
 
-/// What a Matroska film played by id is when this device can repackage:
-/// [CastRendition] when its video is one a copy carries -- its sound copied
-/// when it is AAC in one or two channels, converted otherwise ([surround]:
-/// more than two) -- and a sentence naming the video when a copy cannot
-/// carry it. A film with no sound track has nothing to convert.
-CastCompatibility _rendition(
-  String video,
-  String? audio, {
-  required bool surround,
-}) {
-  if (_repackagedVideo.contains(video)) {
-    return CastRendition(
+/// A Matroska film played by id whose picture a copy carries and the
+/// receiver decodes, as a rendition: its sound copied when it is AAC in one
+/// or two channels, converted otherwise ([surround]: more than two). A film
+/// with no sound track has nothing to convert.
+CastCompatibility _rendition(String? audio, {required bool surround}) =>
+    CastRendition(
       convertsSound: audio != null && (audio != _repackagedAudio || surround),
     );
+
+/// A Matroska film played by id whose picture a copy cannot carry (VP8,
+/// VP9, AV1, ...): a sentence that says whether the receiver could have
+/// played it (a repackaging xtremio does not make yet) or not even that (a
+/// conversion, step F4 of the renditions design).
+CastRefused _renditionRefusal(ReceiverRow receiver, String video) =>
+    CastRefused._rendition(
+      CastRefusal.renditionVideo,
+      receiver.decodes(video)
+          ? "This film's video is $video, which xtremio can't repackage for "
+                'casting yet.'
+          : "This film's video is $video, which this receiver can't play, and "
+                "xtremio can't convert it for casting yet.",
+    );
+
+/// What [receiver] makes of [video] at the size and rate mpv reports: null
+/// when it shows it, else the refusal that says what it does play.
+CastRefused? _pictureRefusal(
+  ReceiverRow receiver,
+  String video,
+  PlaybackStats? stats,
+) {
+  if (!receiver.decodes(video)) {
+    return CastRefused._video(receiver.subject, receiver.codecList, video);
   }
-  return CastRefused._rendition(
-    CastRefusal.renditionVideo,
-    _receiverVideo.contains(video)
-        ? "This film's video is $video, which xtremio can't repackage for "
-              'casting yet.'
-        : "This film's video is $video, which this receiver can't play, and "
-              "xtremio can't convert it for casting yet.",
+  final width = stats?.width;
+  final height = stats?.height;
+  final fps = stats?.containerFps;
+  if (receiver.fits(video, width: width, height: height, fps: fps)) {
+    return null;
+  }
+  final size = width == null || height == null ? null : '${width}x$height';
+  final rate = fps == null ? null : '${fps.round()} frames a second';
+  return CastRefused._pictureSize(
+    receiver.subject,
+    receiver.describeLimit(video),
+    [?size, ?rate].join(' at '),
   );
 }
 

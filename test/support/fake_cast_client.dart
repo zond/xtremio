@@ -51,6 +51,19 @@ class FakeCastClient implements CastClient {
   /// refusing, not the receiver (a receiver's refusal is a status).
   Object? loadError;
 
+  /// The hardware codename each receiver answers, keyed by device id, as a
+  /// silent lookup would; a device not here answers null (not identified).
+  final Map<String, String> codenames = {};
+
+  /// Every `receiverCodename` call, by device id.
+  final List<String> codenameAsks = [];
+
+  @override
+  Future<String?> receiverCodename(CastDevice device) async {
+    codenameAsks.add(device.id);
+    return codenames[device.id];
+  }
+
   /// When set, `connect` records the device and then answers null.
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
