@@ -868,6 +868,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
             : _unmatchedLocal(state);
         _pageThroughUnderAPill(state);
         final isLoggedIn = _isLoggedIn;
+        // The lines that explain the body, above it. Over a grid they are
+        // its first item and scroll away with it ([_buildGrid]): fixed
+        // above the posters they took that height off every screenful,
+        // which on a television was the second row. Over a message there
+        // is nothing to scroll, and they stay where they are.
+        final notes = [
+          if (!isLoggedIn &&
+              !_remote &&
+              !_local &&
+              state != null &&
+              !state.isLibraryEmpty)
+            const _SignInHint(),
+          // Shown only under Remote: a viewer looking at their linked
+          // files is the one who needs to know that renaming is how a
+          // file gets matched.
+          if (_remote) const _NamingNote(),
+        ];
+        final hasGrid =
+            state != null &&
+            state.isLoaded &&
+            (shown.isNotEmpty ||
+                kept.isNotEmpty ||
+                appended.isNotEmpty ||
+                unmatched.isNotEmpty ||
+                unmatchedLocal.isNotEmpty);
         return TvLadder(
           child: Scaffold(
             appBar: AppBar(
@@ -953,16 +978,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         : null,
                   ),
                 ),
-                if (!isLoggedIn &&
-                    !_remote &&
-                    !_local &&
-                    state != null &&
-                    !state.isLibraryEmpty)
-                  const _SignInHint(),
-                // Shown only under Remote: a viewer looking at their linked
-                // files is the one who needs to know that renaming is how a
-                // file gets matched.
-                if (_remote) const _NamingNote(),
+                if (!hasGrid) ...notes,
                 Expanded(
                   child: state == null || !state.isLoaded
                       ? const Center(child: CircularProgressIndicator())
@@ -975,11 +991,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       // worst answer on this screen. The engine still
                       // decides *which* message, because it is the engine's
                       // filter either one is about.
-                      : shown.isNotEmpty ||
-                            kept.isNotEmpty ||
-                            appended.isNotEmpty ||
-                            unmatched.isNotEmpty ||
-                            unmatchedLocal.isNotEmpty
+                      : hasGrid
                       ? _tvGroup(
                           context,
                           _buildGrid(
@@ -989,6 +1001,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             appended,
                             unmatched,
                             unmatchedLocal,
+                            notes: notes,
                           ),
                         )
                       : _local && _localMedia != null
@@ -1176,8 +1189,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     List<DownloadView> kept,
     List<LinkedDriveMatch> appended,
     List<LinkedDriveFile> unmatched,
-    List<LocalMediaFile> unmatchedLocal,
-  ) {
+    List<LocalMediaFile> unmatchedLocal, {
+    List<Widget> notes = const [],
+  }) {
     // The engine's items, then the merged cards in a fixed order: what is
     // on this device, what is matched in Drive, and what nothing matched.
     final afterItems = items.length;
@@ -1186,66 +1200,80 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final afterUnmatched = afterAppended + unmatched.length;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
-      child: GridView.builder(
-        padding: const EdgeInsets.all(12),
-        gridDelegate: posterGridDelegateOf(context),
-        itemCount: afterUnmatched + unmatchedLocal.length,
-        itemBuilder: (context, index) {
-          if (index >= afterUnmatched) {
-            final file = unmatchedLocal[index - afterUnmatched];
-            final media = _localMedia;
-            return LibraryItemTile(
-              item: _cardForLocal(file),
-              posterImage: media == null
-                  ? null
-                  : LocalThumbnail(file.uri, source: media.source),
-              onTap: () => unawaited(_playLocal(file)),
-              onLongPress: () => unawaited(_removeLocal(file)),
-              memoryId: 'local-file-${file.uri}',
-            );
-          }
-          if (index >= afterAppended) {
-            final file = unmatched[index - afterAppended];
-            return LibraryItemTile(
-              item: _cardForFile(file),
-              // Straight into the film: there is no details page for a file
-              // nothing identified, and inventing one would be a page about
-              // a title nobody knows.
-              onTap: () => unawaited(_playUnmatched(file)),
-              onLongPress: () => unawaited(_removeRemote(file)),
-              memoryId: 'linked-file-${file.fileId}',
-            );
-          }
-          if (index >= afterKept) {
-            final match = appended[index - afterKept];
-            return LibraryItemTile(
-              item: _cardFor(match),
-              onTap: () => _openDriveMatch(match),
-              // And no long press: every action in that sheet is a `Ctx`
-              // action about a library item, and this title is not one.
-              memoryId: 'linked-${match.cinemetaId}',
-            );
-          }
-          if (index >= afterItems) {
-            final view = kept[index - afterItems];
-            return LibraryItemTile(
-              item: _cardForDownload(view),
-              onTap: () => unawaited(_openKept(view)),
-              // Not the library item's sheet -- its actions are about a
-              // library item, and this is not one -- but the one thing
-              // there is to do about a download: delete it.
-              onLongPress: () => unawaited(_deleteKept(view)),
-              memoryId: 'kept-${view.metaId}',
-            );
-          }
-          final item = items[index];
-          return LibraryItemTile(
-            item: item,
-            onTap: () => _open(item),
-            onLongPress: () => _showActions(item),
-            memoryId: item.id,
-          );
-        },
+      child: CustomScrollView(
+        slivers: [
+          if (notes.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                key: const Key('library-notes'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: notes,
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.all(12),
+            sliver: SliverGrid.builder(
+              gridDelegate: posterGridDelegateOf(context),
+              itemCount: afterUnmatched + unmatchedLocal.length,
+              itemBuilder: (context, index) {
+                if (index >= afterUnmatched) {
+                  final file = unmatchedLocal[index - afterUnmatched];
+                  final media = _localMedia;
+                  return LibraryItemTile(
+                    item: _cardForLocal(file),
+                    posterImage: media == null
+                        ? null
+                        : LocalThumbnail(file.uri, source: media.source),
+                    onTap: () => unawaited(_playLocal(file)),
+                    onLongPress: () => unawaited(_removeLocal(file)),
+                    memoryId: 'local-file-${file.uri}',
+                  );
+                }
+                if (index >= afterAppended) {
+                  final file = unmatched[index - afterAppended];
+                  return LibraryItemTile(
+                    item: _cardForFile(file),
+                    // Straight into the film: there is no details page for a file
+                    // nothing identified, and inventing one would be a page about
+                    // a title nobody knows.
+                    onTap: () => unawaited(_playUnmatched(file)),
+                    onLongPress: () => unawaited(_removeRemote(file)),
+                    memoryId: 'linked-file-${file.fileId}',
+                  );
+                }
+                if (index >= afterKept) {
+                  final match = appended[index - afterKept];
+                  return LibraryItemTile(
+                    item: _cardFor(match),
+                    onTap: () => _openDriveMatch(match),
+                    // And no long press: every action in that sheet is a `Ctx`
+                    // action about a library item, and this title is not one.
+                    memoryId: 'linked-${match.cinemetaId}',
+                  );
+                }
+                if (index >= afterItems) {
+                  final view = kept[index - afterItems];
+                  return LibraryItemTile(
+                    item: _cardForDownload(view),
+                    onTap: () => unawaited(_openKept(view)),
+                    // Not the library item's sheet -- its actions are about a
+                    // library item, and this is not one -- but the one thing
+                    // there is to do about a download: delete it.
+                    onLongPress: () => unawaited(_deleteKept(view)),
+                    memoryId: 'kept-${view.metaId}',
+                  );
+                }
+                final item = items[index];
+                return LibraryItemTile(
+                  item: item,
+                  onTap: () => _open(item),
+                  onLongPress: () => _showActions(item),
+                  memoryId: item.id,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

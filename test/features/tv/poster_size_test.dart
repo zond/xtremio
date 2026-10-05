@@ -97,7 +97,7 @@ void main() {
     await pumpApp(tester, device: DeviceProfile.fallback);
     await showTab(tester, 'Library');
 
-    final grid = tester.widget<GridView>(find.byType(GridView));
+    final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
     expect(grid.gridDelegate, same(posterGridDelegate));
   });
 }

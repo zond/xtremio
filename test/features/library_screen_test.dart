@@ -559,7 +559,7 @@ void main() {
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
 
-      await tester.drag(find.byType(GridView), const Offset(0, -6000));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -6000));
       await tester.pumpAndSettle();
 
       expect(core.dispatched, hasLength(1));
@@ -580,9 +580,9 @@ void main() {
       // Nothing near the top of a long grid.
       expect(core.dispatched, hasLength(1));
 
-      await tester.drag(find.byType(GridView), const Offset(0, -6000));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -6000));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(GridView), const Offset(0, -400));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
       await tester.pumpAndSettle();
 
       List<CoreAction> nextPages() => [
@@ -603,7 +603,7 @@ void main() {
         libraryWith(items: [for (var i = 0; i < 70; i++) item(i)]),
       );
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(GridView), const Offset(0, -6000));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -6000));
       await tester.pumpAndSettle();
       expect(find.text('Title 69'), findsOneWidget);
       expect(find.text('Title 0'), findsNothing, reason: 'scrolled away');
