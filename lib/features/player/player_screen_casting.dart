@@ -86,6 +86,7 @@ extension _PlayerCasting on _PlayerScreenState {
         );
       }
     }
+    _watchCastPicture(status);
     final duration = status.duration;
     // Once per length, not per status: a receiver repeats its status every
     // second or so, and a length does not go stale.
@@ -111,6 +112,61 @@ extension _PlayerCasting on _PlayerScreenState {
       _castEnded = true;
       _client?.dispatch(CoreActions.playerEnded());
     }
+  }
+
+  /// **Whether the receiver shows the picture**, from its own report
+  /// ([CastStatus.picture]). A receiver that cannot decode a film's picture
+  /// plays its sound, reports PLAYING with its position moving, and says
+  /// nothing of a picture -- the black screen nothing else would notice.
+  /// So once it has played [PlayerScreen.castNoPictureAfter] of the film
+  /// with no picture ever reported this load, the cast is ended, the film
+  /// comes back here at the receiver's position, the viewer is told why,
+  /// and the receiver is not sent that video again this session. Not for
+  /// sound alone, nor on a platform that reports no picture at all.
+  void _watchCastPicture(CastStatus status) {
+    final video = _castVideo;
+    final device = _castingTo;
+    final cast = _cast;
+    if (video == null || device == null || cast == null) return;
+    if (!cast.reportsPicture) return;
+    final picture = status.picture;
+    if (picture != null) {
+      if (!_castPictureSeen) {
+        _castPictureSeen = true;
+        DiagnosticsLog.info('player', 'the receiver shows a $picture picture');
+      }
+      return;
+    }
+    if (_castPictureSeen || status.state != CastPlayerState.playing) return;
+    final from = _castPlayingFrom ??= status.position;
+    if (status.position - from < PlayerScreen.castNoPictureAfter) return;
+    _castVideo = null;
+    unawaited(_endCastWithNoPicture(cast, device, video));
+  }
+
+  Future<void> _endCastWithNoPicture(
+    CastClient cast,
+    CastDevice device,
+    String video,
+  ) async {
+    cast.pictureMemory.noPicture(device.id, video);
+    final stats = _lastStats;
+    final size = stats?.width == null || stats?.height == null
+        ? ''
+        : ', ${stats!.width}x${stats.height}';
+    DiagnosticsLog.warn(
+      'player',
+      'the receiver played the sound and reported no picture for '
+          '$video$size; the film is back here',
+    );
+    final sent = _castSent;
+    await _stopCast();
+    await _explainCast(
+      '${device.name} played the sound but showed no picture: it cannot '
+      "show this film's picture ($video$size). It was sent $sent. The film "
+      'is playing here again.',
+      title: 'No picture on ${device.name}',
+    );
   }
 
   /// [reported] as it is to be believed: with a zero the receiver has not
@@ -218,6 +274,31 @@ extension _PlayerCasting on _PlayerScreenState {
     if (compatibility is CastRefused) {
       await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
+    }
+    // A receiver that played the sound of this video and showed no picture
+    // this session is not sent it again ([_watchCastPicture]).
+    final video = switch (compatibility) {
+      CastReady(:final video) || CastRendition(:final video) => video,
+      _ => null,
+    };
+    if (video != null && cast.pictureMemory.showedNoPicture(device.id, video)) {
+      await _explainCast(
+        '${device.name} showed no picture for $video video when it was sent '
+        'some earlier, so it is not sent it again.',
+      );
+      return;
+    }
+    final tentative = switch (compatibility) {
+      CastReady(:final tentative) ||
+      CastRendition(:final tentative) => tentative,
+      _ => false,
+    };
+    if (tentative) {
+      DiagnosticsLog.info(
+        'player',
+        'trying $video on a receiver only some models with its name decode it '
+            'on; its report of the picture decides',
+      );
     }
     // Whatever session is running is about to be replaced, so its wait ends
     // here: starting a cast zeroes the listener's count, and a timer left
@@ -418,6 +499,18 @@ extension _PlayerCasting on _PlayerScreenState {
       _castEnded = false;
       _castHandedAt = position;
       _castReported = false;
+      _castVideo = switch (compatibility) {
+        CastReady(:final video) || CastRendition(:final video) => video,
+        _ => null,
+      };
+      _castSent = switch (compatibility) {
+        CastRendition(convertsSound: true) =>
+          'the film repackaged, its sound converted',
+        CastRendition() => 'the film repackaged',
+        _ => 'the film as it is',
+      };
+      _castPictureSeen = false;
+      _castPlayingFrom = null;
       _castDirect = direct != null;
       _castDirectRetry = direct == null
           ? null

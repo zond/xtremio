@@ -107,6 +107,31 @@ void main() {
       );
     });
 
+    test('at best, a name is the best model announcing it', () {
+      final byName = ReceiverTable.byAnnouncedName['chromecast']!;
+      for (final row in [
+        ReceiverTable.firstGeneration,
+        ReceiverTable.thirdGeneration,
+        ReceiverTable.googleTv4k,
+        ReceiverTable.googleTvHd,
+      ]) {
+        expect(coveredBy(row, byName.atBest!), isTrue, reason: row.subject);
+      }
+      expect(byName.atBest!.decodes('AV1'), isFalse);
+      for (final row in exactRows) {
+        expect(
+          coveredBy(row, ReceiverTable.unknown.atBest!),
+          isTrue,
+          reason: row.subject,
+        );
+      }
+      // A name that names one model has nothing better to try.
+      expect(ReceiverTable.of(announced: 'Chromecast Ultra').atBest, isNull);
+      for (final row in exactRows) {
+        expect(row.atBest, isNull, reason: row.subject);
+      }
+    });
+
     test('a row known by its name covers what that model decodes', () {
       for (final row in ReceiverTable.byAnnouncedName.values) {
         expect(row.exact, isFalse, reason: row.subject);

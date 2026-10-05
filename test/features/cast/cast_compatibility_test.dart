@@ -491,44 +491,84 @@ void main() {
       expect(result, isA<CastRendition>());
     });
 
-    test('HEVC is refused where only the name is known, in so many words', () {
-      for (final stats in [mkv(video: 'hevc (Main)'), mp4(video: 'hevc')]) {
+    test('HEVC where only the name is known is tried, not refused', () {
+      // Every "Chromecast" decodes H.264; the best of them HEVC too. The
+      // cast is a trial, which the receiver's report of its picture ends.
+      final rendition = check(
+        url: byId,
+        stats: mkv(video: 'hevc (Main)'),
+        canRepackage: true,
+        receiver: chromecastByName,
+      );
+      expect((rendition as CastRendition).tentative, isTrue);
+      expect(rendition.video, 'HEVC');
+      final ready = check(
+        url: byId,
+        stats: mp4(video: 'hevc'),
+        receiver: chromecastByName,
+      );
+      expect((ready as CastReady).tentative, isTrue);
+      // H.264 is no trial: every "Chromecast" decodes it.
+      final h264 = check(url: byId, stats: mp4(), receiver: chromecastByName);
+      expect((h264 as CastReady).tentative, isFalse);
+      expect(h264.video, 'H.264');
+      // Nor is HEVC on a receiver identified as decoding it.
+      final identified = check(
+        url: byId,
+        stats: mkv(video: 'hevc (Main)'),
+        canRepackage: true,
+        receiver: ReceiverTable.googleTv4k,
+      );
+      expect((identified as CastRendition).tentative, isFalse);
+    });
+
+    test(
+      'what no model with the name decodes is refused, in so many words',
+      () {
         final result = check(
           url: byId,
-          stats: stats,
-          canRepackage: true,
+          stats: mp4(video: 'av1 (Main)'),
           receiver: chromecastByName,
         );
-        expect(refusalOf(result), CastRefusal.videoCodec, reason: '$stats');
+        expect(refusalOf(result), CastRefusal.videoCodec);
         expect(
           (result as CastRefused).explanation,
-          'Every receiver that calls itself "Chromecast" plays H.264 video; '
-          "this film's video is HEVC. Casting it would need conversion, which "
-          'this app cannot do yet.',
+          'The best of the receivers that call themselves "Chromecast" plays '
+          "H.264, VP8, HEVC or VP9 video; this film's video is AV1. Casting it "
+          'would need conversion, which this app cannot do yet.',
         );
-      }
-      // H.264 still goes, as it is and as a rendition.
-      expect(
-        check(url: byId, stats: mp4(), receiver: chromecastByName),
-        isA<CastReady>(),
+      },
+    );
+
+    test('a receiver identified as unable is refused, not tried', () {
+      final result = check(
+        url: byId,
+        stats: mkv(video: 'hevc (Main)'),
+        canRepackage: true,
+        receiver: ReceiverTable.thirdGeneration,
       );
+      expect(refusalOf(result), CastRefusal.videoCodec);
       expect(
-        check(
-          url: byId,
-          stats: mkv(),
-          canRepackage: true,
-          receiver: chromecastByName,
-        ),
-        isA<CastRendition>(),
+        (result as CastRefused).explanation,
+        'This receiver, a 3rd generation Chromecast, plays H.264 or VP8 '
+        "video; this film's video is HEVC. Casting it would need conversion, "
+        'which this app cannot do yet.',
       );
     });
 
     test('a WebM the receiver does not decode is refused, not handed over', () {
       final result = check(
         stats: mkv(video: 'vp9', audio: 'opus'),
-        receiver: chromecastByName,
+        receiver: ReceiverTable.firstGeneration,
       );
       expect(refusalOf(result), CastRefusal.videoCodec);
+      // Where only the name is known, tried.
+      final tried = check(
+        stats: mkv(video: 'vp9', audio: 'opus'),
+        receiver: chromecastByName,
+      );
+      expect((tried as CastReady).contentType, 'video/webm');
+      expect(tried.tentative, isTrue);
     });
 
     test('a 4K film on a 1080p receiver is refused with its size', () {
@@ -589,6 +629,53 @@ void main() {
       expect(
         check(stats: fast, receiver: ReceiverTable.thirdGeneration),
         isA<CastReady>(),
+      );
+    });
+  });
+
+  group('a file of sound alone', () {
+    PlaybackStats sound(String format, String audio, {String? track}) =>
+        PlaybackStats(fileFormat: format, audioCodec: audio, videoTrack: track);
+
+    test('goes as it is when its container may carry its sound', () {
+      expect(
+        (check(stats: sound(mp4Format, 'aac')) as CastReady).contentType,
+        'video/mp4',
+      );
+      expect(
+        (check(stats: sound('matroska,webm', 'opus')) as CastReady).contentType,
+        'video/webm',
+      );
+      expect(
+        (check(stats: sound(mp4Format, 'aac')) as CastReady).video,
+        isNull,
+      );
+    });
+
+    test('is refused when it may not, or the container is no receiver\'s', () {
+      expect(
+        refusalOf(check(stats: sound(mp4Format, 'flac'))),
+        CastRefusal.audioCodec,
+      );
+      expect(
+        refusalOf(check(stats: sound('mkv', 'flac'))),
+        CastRefusal.audioCodec,
+      );
+      expect(
+        refusalOf(check(stats: sound('ogg', 'vorbis'))),
+        CastRefusal.container,
+      );
+    });
+
+    test('a video track whose decoder has not reported is still a not yet', () {
+      expect(
+        refusalOf(check(stats: sound(mp4Format, 'aac', track: 'h264'))),
+        CastRefusal.pending,
+      );
+      // And no sound either: nothing has been read yet.
+      expect(
+        refusalOf(check(stats: const PlaybackStats(fileFormat: mp4Format))),
+        CastRefusal.pending,
       );
     });
   });

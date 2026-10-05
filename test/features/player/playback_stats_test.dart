@@ -18,6 +18,7 @@ void main() {
       'audio-codec-name': 'eac3',
       'file-format': 'mov,mp4,m4a,3gp,3g2,mj2',
       'current-tracks/audio/demux-channel-count': '6',
+      'current-tracks/video/codec': 'hevc',
       'video-params/w': '3840',
       'video-params/h': '2160',
       'video-bitrate': '15234567',
@@ -36,6 +37,7 @@ void main() {
     expect(stats.audioCodec, 'eac3');
     expect(stats.fileFormat, 'mov,mp4,m4a,3gp,3g2,mj2');
     expect(stats.audioChannels, 6);
+    expect(stats.videoTrack, 'hevc');
     expect((stats.width, stats.height), (3840, 2160));
     expect(stats.videoBitrate, 15234567);
     expect(stats.cacheDuration, const Duration(milliseconds: 12346));
@@ -51,6 +53,15 @@ void main() {
     expect(
       PlaybackStats.mpvProperties,
       contains('current-tracks/audio/demux-channel-count'),
+    );
+    expect(PlaybackStats.mpvProperties, contains('current-tracks/video/codec'));
+    expect(
+      const PlaybackStats(fileFormat: 'mkv', videoTrack: 'h264'),
+      isNot(const PlaybackStats(fileFormat: 'mkv')),
+    );
+    expect(
+      const PlaybackStats(videoTrack: 'h264').toString(),
+      contains('track: h264'),
     );
     expect(
       const PlaybackStats(audioCodec: 'aac', audioChannels: 2),

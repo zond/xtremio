@@ -596,8 +596,10 @@ void main() {
         expect(cast.loads, hasLength(1));
       });
 
-      testWidgets('the same name, not identified: refused, saying what every '
-          '"Chromecast" plays', (tester) async {
+      testWidgets('the same name, not identified: HEVC is tried', (
+        tester,
+      ) async {
+        final lines = captureDiagnostics();
         useWideViewport(tester);
         final cast = FakeCastClient(devices: const [livingRoom]);
         final harness = hevcHarness(cast);
@@ -607,16 +609,10 @@ void main() {
 
         await castTo(tester, livingRoom);
 
-        expect(
-          find.text(
-            'Every receiver that calls itself "Chromecast" plays H.264 video; '
-            "this film's video is HEVC. Casting it would need conversion, "
-            'which this app cannot do yet.',
-          ),
-          findsOneWidget,
-        );
-        expect(cast.connectAttempts, isEmpty);
-        expect(harness.mediaIds.renditions, isEmpty);
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(harness.mediaIds.renditions, hasLength(1));
+        expect(cast.loads, hasLength(1));
+        expect(lines, anyElement(contains('trying HEVC on a receiver')));
       });
 
       testWidgets('a 4K film on a receiver identified as 1080p is refused '
@@ -641,8 +637,10 @@ void main() {
         expect(cast.loads, isEmpty);
       });
 
-      testWidgets('a receiver whose name the table does not know gets the '
-          'most conservative row', (tester) async {
+      testWidgets('a receiver whose name the table does not know is tried '
+          'with what any receiver decodes, and refused what none does', (
+        tester,
+      ) async {
         useWideViewport(tester);
         const tv = CastDevice(
           id: 'device-9',
@@ -654,10 +652,8 @@ void main() {
           cast: cast,
           mpv: const PlaybackStats(
             fileFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
-            videoCodec: 'h264 (High)',
+            videoCodec: 'mpeg2video',
             audioCodec: 'aac',
-            width: 1920,
-            height: 1080,
           ),
         );
         await harness.pump(tester);
@@ -665,9 +661,10 @@ void main() {
         await castTo(tester, tv);
 
         expect(
-          find.textContaining(
-            'Every Cast receiver plays H.264 up to 1280x720 at 30 frames a '
-            'second',
+          find.text(
+            'The best Cast receiver xtremio knows of plays H.264, VP8, HEVC, '
+            "VP9 or AV1 video; this film's video is MPEG-2. Casting it would "
+            'need conversion, which this app cannot do yet.',
           ),
           findsOneWidget,
         );
@@ -1697,6 +1694,199 @@ void main() {
         expect(harness.mediaIds.published, isEmpty);
       },
     );
+  });
+
+  group("the receiver's own report of its picture", () {
+    const picture = CastPicture(width: 1280, height: 720, hdr: 'sdr');
+
+    CastStatus playingAt(int seconds, {CastPicture? shows}) => CastStatus(
+      state: CastPlayerState.playing,
+      position: Duration(minutes: 10, seconds: seconds),
+      duration: const Duration(minutes: 90),
+      picture: shows,
+    );
+
+    /// A cast of [mpv]'s film, from 10:00, to a platform that reports the
+    /// receiver's picture.
+    Future<(PlayerHarness, FakeCastClient)> casting(
+      WidgetTester tester, {
+      PlaybackStats mpv = mpvMp4H264Aac,
+      bool renditions = false,
+    }) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom])
+        ..reportsPicture = true;
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, mpv: mpv);
+      harness.mediaIds.renditionsAvailable = renditions;
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 90));
+      harness.engine.emitPosition(const Duration(minutes: 10));
+      await pumpEvents(tester);
+      await castTo(tester, livingRoom);
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+      // The receiver fetches what it was sent: the fetch watchdog has
+      // nothing to say, and this is about the picture.
+      lan
+        ..requestsServed = 3
+        ..bodiesServed = 1;
+      return (harness, cast);
+    }
+
+    const noPicture =
+        "Living Room TV played the sound but showed no picture: it cannot show "
+        "this film's picture (HEVC, 3840x2160). It was sent the film "
+        'repackaged, its sound converted. The film is playing here again.';
+
+    testWidgets('a picture reported: the cast plays on', (tester) async {
+      final lines = captureDiagnostics();
+      final (harness, cast) = await casting(tester);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.buffering,
+          position: Duration(minutes: 10),
+          picture: picture,
+        ),
+      );
+      for (var s = 0; s <= 30; s += 5) {
+        cast.emitStatus(playingAt(s, shows: s == 0 ? picture : null));
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+      expect(cast.disconnects, 0);
+      expect(lines, anyElement(contains('the receiver shows a 1280x720 sdr')));
+    });
+
+    testWidgets('playing with no picture is ended, the film back here, and '
+        'not sent there again', (tester) async {
+      final (harness, cast) = await casting(
+        tester,
+        mpv: const PlaybackStats(
+          fileFormat: 'mkv',
+          videoCodec: 'hevc (Main 10)',
+          audioCodec: 'eac3',
+          width: 3840,
+          height: 2160,
+        ),
+        renditions: true,
+      );
+      // Identified as nothing: an HEVC film on a "Chromecast" is a trial.
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.buffering,
+          position: Duration(minutes: 10),
+        ),
+      );
+      cast.emitStatus(playingAt(0));
+      cast.emitStatus(playingAt(2));
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+
+      cast.emitStatus(playingAt(3));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No picture on Living Room TV'), findsOneWidget);
+      expect(find.text(noPicture), findsOneWidget);
+      expect(cast.disconnects, 1);
+      expect(
+        harness.engine.seeks.last,
+        const Duration(minutes: 10, seconds: 3),
+      );
+      expect(harness.engine.playCalls, greaterThan(0));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRemotePanel), findsNothing);
+
+      // Not tried again this session.
+      final connects = cast.connectAttempts.length;
+      await castTo(tester, livingRoom);
+      expect(
+        find.text(
+          'Living Room TV showed no picture for HEVC video when it was sent '
+          'some earlier, so it is not sent it again.',
+        ),
+        findsOneWidget,
+      );
+      expect(cast.connectAttempts, hasLength(connects));
+    });
+
+    testWidgets('an uncertain receiver that shows the picture keeps it', (
+      tester,
+    ) async {
+      final (harness, cast) = await casting(
+        tester,
+        mpv: const PlaybackStats(
+          fileFormat: 'mkv',
+          videoCodec: 'hevc (Main 10)',
+          audioCodec: 'eac3',
+        ),
+        renditions: true,
+      );
+      expect(harness.mediaIds.renditions, hasLength(1));
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.buffering,
+          position: Duration(minutes: 10),
+          picture: CastPicture(width: 3840, height: 2160, hdr: 'hdr10'),
+        ),
+      );
+      for (var s = 0; s <= 20; s += 5) {
+        cast.emitStatus(playingAt(s));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+    });
+
+    testWidgets('buffering for as long as it takes is never ended', (
+      tester,
+    ) async {
+      final (_, cast) = await casting(tester);
+      for (var i = 0; i < 20; i++) {
+        cast.emitStatus(
+          CastStatus(
+            state: CastPlayerState.buffering,
+            position: Duration(minutes: 10, seconds: i),
+          ),
+        );
+        await tester.pump(const Duration(seconds: 10));
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+    });
+
+    testWidgets('sound alone has no picture to miss', (tester) async {
+      final (_, cast) = await casting(
+        tester,
+        mpv: const PlaybackStats(
+          fileFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+          audioCodec: 'aac',
+        ),
+      );
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
+      for (var s = 0; s <= 30; s += 5) {
+        cast.emitStatus(playingAt(s));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+    });
+
+    testWidgets('a platform that reports no picture is never judged by it', (
+      tester,
+    ) async {
+      final (_, cast) = await casting(tester);
+      cast.reportsPicture = false;
+      for (var s = 0; s <= 30; s += 5) {
+        cast.emitStatus(playingAt(s));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+    });
   });
 
   group('while a receiver has the stream', () {

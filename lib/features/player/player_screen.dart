@@ -213,6 +213,15 @@ class PlayerScreen extends StatefulWidget {
   /// nobody is left watching a splash screen wondering.
   static const Duration castFetchTimeout = Duration(seconds: 20);
 
+  /// How far a receiver's position moves while it says it is playing, and
+  /// has never reported a picture, before the cast is called sound over a
+  /// black screen. A receiver decoding the picture reports it from
+  /// buffering on, before it plays at all (measured on a Chromecast with
+  /// Google TV 4K, 2026-10-05), so this is not a wait for a slow start: it
+  /// is a check on a state the receiver reported, and a cast that is
+  /// buffering is never ended by it.
+  static const Duration castNoPictureAfter = Duration(seconds: 3);
+
   /// How often a rendition being prepared for a receiver is asked how far
   /// it has got ([_PlayerCasting._prepareRendition]): a map read on the
   /// server, cheap enough for twice a second.
@@ -931,6 +940,16 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([_trustedCastStatus]).
   Duration _castHandedAt = Duration.zero;
   bool _castReported = false;
+
+  /// The picture the receiver was handed, for the check that it shows one
+  /// ([_PlayerCasting._watchCastPicture]): its codec as judged (null for
+  /// sound alone, which has none to show, and once the check has acted),
+  /// how it was sent, whether the receiver has reported a picture since,
+  /// and where it was when it first said it was playing.
+  String? _castVideo;
+  String _castSent = 'the film as it is';
+  bool _castPictureSeen = false;
+  Duration? _castPlayingFrom;
 
   bool get _casting => _castingTo != null;
 

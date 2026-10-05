@@ -108,15 +108,24 @@ Home Hub" and "Google Nest Hub Max" name one model each. A name the table
 does not know -- a television with Cast built in -- gets what every row
 decodes: H.264 at 720p30.
 
-A picture the row does not decode is refused with a sentence that says
-what this receiver is known to play -- for a file handed over as it is and
-for a rendition alike, since a rendition copies the picture
-(`CastRefusal.videoCodec`, `CastRefusal.pictureSize`): 'Every receiver
-that calls itself "Chromecast" plays H.264 video; this film's video is
-HEVC. ...', "This receiver, a Chromecast with Google TV (HD), plays HEVC up
-to 1920x1080 at 60 frames a second; this film's picture is 3840x2160 at 24
-frames a second. ...". A size or rate mpv has not reported is not held
-against a film.
+**A receiver identified as unable is refused** with a sentence that says
+what it plays -- for a file handed over as it is and for a rendition alike,
+since a rendition copies the picture (`CastRefusal.videoCodec`,
+`CastRefusal.pictureSize`): "This receiver, a Chromecast with Google TV
+(HD), plays HEVC up to 1920x1080 at 60 frames a second; this film's picture
+is 3840x2160 at 24 frames a second. ...". A size or rate mpv has not
+reported is not held against a film.
+
+**A receiver known only by its name is tried instead** (zond: "we could
+e.g. try HEVC if we are uncertain"): a film beyond what every model with
+that name decodes, but within what the best of them does
+(`ReceiverRow.atBest`: for "Chromecast", HEVC and VP9 at 4K60), is sent as
+a trial (`CastReady.tentative`, `CastRendition.tentative`; the log says
+"trying HEVC on a receiver ...") and the receiver's own report of its
+picture decides ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
+Only what no model with the name decodes is refused: 'The best of the
+receivers that call themselves "Chromecast" plays H.264, VP8, HEVC or VP9
+video; this film's video is AV1. ...'.
 
 **The codename is not found out yet.** The Cast SDK does not carry it
 (`CastDevice` in play-services-cast 21.5.0 has the announced model name, a
@@ -126,8 +135,42 @@ eureka_info?params=device_info`, `product_name`), with a certificate the
 receiver signs itself; asking it means accepting that certificate for that
 one request, which is waiting on a decision. Until then
 `GoogleCastClient.receiverCodename` answers null and every receiver is
-judged by its announced name -- so on zond's television an HEVC film is
-refused as it would be on a 2015 dongle.
+judged by its announced name -- so on zond's television an HEVC film is a
+trial, which its report of the picture settles.
+
+## A receiver that shows no picture
+
+A receiver that cannot decode a film's picture does not say so: measured
+2026-10-05 on zond's Chromecast with Google TV 4K, an AV1 MP4 went
+BUFFERING to PLAYING with its position advancing, no error, no idle reason
+-- sound over a black screen. What it does do is leave out the
+`videoInfo` (width, height, HDR type) that its media status carries from
+BUFFERING on for a picture it decodes (H.264 and HEVC MP4s:
+`{"width":1280,"height":720,"hdrType":"sdr"}`). One receiver measured;
+other models are taken to be the same, not proven.
+
+flutter_chrome_cast drops that field, so the app's own Kotlin listens
+beside it (`CastPictureChannel.kt`): a second callback on the
+`RemoteMediaClient` of the plugin's session, reached through the shared
+`CastContext` (never created there), sending `{width, height, hdr}` or
+null on every status over the `xtremio/cast_picture` event channel.
+`GoogleCastClient` carries it on every `CastStatus` (`picture`). Android
+only (`CastClient.reportsPicture`); iOS is not carried.
+
+The player (`_watchCastPicture`): **once the receiver says PLAYING and its
+position has moved `PlayerScreen.castNoPictureAfter` (3 s) from where it
+first did, with no picture reported this load**, the cast is stopped, the
+film resumes here at the receiver's position, and the dialog *No picture
+on <receiver>* says "<receiver> played the sound but showed no picture: it
+cannot show this film's picture (HEVC, 3840x2160). It was sent the film
+repackaged, its sound converted. The film is playing here again." The
+receiver is not sent that codec again this session
+(`ReceiverPictureMemory`, refused up front). It is a check on a state the
+receiver reported, not a timer: a cast that is buffering or waiting on a
+swarm is never ended by it, and a file of sound alone (mpv reads no video
+track: `current-tracks/video/codec`) has no picture to miss and is judged
+by its container and sound. The first picture of each load is logged
+("the receiver shows a 1280x720 sdr picture"), never a URL.
 
 ## Renditions: the picture repackaged, the sound converted
 

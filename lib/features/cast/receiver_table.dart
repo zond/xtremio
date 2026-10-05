@@ -24,6 +24,7 @@ final class ReceiverRow {
     required this.subject,
     required this.video,
     this.exact = true,
+    this.atBest,
   });
 
   /// How a sentence names the receiver, capitalised, as its subject: "This
@@ -39,6 +40,14 @@ final class ReceiverRow {
   /// Whether the receiver was identified as this model, rather than given
   /// what every model with its name has in common.
   final bool exact;
+
+  /// For a row known only by a name several models announce: what the
+  /// best of them decodes. A cast beyond this row and within that one is
+  /// tried (zond, 2026-10-05: "we could e.g. try HEVC if we are
+  /// uncertain"), the receiver's own report of the picture catching a
+  /// model that cannot. Null where the row is the receiver's own, or its
+  /// name names one model.
+  final ReceiverRow? atBest;
 
   /// Whether it decodes [codec] at all.
   bool decodes(String codec) => video.containsKey(codec);
@@ -203,6 +212,16 @@ abstract final class ReceiverTable {
         'H.264': [_p720at60, _p1080at30],
       },
       exact: false,
+      atBest: ReceiverRow(
+        subject: 'The best of the receivers that call themselves "Chromecast"',
+        video: {
+          'H.264': [_p2160at30, _p1080at60],
+          'VP8': [_p720at60, _p1080at30],
+          'HEVC': [_p2160at60],
+          'VP9': [_p2160at60],
+        },
+        exact: false,
+      ),
     ),
     'chromecast ultra': ultra.byName(
       'Every receiver that calls itself "Chromecast Ultra"',
@@ -230,6 +249,17 @@ abstract final class ReceiverTable {
       'H.264': [_p720at30],
     },
     exact: false,
+    atBest: ReceiverRow(
+      subject: 'The best Cast receiver xtremio knows of',
+      video: {
+        'H.264': [_p2160at60],
+        'VP8': [_p2160at30, _p720at60],
+        'HEVC': [_p2160at60],
+        'VP9': [_p2160at60],
+        'AV1': [_p2160at60],
+      },
+      exact: false,
+    ),
   );
 
   /// The row for a receiver that said it is [codename] (null when it could

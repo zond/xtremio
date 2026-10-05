@@ -78,6 +78,16 @@ sealed class CastCompatibility {
   /// decodes only smaller or slower, is refused with a sentence saying what
   /// it plays -- as it is or as a rendition alike, since a rendition copies
   /// the picture.
+  ///
+  /// **A receiver known only by its name is tried, not refused**, with
+  /// what the best model announcing that name decodes
+  /// ([ReceiverRow.atBest]): the answer is then [tentative], and the player
+  /// watches the receiver's own report of the picture to catch one that
+  /// plays the sound over a black screen. A receiver identified as unable
+  /// is refused.
+  ///
+  /// A file mpv reads no video track in at all (audio alone) is judged by
+  /// its container and sound.
   factory CastCompatibility.of({
     required Uri url,
     required ReceiverRow receiver,
@@ -89,12 +99,39 @@ sealed class CastCompatibility {
 
     final readers = stats?.fileFormat?.split(',');
     final video = _canonicalVideo(stats?.videoCodec);
-    if (readers == null || video == null) return const CastRefused._pending();
     final audio = _canonicalAudio(stats?.audioCodec);
+    // No video track, as the demuxer that named the reader says, and the
+    // sound decoding: a file of sound alone, not a picture still to come.
+    final soundAlone =
+        readers != null &&
+        video == null &&
+        stats?.videoTrack == null &&
+        audio != null;
+    if (readers == null || (video == null && !soundAlone)) {
+      return const CastRefused._pending();
+    }
+    if (video == null) return _soundAlone(readers, audio!);
+
     final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
-    // What the receiver makes of the picture: null when it shows it.
-    final picture = _pictureRefusal(receiver, video, stats);
+    // What the receiver makes of the picture: null when it shows it. One
+    // known only by name is held to the best model with that name, and a
+    // cast that needs more than every such model decodes is a trial.
+    final best = receiver.atBest;
+    final known = _pictureRefusal(receiver, video, stats);
+    final picture = known == null || best == null
+        ? known
+        : _pictureRefusal(best, video, stats);
+    final tentative = known != null && picture == null;
+    final row = best ?? receiver;
+
+    CastCompatibility ready(String contentType) =>
+        CastReady(contentType: contentType, video: video, tentative: tentative);
+    CastCompatibility rendition({required bool convertsSound}) => CastRendition(
+      convertsSound: convertsSound,
+      video: video,
+      tentative: tentative,
+    );
 
     if (readers.any(_matroskaReaders.contains)) {
       // A Matroska file carrying what a WebM carries is a WebM to a
@@ -102,13 +139,12 @@ sealed class CastCompatibility {
       final webm =
           _webmVideo.contains(video) &&
           (audio == null || _webm.audio.contains(audio));
-      if (webm && picture == null) {
-        return CastReady(contentType: _webm.contentType);
-      }
+      if (webm && picture == null) return ready(_webm.contentType);
       if (repackages && _repackagedVideo.contains(video)) {
-        return picture ?? _rendition(audio, surround: surround);
+        return picture ??
+            rendition(convertsSound: _convertsSound(audio, surround));
       }
-      if (repackages) return _renditionRefusal(receiver, video);
+      if (repackages) return _renditionRefusal(row, video);
       if (webm) return picture!;
       return const CastRefused._container('a Matroska (.mkv) file');
     }
@@ -121,7 +157,7 @@ sealed class CastCompatibility {
       // An MP4 whose sound the receiver will not take (or will play
       // silent): the same picture, the sound converted.
       if (repackages && _repackagedVideo.contains(video)) {
-        return const CastRendition(convertsSound: true);
+        return rendition(convertsSound: true);
       }
       return CastRefused._audio(audio, _describeAudioSupport(_mp4));
     }
@@ -131,9 +167,9 @@ sealed class CastCompatibility {
     // be. Where no rendition can be made it goes as it is, AAC being a
     // sound the receiver decodes.
     if (surround && repackages && _repackagedVideo.contains(video)) {
-      return const CastRendition(convertsSound: true);
+      return rendition(convertsSound: true);
     }
-    return CastReady(contentType: _mp4.contentType);
+    return ready(_mp4.contentType);
   }
 
   /// Whether the stream can be cast as it is.
@@ -142,10 +178,21 @@ sealed class CastCompatibility {
 
 /// The stream can go to a receiver untouched.
 final class CastReady extends CastCompatibility {
-  const CastReady({required this.contentType});
+  const CastReady({
+    required this.contentType,
+    this.video,
+    this.tentative = false,
+  });
 
   /// The MIME type to tell the receiver, e.g. `video/mp4`.
   final String contentType;
+
+  /// The picture's codec as judged (`HEVC`), or null for sound alone.
+  final String? video;
+
+  /// The receiver is not known to decode the picture, only that some model
+  /// announcing its name does: a trial the player watches.
+  final bool tentative;
 }
 
 /// The stream goes to a receiver as a rendition: the same H.264 or HEVC,
@@ -153,7 +200,17 @@ final class CastReady extends CastCompatibility {
 /// file (`MediaIds.publishRendition`), its sound copied when it is stereo
 /// (or mono) AAC and converted to stereo AAC when [convertsSound].
 final class CastRendition extends CastCompatibility {
-  const CastRendition({this.convertsSound = false});
+  const CastRendition({
+    this.convertsSound = false,
+    this.video,
+    this.tentative = false,
+  });
+
+  /// The picture's codec as judged (`H.264` or `HEVC`).
+  final String? video;
+
+  /// As [CastReady.tentative].
+  final bool tentative;
 
   /// The sound is converted to stereo AAC (`RenditionSpec.convertSound`).
   final bool convertsSound;
@@ -316,14 +373,29 @@ const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 /// a count nobody knows is not a reason to convert.
 const String _repackagedAudio = 'AAC';
 
-/// A Matroska film played by id whose picture a copy carries and the
-/// receiver decodes, as a rendition: its sound copied when it is AAC in one
-/// or two channels, converted otherwise ([surround]: more than two). A film
-/// with no sound track has nothing to convert.
-CastCompatibility _rendition(String? audio, {required bool surround}) =>
-    CastRendition(
-      convertsSound: audio != null && (audio != _repackagedAudio || surround),
-    );
+/// Whether a rendition's sound is converted: anything but AAC in one or two
+/// channels ([surround]: more than two). A film with no sound track has
+/// nothing to convert.
+bool _convertsSound(String? audio, bool surround) =>
+    audio != null && (audio != _repackagedAudio || surround);
+
+/// A file of sound alone: an MP4 (an M4A) with AAC or MP3, or a WebM with
+/// Opus or Vorbis, goes as it is; nothing else does, there being no picture
+/// to make a rendition of.
+CastCompatibility _soundAlone(List<String> readers, String audio) {
+  final format = readers.any(_matroskaReaders.contains)
+      ? _webm
+      : readers.any(_mp4Readers.contains)
+      ? _mp4
+      : null;
+  if (format == null) {
+    return CastRefused._container(_describeReader(readers.first));
+  }
+  if (!format.audio.contains(audio)) {
+    return CastRefused._audio(audio, _describeAudioSupport(format));
+  }
+  return CastReady(contentType: format.contentType);
+}
 
 /// A Matroska film played by id whose picture a copy cannot carry (VP8,
 /// VP9, AV1, ...): a sentence that says whether the receiver could have
