@@ -44,11 +44,9 @@ file at all) and sometimes wrong, and mpv is reading the bytes.
   family: a receiver's video list, and the audio the container may carry.
 - **Before mpv has reported** the reader and the video codec, the answer is
   `CastRefusal.pending`, a "not yet" (below), never a guess.
-- **One wrinkle, untested on a receiver:** mpv cannot tell QuickTime (`.mov`)
-  from MP4 -- one reader opens both -- so a `.mov` of H.264 or HEVC with AAC
-  is now handed over as `video/mp4` as it is, where a file name used to send
-  it to a rendition. A receiver that will not play one would show as a cast
-  that does not start.
+- **QuickTime is MP4 here**: one reader opens both, so a `.mov` of H.264 or
+  HEVC with AAC is handed over as `video/mp4` as it is
+  ([Known limits](#known-limits)).
 - **A stream this device reads only by URL is refused** before any of
   that when it is on this device: an origin that will not serve ranges
   (read forward through `/proxy`) or a route the server names no id for
@@ -226,11 +224,10 @@ preparation below meets it before the receiver is told anything:
 `media_rendition_readiness` answers `failed` with that sentence, and the
 phone shows it in the refusal dialog (`rust/tests/rendition.rs` and
 `player_cast_test.dart` quote it on both sides). A receiver that asks
-anyway is answered `503` with it. **The gap**: a profile 5 film in an MP4
-with AAC sound is not a rendition, so no producer reads its record; it is
-handed over as it is and shows in the wrong colours. Closing it needs a
-libmpv that reports the profile (a newer mpv's track property), or a
-server-side sniff of the record before the hand-over. The player then publishes a
+anyway is answered `503` with it. A profile 5 film that needs no rendition
+is not read by the producer at all ([Known limits](#known-limits)).
+
+Otherwise the player publishes a
 **rendition** (`media_publish_rendition`, stream-server's
 `ServerHandle::publish_rendition`) with this player's duration, position and
 audio track (`RenditionSpec`, `lib/core/media_ids.dart`), and hands the
@@ -274,8 +271,10 @@ running*). Before, it guessed from the last stream opened and the reads in
 flight, and stopped the torrent a television was waiting on once anything
 else opened.
 
-The server cuts six-second segments at the film's own keyframes, muxes
-them, keeps a few in memory and answers the receiver's ranges from them --
+The server cuts the film into segments at its own keyframes (with the
+source's index, one per keyframe a second or more apart: its
+`docs/design/renditions.md`, "A slot per sync sample"), muxes them, keeps a
+few in memory and answers the receiver's ranges from them --
 nothing on disk (its `docs/design/renditions.md`). What it asks of the app is the **producer**,
 `rust/src/rendition.rs`, installed at every server start: per run a thread
 of its own, reading the media id's `MediaReader` through **libavformat from
@@ -504,6 +503,34 @@ up-next card and never starts the next episode, whatever `bingeWatching`
 says. The viewer is at the television, not at the phone to cancel a
 countdown.
 
+## Known limits
+
+What a cast still gets wrong, knowingly:
+
+- **A seek can land up to half a second late.** A rendition's decode times
+  run half a second ahead of its presentation times, so that no
+  composition offset is negative, and a slot is labelled at its first
+  decode time; a seek to a time in the last half second before a key frame
+  lands on that key frame, after the time asked for (stream-server
+  `docs/design/renditions.md`, "Every sample at its own time").
+- **A film with no index seeks backwards slowly.** A Matroska file without
+  cues gets an estimated layout, whose slots are labelled late and open
+  with a `styp`; a seek back to a slot not read before walks forward a slot
+  per request (7 to 17 in headless Chrome; the television may not recover).
+  A transport stream would be the same, but the app refuses one before a
+  rendition is considered.
+- **Dolby Vision profile 5 in an MP4 with AAC sound shows in the wrong
+  colours.** It goes to the receiver as it is: mpv reports it as HEVC, the
+  shipped libmpv has no property for the profile, and no producer reads
+  the container's record for a film that needs no rendition. In Matroska
+  it is a rendition, and refused while the cast is prepared. Closing it
+  needs a libmpv that reports the profile or a server-side sniff of the
+  record before the hand-over.
+- **A QuickTime (`.mov`) file of H.264 or HEVC with AAC is handed over as
+  `video/mp4`**, as mpv cannot tell it from an MP4. Untested on a
+  receiver; one that will not play it shows as a cast that does not start.
+- **Subtitles are not sent** to the receiver ([WISHLIST.md](WISHLIST.md#subtitles-on-a-cast)).
+
 ## The pieces, and what is verified
 
 `lib/features/cast/`: `cast_client.dart` (the interface, `CastScope`, the
@@ -515,11 +542,12 @@ types), `google_cast_client.dart` (over
 `rust/tests/lan_media.rs` drives the listener. The manifest entries are in
 [ANDROID.md](ANDROID.md#manifest-and-platform-channels).
 
-**Not verified against a real Chromecast**: there is no receiver here. What
-is verified: the LAN listener over real HTTP (it serves media routes,
-answers `/proxy` and `/settings` with 404, counts requests, and is gone
-after a stop and a shutdown), the Android manifest merge, every decision
-the app makes around a fake sender, and a rendition fetched over that
-listener and decoded by `ffmpeg` on a desktop (`rust/tests/rendition.rs`).
-Whether the default receiver plays the rendition stream is the device
-proof still owed.
+**One real receiver**: zond's Chromecast with Google TV 4K, on which
+renditions play and seek (stream-server `docs/design/renditions.md` §2.8)
+and the missing picture report above was measured. Every other model is
+Google's table, not seen. Verified here without one: the LAN listener over
+real HTTP (it serves media routes, answers `/proxy` and `/settings` with
+404, counts requests, and is gone after a stop and a shutdown), the
+Android manifest merge, every decision the app makes around a fake sender,
+and a rendition fetched over that listener and decoded by `ffmpeg` on a
+desktop (`rust/tests/rendition.rs`).
