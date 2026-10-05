@@ -116,7 +116,8 @@ bug report or the text of a logged exception (log the exception's *type*):
   `<lan base>/cast/<token>` is a URL into this device for as long as it is
   published. The player logs the listener's address and never the URL
   (`_handToReceiver`), and `DiagnosticsLog.url` writes any `/cast/…` path
-  without it.
+  without it. The Cast plugin would log every media status with the URL
+  in it, so it is held at warnings (`GoogleCastClient.pluginLogLevel`).
 - **Addon, debrid and subtitle URLs**, which carry keys in the path as well
   as the query. `DiagnosticsLog.write` (`lib/core/diagnostics_log.dart`)
   rewrites every `http(s)` URL through `DiagnosticsLog.url` before the line

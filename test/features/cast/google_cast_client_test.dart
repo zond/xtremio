@@ -1,6 +1,7 @@
 import 'package:flutter_chrome_cast/_remote_media_client/android_remote_media_client_method_channel.dart';
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
+import 'package:flutter_chrome_cast/logging.dart';
 import 'package:flutter_chrome_cast/models.dart';
 
 import 'dart:async';
@@ -374,5 +375,14 @@ void main() {
         client.dispose();
       },
     );
+  });
+  test('the plugin is told to keep media statuses out of the log', () async {
+    // Its legacy level writes each status to logcat, URL and all: a
+    // published token, or a debrid link with its key.
+    final client = GoogleCastClient();
+    await client.startDiscovery();
+    expect(GoogleCastLogger.level, CastLogLevel.warning);
+    expect(GoogleCastClient.pluginLogLevel, CastLogLevel.warning);
+    client.dispose();
   });
 }

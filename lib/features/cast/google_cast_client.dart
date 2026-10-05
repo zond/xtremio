@@ -44,6 +44,10 @@ class GoogleCastClient implements CastClient {
 
   bool _initialised = false;
 
+  /// What the plugin is let write to the log; see [_ensureInitialised].
+  @visibleForTesting
+  static const CastLogLevel pluginLogLevel = CastLogLevel.warning;
+
   /// Where each receiver is, as far as Android has said, keyed by Cast
   /// device id. [connect] is what fills a row, and what empties one it
   /// could not fill: a receiver the platform says nothing about this time
@@ -64,6 +68,15 @@ class GoogleCastClient implements CastClient {
   /// depends on it, so every entry point that reaches the SDK goes through
   /// here first.
   Future<void> _ensureInitialised() async {
+    // **The plugin logs nothing below a warning.** Left at its legacy
+    // level it writes every media status to logcat as the SDK's JSON,
+    // whose `contentId` is the URL the receiver was handed: a published
+    // cast token, or a link straight to its source with its key in it --
+    // neither of which is ever logged (AGENTS.md). What the receiver says
+    // is written down by [_logWhatTheReceiverSays] instead. Set before the
+    // context is, which is when the plugin's Kotlin reads it; the setter
+    // is plain Dart and touches no platform singleton.
+    GoogleCastLogger.level = pluginLogLevel;
     if (_initialised || !isSupported) return;
     _initialised = true;
     final options = Platform.isAndroid
