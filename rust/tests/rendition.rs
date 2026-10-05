@@ -223,7 +223,7 @@ impl Layout {
         }
     }
 
-    /// Slot `n`'s fragment: its bytes up to the `free` box that pads it.
+    /// Slot `n`'s fragment: its bytes up to the `free` boxes that pad it.
     /// It opens with its `moof` -- no `styp` -- where the slot opens at its
     /// `sidx` label (a mirrored layout's): FFmpeg read a `moof` a `styp`
     /// kept apart from its `sidx` reference twice, and lost its index's
@@ -233,27 +233,48 @@ impl Layout {
     /// receiver's demuxer hopped between the two, a request a hop. **The
     /// first `moof` is padded to 8 KiB**, which is the slot's first `sidx`
     /// reference: what a seek reads, after which it goes on into the rest
-    /// of this slot and not the next one.
+    /// of this slot and not the next one. **Padding is `free` boxes under
+    /// 2 KiB each**, which a demuxer steps over by reading: over one long
+    /// box it seeks, and a receiver with nothing buffered then asks again,
+    /// once a slot (stream-server `layout::PAD_BOX`).
     fn fragment<'a>(&self, file: &'a [u8], n: usize) -> &'a [u8] {
         let (offset, size) = self.slots[n];
         let slot = &file[offset..offset + size];
         let parts = boxes(slot);
         let kinds: Vec<&[u8; 4]> = parts.iter().map(|(kind, ..)| kind).collect();
-        let (pad, chunks) = kinds.split_last().expect("a slot holds boxes");
-        assert_eq!(*pad, b"free", "slot {n} ends with its padding: {kinds:?}");
+        for (kind, _, size) in &parts {
+            assert!(
+                kind != b"free" || *size < 2048,
+                "slot {n} has a free box of {size}"
+            );
+        }
+        let padding = kinds
+            .iter()
+            .rev()
+            .take_while(|kind| **kind == b"free")
+            .count();
+        assert!(padding > 0, "slot {n} ends with its padding: {kinds:?}");
+        let chunks = &kinds[..kinds.len() - padding];
+        let first_pad = chunks[1..]
+            .iter()
+            .take_while(|kind| **kind == b"free")
+            .count();
         assert!(
-            matches!(chunks, [moof, pad, mdat, ..]
-                if *moof == b"moof" && *pad == b"free" && *mdat == b"mdat"),
+            chunks[0] == b"moof" && first_pad > 0 && chunks.get(1 + first_pad) == Some(&b"mdat"),
             "slot {n} opens moof, free, mdat: {kinds:?}"
         );
-        assert_eq!(parts[2].1, 8192, "slot {n}'s first mdat begins 8 KiB in");
+        assert_eq!(
+            parts[1 + first_pad].1,
+            8192,
+            "slot {n}'s first mdat begins 8 KiB in"
+        );
         assert!(
-            chunks[3..]
+            chunks[2 + first_pad..]
                 .chunks(2)
                 .all(|pair| matches!(pair, [moof, mdat] if *moof == b"moof" && *mdat == b"mdat")),
             "slot {n} goes on in moof + mdat pairs: {kinds:?}"
         );
-        &slot[..parts[parts.len() - 1].1]
+        &slot[..parts[parts.len() - padding].1]
     }
 }
 
