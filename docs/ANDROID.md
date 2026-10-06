@@ -7,12 +7,18 @@ decisions behind it. How the app works is in
 
 ## Prerequisites
 
-`nix develop .#android` provides all of these but rustup's targets
-([OPERATIONS.md](OPERATIONS.md#with-nix)).
+`nix develop .#android` provides these but rustup's targets
+([OPERATIONS.md](OPERATIONS.md#with-nix)) and, for now, platform 37 (its
+SDK names platforms 35 and 36 only, and Gradle cannot install into it).
 
 - **Android SDK**: platform 36, build-tools 36.0.0, NDK 28.2.13676358 (the
-  versions Flutter 3.47 pins; `android/app/build.gradle.kts` takes them from
-  the Flutter Gradle plugin, `minSdk` 24).
+  versions Flutter 3.47 pins; `android/app/build.gradle.kts` takes the NDK,
+  `minSdk` 24 and `targetSdk` from the Flutter Gradle plugin), and
+  **platform 37**, which the app compiles against (`compileSdk = 37`):
+  `flutter_chrome_cast` 1.5.0 brings `permission_handler_android` 14.1,
+  compiled against API 37, and AGP's AAR metadata check makes every module
+  that depends on it do the same. `targetSdk` stays Flutter's. Gradle
+  fetches platform 37 into a writable SDK by itself.
 - **JDK 21**.
 - **Rust via rustup**, with the Android targets added (cargokit adds them on
   first build, but pre-installing keeps that build predictable):
@@ -118,11 +124,19 @@ renderer for them.
   `OPTIONS_PROVIDER_CLASS_NAME` meta-data naming
   `com.felnanuke.google_cast.GoogleCastOptionsProvider`, and Play services'
   `MediaNotificationService`; everything else merges in from
-  `flutter_chrome_cast`. `play-services-cast` is named in Gradle so
-  `CastDevice` is on the compile classpath for `castDeviceAddress` (below).
+  `flutter_chrome_cast`. `play-services-cast` and
+  `play-services-cast-framework` (21.5.0, the versions the plugin already
+  resolves, so the APK gains nothing) are named in Gradle to put them on
+  the app's own compile classpath: `CastDevice` for `castDeviceAddress`
+  (below), and `CastContext` and `RemoteMediaClient` for
+  `CastPictureChannel.kt`.
+- **Local videos**: `READ_MEDIA_VIDEO` and
+  `READ_MEDIA_VISUAL_USER_SELECTED` (with `READ_EXTERNAL_STORAGE` up to
+  API 32), asked for when the Library's Local list is first opened
+  ([ARCHITECTURE.md](ARCHITECTURE.md#local-videos)).
 - **Channels.**
   - `xtremio/device`: `DeviceProfile.detect()` (`lib/shell/device_profile.dart`)
-    asks once, before `runApp`, for `{isTv, hasTouch}` -- `isTv` is
+    asks once (`profile`), before `runApp`, for `{isTv, hasTouch}` -- `isTv` is
     `UiModeManager` in television mode or the `android.software.leanback`
     feature; any error means "a phone", and no other platform calls it. The
     answer goes down the tree as `DeviceScope`, the only thing the TV layout
@@ -134,10 +148,16 @@ renderer for them.
     (see [CASTING.md](CASTING.md)).
   - `xtremio/display`: an event channel pushing the display's refresh rate
     (below).
+  - `xtremio/cast_picture`: an event channel, `CastPictureChannel.kt`,
+    carrying the picture a cast receiver reports, which `flutter_chrome_cast`
+    drops ([CASTING.md](CASTING.md#a-receiver-that-shows-no-picture)).
   - `xtremio/downloads`: the foreground service (below).
   - `xtremio/drive_picker`: `DrivePicker.kt`, Android's own Drive picker.
+  - `xtremio/local_media`: `LocalMediaChannel.kt`, the videos in Android's
+    media index and a descriptor to play one by
+    ([ARCHITECTURE.md](ARCHITECTURE.md#local-videos)).
   - `xtremio/update`: `AppUpdateChannel.kt`, installing a downloaded
-    release (below).
+    release and measuring the room for it (`room`) (below).
 - **`REQUEST_INSTALL_PACKAGES`** and the unexported `InstallStatusReceiver`
   are the in-app update's: see
   [Updating from inside the app](#updating-from-inside-the-app).
@@ -196,7 +216,8 @@ updates" asks at any time and says "up to date" too. The code is in
   the native code unpacked from it) and three before the download
   (`UpdateRoom`, `lib/features/update/install_room.dart`). A Chromecast
   with Google TV refused a 50 MB update with 130-330 MB free and took it
-  with about 500 MB; this asks it for 350-450 MB. Without the room the
+  with about 500 MB; this asks it for 350-450 MB before the download and
+  300-400 MB before the install. Without the room the
   dialog downloads and installs nothing, says how much is free and how
   much is needed, and offers Server storage and Try again. A volume that
   could not be measured is not taken for a full one: the install goes
@@ -416,7 +437,8 @@ adb shell pm list features | grep leanback   # android.software.leanback
 ```
 
 The TV AVD also claims a touchscreen, which a real box does not; nothing
-keys on `hasTouch`. Under `swiftshader_indirect` libmpv draws no video, so
+on a television keys on `hasTouch` (the one reader, the Drive pairing's
+shape, asks `isTv` first). Under `swiftshader_indirect` libmpv draws no video, so
 decoding cannot be checked on an emulator: the position advancing is what
 can.
 
@@ -426,7 +448,7 @@ can.
 |---|---|---|
 | D-pad | `KEYCODE_DPAD_UP` `_DOWN` `_LEFT` `_RIGHT` (19-22) | Moves focus; in the player, seek left/right, controls up/down |
 | Centre | `KEYCODE_DPAD_CENTER` (23) | Activates the focused control; on the video, play/pause and wake the controls |
-| Centre, held | `input keyevent --longpress 23` | The long press: mark watched, an item's action menu |
+| Centre, held | `input keyevent --longpress 23` | The long press: mark watched, an item's action menu, remove from Continue watching (after asking, the remote starting on Cancel). What is left of the held key presses nothing (`RemotePress`) |
 | Context menu | `KEYCODE_MENU` (82) | The same menu as the long press |
 | Back | `KEYCODE_BACK` (4) | Comes down the ladder; leaves the player |
 | Play/pause | `KEYCODE_MEDIA_PLAY_PAUSE` (85), `_PLAY` (126), `_PAUSE` (127) | Play/pause |
