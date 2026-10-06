@@ -19,8 +19,10 @@ in [AGENTS.md](../AGENTS.md); running and checking it is in
 [Downloads and offline play](#downloads-and-offline-play) ·
 [Google Drive](#google-drive) ·
 [The library](#the-library) ·
+[Local videos](#local-videos) ·
 [Addons](#addons) ·
 [Recommendations](#recommendations) ·
+[Ratings](#ratings) ·
 [Casting](#casting) ·
 [Pinned forks](#pinned-forks)
 
@@ -42,7 +44,8 @@ The FFI surface, by file under `rust/src/api/`:
 |---|---|
 | `hello.rs` | `init_app` (FRB's start-up hook); `bridge_version`, `core_schema_version` (test and diagnostic only) |
 | `core.rs` | `core_init`, `core_dispatch`, `core_get_state`, `core_events`, `core_shutdown`, `core_is_initialized` |
-| `server.rs` | `server_start`/`stop`/`base_url` (test and diagnostic only: `core_init` starts the app's server); `server_set_background`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled`; `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_stream_numbers`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_base_url` |
+| `server.rs` | `server_start`/`stop`/`base_url` (test and diagnostic only: `core_init` starts the app's server); `server_set_background`, `server_set_idle_sharing_held`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled` and `server_stream_numbers` (for a stream played by its URL; one played by id uses `media.rs`'s); `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`, `server_release_player`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_bodies_served`, `server_lan_media_base_url` |
+| `media.rs` | `media_register`, `media_register_drive`, `media_register_local_path`, `media_register_local_fd`, `media_resolve`; `media_set_play`, `media_set_buffer`, `media_set_resume`, `media_note_position`; `media_note_duration`, `media_note_player_opened`, `media_note_player_stalled`, `media_read_wait`, `media_stream_numbers`; `mpv_stream_register`; for a cast, `media_publish`, `media_publish_rendition`, `media_prepare_rendition`, `media_rendition_readiness`, `media_renditions_available`, `media_cast_numbers`, `media_unpublish` ([CASTING.md](CASTING.md)) |
 | `downloads.rs` | `downloads_add`, `downloads_remove`, `downloads_list`, `downloads_open`, `downloads_events`, `downloads_start_fresh` |
 | `prefs.rs` | `prefs_get_all`, `prefs_set` |
 | `subtitles.rs` | `subtitles_match` |
@@ -127,8 +130,9 @@ authority; these are the ones that have bitten.
 ## The Rust side
 
 **What the crate keeps between calls is one value** (`rust/src/state.rs`):
-`AppState`, grouped by concern (`core`, `server`, `downloads`, `prefs`,
-`addon_health`, `addon_observer`), behind the one process static there is.
+`AppState`, grouped by concern (`core`, `server`, `downloads`,
+`addon_health`, `addon_observer`, `media`), behind the one process static
+there is.
 `core_init` creates it (or adopts the one the event-stream subscribe made
 just before), and `core_shutdown` takes the whole value out, so a second
 boot starts clean. Every lock is a field inside it, never one around it, so
@@ -184,6 +188,10 @@ the rest. Nothing secret goes in it.
 | `similarSuggestions` | "More like this" answers already fetched |
 | `titleRatings` | A title's scores already fetched (see [Ratings](#ratings)) |
 | `driveLinkedFiles`, `driveTokenDead`, `drivePendingSession` | Linked Drive files, a grant Google has refused, a pairing not yet collected |
+| `localMedia`, `localFolders`, `localFolderBookmarks` | The videos on this device and what each matched, a desktop's folders, and macOS's bookmarks for them (see [Local videos](#local-videos)) |
+| `detailsVisits` | Which season and episode each title's details screen was left on |
+| `viewerId` | This install's name for its viewer, the first half of every player token (`p=<viewer>.<screen>`) |
+| `updateCheckedAt`, `updateSkippedTag` | When the app last asked GitHub for its latest release, and the tag "Skip this version" was pressed for |
 | `addonHealth` | Written by the Rust side (see [docs/ADDONS.md](ADDONS.md)) |
 
 `similarApiKey` and `similarModel`, from builds that asked a model
@@ -269,8 +277,11 @@ switch is one for the whole session (one `set_upload_enabled` on the
 backend: nothing is paused, no peer dropped, downloads untouched), and it is
 on while a player reads and while a torrent download is on its way --
 downloading is activity, not idling -- whatever the app says. What the app
-decides is the rest: whether what was watched or finished before goes on
-uploading when nothing is happening. That is `seedingEnabled`, which
+decides is the rest: whether the kept downloads and the last thing the
+viewer watched go on uploading when nothing is happening. The last thing
+watched is the server's idle share from leaving it until something else
+plays, and its torrent runs only while that sharing is allowed (8ce5427).
+That is `seedingEnabled`, which
 `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) decides from
 the viewer's `shareWhileIdle` -- on by default everywhere; nothing asks what
 the connection costs -- pushing only changes, serialized, and holding it
@@ -285,7 +296,10 @@ The settings tile says so on the devices it applies to.
 
 **The status light says what is happening, never what is configured.**
 `SharingLight` (`lib/features/sharing/sharing_light.dart`) is drawn in the
-shell's top right while the server says bytes moved to or from peers with
+shell's top right -- on a television, at the right end of the band across
+the top of Discover, Search and the Library, which have no app bar there
+(`_Destination.barlessOnTv`) -- while the server says bytes moved to or
+from peers with
 no player reading (`server_background_traffic`, a peek that creates no
 engine, polled every five seconds by `SharingActivityMonitor` only while the
 shell's own route is current). One slot, three glyphs: up while
@@ -372,15 +386,20 @@ reasoning is on the constants. A seek outside is a range request answered
 from the server's cache. A television has 2 GB of RAM for everything, and
 the cushion belongs in the server's bounded cache.
 
-**A player that is left ends its own reads.** A read by id ends with the
-quit, which cancels mpv's `stream_cb` read. For a link read forward over
+**A player that is left ends its own reads, and lets go of its torrent.**
+A read by id ends with the quit, which cancels mpv's `stream_cb` read. For
+a link read forward over
 HTTP, each player screen's token (`<viewer>.<screen>`) rides in its
 `/proxy` URL as `p=`, and on the way out the screen calls
 `server_close_proxy_streams` (`ProxyStreamControl`): the server ends those
 reads and answers `410 Gone` to the token afterwards, so ffmpeg's reconnect
 cannot revive them. The token is a name, not a credential: the route is on
 the loopback control API only, and the token is stripped before the origin
-is asked.
+is asked. The server holds a screen's torrent from its first read until the
+screen says it is gone (`server_release_player`,
+`ProxyStreamControl.releasePlayer`) -- paused, stalled or with nothing open -- since only the app knows when it
+stops using it; a cast published from the screen holds the torrent on its
+own until unpublished.
 
 ### Archives and disc images
 
@@ -407,9 +426,10 @@ it cannot read.
 
 ### Leaving the player
 
-Every way out goes through `PlayerScreen._leave`, in one order: `_detach`,
-send `quit`, close the proxied streams, await the teardown with the video
-still in the tree, then pop.
+Every way out goes through `PlayerScreen._leave`, in one order: report the
+position (to the core, and to the server by `media_note_position`),
+`_detach`, send `quit`, close the proxied streams, release the screen's
+torrent, await the teardown with the video still in the tree, then pop.
 
 - **`_detach` first** ends every subscription, listener and timer before the
   first `await`. Waiting with the screen up is a state the handlers were not
@@ -449,8 +469,8 @@ twice it, then five times it; a fresh press starts again at one.
 ### Controls and keys
 
 `PlayerScreen` switches media_kit's controls off and draws its own: a top
-bar (back, title, next episode, subtitles, audio, stats, settings) and a
-bottom bar (seek bar with the buffered range and drag scrubbing,
+bar (back, title, cast, next episode, subtitles, audio, stats, settings)
+and a bottom bar (seek bar with the buffered range and drag scrubbing,
 play/pause, ± the seek step, time, volume on wide layouts, fullscreen). The
 controls fade after 3 s while playing and stay while paused or buffering.
 On a television they fade whatever holds focus, taking focus back to the
@@ -530,8 +550,9 @@ told for six seconds.
 `NextVideo` and either replaces the route with a player for `nextStream`
 (skipping its own `Unload`, so the session's subtitle preference survives)
 or pops with a `PlayerScreenResult` so Details loads that episode's streams.
-A finished download of the next episode, then a linked Drive file of it, is
-preferred to the core's own next stream.
+A finished download of the next episode, then a video on this device
+matched to it, then a linked Drive file of it, is preferred to the core's
+own next stream (`player_screen_next.dart`).
 
 ## Subtitles
 
@@ -806,8 +827,8 @@ the piece store the streaming cache and kept downloads share
 session's records, and the proxy cache. There is no downloads folder and
 nothing to move a download to.
 
-- **Its default** is the directory the app hands `server_start`
-  (`XtremioBootstrap.dataDirectory`, `lib/main.dart`): the app cache
+- **Its default** is `server/` under the data directory the app hands
+  `core_init` (`dataDirectory`, `lib/main.dart`): the app cache
   directory everywhere but Android, and on Android the app-specific external
   files directory, since `getCacheDir()` is the system's to reclaim.
 - **Its setting** is `cacheRoot`, written through `server_update_settings`
@@ -917,8 +938,11 @@ merged into the list and never written to the engine's library or synced:
 they filter whatever the engine answered: they combine with the type pills
 and the sort, dispatch nothing, and are not turned off by the engine's
 controls. Remote shows everything linked, matched or not, with a Reload
-button beside it. The app bar holds the way to the Downloads screen and
-`RemoteFilesButton`, where files are linked from. One matching pass runs
+button beside it. The app bar holds "Sync now" (signed in), "Manage
+downloads" (while there are any) and `RemoteFilesButton`, where files are
+linked from. On a television there is no app bar: the types, the sort (an icon, its words
+the tooltip) and those buttons are one band across the top, with the
+filter chips the row under it (8c530e6). One matching pass runs
 per screen (`DriveMatchRun`). Tests: `test/features/library_merge_test.dart`,
 `library_remote_test.dart`, `library_local_test.dart`,
 `library_screen_test.dart`.
@@ -1068,7 +1092,7 @@ it; read the current revs there.
 |---|---|---|
 | `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | The server this app embeds. It keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry. Default features are on, which is RAR support -- see [the README](../README.md#license). |
 | `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | A dev-dependency only, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. Always the rev stream-server's `enginefs` uses, or two librqbits end up in the graph: bump the two together. |
-| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) in a flattened `other` map instead of letting serde drop them (upstream PR Stremio/stremio-core#1045), one that pins its `localsearch` dependency by rev, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"` -- stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. Built with the `derive` + `env-future-send` features. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.64.1 (rebased 2026-10-05, 2ab0526) plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) in a flattened `other` map instead of letting serde drop them (upstream PR Stremio/stremio-core#1045), one that pins its `localsearch` dependency by rev, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"` -- stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. Built with the `derive` + `env-future-send` features. |
 
 To bump one: change the rev, `cargo update -p <crate>`, run `cargo test`,
 and re-record any fixture whose shape moved. A stremio-core bump has to
