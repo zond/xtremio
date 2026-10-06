@@ -347,6 +347,14 @@ unless it says otherwise.
 - **A row a remote walks is built all at once** (`SingleChildScrollView`
   over a `Row`, never `ListView.builder`); bound each image's decode
   instead. Its test walks to the last item of a row longer than the screen.
+- **What is left of a held key after its long press is nobody's.** The
+  long press opens something that takes focus while the key is still
+  down, and Android repeats the key until it comes up; Flutter's
+  shortcuts activate on repeats, so the first repeat pressed the new
+  sheet's Cancel. `RemotePress` swallows the key's repeats and release
+  app-wide once the long press fires (`_SpentHold`). A widget test that
+  holds a key sends its repeats (`continue_watching_remove_test.dart`,
+  `remote_press_test.dart`).
 - **A sideways press at the end of a row stays in the row**
   (`TvCardStrip`; `RootShell._onRailKey` for the rail).
 - **Anything the remote can land on wears the app's own focus indicator.**

@@ -95,6 +95,41 @@ void main() {
     expect(focusedTileName(tester), first, reason: 'back where it was');
   });
 
+  testWidgets('a real remote\'s hold -- down, repeats while it is held, up -- '
+      'leaves the confirmation open with nothing chosen', (tester) async {
+    // Android sends a held key's repeats every 50 ms or so. The sheet opens
+    // at the long press, half a second into the hold, and takes the remote
+    // onto Cancel; the repeats still coming must not press it.
+    final core = await pumpApp(tester, continueWatching());
+    expect(focusedTileName(tester), first);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(
+      RemotePress.holdDuration + const Duration(milliseconds: 50),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Remove from Continue watching'), findsOneWidget);
+    expect(focusedLabel(tester), 'Cancel');
+
+    for (var i = 0; i < 5; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Remove from Continue watching'), findsOneWidget);
+    expect(focusedLabel(tester), 'Cancel');
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Remove from Continue watching'), findsOneWidget);
+    expect(ctxActions(core), isEmpty);
+
+    // And the next press is an ordinary one again.
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(focusedTileName(tester), first);
+  });
+
   testWidgets('the last tile of the row hands the remote to the one before '
       'it', (tester) async {
     final core = await pumpApp(tester, continueWatching());

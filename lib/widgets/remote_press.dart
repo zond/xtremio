@@ -18,6 +18,17 @@ import 'package:flutter/widgets.dart';
 /// ([LogicalKeyboardKey.contextMenu], Android's `KEYCODE_MENU`) is
 /// [onLongPress] too, straight away. Every other key passes through.
 ///
+/// **What is left of a held key after the long press is nobody's.** The
+/// long press usually opens something -- a sheet, a dialog -- that takes
+/// focus while the key is still down, and Android goes on sending the
+/// key's repeats every 50 ms until it comes up. Flutter's default
+/// shortcuts activate on a repeat as well as on a press, so the first
+/// repeat pressed whatever the new sheet had focused (its Cancel, its
+/// first entry) and the next ones the tile under it again. So once the
+/// long press has fired, every remaining event of that key -- repeats and
+/// the release -- is swallowed before the focus tree sees it
+/// ([_SpentHold]), whoever has focus by then.
+///
 /// A hold with no [onLongPress] still taps on release, as Android does.
 /// The child keeps its own tap handlers for pointers (a touch remote, a
 /// mouse); this widget only listens to keys, and only for the key events
@@ -44,6 +55,10 @@ class RemotePress extends StatefulWidget {
   static final Set<LogicalKeyboardKey> activateKeys = {
     LogicalKeyboardKey.select,
     LogicalKeyboardKey.enter,
+    // A remote whose centre key is `KEYCODE_NUMPAD_ENTER`: Flutter's own
+    // shortcuts activate on it, so it must be taken here or a hold on it
+    // is a stream of taps.
+    LogicalKeyboardKey.numpadEnter,
     LogicalKeyboardKey.gameButtonA,
   };
 
@@ -69,6 +84,9 @@ class _RemotePressState extends State<RemotePress> {
   /// The current hold already fired [RemotePress.onLongPress].
   bool _longPressed = false;
 
+  /// The activate key that is down here.
+  LogicalKeyboardKey? _heldKey;
+
   @override
   void dispose() {
     _hold?.cancel();
@@ -80,6 +98,7 @@ class _RemotePressState extends State<RemotePress> {
     _hold = null;
     _down = false;
     _longPressed = false;
+    _heldKey = null;
   }
 
   void _onHoldElapsed() {
@@ -87,6 +106,8 @@ class _RemotePressState extends State<RemotePress> {
     final onLongPress = widget.onLongPress;
     if (onLongPress == null) return;
     _longPressed = true;
+    final key = _heldKey;
+    if (key != null) _SpentHold.swallow(key);
     onLongPress();
   }
 
@@ -106,6 +127,7 @@ class _RemotePressState extends State<RemotePress> {
       case KeyDownEvent():
         _reset();
         _down = true;
+        _heldKey = key;
         _hold = Timer(RemotePress.holdDuration, _onHoldElapsed);
         return KeyEventResult.handled;
       case KeyRepeatEvent():
@@ -138,4 +160,43 @@ class _RemotePressState extends State<RemotePress> {
     onFocusChange: _onFocusChange,
     child: widget.child,
   );
+}
+
+/// The rest of a held key whose long press has fired: its repeats and its
+/// release, taken before the focus tree sees them (see [RemotePress]).
+///
+/// One key at a time, app-wide, as a remote has one centre key. An early
+/// key handler on the [FocusManager] rather than a [Focus] anywhere in the
+/// tree, because what the long press opened is a new route, above every
+/// widget this one could put round itself.
+abstract final class _SpentHold {
+  static LogicalKeyboardKey? _key;
+
+  static void swallow(LogicalKeyboardKey key) {
+    if (_key == null) FocusManager.instance.addEarlyKeyEventHandler(_handle);
+    _key = key;
+  }
+
+  static void _release() {
+    _key = null;
+    FocusManager.instance.removeEarlyKeyEventHandler(_handle);
+  }
+
+  static KeyEventResult _handle(KeyEvent event) {
+    if (event.logicalKey != _key) return KeyEventResult.ignored;
+    switch (event) {
+      case KeyRepeatEvent():
+        return KeyEventResult.handled;
+      case KeyUpEvent():
+        _release();
+        return KeyEventResult.handled;
+      case KeyDownEvent():
+        // A press of its own: the release this was waiting for never came
+        // (the app went to the background mid-hold, say). It is not the
+        // spent hold's, so it goes through.
+        _release();
+        return KeyEventResult.ignored;
+    }
+    return KeyEventResult.ignored;
+  }
 }

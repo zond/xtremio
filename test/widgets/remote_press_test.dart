@@ -111,17 +111,93 @@ void main() {
     expect(events, ['long']);
   });
 
-  testWidgets('enter and the gamepad\'s A activate like select', (
+  testWidgets('enter, numpad enter and the gamepad\'s A activate like select', (
     tester,
   ) async {
+    // Some remotes' centre key is KEYCODE_ENTER or KEYCODE_NUMPAD_ENTER;
+    // Flutter's own shortcuts activate on both.
     final events = <String>[];
     await tester.pumpWidget(harness(events));
     await tester.pumpAndSettle();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
     await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonA);
     await tester.pumpAndSettle();
-    expect(events, ['tap', 'tap']);
+    expect(events, ['tap', 'tap', 'tap']);
+  });
+
+  testWidgets('after a long press, the held key\'s repeats and release reach '
+      'nothing, even what the long press put focus on', (tester) async {
+    // The long press opens a dialog that takes focus while the key is still
+    // down; Android goes on repeating the key until it comes up. Without
+    // the swallow the first repeat presses the dialog's button.
+    final events = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: RemotePress(
+              onTap: () => events.add('tap'),
+              onLongPress: () {
+                events.add('long');
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    child: TextButton(
+                      autofocus: true,
+                      onPressed: () => events.add('dialog'),
+                      child: const Text('in the dialog'),
+                    ),
+                  ),
+                );
+              },
+              child: TextButton(
+                autofocus: true,
+                onPressed: () => events.add('button'),
+                child: const Text('press me'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(RemotePress.holdDuration);
+    await tester.pumpAndSettle();
+    expect(find.text('in the dialog'), findsOneWidget);
+    for (var i = 0; i < 3; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(events, ['long']);
+    expect(find.text('in the dialog'), findsOneWidget);
+
+    // The swallow ended with the release: the next press is the dialog's.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(events, ['long', 'dialog']);
+  });
+
+  testWidgets('a press after a hold whose release never came is not '
+      'swallowed', (tester) async {
+    final events = <String>[];
+    await tester.pumpWidget(harness(events));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(RemotePress.holdDuration);
+    expect(events, ['long']);
+    // The release is lost (the app was in the background, say): the
+    // platform's next word about the key is a fresh press.
+    HardwareKeyboard.instance.clearState();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(events, ['long', 'tap']);
   });
 
   testWidgets('other keys and a release without a press pass through', (
