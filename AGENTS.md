@@ -38,17 +38,18 @@ commit (the pipe's exit code is the filter's); redirect to a log and
 `echo EXIT=$?`.
 
 ```bash
-dart format --set-exit-if-changed lib test; echo EXIT=$?
+# Rust first: the closing `cargo build` leaves the debug library
+# (rust/target/debug/libxtremio_core.*) that the FFI-backed Dart tests load;
+# skip it after touching rust/src and they run against a stale library.
+(cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items && cargo test && cargo build); echo EXIT=$?
+dart format --output=none --set-exit-if-changed lib test; echo EXIT=$?
 flutter analyze; echo EXIT=$?
-# FFI-backed Dart tests load rust/target/debug/libxtremio_core.*: rebuild it
-# after touching rust/src, or they run against a stale library.
-cargo build --manifest-path rust/Cargo.toml; echo EXIT=$?
 flutter test > /tmp/flutter-test.log 2>&1; echo EXIT=$?
-# Rust changes:
-(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items && cargo test); echo EXIT=$?
-# Anything under rust/src/api:
+# Anything under rust/src/api (make compares before and after instead, so it
+# also passes on a tree whose regenerated bindings are not committed yet):
 flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs; echo EXIT=$?
-# Kotlin with no Android in it (FrameRateMode, DownloadsProgressBar):
+# Kotlin with no device in it (FrameRateMode, DownloadsProgressBar,
+# CastPicture, InstallOutcome):
 (cd android && ./gradlew :app:testDebugUnitTest); echo EXIT=$?
 ```
 
@@ -78,8 +79,9 @@ stashing the `lib/` (or `rust/src`) change and running the new test
   changing the test in the same commit, not loosening it to a fragment.
 - Widget tests run against `FakeCoreClient`, `FakePlaybackEngine` and the
   other fakes in `test/support/`; nothing in `test/features` touches FFI or
-  libmpv. `test/core/core_client_test.dart` and `rust/tests/core.rs` are the
-  FFI and engine tests.
+  libmpv. The FFI tests load the library through `test/support/rust_lib.dart`
+  (`test/bridge/`, `test/core/core_client_test.dart` and a few others under
+  `test/core/`); `rust/tests/` holds the Rust side's, `core.rs` the engine's.
 - Model-field states come from fixtures under `rust/tests/fixtures/`,
   recorded by the `#[ignore]` tests in `rust/tests/` (the commands are in
   [docs/OPERATIONS.md](docs/OPERATIONS.md#re-recording-fixtures)) and loaded
@@ -102,7 +104,8 @@ bug report or the text of a logged exception (log the exception's *type*):
   `source.event` only -- never `RuntimeCoreEvent.args`, a `Ctx` action's
   args, or the `ctx` JSON.
 - **The embedded server's bearer token** (`ServerHandle::auth_token`, read
-  by `server::token_for` in `rust/src/env.rs`). It never crosses FFI and
+  by `server::token_for` in `rust/src/server.rs`, which `Env::fetch` in
+  `rust/src/env.rs` asks). It never crosses FFI and
   exists only inside the Rust crate.
 - **The Google Drive refresh token.** It does not expire and reaches every
   file the account ever picked through this OAuth client. It lives in
@@ -115,7 +118,7 @@ bug report or the text of a logged exception (log the exception's *type*):
 - **A published cast token** (`media_publish`, `media_publish_rendition`):
   `<lan base>/cast/<token>` is a URL into this device for as long as it is
   published. The player logs the listener's address and never the URL
-  (`_handToReceiver`), and `DiagnosticsLog.url` writes any `/cast/…` path
+  (`_deliverToReceiver`), and `DiagnosticsLog.url` writes any `/cast/…` path
   without it. The Cast plugin would log every media status with the URL
   in it, so it is held at warnings (`GoogleCastClient.pluginLogLevel`).
 - **Addon, debrid and subtitle URLs**, which carry keys in the path as well
@@ -134,7 +137,8 @@ bug report or the text of a logged exception (log the exception's *type*):
 
 Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
 `test/core/actions_test.dart`, `test/features/player/player_cast_test.dart`,
-`test/features/player/player_direct_cast_test.dart`.
+`test/features/player/player_direct_cast_test.dart`,
+`test/features/cast/google_cast_client_test.dart`.
 
 ## The app never speaks HTTP to the embedded server
 
@@ -295,8 +299,9 @@ its half of one) away, never a dash. Tests:
   no sharing row. mpv's `collecting…` holds back only mpv's readings.
 - The transfer counters cover the torrent's current live period and the row
   says `since it last went live`. Label them; never persist them.
-- The server is asked about what the engine was handed: a torrent's media
-  id (`_playingMediaId`), or the URL (`_heldStreamUrl`) only when that URL
+- The server is asked about what the engine was handed: the stream's media
+  id (`_registeredMediaId` from the moment it is registered, else
+  `_playingMediaId`), or the URL (`_heldStreamUrl`) only when that URL
   is on the embedded server --
   any loopback URL (`isEmbeddedServerHost`: there is no other server on
   this device) in a build that started one. The torrent stats poll asks about every torrent (all of them are the
@@ -310,6 +315,27 @@ its half of one) away, never a dash. Tests:
   on every screen goes through): decimal, binary only for piece lengths.
   Stream pills follow the addon's 1024-based size text (`StreamFacts`),
   because they repeat what the addon wrote.
+
+## A cast is judged by what mpv read, and nothing else
+
+`CastCompatibility.of` (`lib/features/cast/cast_compatibility.dart`) decides
+from mpv's report -- the reader that opened the file, the codecs, the pixel
+format -- and from the model name the receiver announces
+(`ReceiverTable.of`, `lib/features/cast/receiver_table.dart`). See
+[What can be cast](docs/CASTING.md#what-can-be-cast). Tests:
+`test/features/cast/cast_compatibility_test.dart`,
+`test/features/cast/receiver_table_test.dart`.
+
+- **No name is read.** Not a file name, a URL's extension, a
+  server-resolved name or a release title (`x265`, `DDP5.1`): they are
+  often absent and sometimes wrong. A test that a `.mp4` mpv calls Matroska
+  is a Matroska holds it.
+- **Before mpv has reported, the answer is "not yet"** (`CastRefusal.pending`),
+  never a guess, and a report is dropped when the screen moves to another
+  stream.
+- **A picture no receiver decodes is refused up front**
+  (`ReceiverTable.deepestPicture`; 10-bit H.264 among them), whether the
+  film would go as it is or repackaged: a rendition copies the picture.
 
 ## The addon health record keys on a hash, never the URL
 
@@ -344,9 +370,16 @@ unless it says otherwise.
   No widget test can see this.
 - **A scrolling strip clips, so a focused tile needs room**
   (`_RowLayout.focusSlack`, television only).
-- **A row a remote walks is built all at once** (`SingleChildScrollView`
-  over a `Row`, never `ListView.builder`); bound each image's decode
-  instead. Its test walks to the last item of a row longer than the screen.
+- **A row a remote walks reaches its last item.** Directional focus sees
+  only built widgets, so the details screen's rows (`TvCardStrip`,
+  `TvEpisodeRow`, the season pills) are built all at once
+  (`SingleChildScrollView` over a `Row`, never `ListView.builder`), with
+  each image's decode bounded instead. Discover's strips are lazy
+  `ListView.builder`s and get away with it only because every focus
+  centres its tile (`FocusableTile`'s `ensureVisible`), which builds the
+  next before it is asked for. Each kind has a test walking a row longer
+  than the screen (`details_episode_row_test.dart`,
+  `details_sources_row_test.dart`, `catalog_rows_focus_test.dart`).
 - **What is left of a held key after its long press is nobody's.** The
   long press opens something that takes focus while the key is still
   down, and Android repeats the key until it comes up; Flutter's
@@ -354,7 +387,7 @@ unless it says otherwise.
   sheet's Cancel. `RemotePress` swallows the key's repeats and release
   app-wide once the long press fires (`_SpentHold`). A widget test that
   holds a key sends its repeats (`continue_watching_remove_test.dart`,
-  `remote_press_test.dart`).
+  `test/widgets/remote_press_test.dart`).
 - **A sideways press at the end of a row stays in the row**
   (`TvCardStrip`; `RootShell._onRailKey` for the rail).
 - **Anything the remote can land on wears the app's own focus indicator.**
@@ -371,7 +404,8 @@ unless it says otherwise.
 - **An image holds its box before it arrives**: pending, failed and loaded
   are one size (`TvBackdrop`, `EpisodeThumbnail`, `TvMetaHeader`).
 - **A sliver that comes and goes is keyed**, or focus is lost when it
-  appears.
+  appears (the details screen's last-used rung,
+  `meta_details_tv_sources.dart`).
 - **A width shared between N things is clamped at zero.** `(width - gaps) /
   n` goes negative on a phone; debug builds throw where release clamps.
 
@@ -393,8 +427,9 @@ own navigator -- see [docs/DRIVING.md](docs/DRIVING.md). Never install a
 debug or profile build in a way that touches the release app
 (`com.zond.xtremio`): never uninstall it, `pm clear` it or install over
 it. Nothing outside `lib/main_driver.dart` imports `lib/dev/driver/`, and
-`lib/main.dart` never imports `flutter_driver`. Tests:
-`test/dev/app_driver_test.dart`.
+`lib/main.dart` never imports `flutter_driver`; no test holds those two,
+so `git grep dev/driver lib` is the check. The driver's commands are
+tested in `test/dev/app_driver_test.dart`.
 
 ## Use cheaper models for mechanical work
 
