@@ -34,7 +34,9 @@ tool/drive-start --stop           # ends the session; the app stays installed
 `tool/drive-start` runs `flutter run --profile -t lib/main_driver.dart` in
 the background and returns once the app's VM service URL is written to
 `build/drive/vmservice-url`; Flutter's output is in
-`build/drive/flutter-run.log`. A profile build compiles the Rust crate as a
+`build/drive/flutter-run.log` (both under `$XTREMIO_DRIVE_DIR` when it is
+set; `$XTREMIO_DRIVE_DEVICE` stands in for `-d`). It gives up after thirty
+minutes without a URL, or as soon as `flutter run` exits. A profile build compiles the Rust crate as a
 cargo `--release` build (cargokit maps profile to release), so the first one
 takes a few minutes and a rebuild with the crate cached about half a minute.
 A session survives the app being backgrounded; it ends when the app process
@@ -57,7 +59,8 @@ tool/drive find Torrentio 720p --not "Torrentio RD"
 tool/drive tap Torrentio H265 --not "Torrentio RD"   # find, then tap the first match
 tool/drive wait "1080p" --timeout 30     # poll until something matches
 tool/drive player                        # what the player opened, position, state, errors
-tool/drive log 80                        # the last lines of the diagnostics ring
+tool/drive seek 1:02:30                  # h:mm:ss, m:ss, seconds or N%
+tool/drive log 80                        # the last lines of the diagnostics ring (default 50)
 tool/drive streams x265 1080p --not 2160p  # every source of the open title, numbered
 tool/drive play 2                        # play stream #2 as a tap on its row would
 tool/drive --json screen                 # the raw answer
@@ -70,9 +73,11 @@ ids: stable while the node lives, so read a fresh `screen` after a
 navigation. A node marked `hidden` is built but scrolled out of view; a
 list builds only what is near the viewport, so scroll (`act <id>
 scrollUp`) to reach rows further down -- or, for a title's sources, read
-them all with `streams`. `act`, `tap` and `go` wait for the
+them all with `streams`. `act`, `tap`, `go` and `play` wait for the
 screen to settle (at most three seconds, so a spinner does not hang them)
-and answer the new screen.
+and answer the new screen. `find`, `tap` and `wait` match every word given,
+ignoring case, against a node's label, value, hint and tooltip; `wait`
+polls for twenty seconds unless told `--timeout`.
 
 `streams [<text>...] [--not <text>]` lists every source the open details
 screen offers -- or the one under the player -- read from the list's own
@@ -83,8 +88,11 @@ its index, its kind (torrent, link, YouTube, external ...; `not playable`
 when its row takes no tap), the addon (`Google Drive` and `This device` for
 the viewer's own files), what the row says, what was read out of it
 (resolution, size, seeders, the source, codec and audio tags, the flags)
-and the file the addon names. Filter words work as `find`'s and keep the
-unfiltered indices. It never prints a stream's URL, info hash or headers:
+and the file the addon names, then `also from` and the other addons when
+the row stands for the same stream from several. Filter words work as
+`find`'s and keep the unfiltered indices. Before the list there is a note
+when there is nothing to list yet: the title not loaded, no episode picked,
+or an episode picked whose streams have not come back. It never prints a stream's URL, info hash or headers:
 addon and debrid URLs carry keys, and a link an addon wrote into its text
 is cut to its origin as a log line's is. While addons are still answering
 it says which, and the list can still grow and its numbers shift; list again
@@ -115,15 +123,20 @@ routes: ... > MetaDetailsScreen > PlayerScreen (player) *
 ...
 ```
 
-(The output is the test fixture's, `test/dev/app_driver_test.dart`.)
+(The streams are the test fixture's, `moreSourcesCore` in
+`test/dev/app_driver_test.dart`, with the listing cut short.)
 
 `seek <h:mm:ss|m:ss|seconds|N%>` moves the player the way its seek bar
 does; the bar itself takes a tap at a place, which semantics cannot aim.
+It needs exactly one player screen up, and a percentage needs a known
+duration. It answers `player` as it stands right after, so poll `player`
+for where it lands.
 
 `player` reads the player screen's own state (`PlayerProbe` in
 `lib/features/player/player_screen.dart`): the core's URL, what the engine
 was handed (`xtremio://<media id>` for a stream played by id), position, duration,
-buffer, playing, buffering, a stuck position and the last engine and open
+buffer, playing, buffering, a stuck position, whether the media has
+loaded, whether it is casting or leaving, and the last engine and open
 errors. Every URL in it, and every `log` line unless Verbose logging is on,
 goes through the same redaction as the diagnostics report.
 
