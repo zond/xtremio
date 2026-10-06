@@ -6,8 +6,10 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/prefs_client.dart';
+import '../../core/server_client.dart';
 import 'apk_download.dart';
 import 'apk_installer.dart';
+import 'install_room.dart';
 import 'release_version.dart';
 import 'releases.dart';
 
@@ -64,6 +66,13 @@ class UpdateCheckFailed extends UpdateCheck {
 /// one than that is offered again. "Later" puts the offer away for this
 /// run. A manual check offers the skipped release as well: it was asked
 /// for.
+///
+/// **Room before an install.** An Update press first asks the embedded
+/// server to give back its cache ([makeRoom]) and then measures the data
+/// volume, before the download and again before the install: a television
+/// whose cache has filled its disk would otherwise download the APK and
+/// have Android refuse it. Nothing else here reclaims anything -- the
+/// daily look and the offer never touch the cache.
 class AppUpdates {
   AppUpdates({
     required this.prefs,
@@ -74,6 +83,7 @@ class AppUpdates {
     Future<Directory> Function()? downloadsDirectory,
     DateTime Function()? clock,
     bool? installsHere,
+    this.cache = const ServerClient(),
   }) : source = source ?? GitHubReleaseSource(),
        newDownloader = downloader ?? ApkDownloader.new,
        downloadsDirectory = downloadsDirectory ?? _defaultDirectory,
@@ -98,6 +108,22 @@ class AppUpdates {
   /// The platform installs APKs (Android). Everywhere else an update is a
   /// page to open.
   final bool installsHere;
+
+  /// The embedded server's cache, which [makeRoom] asks for what it can
+  /// give back.
+  final ServerCacheControl cache;
+
+  /// How long [makeRoom] waits for the server's clean before it measures
+  /// anyway.
+  ///
+  /// A clean is the server's owners unlinking what nobody is playing and
+  /// nobody kept, on this device's own flash: well under a second as a
+  /// rule, and a few on a television's eMMC with thousands of piece files
+  /// to go. Thirty seconds lets a clean that is working finish, and keeps
+  /// a server that does not answer from holding an update the viewer is
+  /// watching a dialog for. What it freed by then is in the measurement
+  /// either way: the clean is not cancelled, only no longer waited for.
+  static const Duration cleanBound = Duration(seconds: 30);
 
   /// Whether an update can be installed from inside the app rather than
   /// only pointed at. See [BuildIdentity.canInstall] for why a debug build
@@ -148,6 +174,43 @@ class AppUpdates {
   /// "Skip this version": [release] is not offered by the daily look again.
   Future<void> skip(ReleaseInfo release) =>
       prefs.setUpdateSkippedTag(release.tag);
+
+  /// Asks the server to give back its cache, waits for that (at most
+  /// [cleanBound]) and measures whether an APK of [apkBytes] fits: before
+  /// the download when [downloaded] is false, before the install when it
+  /// is true ([UpdateRoom.forApk]).
+  ///
+  /// The clean is the Server storage screen's "Clean cache now": what
+  /// nobody is playing and nobody kept, never a kept download or the part
+  /// of the title played last around where it was left. Called only from
+  /// an Update press.
+  ///
+  /// Null when the volume could not be measured: then nothing is refused
+  /// here and Android decides, as it always did.
+  Future<UpdateRoom?> makeRoom({
+    required int apkBytes,
+    required bool downloaded,
+  }) async {
+    try {
+      await cache.cleanCacheNow().timeout(cleanBound);
+    } catch (error) {
+      // No server, or still cleaning at the bound: the measurement below
+      // is the answer either way.
+      if (kDebugMode) debugPrint('update clean: ${error.runtimeType}');
+    }
+    DataVolumeRoom? volume;
+    try {
+      volume = await installer.room();
+    } catch (_) {
+      volume = null;
+    }
+    if (volume == null) return null;
+    return UpdateRoom.forApk(
+      apkBytes: apkBytes,
+      volume: volume,
+      downloaded: downloaded,
+    );
+  }
 
   /// The file [release]'s APK for [abi] is downloaded to.
   Future<File> apkFile(ReleaseInfo release, String abi) async => File(

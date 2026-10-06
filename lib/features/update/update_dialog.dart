@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import '../../core/units.dart';
 import '../../shell/external_link.dart';
 import '../../widgets/readout.dart';
+import '../diagnostics/server_storage_screen.dart';
 import 'apk_download.dart';
 import 'apk_installer.dart';
 import 'app_updates.dart';
+import 'install_room.dart';
 import 'releases.dart';
 
 /// Puts [release] to the viewer: what it is, what changed, and Update,
@@ -16,7 +18,10 @@ import 'releases.dart';
 ///
 /// Update installs it where [AppUpdates.canInstall] (an Android release
 /// build) and opens its page everywhere else. Nothing is installed without
-/// a press here *and* Android's own confirmation after it.
+/// a press here *and* Android's own confirmation after it, and nothing is
+/// downloaded or installed that the device has no room for
+/// ([AppUpdates.makeRoom]): the dialog says how much is free and how much
+/// is needed instead, and offers Server storage.
 Future<void> showUpdateDialog(
   BuildContext context, {
   required AppUpdates updates,
@@ -28,7 +33,7 @@ Future<void> showUpdateDialog(
 );
 
 /// Where an update is between the offer and Android's confirmation.
-enum _Step { offer, downloading, permission, installing, failed }
+enum _Step { offer, room, downloading, permission, installing, short, failed }
 
 /// The dialog [showUpdateDialog] shows. One dialog for the whole way, so a
 /// remote's focus never has to find its way to a second one: each step
@@ -52,6 +57,12 @@ class UpdateDialog extends StatefulWidget {
   static const String retryLabel = 'Try again';
   static const String openSettingsLabel = 'Open settings';
   static const String installLabel = 'Install';
+  static const String storageLabel = 'Server storage';
+
+  /// What the dialog says while the server cleans and the room is measured.
+  static const String roomText =
+      'Emptying the torrent cache of what it can give back, then checking '
+      'the space.';
 
   @override
   State<UpdateDialog> createState() => _UpdateDialogState();
@@ -73,6 +84,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   /// What went wrong, for [_Step.failed].
   String _failure = '';
+
+  /// What did not fit, for [_Step.short].
+  UpdateRoom? _room;
 
   /// Whether the "Install unknown apps" shortcut opened; false shows where
   /// the setting is instead.
@@ -132,6 +146,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final asset = _asset;
     final abi = _abi;
     if (asset == null || abi == null) return;
+    if (!await _makeRoom(downloaded: false)) return;
     final downloader = _downloader = _updates.newDownloader();
     setState(() {
       _step = _Step.downloading;
@@ -191,9 +206,37 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (mounted) setState(() => _settingsOpened = opened);
   }
 
+  /// Has the server give back its cache and measures what is left, before
+  /// the download and again before the install. False -- and the dialog on
+  /// [_Step.short] -- when the update does not fit; a room nobody could
+  /// measure is not "full", and goes ahead.
+  Future<bool> _makeRoom({required bool downloaded}) async {
+    final asset = _asset;
+    if (asset == null) return false;
+    setState(() => _step = _Step.room);
+    final room = await _updates.makeRoom(
+      apkBytes: asset.size,
+      downloaded: downloaded,
+    );
+    if (!mounted) return false;
+    if (room == null || room.fits) return true;
+    setState(() {
+      _step = _Step.short;
+      _room = room;
+    });
+    return false;
+  }
+
+  Future<void> _openStorage() => Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => ServerStorageScreen(client: _updates.cache),
+    ),
+  );
+
   Future<void> _install() async {
     final path = _apkPath;
     if (path == null) return;
+    if (!await _makeRoom(downloaded: true)) return;
     setState(() => _step = _Step.installing);
     final outcome = await _updates.installer.install(path);
     if (!mounted) return;
@@ -239,9 +282,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Back is Later while offering and Close after a failure; during a
-    // download it is Cancel ([dispose] stops the download, which keeps its
-    // part for the next attempt).
+    // Back is Later while offering and Close after a failure; while room
+    // is made and during a download it is Cancel ([dispose] stops the
+    // download, which keeps its part for the next attempt; a clean under
+    // way finishes on its own).
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -259,20 +303,32 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   String get _title => switch (_step) {
     _Step.offer => 'xtremio ${_release.version} is available',
+    _Step.room => 'Making room for xtremio ${_release.version}',
     _Step.downloading => 'Downloading xtremio ${_release.version}',
     _Step.permission => 'Allow xtremio to install apps',
     _Step.installing => 'Installing xtremio ${_release.version}',
+    _Step.short => 'Not enough space for the update',
     _Step.failed => 'The update did not install',
   };
 
   Widget _content(BuildContext context) => switch (_step) {
     _Step.offer => _offer(context),
+    _Step.room => const Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LinearProgressIndicator(),
+        SizedBox(height: 8),
+        Text(UpdateDialog.roomText),
+      ],
+    ),
     _Step.downloading => _progress(context),
     _Step.permission => _permission(),
     _Step.installing => const Text(
       'Confirm the install on Android\'s screen. When it is done Android '
       'closes xtremio; open it again to use the new version.',
     ),
+    _Step.short => Text(_room?.shortText ?? ''),
     _Step.failed => Text(_failure),
   };
 
@@ -364,7 +420,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           child: const Text(UpdateDialog.openPageLabel),
         ),
     ],
-    _Step.downloading => [
+    _Step.room || _Step.downloading => [
       TextButton(
         autofocus: true,
         onPressed: () => Navigator.of(context).pop(),
@@ -392,6 +448,21 @@ class _UpdateDialogState extends State<UpdateDialog> {
         autofocus: true,
         onPressed: () => Navigator.of(context).pop(),
         child: const Text(UpdateDialog.closeLabel),
+      ),
+    ],
+    _Step.short => [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text(UpdateDialog.closeLabel),
+      ),
+      TextButton(
+        autofocus: true,
+        onPressed: _openStorage,
+        child: const Text(UpdateDialog.storageLabel),
+      ),
+      FilledButton(
+        onPressed: _retry,
+        child: const Text(UpdateDialog.retryLabel),
       ),
     ],
     _Step.failed => [

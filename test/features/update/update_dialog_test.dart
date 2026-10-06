@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/update/apk_installer.dart';
+import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/update/app_updates.dart';
+import 'package:xtremio/features/update/install_room.dart';
 import 'package:xtremio/features/update/update_dialog.dart';
 import 'package:xtremio/shell/external_link.dart';
 
 import '../../support/fake_link_opener.dart';
+import '../../support/fake_server_cache.dart';
 import '../../support/fake_updates.dart';
 
 final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
@@ -36,6 +39,21 @@ Future<void> openDialog(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// A 4 GB volume with [free] bytes free: its reserve is 200 MB, so the
+/// 1 kB sample APK needs 200,003,000 bytes before the download and
+/// 200,002,000 before the install.
+DataVolumeRoom fourGb(int free) =>
+    DataVolumeRoom(freeBytes: free, totalBytes: 4000000000);
+
+/// A server whose clean never answers.
+class _StuckCache extends FakeServerCache {
+  @override
+  Future<EvictionReport> cleanCacheNow() {
+    cleans++;
+    return Completer<EvictionReport>().future;
+  }
 }
 
 /// The button labelled [label], whichever kind of Material button it is.
@@ -85,6 +103,135 @@ void main() {
     ]);
     // Success: the dialog is gone (and on a device, so is the process).
     expect(find.byType(UpdateDialog), findsNothing);
+  });
+
+  testWidgets('Update has the server clean its cache before the download '
+      'and again before the install', (tester) async {
+    final cache = FakeServerCache(cleanResult: cleanedNothing);
+    int? cleansAtInstall;
+    final installer = FakeApkInstaller(
+      onInstall: () => cleansAtInstall = cache.cleans,
+    );
+    var cleansAtDownload = -1;
+    await openDialog(
+      tester,
+      fakeUpdates(
+        installer: installer,
+        cache: cache,
+        downloader: () {
+          cleansAtDownload = cache.cleans;
+          return FakeApkDownloader();
+        },
+      ),
+    );
+    // Offering it reclaims nothing: only the press does.
+    expect(cache.cleans, 0);
+    await tester.tap(button(UpdateDialog.updateLabel));
+    await tester.pumpAndSettle();
+    expect(cleansAtDownload, 1);
+    expect(cleansAtInstall, 2);
+    expect(installer.installed, hasLength(1));
+  });
+
+  testWidgets('Later reclaims nothing', (tester) async {
+    final cache = FakeServerCache(cleanResult: cleanedNothing);
+    await openDialog(tester, fakeUpdates(cache: cache));
+    await tester.tap(button(UpdateDialog.laterLabel));
+    await tester.pumpAndSettle();
+    expect(cache.cleans, 0);
+  });
+
+  testWidgets('without the room it downloads nothing, says how much is '
+      'free and needed, and offers Server storage', (tester) async {
+    final installer = FakeApkInstaller(volume: fourGb(150000000));
+    var downloads = 0;
+    await openDialog(
+      tester,
+      fakeUpdates(
+        installer: installer,
+        downloader: () {
+          downloads++;
+          return FakeApkDownloader();
+        },
+      ),
+    );
+    await tester.tap(button(UpdateDialog.updateLabel));
+    await tester.pumpAndSettle();
+    expect(find.text('Not enough space for the update'), findsOneWidget);
+    expect(
+      find.text(
+        'The update needs 200 MB free on this device and there is 150 MB, '
+        'after emptying the torrent cache of everything it could give back. '
+        'What is left there is a download you kept or the title you played '
+        'last; Server storage shows it.',
+      ),
+      findsOneWidget,
+    );
+    expect(downloads, 0);
+    expect(installer.installed, isEmpty);
+
+    await tester.tap(button(UpdateDialog.storageLabel));
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerStorageScreen), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Room made elsewhere: Try again goes on from where it stopped.
+    installer.volume = fourGb(1000000000);
+    await tester.tap(button(UpdateDialog.retryLabel));
+    await tester.pumpAndSettle();
+    expect(downloads, 1);
+    expect(installer.installed, hasLength(1));
+  });
+
+  testWidgets('the room is measured again before the install', (tester) async {
+    final installer = FakeApkInstaller(allowed: false);
+    await openDialog(tester, fakeUpdates(installer: installer));
+    await tester.tap(button(UpdateDialog.updateLabel));
+    await tester.pumpAndSettle();
+    expect(find.text('Allow xtremio to install apps'), findsOneWidget);
+
+    // The disk filled while the permission was being found.
+    installer.volume = fourGb(200001999);
+    await tester.tap(button(UpdateDialog.installLabel));
+    await tester.pumpAndSettle();
+    expect(find.text('Not enough space for the update'), findsOneWidget);
+    expect(installer.installed, isEmpty);
+
+    installer.volume = fourGb(200002000);
+    await tester.tap(button(UpdateDialog.retryLabel));
+    await tester.pumpAndSettle();
+    expect(installer.installed, hasLength(1));
+  });
+
+  testWidgets('a volume nobody could measure is not a full one', (
+    tester,
+  ) async {
+    final installer = FakeApkInstaller(volume: null);
+    await openDialog(tester, fakeUpdates(installer: installer));
+    await tester.tap(button(UpdateDialog.updateLabel));
+    await tester.pumpAndSettle();
+    expect(installer.installed, hasLength(1));
+  });
+
+  testWidgets('a clean that does not answer is waited for only so long', (
+    tester,
+  ) async {
+    final cache = _StuckCache();
+    final installer = FakeApkInstaller();
+    await openDialog(tester, fakeUpdates(installer: installer, cache: cache));
+    await tester.tap(button(UpdateDialog.updateLabel));
+    await tester.pump();
+    expect(find.text('Making room for xtremio 0.1.14'), findsOneWidget);
+    expect(find.text(UpdateDialog.roomText), findsOneWidget);
+    await tester.pump(AppUpdates.cleanBound - const Duration(seconds: 1));
+    expect(installer.installed, isEmpty);
+    await tester.pump(const Duration(seconds: 1));
+    // The download's clean, then the install's: each waited out in turn.
+    await tester.pump(AppUpdates.cleanBound);
+    await tester.pumpAndSettle();
+    expect(cache.cleans, 2);
+    expect(installer.installed, hasLength(1));
   });
 
   testWidgets('shows how far the download is, and Cancel stops it', (

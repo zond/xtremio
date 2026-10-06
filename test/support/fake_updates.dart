@@ -5,8 +5,11 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/update/apk_download.dart';
 import 'package:xtremio/features/update/apk_installer.dart';
 import 'package:xtremio/features/update/app_updates.dart';
+import 'package:xtremio/features/update/install_room.dart';
 import 'package:xtremio/features/update/release_version.dart';
 import 'package:xtremio/features/update/releases.dart';
+
+import 'fake_server_cache.dart';
 
 /// A stamped, clean release build of 0.1.13: one that checks by itself.
 const BuildIdentity releaseBuild = BuildIdentity(
@@ -76,12 +79,27 @@ class FakeApkInstaller implements ApkInstaller {
     this.allowed = true,
     this.settingsOpen = true,
     this.outcome = const InstallOutcome(InstallResult.success),
+    this.volume = roomy,
+    this.onInstall,
   });
 
   String? abi;
   bool allowed;
   bool settingsOpen;
   InstallOutcome outcome;
+
+  /// What [room] answers; null is a volume nobody could measure.
+  DataVolumeRoom? volume;
+
+  /// Called as [install] is, for a test that wants to know what had
+  /// happened by then.
+  void Function()? onInstall;
+
+  /// A 32 GB volume with 10 GB free: any update fits.
+  static const DataVolumeRoom roomy = DataVolumeRoom(
+    freeBytes: 10000000000,
+    totalBytes: 32000000000,
+  );
 
   /// Every path [install] was handed.
   final List<String> installed = [];
@@ -100,7 +118,11 @@ class FakeApkInstaller implements ApkInstaller {
   }
 
   @override
+  Future<DataVolumeRoom?> room() async => volume;
+
+  @override
   Future<InstallOutcome> install(String path) async {
+    onInstall?.call();
     installed.add(path);
     return outcome;
   }
@@ -146,6 +168,7 @@ AppUpdates fakeUpdates({
   ApkDownloader Function()? downloader,
   DateTime Function()? clock,
   bool installsHere = true,
+  ServerCacheControl? cache,
 }) => AppUpdates(
   prefs: prefs ?? AppPrefs.inMemory(),
   identity: identity,
@@ -155,4 +178,15 @@ AppUpdates fakeUpdates({
   downloadsDirectory: () async => Directory('/nonexistent/updates'),
   clock: clock ?? () => DateTime.utc(2026, 10, 3, 12),
   installsHere: installsHere,
+  cache: cache ?? FakeServerCache(cleanResult: cleanedNothing),
+);
+
+/// A clean that found nothing to give back.
+const EvictionReport cleanedNothing = EvictionReport(
+  total: 0,
+  protected: 0,
+  protectedFiles: 0,
+  freed: 0,
+  deleted: 0,
+  limit: null,
 );

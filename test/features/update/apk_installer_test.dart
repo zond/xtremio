@@ -36,6 +36,24 @@ void main() {
     expect(outcome.message, 'INSTALL_FAILED_UPDATE_INCOMPATIBLE');
   });
 
+  test('room reads the volume, and a failed ask is no answer', () async {
+    answer(
+      (_) => {
+        'freeBytes': 500000000,
+        'totalBytes': 4000000000,
+        'thresholdPercent': null,
+        'thresholdMaxBytes': null,
+      },
+    );
+    final room = await const PlatformApkInstaller().room();
+    expect(calls.single.method, 'room');
+    expect(room?.freeBytes, 500000000);
+    expect(room?.totalBytes, 4000000000);
+
+    answer((_) => throw PlatformException(code: 'boom'));
+    expect(await const PlatformApkInstaller().room(), isNull);
+  });
+
   test('every word the Kotlin side sends has its own result', () async {
     for (final result in InstallResult.values) {
       answer((_) => {'outcome': result.name});

@@ -174,6 +174,33 @@ updates" asks at any time and says "up to date" too. The code is in
   install is a `PackageInstaller` session that asks for user action
   outright, so Android's own confirmation is always shown. When it
   succeeds Android closes xtremio; open it again.
+- **Room first.** On a television the embedded server's torrent cache can
+  fill the disk, and Android then refuses the install
+  (`INSTALL_FAILED_INSUFFICIENT_STORAGE`, "Requested internal only, but
+  not enough space"). So the Update press, before the download and again
+  before the install, asks the server to clean its cache -- the Server
+  storage screen's "Clean cache now": what nobody is playing and nobody
+  kept, never a kept download or the part of the title played last around
+  where it was left -- waits up to 30 seconds for it
+  (`AppUpdates.cleanBound`), and measures the data volume (`room` on
+  `xtremio/update`). Android's installer wants the session to fit in the
+  free space less its low-storage reserve
+  (`InstallLocationUtils.fitsOnInternal`,
+  `StorageManager.getAllocatableBytes`), and the reserve is
+  `StorageManager.getStorageLowBytes`: the smaller of
+  `sys_storage_threshold_percentage` of the volume (default 5%) and
+  `sys_storage_threshold_max_bytes` (default 500 MiB), the defaults
+  wherever the app cannot read the settings. The update asks for that
+  reserve plus two APKs' worth before the install (the session's copy and
+  the native code unpacked from it) and three before the download
+  (`UpdateRoom`, `lib/features/update/install_room.dart`). A Chromecast
+  with Google TV refused a 50 MB update with 130-330 MB free and took it
+  with about 500 MB; this asks it for 350-450 MB. Without the room the
+  dialog downloads and installs nothing, says how much is free and how
+  much is needed, and offers Server storage and Try again. A volume that
+  could not be measured is not taken for a full one: the install goes
+  ahead and Android decides. Nothing else reclaims the cache for an
+  update: the daily look and the offer never do.
 - **"Install unknown apps".** Android lets an app install packages only
   with that per-app switch. The dialog explains it and opens the switch
   (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`); where nothing answers that screen

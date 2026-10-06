@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'install_room.dart';
+
 /// How an install ended, as Android's `PackageInstaller` reported it
 /// (`AppUpdateChannel.kt`, `InstallOutcome`).
 enum InstallResult {
@@ -63,6 +65,10 @@ abstract interface class ApkInstaller {
   /// false when nothing on this device answers that screen.
   Future<bool> openInstallPermission();
 
+  /// The room on Android's data volume, where the APK is downloaded to and
+  /// installed on; null where nobody could say ([UpdateRoom]).
+  Future<DataVolumeRoom?> room();
+
   /// Installs the APK at [path] through a `PackageInstaller` session.
   /// Android always puts its own confirmation up first; this completes
   /// when the session ends (and not at all when the update replaces this
@@ -92,6 +98,19 @@ class PlatformApkInstaller implements ApkInstaller {
   @override
   Future<bool> openInstallPermission() async =>
       await channel.invokeMethod<bool>('openInstallPermission') ?? false;
+
+  @override
+  Future<DataVolumeRoom?> room() async {
+    try {
+      return DataVolumeRoom.fromMap(
+        await channel.invokeMapMethod<Object?, Object?>('room'),
+      );
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
 
   @override
   Future<InstallOutcome> install(String path) async {

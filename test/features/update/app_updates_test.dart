@@ -6,6 +6,7 @@ import 'package:xtremio/features/update/app_updates.dart';
 import 'package:xtremio/features/update/release_version.dart';
 
 import '../../support/fake_prefs_client.dart';
+import '../../support/fake_server_cache.dart';
 import '../../support/fake_updates.dart';
 
 void main() {
@@ -27,6 +28,14 @@ void main() {
         AppUpdates.isDue(noon, noon.subtract(const Duration(minutes: 1))),
         isTrue,
       );
+    });
+
+    test('never reclaims the cache, even when it finds an update', () async {
+      final cache = FakeServerCache(cleanResult: cleanedNothing);
+      final updates = fakeUpdates(cache: cache);
+      expect(await updates.checkIfDue(), isA<UpdateAvailable>());
+      expect(await updates.check(), isA<UpdateAvailable>());
+      expect(cache.cleans, 0);
     });
 
     test('asks GitHub once a day, and remembers it asked', () async {

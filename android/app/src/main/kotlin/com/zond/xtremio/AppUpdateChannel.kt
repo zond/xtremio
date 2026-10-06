@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -26,8 +27,11 @@ import java.util.concurrent.Executors
  * From Dart: `abi` (`Build.SUPPORTED_ABIS[0]`, which chooses the APK),
  * `canRequestInstalls` (the per-app "Install unknown apps" switch),
  * `openInstallPermission` (that switch's screen; false where nothing
- * answers the intent) and `install`, which answers with an
- * [InstallOutcome] map once the session is over.
+ * answers the intent), `room` (the data volume's free and total space
+ * and the device's low-storage settings, which say whether an update fits:
+ * `UpdateRoom` in lib/features/update/install_room.dart does the
+ * arithmetic) and `install`, which answers with an [InstallOutcome] map
+ * once the session is over.
  *
  * **Never silent.** The session asks for user action outright
  * (`USER_ACTION_REQUIRED`), so Android puts its own confirmation up even
@@ -70,6 +74,7 @@ class AppUpdateChannel(
             "abi" -> result.success(Build.SUPPORTED_ABIS.firstOrNull())
             "canRequestInstalls" -> result.success(canRequestInstalls())
             "openInstallPermission" -> result.success(openInstallPermission())
+            "room" -> result.success(room())
             "install" -> install(call.argument<String>("path"), result)
             else -> result.notImplemented()
         }
@@ -78,6 +83,36 @@ class AppUpdateChannel(
     private fun canRequestInstalls(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
             activity.packageManager.canRequestPackageInstalls()
+
+    /**
+     * The volume an update is downloaded to and installed on, and the two
+     * `Settings.Global` values `StorageManager.getStorageLowBytes` reads
+     * for the reserve Android keeps free on it. Either setting is null when
+     * unset or unreadable -- from Android 12 an app may not read a hidden
+     * key, and these are hidden -- which Dart reads as Android's defaults.
+     */
+    private fun room(): Map<String, Any?> {
+        val data = Environment.getDataDirectory()
+        val resolver = activity.contentResolver
+        return mapOf(
+            "freeBytes" to data.usableSpace,
+            "totalBytes" to data.totalSpace,
+            "thresholdPercent" to globalSetting {
+                Settings.Global.getInt(resolver, THRESHOLD_PERCENTAGE).toLong()
+            },
+            "thresholdMaxBytes" to globalSetting {
+                Settings.Global.getLong(resolver, THRESHOLD_MAX_BYTES)
+            },
+        )
+    }
+
+    private fun globalSetting(read: () -> Long): Long? = try {
+        read()
+    } catch (error: Settings.SettingNotFoundException) {
+        null
+    } catch (error: SecurityException) {
+        null
+    }
 
     /**
      * This app's "Install unknown apps" screen. Not resolved first: under
@@ -193,6 +228,10 @@ class AppUpdateChannel(
 
     companion object {
         const val CHANNEL = "xtremio/update"
+
+        /** `Settings.Global.SYS_STORAGE_THRESHOLD_*`, hidden from the SDK. */
+        const val THRESHOLD_PERCENTAGE = "sys_storage_threshold_percentage"
+        const val THRESHOLD_MAX_BYTES = "sys_storage_threshold_max_bytes"
 
         /** The release app's package; the debug one has `.debug` on it. */
         const val RELEASE_PACKAGE = "com.zond.xtremio"
