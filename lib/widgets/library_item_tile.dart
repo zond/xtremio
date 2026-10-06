@@ -47,17 +47,11 @@ class LibraryItemTile extends StatelessWidget {
     final progress = item.progress;
     final episode = item.seasonEpisodeLabel;
     final isTv = DeviceScope.isTv(context);
-    // On a television the episode line under the focused tile goes to full
-    // strength: a muted caption under a poster is the second thing a
-    // projector in a lit room loses, after the ring itself. Off one there
-    // is no [TileFocus] above and it is the muted colour it has always
-    // been.
-    TextStyle? episodeStyle(BuildContext context) =>
-        theme.textTheme.bodySmall?.copyWith(
-          color: TileFocus.maybeOf(context) ?? false
-              ? theme.colorScheme.onSurface
-              : theme.colorScheme.onSurfaceVariant,
-        );
+    // The episode line under the name, off a television (which draws it
+    // on the poster, [_EpisodeBadge]): muted, as it always was.
+    final episodeStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return FocusableTile(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -82,6 +76,16 @@ class LibraryItemTile extends StatelessWidget {
                       minHeight: 4,
                       backgroundColor: Colors.black45,
                     ),
+                  ),
+                // On a television the episode is on the poster, not in the
+                // caption: a one-line caption with the episode after the
+                // name left the name three letters long.
+                if (isTv && episode.isNotEmpty)
+                  Positioned(
+                    left: 6,
+                    // Above the progress bar, which is 4 tall.
+                    bottom: progress != null ? 8 : 6,
+                    child: _EpisodeBadge(episode),
                   ),
                 if (item.notifications > 0)
                   Positioned(
@@ -109,32 +113,15 @@ class LibraryItemTile extends StatelessWidget {
               PosterTile.captionInset,
               PosterTile.captionInset,
             ),
-            // One line on a television, as [PosterTile]'s: the name, cut
-            // short at its end, then the episode, which is never cut.
+            // One line on a television, as [PosterTile]'s: the name alone,
+            // cut short at its end; the episode is on the poster.
             child: isTv
-                ? Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          item.name,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                      if (episode.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Builder(
-                          builder: (context) => Text(
-                            episode,
-                            maxLines: 1,
-                            softWrap: false,
-                            style: episodeStyle(context),
-                          ),
-                        ),
-                      ],
-                    ],
+                ? Text(
+                    item.name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,13 +133,7 @@ class LibraryItemTile extends StatelessWidget {
                         style: theme.textTheme.bodySmall,
                       ),
                       if (episode.isNotEmpty)
-                        Builder(
-                          builder: (context) => Text(
-                            episode,
-                            maxLines: 1,
-                            style: episodeStyle(context),
-                          ),
-                        ),
+                        Text(episode, maxLines: 1, style: episodeStyle),
                     ],
                   ),
           ),
@@ -160,6 +141,33 @@ class LibraryItemTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A series' episode, on its poster: white on a dark translucent pill, so
+/// it reads on any art.
+class _EpisodeBadge extends StatelessWidget {
+  const _EpisodeBadge(this.episode);
+
+  final String episode;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    key: const Key('episode-badge'),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.7),
+      borderRadius: const BorderRadius.all(Radius.circular(8)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      child: Text(
+        episode,
+        maxLines: 1,
+        softWrap: false,
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: Colors.white),
+      ),
+    ),
+  );
 }
 
 /// The "watched" check in the poster's corner.

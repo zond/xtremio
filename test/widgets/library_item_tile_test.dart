@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
+import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../support/tv.dart';
 
@@ -37,66 +38,54 @@ void main() {
   testWidgets('the caption clears the bold focus ring, all of it', (
     tester,
   ) async {
-    await tester.pumpWidget(harness());
-
-    final tile = tester.getRect(find.byType(LibraryItemTile));
-    for (final line in ['Lanterns', 'S2E3']) {
-      final text = tester.getRect(find.text(line));
+    for (final device in [tv, DeviceProfile.fallback]) {
+      await tester.pumpWidget(harness(device: device));
+      final tile = tester.getRect(find.byType(LibraryItemTile));
+      final name = tester.getRect(find.text('Lanterns'));
+      expect(name.left - tile.left, greaterThanOrEqualTo(FocusRing.boldWidth));
       expect(
-        text.left - tile.left,
+        tile.right - name.right,
         greaterThanOrEqualTo(FocusRing.boldWidth),
-        reason: line,
       );
+      // The caption's last line, which the ring runs under.
+      final last = device.isTv ? name : tester.getRect(find.text('S2E3'));
       expect(
-        tile.right - text.right,
+        tile.bottom - last.bottom,
         greaterThanOrEqualTo(FocusRing.boldWidth),
-        reason: line,
+        reason: '$device',
       );
     }
-    expect(
-      tile.bottom - tester.getRect(find.text('S2E3')).bottom,
-      greaterThanOrEqualTo(FocusRing.boldWidth),
-      reason: 'the last line, which the ring runs under',
-    );
   });
 
-  testWidgets('on a television the caption is one line: the name, cut '
-      'short at its end, then the episode', (tester) async {
+  testWidgets('on a television the caption is the name alone, and the '
+      'episode is a badge on the poster, above the progress bar', (
+    tester,
+  ) async {
     await tester.pumpWidget(harness());
 
     final name = tester.widget<Text>(find.text('Lanterns'));
     expect(name.maxLines, 1);
     expect(name.softWrap, isFalse);
     expect(name.overflow, TextOverflow.ellipsis);
-    final nameAt = tester.getRect(find.text('Lanterns'));
-    final episodeAt = tester.getRect(find.text('S2E3'));
-    expect(episodeAt.top, lessThan(nameAt.bottom), reason: 'one line');
-    expect(episodeAt.left, greaterThan(nameAt.right));
+    final badge = find.byKey(const Key('episode-badge'));
+    expect(badge, findsOneWidget);
+    expect(
+      find.descendant(of: badge, matching: find.text('S2E3')),
+      findsOneWidget,
+      reason: 'the episode is in the badge and nowhere else',
+    );
+    expect(find.text('S2E3'), findsOneWidget);
+
+    final poster = tester.getRect(find.byType(PosterImage));
+    final bar = tester.getRect(find.byType(LinearProgressIndicator));
+    final at = tester.getRect(badge);
+    expect(poster.contains(at.topLeft), isTrue);
+    expect(poster.contains(at.bottomRight), isTrue);
+    expect(at.bottom, lessThanOrEqualTo(bar.top), reason: 'above the bar');
   });
 
-  testWidgets('the focused tile lifts its episode line to full strength', (
-    tester,
-  ) async {
-    // A muted caption under a poster is the second thing a projector in a
-    // lit room loses, after the ring itself.
-    await tester.pumpWidget(harness());
-    await tester.pumpAndSettle();
-    final scheme = Theme.of(tester.element(find.byType(LibraryItemTile)))
-        .colorScheme;
-    expect(episodeColour(tester), scheme.onSurfaceVariant);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pumpAndSettle();
-    expect(episodeColour(tester), scheme.onSurface);
-
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pumpAndSettle();
-    expect(episodeColour(tester), scheme.onSurfaceVariant);
-  });
-
-  testWidgets('off a television the line is the muted one it always was', (
-    tester,
-  ) async {
+  testWidgets('off a television the episode is the caption\'s second, muted '
+      'line, and there is no badge', (tester) async {
     // No tile focus above it there at all, which is not the same as an
     // unfocused one: a phone's caption is the only caption.
     await tester.pumpWidget(harness(device: DeviceProfile.fallback));
@@ -104,6 +93,11 @@ void main() {
     final scheme = Theme.of(tester.element(find.byType(LibraryItemTile)))
         .colorScheme;
     expect(episodeColour(tester), scheme.onSurfaceVariant);
+    expect(find.byKey(const Key('episode-badge')), findsNothing);
+    expect(
+      tester.getRect(find.text('S2E3')).top,
+      greaterThanOrEqualTo(tester.getRect(find.text('Lanterns')).bottom),
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();

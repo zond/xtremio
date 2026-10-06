@@ -294,4 +294,6 @@ those rows, one per catalog, the field typed on the platform's screen or
 straight into with a hardware keyboard. On those two screens the status
 light sits at the right end of the pills' or the field's band. That
 poster and its one-line caption are a television's everywhere: the
-Library's grid, a catalog's grid and **More like this** draw the same.
+Library's grid, a catalog's grid and **More like this** draw the same. A
+series' episode (`S1E2`) is a badge on its poster there, above the
+progress bar, so the caption is the name alone.
