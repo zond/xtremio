@@ -1,7 +1,8 @@
 # Running and checking Xtremio
 
-Setting up a machine, building and running the app, re-recording fixtures,
-and the screens and log lines that say what a build is doing. The checks
+Setting up a machine, building and running the app, cutting a release,
+re-recording fixtures, and the screens and log lines that say what a build
+is doing. The checks
 that gate a commit are in [AGENTS.md](../AGENTS.md#verification-with-real-exit-codes);
 everything specific to Android and Android TV -- the SDK, the APKs, the
 emulators, a real box -- is in [ANDROID.md](ANDROID.md).
@@ -77,6 +78,7 @@ make apk-debug          # debug APK for the x86_64 emulator
 make macos              # release macOS .app
 make ios                # does the iOS half compile (see below)
 make version            # what would be stamped
+make check              # every gate a commit passes (AGENTS.md)
 ```
 
 Each target adds `XTREMIO_VERSION` (from `pubspec.yaml`) and
@@ -98,15 +100,40 @@ Every version tag builds Linux, Windows, macOS and both Android ABIs in
 `.github/workflows/build.yml` and attaches them to a GitHub Release; that
 workflow also runs weekly and on demand.
 
+## Cutting a release
+
+Only this repository is tagged; stream-server, rqbit and stremio-core are
+pinned by rev.
+
+1. **Bump `version:` in `pubspec.yaml`** to `0.1.N+1` and commit it alone
+   as "Version 0.1.N". The `+1` build number reaches no APK: `make apk` and
+   `make apk-tv`, which the Android jobs run, stamp 2001 and 1001 over it.
+2. **Tag it, annotated**: `v0.1.N`, whose message is the tag name, a blank
+   line, then the notes for people -- a one-line lede, then bold-led
+   paragraphs, ending with **Underneath.** for what changed inside.
+3. **Push `main`, then the tag.** The tag starts `build.yml`: two Android
+   ABIs, Linux, Windows and macOS, then a `release` job that creates the
+   GitHub Release as a draft, uploads every file and publishes it, with a
+   body that is the downloads table and the install notes and nothing else.
+   v0.1.15's run took about 25 minutes.
+4. **The workflow does not carry the tag's notes.** Prepend them to the
+   body it wrote: `gh release edit v0.1.N -R zond/xtremio --notes-file
+   <notes, then the existing body>`. Name the repository: in a fork `gh`
+   defaults to upstream's.
+
+The last was v0.1.15, at 8620717.
+
 ## Seeing video play
 
 Run the app, then either **Discover → a title → a stream**, or **Settings →
 Developer → "Play test torrent"** (Big Buck Bunny from a public torrent
 through the embedded server; "Play test HTTP stream" is the direct-play
 path, and "Download test torrent" proves the download path). The stats OSD
-(Shift+I) ends with the URL libmpv is playing, so a torrent reads
-`http://127.0.0.1:<port>/dd8255ec…/-1?tr=…`, on whatever port the embedded
-server bound this launch.
+(Shift+I) ends with the URL the player opened -- the stream's own, so a
+torrent reads `http://127.0.0.1:<port>/dd8255ec…/-1?tr=…`, on whatever port
+the embedded server bound this launch. What mpv was handed can differ
+(`xtremio://<id>` for a stream read by id); `tool/drive player` shows both
+([DRIVING.md](DRIVING.md#commands)).
 
 ### Linux video is software-rendered, for now
 
@@ -138,7 +165,10 @@ cargo test --release --test subtitle_threshold -- --ignored   # network, ~15 min
 ```
 
 `ctx_logged_in.json` is hand-authored with a fake account and has no
-recorder.
+recorder. Nor has `addon_streams_recorded.json`: live addons' answers,
+recorded once and trimmed by hand to one row per field shape
+(`loadRecordedStreams`, `test/support/fixtures.dart`), the specification
+the source parser in `lib/features/details/stream_facts.dart` is held to.
 
 ## Where torrent data lives, and what it costs
 
@@ -209,6 +239,11 @@ Lines worth knowing:
   its ceiling (`ImageCacheUsage`, `lib/core/image_cache_usage.dart`; the
   ceiling and why it is 16 MiB are
   `XtremioBootstrap.imageCacheCeilingBytes` in `lib/main.dart`).
+- `the cast ended after <time>: the receiver ...; <n> requests, <bytes>
+  sent` -- one line per cast, whichever way it ended, saying how often the
+  receiver stopped to buffer and what this device served it
+  (`_logCastEnd`, `lib/features/player/player_screen_casting.dart`;
+  [CASTING.md](CASTING.md#the-stats-panel-while-casting)).
 
 ## The stats OSD
 
@@ -222,19 +257,26 @@ with nothing measured is absent, never a dash (the rule is in
 casting, the same button shows the cast panel instead
 ([CASTING.md](CASTING.md#the-stats-panel-while-casting)).
 
+Until mpv's first sample the panel's mpv rows are one `mpv      collecting…`
+row; the server's rows below are drawn as usual, since what is on the disk
+is what a stream that has not started yet is worth watching for.
+
 **`cache` is two caches at two cadences.** First mpv's own demuxer cache,
-labelled `mpv`; then the retention window -- what this device's server holds
-either side of the playhead, each with the watching it is worth at the
-bitrate above -- asked of the server every five seconds
+labelled `mpv` (`0.4s mpv  buffering 40%` while it has run dry); then what this
+device's server holds unbroken behind and ahead of the playhead, each with
+the watching it is worth -- asked of the server every five seconds
 (`PlayerScreen.streamNumbersInterval`):
 
 ```
 cache    2.3s mpv · behind 340 MB (2 min) · ahead 512 MB (3 min)
 ```
 
-The window is absent where nothing bounds the stream (a torrent the storage
-budget covers has no retention policy), and the minutes are absent until
-mpv reports a bitrate.
+The server's half is there under every cache budget, one that covers the
+whole file included, and absent only where the server has no playhead for
+the stream: one it holds nothing of (an addon's direct link, a file on the
+device), or one no reader has been inside yet (6677606). The times are the
+server's, from each head's own read rate, not mpv's `video-bitrate`
+(e861525); a head nothing has measured yet shows its bytes alone.
 
 **`sharing` is a torrent's, over its current live period**: what it has
 committed to the swarm and what it has moved.
@@ -249,6 +291,18 @@ neither the torrent's total nor the evening's. A ratio against nothing
 downloaded is left out. A proxied stream has no sharing row, and neither has
 a torrent whose counters cannot be read (paused, checking, stopped for
 space, in error).
+
+**`unver.` is bytes fetched and not yet hash-checked**, and reclaims the
+cache asked for and was refused:
+
+```
+unver.   38.0 MB fetched, not hash-checked · 2 reclaims refused
+```
+
+A level, not a verdict: a piece still in flight and the deliberate second
+copy of a chunk taken from a faster peer both sit in it. A few per cent of
+what was played is that; a multiple of it beside refused reclaims is the
+cache fetching what its own next pass deletes. Absent where `sharing` is.
 
 **`seekable` and `ranges` are about seeking.** On a stream the embedded
 server serves, the player sets `force-seekable`, so `seekable` reads
@@ -267,8 +321,10 @@ last said about everyone (`137 seeds / 402 peers · 4 min ago`, or `not
 reported`); the phase while not ready; the piece length (nothing is readable
 until a whole piece is verified); an `inflight` row for the piece the reader
 is on (`inflight #137 · 6.3 of 16.0 MiB · unverified`); and the server's
-reason when it stopped. These are polled only while the panel is up and the
-app in front, every five seconds, faster during a stall.
+reason when it stopped, and a `dht` row only while the DHT has found no
+node. They are polled while the panel is up and the app in front, every
+five seconds (`PlayerScreen.torrentStatsOverlayInterval`), and every two
+during a stall, panel or not, because the stall card reads them too.
 
 On Android a `display` row gives the refresh rate the display settled on;
 see [ANDROID.md](ANDROID.md#telling-mpv-when-the-screen-refreshes) for how
