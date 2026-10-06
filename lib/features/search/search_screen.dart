@@ -331,6 +331,7 @@ class _SearchField extends StatelessWidget {
       onSubmitted: onSubmitted,
       onClear: onClear,
       typesInPlace: true,
+      voice: true,
       decoration: InputDecoration(
         hintText: 'Search',
         // Off the app bar on a television, the field's own box is what

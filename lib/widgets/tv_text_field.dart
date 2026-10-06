@@ -44,6 +44,7 @@ class TvTextField extends StatefulWidget {
     this.onSubmitted,
     this.onClear,
     this.typesInPlace = false,
+    this.voice = false,
   });
 
   final TextEditingController controller;
@@ -84,6 +85,21 @@ class TvTextField extends StatefulWidget {
   /// Enter and Back carry no character and go where they always went.
   final bool typesInPlace;
 
+  /// On a television, a microphone button at the field's right end that
+  /// fills it by voice ([TvTextEntry.recognizeSpeech]) and then announces
+  /// the transcript as a confirmed entry is. Where the device has no
+  /// recognizer the button opens the text-entry screen instead, whose
+  /// keyboard has a microphone of its own, so it is never a dead control.
+  /// Off a television nothing changes: the keyboard there has the
+  /// microphone.
+  ///
+  /// The button is drawn inside the field's outline, over room the
+  /// decoration keeps free for it, and is a sibling of the field rather
+  /// than a child: inside its [RemotePress] it could be landed on and not
+  /// pressed. Since its box is inside the field's, directional traversal
+  /// would never step right onto it, so the field sends right there itself.
+  final bool voice;
+
   /// What the text-entry screen is headed with: whatever this field is
   /// already labelled, so nothing has to be named twice.
   String get label => decoration.labelText ?? decoration.hintText ?? '';
@@ -105,9 +121,16 @@ class _TvTextFieldState extends State<TvTextField> {
   /// the remote once it has done its job.
   final FocusNode _fieldFocus = FocusNode(debugLabel: 'TvTextField');
 
+  /// The microphone's stop ([TvTextField.voice]).
+  final FocusNode _micFocus = FocusNode(debugLabel: 'TvTextField voice');
+
+  /// The microphone's room at the field's trailing edge: a suffix icon's.
+  static const double _micWidth = 48;
+
   @override
   void dispose() {
     _fieldFocus.dispose();
+    _micFocus.dispose();
     super.dispose();
   }
 
@@ -122,9 +145,43 @@ class _TvTextFieldState extends State<TvTextField> {
     _editing = false;
     // Cancelled, or no platform side: the value stands.
     if (!mounted || typed == null) return;
+    _confirm(typed);
+  }
+
+  /// [typed] as the field's value, announced the way pressing Done is.
+  void _confirm(String typed) {
     widget.controller.text = typed;
     widget.onChanged?.call(typed);
     widget.onSubmitted?.call(typed);
+  }
+
+  /// The microphone: the device's recognizer, or the text-entry screen
+  /// where there is none. Nothing heard leaves the value alone.
+  Future<void> _speak() async {
+    if (_editing) return;
+    if (!await TvTextEntry.canRecognizeSpeech()) {
+      await _edit();
+      return;
+    }
+    if (_editing) return;
+    _editing = true;
+    final heard = await TvTextEntry.recognizeSpeech(prompt: widget.label);
+    _editing = false;
+    if (!mounted || heard == null || heard.isEmpty) return;
+    _confirm(heard);
+  }
+
+  /// Keys on the field itself: right to the microphone, which traversal
+  /// cannot reach from a box that contains it, then a hardware keyboard's
+  /// typing where the field [TvTextField.typesInPlace].
+  KeyEventResult _onFieldKey(FocusNode node, KeyEvent event) {
+    if (widget.voice &&
+        event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _micFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return widget.typesInPlace ? _onKey(node, event) : KeyEventResult.ignored;
   }
 
   /// A hardware key while the field has focus ([TvTextField.typesInPlace]).
@@ -228,7 +285,9 @@ class _TvTextFieldState extends State<TvTextField> {
               canRequestFocus: false,
               skipTraversal: true,
               includeSemantics: false,
-              onKeyEvent: widget.typesInPlace ? _onKey : null,
+              onKeyEvent: widget.typesInPlace || widget.voice
+                  ? _onFieldKey
+                  : null,
               child: InkWell(
                 onTap: onTap,
                 focusNode: _fieldFocus,
@@ -239,6 +298,9 @@ class _TvTextFieldState extends State<TvTextField> {
                 child: InputDecorator(
                   decoration: widget.decoration.copyWith(
                     enabled: widget.enabled,
+                    suffixIcon: widget.voice
+                        ? const SizedBox(width: _micWidth)
+                        : null,
                   ),
                   isFocused: _focused,
                   isEmpty: text.isEmpty,
@@ -262,7 +324,30 @@ class _TvTextFieldState extends State<TvTextField> {
         // arriving does not reparent the field and take its focus with it.
         return Row(
           children: [
-            Expanded(child: field),
+            Expanded(
+              child: widget.voice
+                  ? Stack(
+                      children: [
+                        field,
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          width: _micWidth,
+                          child: Center(
+                            child: IconButton(
+                              key: const Key('tv-text-field-voice'),
+                              focusNode: _micFocus,
+                              tooltip: 'Voice input',
+                              icon: const Icon(Icons.mic_none),
+                              onPressed: widget.enabled ? _speak : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : field,
+            ),
             _clearButton(refocus: true) ?? const SizedBox.shrink(),
           ],
         );

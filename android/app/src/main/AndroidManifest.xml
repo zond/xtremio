@@ -200,5 +200,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- The TV search field's microphone asks whether a speech
+             recognizer is there before it offers one (MainActivity,
+             canRecognizeSpeech); from API 30 a resolve sees only what is
+             declared here. The intent route needs no RECORD_AUDIO: the
+             recognizer listens, and xtremio gets the text. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
+        </intent>
     </queries>
 </manifest>

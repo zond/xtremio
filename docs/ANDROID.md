@@ -127,7 +127,8 @@ renderer for them.
     feature; any error means "a phone", and no other platform calls it. The
     answer goes down the tree as `DeviceScope`, the only thing the TV layout
     keys on. The channel also carries `os` (the Diagnostics device line),
-    `editText`, the frame-rate calls, and `castDeviceAddress` -- the
+    `editText`, `canRecognizeSpeech` and `recognizeSpeech` (below), the
+    frame-rate calls, and `castDeviceAddress` -- the
     receiver's IPv4 address off the MediaRouter route, which
     `flutter_chrome_cast` drops and the server needs to pick an interface
     (see [CASTING.md](CASTING.md)).
@@ -226,6 +227,24 @@ select, asks `MainActivity` (`editText`) for `TextEntryActivity`: one plain
 personalized learning and autofill, and runs behind `FLAG_SECURE`. A
 field's clear button sits *beside* the box on a television, never inside
 it. Off a television `TvTextField` is an ordinary `TextField`.
+
+Search's field also has a microphone on a television (`TvTextField.voice`):
+a button at the right end inside the box, reached by right from the field
+(which sends right there itself, since traversal does not step onto a box
+inside the one it leaves) and left back. It asks `MainActivity`
+(`canRecognizeSpeech`) whether anything takes
+`RecognizerIntent.ACTION_RECOGNIZE_SPEECH` -- the manifest's `<queries>`
+declares it, so the resolve works on API 30+ -- and if so starts it
+(`recognizeSpeech`: free-form, one result, the field's label as the
+prompt) with `startActivityForResult`. The transcript is the field's new
+value and is confirmed as Done on the text-entry screen is, so Search runs
+it; cancelled, failed or nothing heard leaves the field alone. Where no
+recognizer resolves the button opens the text-entry screen instead, whose
+keyboard has a microphone of its own (Gboard for TV's types by voice into
+it). The app holds no `RECORD_AUDIO`: the recognizer listens on its own
+screen. **Voice search uses the device's Google speech service; xtremio
+receives only the text.** Off a television the field is unchanged; the
+keyboard there has the microphone.
 
 Search's field also `typesInPlace`: while it has focus a hardware
 keyboard's characters and Backspace change it directly, each announced to

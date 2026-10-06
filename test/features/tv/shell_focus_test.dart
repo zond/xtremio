@@ -343,9 +343,8 @@ void main() {
     expect(focusIn<NavigationRail>(), isTrue);
   });
 
-  testWidgets('right from a full search field reaches Clear, and it presses', (
-    tester,
-  ) async {
+  testWidgets('right from a full search field passes the microphone and '
+      'reaches Clear, and it presses', (tester) async {
     useScreen(tester, const Size(1280, 720));
     final core = fakeCore();
     await tester.pumpWidget(harness(core));
@@ -362,11 +361,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithIcon(IconButton, Icons.close), findsOneWidget);
 
+    // The microphone at the field's right end comes first.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'TvTextField voice');
     // The button is beside the field, so the D-pad walks to it, and it is
     // outside the field's RemotePress, so select is its own press rather
     // than another trip to the typing screen.
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<IconButton>(), isTrue);
+    expect(
+      Focus.of(tester.element(find.byIcon(Icons.close))).hasPrimaryFocus,
+      isTrue,
+    );
 
     final calls = answerTextEntry('never asked for');
     await press(tester, LogicalKeyboardKey.select);

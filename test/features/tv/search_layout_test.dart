@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/tv_text_entry.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
@@ -127,6 +128,51 @@ void main() {
       );
       expect(hint.top, greaterThan(field.bottom));
       expect(hint.bottom, lessThan(logical.height - band));
+    });
+
+    testWidgets('the microphone is right of the field, and what it hears '
+        'is searched for', (tester) async {
+      useTv(tester);
+      final core = await pumpApp(tester);
+      await openSearch(tester);
+      final field = tester.getRect(find.byType(InputDecorator));
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'TvTextField voice',
+      );
+      final mic = tester.getRect(find.byKey(const Key('tv-text-field-voice')));
+      expect(mic.top, greaterThanOrEqualTo(field.top));
+      expect(mic.bottom, lessThanOrEqualTo(field.bottom));
+      expect(mic.right, field.right);
+
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        DeviceProfile.channel,
+        (call) async {
+          calls.add(call);
+          return switch (call.method) {
+            TvTextEntry.canRecognizeSpeechMethod => true,
+            TvTextEntry.recognizeSpeechMethod => recorded,
+            _ => null,
+          };
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          DeviceProfile.channel,
+          null,
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settleTextEntry(tester);
+      expect(calls.last.method, TvTextEntry.recognizeSpeechMethod);
+      expect(
+        tester.widget<TvTextField>(find.byType(TvTextField)).controller.text,
+        recorded,
+      );
+      expect(searches(core), [recorded]);
     });
 
     testWidgets('a hardware keyboard types into the field, and the search '

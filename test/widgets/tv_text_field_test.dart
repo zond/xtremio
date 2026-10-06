@@ -38,22 +38,45 @@ void main() {
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
     VoidCallback? onClear,
+    bool voice = false,
+    InputDecoration decoration = const InputDecoration(labelText: 'Email'),
   }) => DeviceScope(
     profile: isTv ? tv : DeviceProfile.fallback,
     child: MaterialApp(
       home: Scaffold(
         body: TvTextField(
           controller: controller,
-          decoration: const InputDecoration(labelText: 'Email'),
+          decoration: decoration,
           kind: kind,
           autofocus: autofocus,
           onChanged: onChanged,
           onSubmitted: onSubmitted,
           onClear: onClear,
+          voice: voice,
         ),
       ),
     ),
   );
+
+  final mic = find.byKey(const Key('tv-text-field-voice'));
+
+  /// The device's recognizer: there or not ([canRecognize]), answering
+  /// [heard]; `editText` answers [typed]. Records every call.
+  void answersSpeech({
+    required bool canRecognize,
+    String? heard,
+    String? typed,
+  }) {
+    mockChannel((call) async {
+      calls.add(call);
+      return switch (call.method) {
+        TvTextEntry.canRecognizeSpeechMethod => canRecognize,
+        TvTextEntry.recognizeSpeechMethod => heard,
+        TvTextEntry.method => typed,
+        _ => null,
+      };
+    });
+  }
 
   group('on a television', () {
     testWidgets('a press opens the platform screen and takes the string', (
@@ -217,6 +240,168 @@ void main() {
       await tester.pumpAndSettle();
 
       expect((calls.single.arguments as Map)['value'], 'half typed');
+    });
+  });
+
+  group('the microphone', () {
+    testWidgets('is on a television, inside the field, which keeps its '
+        'height', (tester) async {
+      const search = InputDecoration(
+        hintText: 'Search',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.search),
+        contentPadding: EdgeInsets.symmetric(vertical: 10),
+      );
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, decoration: search));
+      expect(mic, findsNothing, reason: 'only a field that asks for it');
+      final without = tester.getRect(find.byType(InputDecorator));
+
+      await tester.pumpWidget(
+        host(controller, decoration: search, voice: true),
+      );
+      expect(mic, findsOneWidget);
+      final field = tester.getRect(find.byType(InputDecorator));
+      expect(field, without);
+      final button = tester.getRect(mic);
+      expect(field.contains(button.topLeft), isTrue);
+      expect(field.contains(button.bottomRight - const Offset(1, 1)), isTrue);
+      expect(button.right, field.right, reason: 'at its right end');
+      // The text keeps out from under it, however long it is.
+      controller.text = 'a title long enough to run the whole width ' * 4;
+      await tester.pump();
+      expect(
+        tester.getRect(find.text(controller.text)).right,
+        lessThanOrEqualTo(button.left),
+      );
+    });
+
+    testWidgets('is not off a television', (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, isTv: false, voice: true));
+      expect(find.byType(TextField), findsOneWidget);
+      expect(mic, findsNothing);
+      expect(find.byIcon(Icons.mic_none), findsNothing);
+    });
+
+    testWidgets('is right of the field for the D-pad, and the field left of '
+        'it', (tester) async {
+      final controller = TextEditingController(text: 'dune');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        host(controller, voice: true, onClear: controller.clear),
+      );
+      await tester.pump();
+      tester
+          .widget<InkWell>(find.byType(InkWell).first)
+          .focusNode!
+          .requestFocus();
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'TvTextField');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'TvTextField voice',
+      );
+      // On from it to Clear, beside the box, and back.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        Focus.of(tester.element(find.byIcon(Icons.close))).hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'TvTextField voice',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'TvTextField');
+    });
+
+    testWidgets('fills the field with what was heard and confirms it', (
+      tester,
+    ) async {
+      answersSpeech(canRecognize: true, heard: 'the thing');
+      final controller = TextEditingController(text: 'old');
+      addTearDown(controller.dispose);
+      final changed = <String>[];
+      final submitted = <String>[];
+      await tester.pumpWidget(
+        host(
+          controller,
+          voice: true,
+          onChanged: changed.add,
+          onSubmitted: submitted.add,
+        ),
+      );
+
+      await tester.tap(mic);
+      await tester.pumpAndSettle();
+
+      expect(calls.map((call) => call.method), [
+        TvTextEntry.canRecognizeSpeechMethod,
+        TvTextEntry.recognizeSpeechMethod,
+      ]);
+      expect(calls.last.arguments, {'prompt': 'Email'});
+      expect(controller.text, 'the thing');
+      expect(changed, ['the thing']);
+      expect(submitted, ['the thing']);
+    });
+
+    testWidgets('nothing heard leaves the field alone', (tester) async {
+      answersSpeech(canRecognize: true);
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      final changed = <String>[];
+      await tester.pumpWidget(
+        host(controller, voice: true, onChanged: changed.add),
+      );
+
+      await tester.tap(mic);
+      await tester.pumpAndSettle();
+
+      expect(calls.last.method, TvTextEntry.recognizeSpeechMethod);
+      expect(controller.text, 'kept');
+      expect(changed, isEmpty);
+    });
+
+    testWidgets('with no recognizer it opens the keyboard screen instead', (
+      tester,
+    ) async {
+      answersSpeech(canRecognize: false, typed: 'typed');
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+
+      await tester.tap(mic);
+      await tester.pumpAndSettle();
+
+      expect(calls.map((call) => call.method), [
+        TvTextEntry.canRecognizeSpeechMethod,
+        TvTextEntry.method,
+      ]);
+      expect(controller.text, 'typed');
+    });
+
+    testWidgets('with no platform side at all it is the keyboard screen, '
+        'which is not there either: nothing changes', (tester) async {
+      mockChannel(null);
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+
+      await tester.tap(mic);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(controller.text, 'kept');
     });
   });
 
