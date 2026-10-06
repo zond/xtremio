@@ -137,14 +137,22 @@ hands over to the next episode; and a **buffer ahead** choice, including
 
 A torrent starts behind a card saying what the server is doing (fetching
 metadata, checking data, finding peers, the piece it is waiting for) instead
-of a spinner, and a stall mid-playback shows the same card; an open that
-fails while the torrent is still starting is retried behind it. A stream
+of a spinner, and a stall mid-playback shows the same card -- "Buffering
+from the torrent…" also while mpv sits blocked in a read the server has
+not answered for a second, which is what a resumed film on a weak swarm
+looks like; an open that fails while the torrent is still starting is
+retried behind it. A resumed torrent tells the server where it resumes, so
+the resume point is asked for beside the file's head rather than after
+it. A stream
 that turns out to be an archive or a disc image is played from inside the
 container, or refused in a sentence when the film is compressed. A cast
-button appears once a receiver answers ([CASTING.md](CASTING.md)).
-**Known issue:** casting a torrent does not play on the receiver in this
-build -- the embedded server's LAN listener now serves only published cast
-tokens, and the app's switch to publishing them is the next step.
+button appears once a receiver answers: whether a film can be cast is
+judged by what mpv reports of it and the receiver's announced name; a
+plain link the receiver can fetch goes to it straight, and anything else
+is published on the LAN listener, repackaged with its sound converted to
+AAC where the receiver needs it. While casting, the stats button shows a
+panel of the cast's own (`CastStatsOverlay`). See
+[CASTING.md](CASTING.md).
 
 ## Library
 
@@ -256,14 +264,21 @@ Each installed addon carries a verdict on how it has been answering
   (seek steps, binge watching and the up-next countdown, pause on minimize,
   hardware decoding, languages, subtitle size and colours), plus the app's
   **Buffer ahead** and, on a television, **Bold focus**.
-- **Streaming server**: **Share while idle**, the embedded server's status
+- **Streaming server**: **Share while idle** (keeps sharing the downloads
+  and the last thing watched, until something else plays), the embedded
+  server's status
   (there is no choice of server), **Server storage** (where torrent data
   lives, what it costs, "Clean cache now") and peer discovery (DHT) health.
-- **About**: open source licences, including unrar-rs's.
+- **Core**: the stremio-core storage schema version.
+- **About**: **Check for updates** (the app also looks once a day by
+  itself; an Android release build installs a newer release over itself,
+  first asking the server to clean its cache and measuring that the
+  install has room, and every other build points at the release page),
+  and open source licences, including unrar-rs's.
 - **Developer**, in release builds: **Verbose logging**, **Diagnostics** (the
   core's and the server's recent log, copied redacted unless verbose
-  logging is on) and entries that play or download a public Big Buck Bunny
-  torrent without any addon.
+  logging is on) and entries that play a public Big Buck Bunny torrent or
+  HTTP stream, or download the torrent, without any addon.
 
 A **status light** on the main screens is lit while the server moves bytes
 to or from peers with nothing playing, and offers a stop for what it shows.
@@ -274,12 +289,14 @@ A layout of its own, chosen by `DeviceProfile.detect()` asking Android
 whether this is a television. The shell keeps the rail at every width with a
 focus memory per tab; tiles mark focus with a two-stroke ring, a 5 % zoom
 and a shadow ("Bold focus" thickens it and dims the rest); the D-pad walks
-rows and columns, a held centre key or the menu key is a long press; the
+rows and columns, a held centre key or the menu key is a long press (and
+the rest of that hold presses nothing after it); the
 player takes the remote's centre and media keys, stays immersive, and asks
 the panel for the film's own frame rate; text grows 1.15x with 48 dp
 targets; every screen but the video and the Details backdrop keeps 5 % of
 each edge clear of overscan; and controls a remote cannot work (the volume
-slider, the fullscreen toggle, scrollbar thumbs) are not drawn. Text is
+slider, the fullscreen toggle) are not drawn, nor is any scrollbar: the
+remote scrolls by moving focus. Text is
 typed on a screen of its own
 ([ANDROID.md](ANDROID.md#typing-with-a-remote)).
 
@@ -292,13 +309,15 @@ its title, a caption of one line cut short at its end, and posters as big
 as two whole rows allow (94 x 141 dp, on a 1080p Google TV's 960 x 540,
 against the 153 x 230 of the one row that used to fill it). Search is laid
 out the same way: its field is the top of the screen and its hits are
-those rows, one per catalog, the field typed on the platform's screen or
-straight into with a hardware keyboard. The Library has no title there
+those rows, one per catalog, the field typed on the platform's screen,
+straight into with a hardware keyboard, or spoken through the microphone
+at its right end (Android's speech recogniser). The Library has no title there
 either: its types, its sort (an icon, its order in the tooltip and checked
 in its menu) and the bar's buttons are one band across the top, the
 Remote / Local / Downloaded row under it. On those three screens the
 status light sits at the right end of the top band. That
 poster and its one-line caption are a television's everywhere: the
-Library's grid, a catalog's grid and **More like this** draw the same. A
+Library's grid and a catalog's grid draw the same, and **More like this**
+the same poster with the year on a second line under the name. A
 series' episode (`S1E2`) is a badge on its poster there, above the
 progress bar, so the caption is the name alone.
