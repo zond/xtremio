@@ -202,10 +202,12 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 ## What is next
 
 What is genuinely not built, and why, is in
-[docs/WISHLIST.md](docs/WISHLIST.md). Most of it is about the cast: a
-subtitle is not sent to a receiver, and a picture a receiver cannot decode
-(AV1 on most, Dolby Vision profile 5, a 4K film for a 1080p receiver) is
-refused rather than re-encoded.
+[docs/WISHLIST.md](docs/WISHLIST.md). The largest part is about the cast:
+a subtitle is not sent to a receiver, and a picture a receiver cannot decode
+(AV1 on most, 10-bit H.264, Dolby Vision profile 5, a 4K film for a 1080p
+receiver) is refused rather than re-encoded. Besides: the remote's own
+search key, Continue watching on the Google TV home screen, and archives the
+server cannot yet read inside.
 
 ## What is written down where
 
