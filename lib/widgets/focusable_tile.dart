@@ -176,9 +176,7 @@ class _FocusableTileState extends State<FocusableTile> {
           // a dead button inside it (an addon's ⋮ menu, say), with no way
           // to walk past it to whatever is below. Something that must be
           // pressed goes beside the tile.
-          child: ExcludeFocus(
-            child: TileFocus(focused: _focused, child: widget.child),
-          ),
+          child: ExcludeFocus(child: widget.child),
         ),
       ),
     );
@@ -204,25 +202,6 @@ class FocusMemory extends InheritedWidget {
 
   @override
   bool updateShouldNotify(FocusMemory oldWidget) => store != oldWidget.store;
-}
-
-/// Whether the [FocusableTile] around this context holds focus, for the
-/// parts of a tile that want to say so themselves -- a caption that is
-/// muted until the remote is on it.
-///
-/// Null where there is no tile above (off a television, where nothing
-/// draws a focus indicator at all), which is not the same as false: a
-/// phone's caption is not "the unfocused one", it is the only one.
-class TileFocus extends InheritedWidget {
-  const TileFocus({super.key, required this.focused, required super.child});
-
-  final bool focused;
-
-  static bool? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<TileFocus>()?.focused;
-
-  @override
-  bool updateShouldNotify(TileFocus oldWidget) => focused != oldWidget.focused;
 }
 
 /// How much of the focus indicator a surface family wears.
