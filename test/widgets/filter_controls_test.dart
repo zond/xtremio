@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/tv_density.dart';
 import 'package:xtremio/widgets/filter_controls.dart';
 
 import '../support/tv.dart' show FocusMark, focusIn, focusMarks, press, tv;
@@ -237,6 +238,46 @@ void main() {
 
       // Closed, BACK is the screen's own again.
       expect(await tester.binding.handlePopRoute(), isFalse);
+    });
+
+    testWidgets('the open menu draws no scrollbar', (tester) async {
+      // A Material menu draws a scrollbar while open, inset by the
+      // `MediaQuery` padding; on a television that padding is the overscan
+      // band, and the thumb landed a band's width inside the panel, over
+      // the entries (seen on zond's TV, 2026-10-06). The panel is built in
+      // the overlay, out of a screen's reach, so the television's theme
+      // gives every scrollbar no thickness.
+      await tester.pumpWidget(
+        DeviceScope(
+          profile: tv,
+          child: MaterialApp(
+            theme: XtremioApp.themeFor(
+              isTv: true,
+              emphasis: FocusEmphasis.bold,
+            ),
+            builder: TvMediaQuery.builder,
+            home: Scaffold(
+              body: Center(
+                child: FilterMenu(
+                  label: 'Type',
+                  options: options,
+                  onSelect: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await press(tester, LogicalKeyboardKey.tab);
+      await press(tester, LogicalKeyboardKey.select);
+      final scrollbar = find.descendant(
+        of: find.byType(MenuAnchor),
+        matching: find.byType(Scrollbar),
+      );
+      expect(scrollbar, findsOneWidget);
+      final theme = ScrollbarTheme.of(tester.element(scrollbar));
+      expect(theme.thickness?.resolve(const {}), 0);
+      expect(theme.thumbVisibility?.resolve(const {}), isFalse);
     });
   });
 }

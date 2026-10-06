@@ -72,6 +72,18 @@ abstract final class TvDensity {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
     ),
+    // No scrollbars on a television. Nothing drags one, the remote
+    // scrolls by moving focus -- and a Material scrollbar insets itself
+    // by the `MediaQuery` padding, which here is the overscan band
+    // ([TvMediaQuery]), so a menu's thumb landed a band's width inside the
+    // panel, over its entries (zond's TV, 2026-10-06). A menu's panel is
+    // built in the app's overlay, above anything a screen can wrap, so the
+    // theme is the one place that reaches it.
+    scrollbarTheme: const ScrollbarThemeData(
+      thickness: WidgetStatePropertyAll(0),
+      thumbVisibility: WidgetStatePropertyAll(false),
+      trackVisibility: WidgetStatePropertyAll(false),
+    ),
   );
 
   /// [base] — whatever the platform's own accessibility setting scales text
