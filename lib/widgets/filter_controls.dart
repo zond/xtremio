@@ -131,11 +131,18 @@ class FilterMenu<R> extends StatelessWidget {
     required this.label,
     required this.options,
     required this.onSelect,
+    this.icon,
   });
 
   final String label;
   final List<FilterOption<R>> options;
   final ValueChanged<R> onSelect;
+
+  /// On a television, draws the button as this icon alone, its words
+  /// ("Label: selected") its tooltip and its name for a screen reader, and
+  /// marks the selected entry in the open menu with a check: for a band
+  /// with no room for the words. Off a television it changes nothing.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +159,7 @@ class FilterMenu<R> extends StatelessWidget {
         options: options,
         selectedIndex: selectedIndex,
         onSelect: onSelect,
+        icon: icon,
       );
     }
     return DropdownMenu<int>(
@@ -207,12 +215,16 @@ class _FilterMenuButton<R> extends StatefulWidget {
     required this.options,
     required this.selectedIndex,
     required this.onSelect,
+    this.icon,
   });
 
   final String label;
   final List<FilterOption<R>> options;
   final int? selectedIndex;
   final ValueChanged<R> onSelect;
+
+  /// [FilterMenu.icon].
+  final IconData? icon;
 
   @override
   State<_FilterMenuButton<R>> createState() => _FilterMenuButtonState<R>();
@@ -239,6 +251,9 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
     final selected = selectedIndex == null
         ? null
         : widget.options[selectedIndex].label;
+    final words = selected == null
+        ? widget.label
+        : '${widget.label}: $selected';
     return PopScope(
       canPop: !_open,
       onPopInvokedWithResult: (didPop, _) {
@@ -266,6 +281,11 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
               ),
             MenuItemButton(
               autofocus: index == (selectedIndex ?? 0),
+              // An icon-only button says nothing of the selection, so the
+              // menu does.
+              leadingIcon: widget.icon == null
+                  ? null
+                  : Icon(option.selected ? Icons.check : null),
               onPressed: () {
                 if (!option.selected) widget.onSelect(option.request);
               },
@@ -295,16 +315,24 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
           },
-          child: OutlinedButton.icon(
-            focusNode: _button,
-            onPressed: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            iconAlignment: IconAlignment.end,
-            icon: const Icon(Icons.arrow_drop_down),
-            label: Text(
-              selected == null ? widget.label : '${widget.label}: $selected',
-            ),
-          ),
+          child: widget.icon != null
+              ? IconButton(
+                  focusNode: _button,
+                  tooltip: words,
+                  onPressed: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  icon: Icon(widget.icon),
+                )
+              : OutlinedButton.icon(
+                  focusNode: _button,
+                  onPressed: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  iconAlignment: IconAlignment.end,
+                  icon: const Icon(Icons.arrow_drop_down),
+                  label: Text(words),
+                ),
         ),
       ),
     );

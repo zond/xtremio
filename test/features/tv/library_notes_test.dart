@@ -147,10 +147,10 @@ void main() {
       // The first row moves up into the room the note had.
       final firstRow = tester.getRect(find.byType(LibraryItemTile).first);
       expect(firstRow.top, lessThan(tester.getRect(grid()).top + 16));
-      // One whole row, captions and all. Not two: under the app bar and
-      // the two filter rows the grid is 246 dp tall, and two rows of the
-      // television's tiles are 319.
-      expect(wholeRows(tester, safeBottom), 1);
+      // Two whole rows, captions and all: with no app bar, under the top
+      // band and the filter row the grid is 366 dp tall, and two rows of
+      // the television's tiles are 356.
+      expect(wholeRows(tester, safeBottom), 2);
     });
 
     testWidgets('the remote walking down into the posters scrolls the note '

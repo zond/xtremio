@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/sharing/sharing_activity.dart';
@@ -151,6 +152,35 @@ void main() {
     expectClearOfTheRows(tester, tester.getRect(find.byKey(lightKey)));
   });
 
+  testWidgets('on the Library it is at the right end of the band, past the '
+      'bar\'s buttons, clear of every tile', (tester) async {
+    await mount(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text('Library'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final light = tester.getRect(find.byKey(lightKey));
+    final types = tester.getRect(find.byType(SegmentedButton<int>));
+    expect(light.center.dy, closeTo(types.center.dy, 0.5));
+    expect(light.top, greaterThanOrEqualTo(540 * 0.05), reason: 'safe area');
+    expect(light.right, lessThanOrEqualTo(960 * 0.95), reason: 'safe area');
+    final buttons = find.descendant(
+      of: find.byType(LibraryScreen),
+      matching: find.byType(IconButton),
+    );
+    expect(buttons, findsWidgets);
+    for (final element in buttons.evaluate()) {
+      final button = tester.getRect(
+        find.byElementPredicate((e) => e == element),
+      );
+      expect(button.overlaps(light), isFalse, reason: 'a button at $button');
+    }
+    expectClearOfTheRows(tester, light);
+  });
+
   testWidgets('elsewhere it keeps its place a toolbar\'s height down', (
     tester,
   ) async {
@@ -158,7 +188,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(NavigationRail),
-        matching: find.text('Library'),
+        matching: find.text('Settings'),
       ),
     );
     await tester.pumpAndSettle();

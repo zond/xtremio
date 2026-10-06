@@ -54,10 +54,12 @@ void main() {
     ),
   );
 
-  /// Presses down until the link button has the remote.
+  /// Down onto the top band, then right along it until the link button,
+  /// at the band's end, has the remote.
   Future<void> reachTheButton(WidgetTester tester) async {
-    for (var i = 0; i < 4 && focusedTooltip() != RemoteFilesButton.label; i++) {
-      await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 8 && focusedTooltip() != RemoteFilesButton.label; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
     }
     expect(focusedTooltip(), RemoteFilesButton.label);
   }

@@ -903,12 +903,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // Onto the top band, and along it to its end.
+      await press(tester, LogicalKeyboardKey.arrowDown);
       await pressUntil(
         tester,
-        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowRight,
         () => focusedTooltip() == RemoteFilesButton.label,
         target: 'the link button',
-        limit: 4,
+        limit: 8,
       );
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(AlertDialog), findsOneWidget);
@@ -1005,7 +1007,8 @@ void main() {
         await pressUntil(
           tester,
           LogicalKeyboardKey.tab,
-          () => focusedLabel(tester)?.startsWith('Sort:') ?? false,
+          // An icon on the television's band; its words are its tooltip.
+          () => focusedTooltip()?.startsWith('Sort:') ?? false,
           target: 'the Sort button',
         );
         await press(tester, LogicalKeyboardKey.select);

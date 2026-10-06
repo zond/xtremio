@@ -194,6 +194,7 @@ class _RootShellState extends State<RootShell> {
       Icons.video_library_outlined,
       Icons.video_library,
       LibraryScreen(),
+      barlessOnTv: true,
     ),
     _Destination(
       'Settings',

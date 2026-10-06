@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/filter_controls.dart';
@@ -893,60 +895,66 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 appended.isNotEmpty ||
                 unmatched.isNotEmpty ||
                 unmatchedLocal.isNotEmpty);
+        final isTv = DeviceScope.isTv(context);
+        // The bar's buttons: in the app bar off a television, and on a
+        // television at the right end of the top band, beside the types
+        // (the rail already says this is the Library, so there is no title
+        // to keep a bar for).
+        final barButtons = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoggedIn)
+              _syncing
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : IconButton(
+                      tooltip: 'Sync now',
+                      icon: const Icon(Icons.sync),
+                      onPressed: _sync,
+                    ),
+            // Shown only while there is something to clean up.
+            // Housekeeping is a different intention from browsing:
+            // the pill below says what to look at, this says what
+            // to get rid of, and a control that did both would
+            // blur the two.
+            if (_hasDownloads)
+              IconButton(
+                tooltip: LibraryScreen.downloadsLabel,
+                // A "downloads" glyph, not a tick: the pill below wears
+                // the tick and means "show me what is here", this opens
+                // the place they are managed.
+                icon: const Icon(Icons.download_for_offline_outlined),
+                onPressed: _openDownloads,
+              ),
+            const RemoteFilesButton(),
+          ],
+        );
         return TvLadder(
           child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Library'),
-              actions: [
-                // One rung for the bar's buttons, so a press down out of it
-                // reaches the first filter row and not whichever control
-                // happens to be nearest (see the class comment).
-                TvLadderRow(
-                  level: 0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isLoggedIn)
-                        _syncing
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : IconButton(
-                                tooltip: 'Sync now',
-                                icon: const Icon(Icons.sync),
-                                onPressed: _sync,
-                              ),
-                      // Shown only while there is something to clean up.
-                      // Housekeeping is a different intention from browsing:
-                      // the pill below says what to look at, this says what
-                      // to get rid of, and a control that did both would
-                      // blur the two.
-                      if (_hasDownloads)
-                        IconButton(
-                          tooltip: LibraryScreen.downloadsLabel,
-                          // A "downloads" glyph, not a tick: the pill below wears
-                          // the tick and means "show me what is here", this opens
-                          // the place they are managed.
-                          icon: const Icon(Icons.download_for_offline_outlined),
-                          onPressed: _openDownloads,
-                        ),
-                      const RemoteFilesButton(),
+            appBar: isTv
+                ? null
+                : AppBar(
+                    title: const Text('Library'),
+                    actions: [
+                      // One rung for the bar's buttons, so a press down out
+                      // of it reaches the first filter row and not whichever
+                      // control happens to be nearest (see the class
+                      // comment).
+                      TvLadderRow(level: 0, child: barButtons),
                     ],
                   ),
-                ),
-              ],
-            ),
             body: Column(
               children: [
                 _tvGroup(
                   context,
                   _FilterRow(
+                    // A television's bar buttons, at the end of the top band.
+                    barButtons: isTv ? barButtons : null,
                     // The engine's half of the row, empty until it has
                     // loaded something: its options are meaningless
                     // without its state, and a type filter over a library
@@ -1384,7 +1392,15 @@ class _FilterRow extends StatelessWidget {
     this.hasLocal = false,
     this.onLocal,
     this.onChooseLocal,
+    this.barButtons,
   });
+
+  /// The app bar's buttons, on a television, which has no app bar here:
+  /// drawn at the right end of the first row, which is then the screen's
+  /// top band -- the types and the sort, at the edge of the overscan band,
+  /// as Discover's types are -- and clear of the status light the shell
+  /// puts at the band's end ([TvDensity.lightRoom]).
+  final Widget? barButtons;
 
   /// Opens the system's picker for more videos; null while there is no
   /// picking to do (every video is allowed, or none).
@@ -1447,21 +1463,58 @@ class _FilterRow extends StatelessWidget {
           request: sort.request,
         ),
     ];
+    final barButtons = this.barButtons;
+    final engines = Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (types.isNotEmpty)
+          isWide
+              ? FilterSegments(options: types, onSelect: onSelect)
+              : FilterChips(options: types, onSelect: onSelect),
+        if (sorts.isNotEmpty)
+          FilterMenu(
+            label: 'Sort',
+            options: sorts,
+            onSelect: onSelect,
+            // On the television's band the words do not fit beside the
+            // types and the bar's buttons in 960 dp ("Sort: Last watched"
+            // is 362 of them): the icon, its words as its tooltip, and
+            // the menu marking the selected order.
+            icon: barButtons != null ? Icons.sort : null,
+          ),
+      ],
+    );
     final rows = <Widget>[
-      if (types.isNotEmpty || sorts.isNotEmpty)
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (types.isNotEmpty)
-              isWide
-                  ? FilterSegments(options: types, onSelect: onSelect)
-                  : FilterChips(options: types, onSelect: onSelect),
-            if (sorts.isNotEmpty)
-              FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
-          ],
-        ),
+      if (barButtons != null)
+        // The top band, one rung: the engine's controls, then the bar's
+        // buttons at its right end. Nothing is above it, and an up press
+        // there stays: left to directional traversal, up from the buttons
+        // at its end found nothing above, gave up to the shell's scope,
+        // and came back down on the row under the band.
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          includeSemantics: false,
+          onKeyEvent: (node, event) =>
+              event is! KeyUpEvent &&
+                  event.logicalKey == LogicalKeyboardKey.arrowUp
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored,
+          child: Row(
+            children: [
+              Expanded(
+                child: types.isNotEmpty || sorts.isNotEmpty
+                    ? engines
+                    : const SizedBox.shrink(),
+              ),
+              barButtons,
+            ],
+          ),
+        )
+      else if (types.isNotEmpty || sorts.isNotEmpty)
+        engines,
       // The app's own filters, together and under the engine's controls: a
       // choice of what to look at, made after the type and the order. Chips
       // in both layouts: at wide widths the engine's types become one
@@ -1563,7 +1616,9 @@ class _FilterRow extends StatelessWidget {
         ),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: barButtons != null
+          ? const EdgeInsets.fromLTRB(12, 0, TvDensity.lightRoom, 8)
+          : const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
