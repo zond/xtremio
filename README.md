@@ -3,7 +3,9 @@
 ![xtremio](assets/branding/xtremio-logo.png)
 
 A native, cross-platform **Stremio client** built on a Rust core with a
-Flutter UI.
+Flutter UI, for Android TV and Google TV, Android phones and tablets, and
+Linux, Windows and macOS desktops. iOS is not carried
+([Platform support](#platform-support)).
 
 [![CI](https://github.com/zond/xtremio/actions/workflows/ci.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/ci.yml) [![source: MIT](https://img.shields.io/badge/source-MIT-blue)](#license) [![binaries: GPL-3.0-or-later](https://img.shields.io/badge/binaries-GPL--3.0--or--later-blue)](#license)
 
@@ -21,8 +23,8 @@ engine for addons, catalogs, library and playback state, built here from a
 What Stremio's own apps do -- catalogs and search across every installed
 addon, a library, an account, playback state -- this app does through the
 same engine, [`stremio-core`](https://github.com/Stremio/stremio-core), and
-it draws them its own way (a board with a line naming the addons that could
-*not* answer, so a dead addon is never mistaken for a title nobody has; a
+it draws them its own way (Discover's rows end with a line naming the
+catalogs that could *not* answer, so a dead addon is never mistaken for a title nobody has; a
 title's sources as one row per release, in a section per resolution, ranked
 by peers per megabyte). The list below is what it does that they do not.
 All of it is built and runs today; [docs/STATUS.md](docs/STATUS.md) is the
@@ -31,7 +33,8 @@ screen-by-screen inventory, and a feature with a design document links it.
 - **Torrent streaming with no external binary.** `stream-server` runs
   in-process on loopback: nothing to ship beside the app, launch, or keep
   alive on mobile. A torrent starts behind a card that says what it is doing
-  -- checking, finding peers, buffering -- instead of a spinner, and every
+  -- checking, finding peers, buffering -- instead of a spinner, a stall
+  later says *Buffering from the torrent* with the swarm's numbers, and every
   stream the app plays -- a torrent, an addon's direct link, a debrid link,
   a Drive file -- is cached and read ahead of the player by the server,
   inside one bounded cache.
@@ -66,20 +69,26 @@ screen-by-screen inventory, and a feature with a design document links it.
   read over unknown poster art, remote keys in the player, ten-foot density
   and overscan. Run on a physical Chromecast with Google TV
   ([docs/ANDROID.md](docs/ANDROID.md)).
-- **Casting to a Chromecast** from an Android phone, where the receiver can
-  decode what the embedded server is already serving. The bytes go over the
-  LAN untouched, from a second listener on the server that exists only while
-  a cast session does and serves only torrents and archives the app has
-  already opened -- no control routes, no `/proxy`. The player screen becomes
-  a remote, and a cast does not binge: the end of an episode on the
-  television never starts the next one. What it refuses, why it refuses
-  rather than guesses, and the fact that no real receiver has confirmed it
-  yet are in [docs/CASTING.md](docs/CASTING.md).
+- **Casting to a Chromecast** from an Android phone. What the film is comes
+  from mpv's report of the bytes alone, never a file name: a film the
+  receiver decodes goes over the LAN untouched, and an H.264 or HEVC film in
+  Matroska, or one whose sound the receiver will not take, goes repackaged as
+  one fragmented MP4 with its sound converted to stereo AAC -- the picture is
+  never re-encoded, so a picture no receiver decodes (10-bit H.264, say) is
+  refused up front with a sentence saying why. The receiver fetches from a
+  second listener on the server that exists only while a cast session does
+  and serves published tokens and nothing else -- no control routes, no
+  `/proxy`. The player screen becomes a remote with its own stats panel, and
+  a cast does not binge: the end of an episode on the television never
+  starts the next one. One real receiver, a Chromecast with Google TV 4K, has
+  played and seeked it; the rules and what each refusal says are in
+  [docs/CASTING.md](docs/CASTING.md).
 - **Sharing you can see and stop.** Xtremio shares while you watch and
   while a torrent download is on its way. *Share while idle* (Settings, on
-  by default) also keeps sharing your downloads and the last thing you
-  watched, until you watch something else, when nothing is happening, except on a phone or tablet while the app is in the
-  background. A status light on the main screens is lit only while the
+  by default) also keeps sharing your downloads, and the last thing you
+  watched until you watch something else, while nothing is happening --
+  except on a phone or tablet while the app is in the background. A status
+  light on the main screens is lit only while the
   server measures bytes moving with nothing playing, never because of the
   setting: an arrow up for uploading, down for bytes coming in (an offline
   download filling in -- a torrent, an addon link or a Drive file -- or the
@@ -107,13 +116,29 @@ build is unsigned. The APKs carry this project's own release key: to
 Android, a signing certificate *is* the app's identity, so upgrading from a
 build signed with a different key needs an uninstall first. Once
 installed, the app looks for a newer release once a day and offers it --
-on Android it downloads, verifies and installs it, behind Android's own
+on Android it first cleans the server's cache to make room (never a kept
+download), then downloads, verifies and installs it, behind Android's own
 confirmation ([docs/ANDROID.md](docs/ANDROID.md#updating-from-inside-the-app)).
 
-Building it yourself needs Flutter stable and a Rust toolchain; `make run
-DEVICE=linux` runs it, and the setup, the `make` targets and what a build
-stamps are in [docs/OPERATIONS.md](docs/OPERATIONS.md#building-and-running)
-(Android: [docs/ANDROID.md](docs/ANDROID.md)).
+## Building, testing, driving, releasing
+
+- **Building** needs Flutter stable and a Rust toolchain (or the Nix shells);
+  `make run DEVICE=linux` runs it. The setup, the `make` targets and what a
+  build stamps are in
+  [docs/OPERATIONS.md](docs/OPERATIONS.md#building-and-running); Android and
+  the TV APK in [docs/ANDROID.md](docs/ANDROID.md).
+- **Testing** is `make check`: Rust format, clippy, docs and tests, then Dart
+  format, analysis and the Flutter tests, the bindings' drift check and the
+  Kotlin unit tests, stopping at the first that fails. CI runs the same on
+  every push; [AGENTS.md](AGENTS.md#verification-with-real-exit-codes) lists
+  each gate and the rules a test has to keep.
+- **Driving** a running build from a terminal -- reading the screen, acting
+  on it, opening a title and playing one of its sources -- is `tool/drive-start` and
+  `tool/drive`, on a side-by-side debug app that never touches an installed
+  release ([docs/DRIVING.md](docs/DRIVING.md)).
+- **Releasing** is a version tag: the Build workflow makes every platform's
+  download and publishes the release
+  ([docs/OPERATIONS.md](docs/OPERATIONS.md#cutting-a-release)).
 
 ## How it works
 
@@ -127,9 +152,9 @@ stamps are in [docs/OPERATIONS.md](docs/OPERATIONS.md#building-and-running)
 │   • stream-server  → embedded: settings, stats, storage and  │
 │                      downloads as FFI calls                  │
 ├──────────────────────────────────────────────────────────────┤
-│  media_kit / libmpv — fetches the media over loopback HTTP,  │
-│  decodes and renders it (direct play; codecs and subtitles   │
-│  on-device)                                                  │
+│  media_kit / libmpv — reads the media from the server by id  │
+│  (xtremio://, no HTTP), decodes and renders it (direct play; │
+│  codecs and subtitles on-device)                             │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -138,15 +163,19 @@ bytes come from `stream-server`, and the client's job is presentation plus
 driving libmpv. `stream-server` runs **in-process**: the Rust crate in `rust/`
 links it as a library and starts it on its own thread with its own runtime,
 bound to `127.0.0.1` on a port the OS picks and pointing stremio-core at
-the address it reads back (the only server the app streams from), so no sidecar binary ships and no fixed port is
-lost to a desktop Stremio. The Dart side never speaks HTTP to it: libmpv
-fetches the media routes, the app's own questions -- settings, a torrent's
-stats, storage, downloads -- are FFI calls into the server's library API, and
-stremio-core's requests to it carry a per-launch bearer token that only the
-Rust side holds. The only HTTP it serves beyond loopback is the media listener
+the address it reads back (the only server the app streams from), so no
+sidecar binary ships and no fixed port is lost to a desktop Stremio. The
+Dart side never speaks HTTP to it: libmpv reads what it plays by media id
+through an `xtremio://` protocol registered on its handle
+(`rust/src/mpv_stream.rs`), fetching a loopback route only for a link the
+server reads forward; the app's own questions -- settings, a torrent's
+stats, storage, downloads, publishing a cast -- are FFI calls into the
+server's library API; and stremio-core's requests to it carry a per-launch
+bearer token that only the Rust side holds. The only HTTP it serves beyond loopback is the media listener
 a cast session turns on and off. Because a capable on-device player handles
-codecs and subtitles, the server never transcodes -- it just gets bytes onto an
-HTTP connection.
+codecs and subtitles, the server never transcodes a picture -- it gets bytes
+to the player, and for a cast at most repackages them and converts the
+sound.
 
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -184,9 +213,9 @@ refused rather than re-encoded.
 |---|---|
 | [docs/STATUS.md](docs/STATUS.md) | What is built today, screen by screen. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it works: the bridge and what crosses it, the wire conventions, the embedded server, the player, subtitles, downloads, Google Drive, the library, recommendations, and the pinned forks. |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Setting up, building and running, re-recording fixtures, server storage, diagnostics, the stats OSD, and what an iOS build needs. |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Setting up, building and running, cutting a release, re-recording fixtures, server storage, diagnostics, the stats OSD, and what an iOS build needs. |
 | [docs/ANDROID.md](docs/ANDROID.md) | Android and Android TV: prerequisites, the APK, manifest and channels, display frame rate, downloads in the background, emulators, a real box. |
-| [docs/DRIVING.md](docs/DRIVING.md) | Driving a running app from a terminal or an agent: the side-by-side debug app, `tool/drive-start`, `tool/drive`. |
+| [docs/DRIVING.md](docs/DRIVING.md) | Driving a running app from a terminal or an agent: the side-by-side debug app, `tool/drive-start`, `tool/drive` and its commands. |
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, what it repackages, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
