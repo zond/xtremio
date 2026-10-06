@@ -72,10 +72,10 @@ final class AddonManifest {
         resource['name'] as String,
   ];
 
-  /// Whether [resources] offers [resourceName] for [type], mirroring
-  /// stremio-core's `Manifest::is_resource_supported` (minus the id-prefix
-  /// half, which needs an id this call has none of): a short-form entry
-  /// (`"stream"`) falls back to [types]; a long-form entry
+  /// Whether the manifest's `resources` offers [resourceName] for [type],
+  /// mirroring stremio-core's `Manifest::is_resource_supported` (minus the
+  /// id-prefix half, which needs an id this call has none of): a short-form
+  /// entry (`"stream"`) falls back to [types]; a long-form entry
   /// (`{name, types}`) answers for its own `types` list alone -- one
   /// declared with no `types` of its own supports nothing, same as the
   /// Rust side.

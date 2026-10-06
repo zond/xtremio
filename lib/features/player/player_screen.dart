@@ -711,7 +711,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// at the start of the film, and neither is believed ([_onPosition],
   /// [_onDuration]): believed, it would report the viewer at the start to the
   /// core, and a re-open issued meanwhile would resume from it
-  /// ([_resumePosition]).
+  /// ([_reopenAt] at the position).
   ///
   /// It is also where an engine error stops being fatal ([_onEngineError]).
   bool _mediaIn = false;

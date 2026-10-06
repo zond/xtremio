@@ -41,7 +41,7 @@ import '../../core/core.dart';
 /// `query` the title as the model wrote it.
 ///
 /// A function rather than a client interface for the reason
-/// `PlaybackScope.archiveSniff` is one: it is the only question this
+/// `PlaybackScope.dhtStatus` is one: it is the only question this
 /// feature asks over the network apart from the model, a test answers it
 /// with a list, and there is nothing else about a catalogue this wants to
 /// know. Failures are the function's own business -- it may throw, and

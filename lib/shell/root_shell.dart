@@ -300,15 +300,14 @@ class _RootShellState extends State<RootShell> {
   /// **Below that band it is over the screen's own content, and this is
   /// what it costs.** The shell cannot know what a screen draws there, and
   /// the Library draws its filter row immediately under the app bar: the
-  /// light clips the right-hand end of that row's last chip -- 15 x 40 px
-  /// of "Downloaded" at 1280x720 on a television, and as much of whichever
-  /// chip ends the row on a phone narrow enough for it to reach the edge.
+  /// light clips the right-hand end of that row's last chip, on a phone
+  /// whose row ends a chip at the edge.
   /// So the claim is not that the corner is empty, which no fixed position
   /// over somebody else's screen can promise. It is that **the light never
   /// takes a press meant for something else**: nothing an app bar draws is
   /// touched at all, and no control lower down has its middle under the
   /// light, which is where a press is aimed and where `tap` lands. Both are
-  /// measured on all five screens by
+  /// measured on all four screens by
   /// `test/features/sharing_light_placement_test.dart`, at 1280x720 on a
   /// television and at 360x800 and 320x800 off one -- the width most
   /// phones have and the narrowest any does.
@@ -325,14 +324,14 @@ class _RootShellState extends State<RootShell> {
   ///
   /// A television has the easier half of that: the light takes no pointer
   /// there at all -- it is reached from the rail and pressed with select --
-  /// so what it clips is pixels, and the chip stays where the D-pad finds
-  /// it.
+  /// so what it clips is pixels, and a control under it stays where the
+  /// D-pad finds it.
   ///
-  /// **A screen with no app bar on a television** (Discover, Search) has a
-  /// band of its own controls across the top instead, and the light sits
-  /// at that band's right end, centred on it, in the room the screen keeps
-  /// clear there ([TvDensity.lightRoom]): a toolbar's height down would be
-  /// over its first row of posters.
+  /// **A screen with no app bar on a television** (Discover, Search, the
+  /// Library) has a band of its own controls across the top instead, and
+  /// the light sits at that band's right end, centred on it, in the room
+  /// the screen keeps clear there ([TvDensity.lightRoom]): a toolbar's
+  /// height down would be over its first row of posters.
   Widget _withLight(
     Widget content, {
     required bool isTv,

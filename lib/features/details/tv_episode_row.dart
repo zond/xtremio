@@ -105,7 +105,7 @@ class TvEpisodeRow extends StatefulWidget {
   ///
   /// A strip clips to exactly its own bounds, so without this the zoom and
   /// the shadow a focused card wears are cut off at both edges and read as
-  /// a crop. The Board's rows spend the same 12 dp on it.
+  /// a crop. Discover's rows spend the same 12 dp on it.
   static const double focusSlack = 12;
 
   /// The still: the card's own width, at 16:9.

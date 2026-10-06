@@ -64,7 +64,7 @@ typedef SimilarAsk = Future<List<SimilarTitle>> Function({
 typedef SimilarAskBuilder = SimilarAsk Function(AppPrefs prefs);
 
 /// Supplies how "More like this" is asked, for the details screen -- the
-/// same seam, and for the same reason, as `PlaybackScope.archiveSniff`: a
+/// same seam, and for the same reason, as `PlaybackScope.dhtStatus`: a
 /// test answers what the server would without a network or a wait.
 ///
 /// Absent, the screen builds a [MoreLikeThis] of its own. One per screen

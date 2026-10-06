@@ -31,12 +31,13 @@ import '../support/tv.dart';
 ///   control whose centre is clear still takes the press it is given.
 ///
 /// What that admits, and what it is worth writing down: the light does clip
-/// things. On the Library, whose filter row starts immediately under the
-/// app bar, it covers 15 x 40 px of the "Downloaded" chip at 1280x720 on a
-/// television, and at 400 wide off one, where the row's `Wrap` breaks its
-/// line with a chip ending under the light. At the two phone widths the
-/// sweep runs at, 360 and 320, the break falls elsewhere and nothing is
-/// clipped; the other four screens draw nothing there on either layout.
+/// things. On the Library off a television, whose filter row starts
+/// immediately under the app bar, it covers part of the "Downloaded" chip
+/// at 400 wide, where the row's `Wrap` breaks its line with a chip ending
+/// under the light. At the two phone widths the sweep runs at, 360 and 320,
+/// the break falls elsewhere and nothing is clipped. A television's
+/// Library, like its Discover and Search, has no app bar: the light sits on
+/// the screen's own top band.
 void main() {
   const lightKey = Key('sharing-light');
 

@@ -8,7 +8,9 @@ import 'poster_tile.dart';
 /// A library item as a poster: the watched fraction of its current video
 /// along the bottom edge, a badge for unseen new episodes, optionally a
 /// check mark once anything was watched to completion, and the name (plus
-/// the episode label for a series) underneath. Shared by the Board's
+/// the episode label for a series) underneath. On a television the caption
+/// is the name alone, on one line, and a series' episode is a badge in the
+/// poster's bottom-left corner instead. Shared by Discover's
 /// continue-watching row and the Library grid.
 class LibraryItemTile extends StatelessWidget {
   const LibraryItemTile({

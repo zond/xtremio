@@ -42,9 +42,11 @@ import '../similar/similar_resolver.dart';
 /// dispose; the anonymous library is shown with a hint to sign in, and a
 /// signed-in profile gets a "Sync now" button.
 ///
-/// The filter row also carries the way to the [DownloadsScreen]: what is
-/// kept on the device is a view of the library rather than a place of its
-/// own, and a chip next to the type filters is where one would look for it.
+/// The app bar also carries the way to the [DownloadsScreen] ("Manage
+/// downloads", while anything is downloaded): what is kept on the device is
+/// a view of the library rather than a place of its own, so the Library is
+/// where one would look for it. The Downloaded pill beside the types says
+/// what to look at; this button is where downloads are removed.
 ///
 /// It carries **Remote** for a related but not identical reason, and the
 /// difference is the whole of why that option is built the way it is: see
@@ -58,8 +60,12 @@ import '../similar/similar_resolver.dart';
 /// [_appended].
 ///
 /// The app bar carries the [RemoteFilesButton]. A file on the viewer's own
-/// Drive is theirs; the board is what an addon catalogue offers, which is
+/// Drive is theirs; Discover is what an addon catalogue offers, which is
 /// why the button moved here.
+///
+/// A television has no app bar here (the rail says which tab this is): the
+/// bar's buttons sit at the right end of the band across the top, beside
+/// the types and the sort, clear of the status light.
 ///
 /// On a TV the filter row and the grid are separate [FocusTraversalGroup]s,
 /// the tiles remember which one had focus for the shell's per-tab memory,
@@ -1174,11 +1180,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
-  /// The engine's items, then [appended] -- one lazy grid and not two, so
-  /// that merging a card does not cost a page of tiles that nobody has
-  /// scrolled to. The count grows by what was appended and the builder
-  /// picks the list by index; nothing walks the engine's items to build
-  /// them.
   /// The local videos nothing matched: drawn under Local only, and there
   /// under "All" and "Other" -- no title, so no type -- like Drive's.
   List<LocalMediaFile> _unmatchedLocal(LibraryState state) {
@@ -1191,6 +1192,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
+  /// The engine's items, then [appended] -- one lazy grid and not two, so
+  /// that merging a card does not cost a page of tiles that nobody has
+  /// scrolled to. The count grows by what was appended and the builder
+  /// picks the list by index; nothing walks the engine's items to build
+  /// them.
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,

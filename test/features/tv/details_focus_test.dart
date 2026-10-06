@@ -290,10 +290,8 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
 
 /// The card in the row of sources for the release called [release].
 ///
-/// Not `find.text`: the strip under the row says the name of the card the
-/// remote is on as well, in full and on one line ([TvSourceDetailStrip]),
-/// so a release that is on the panel once is on it twice. What these tests
-/// are about is which row is out, and a row is its cards.
+/// By the card's source rather than `find.text`: what these tests are
+/// about is which row is out, and a row is its cards.
 Finder sourceCard(String release) => find.byWidgetPredicate(
   (widget) => widget is TvSourceCard && widget.source.title == release,
 );

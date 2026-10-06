@@ -8,7 +8,7 @@ import '../shell/device_profile.dart';
 import 'remote_press.dart';
 
 /// The tappable surface under every poster-like tile ([PosterTile],
-/// [LibraryItemTile], the Board's "See all").
+/// [LibraryItemTile], a Discover row's "See all").
 ///
 /// Off a television it is the plain [InkWell] those tiles always had. On a
 /// TV ([DeviceScope.isTv]) the D-pad moves focus from tile to tile, so the

@@ -27,9 +27,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   final Stream<PlaybackStats> stats;
 
-  /// The URL libmpv is playing, shown as the last line (a torrent reads
+  /// The stream's own URL, the one the screen was asked to play, shown as
+  /// the last line (a torrent reads
   /// `http://127.0.0.1:<port>/<infoHash>/<fileIdx>?tr=…`, on whatever port
-  /// the embedded server bound).
+  /// the embedded server bound). Not necessarily what libmpv opened: a
+  /// stream played by id is handed to mpv as `xtremio://<id>`.
   final Uri? source;
 
   /// The stream is a torrent the embedded server is serving: the swarm

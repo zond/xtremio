@@ -53,7 +53,7 @@ final class MoreLikeThis {
   final SimilarTitlesProvider provider;
 
   /// How a suggestion is checked against a catalogue -- injected for the
-  /// same reason and in the same shape as `PlaybackScope.archiveSniff`.
+  /// same reason and in the same shape as `PlaybackScope.dhtStatus`.
   final CatalogueSearch search;
 
   /// The types the server answers for: Stremio's own `movie` and `series`.

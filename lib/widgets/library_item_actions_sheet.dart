@@ -39,9 +39,9 @@ List<CoreAction> libraryItemActionsFor(
 /// The long-press menu of one library item: mark watched, rewind, toggle
 /// notifications, remove. Shared by the Library screen and, for an item
 /// the Continue-watching row shows that is also in the library, the
-/// Board (see [showContinueWatchingActions]) -- the same menu either way,
-/// so opening it from the Board loses none of what opening it from the
-/// Library screen offers.
+/// Discover screen (see [showContinueWatchingActions]) -- the same menu
+/// either way, so opening it from Discover loses none of what opening it
+/// from the Library screen offers.
 class LibraryItemActionsSheet extends StatelessWidget {
   const LibraryItemActionsSheet({
     super.key,
@@ -180,7 +180,7 @@ class ContinueWatchingRemoveSheet extends StatelessWidget {
 /// Opens the long-press menu for a Continue-watching tile and dispatches
 /// whatever it picks: [LibraryItemActionsSheet] -- the full library menu,
 /// with "Remove from Continue watching" added -- when [item] is actually in
-/// the library, so opening it from the Board offers nothing less than
+/// the library, so opening it from Discover offers nothing less than
 /// opening it from the Library screen would; [ContinueWatchingRemoveSheet]
 /// otherwise. Removing from Continue watching is confirmed on
 /// [ContinueWatchingRemoveSheet] either way (see its doc for why it takes

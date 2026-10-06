@@ -81,8 +81,8 @@ extension _PlayerServerPolls on _PlayerScreenState {
 
   /// Tells the server a player opened on the torrent played by media id
   /// [id], once per id; see [_reportPlayerOpened]. Called when the id has
-  /// resolved ([_resolveMedia]), which is the first moment the server
-  /// knows which torrent it is.
+  /// resolved ([_playable]) and the engine's `open` is on its way, which is
+  /// the first moment the server knows which torrent it is.
   Future<void> _reportMediaOpened(String id) async {
     if (_mediaOpenedReported == id) return;
     _mediaOpenedReported = id;
