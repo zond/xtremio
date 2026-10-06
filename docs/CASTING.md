@@ -6,8 +6,8 @@ why. The player it hangs off is in [ARCHITECTURE.md](ARCHITECTURE.md#the-player)
 A cast button on the player's top bar, once a receiver has answered. It hands
 the stream to the receiver **untouched** -- the bytes the embedded server
 already serves, with no processing anywhere -- or, for an H.264 or HEVC
-film in a Matroska file, or an MP4 whose sound the receiver will not take,
-**repackaged**: the same picture as one fragmented MP4, its
+film in a Matroska file, or an MP4 whose sound the receiver will not take
+or carries in more than two channels, **repackaged**: the same picture as one fragmented MP4, its
 sound copied when it is AAC and **converted to stereo AAC** otherwise, made
 as the receiver reads it ([Renditions](#renditions-the-picture-repackaged-the-sound-converted)).
 It turns the player screen into a remote while the television plays. The
@@ -74,11 +74,12 @@ file at all) and sometimes wrong, and mpv is reading the bytes.
 - **QuickTime is MP4 here**: one reader opens both, so a `.mov` of H.264 or
   HEVC with AAC is handed over as `video/mp4` as it is
   ([Known limits](#known-limits)).
-- **A stream this device reads only by URL is refused** before any of
-  that when it is on this device: an origin that will not serve ranges
-  (read forward through `/proxy`) or a route the server names no id for
-  (`/ftp`). The LAN listener serves published ids and nothing else, and
-  nothing here can seek such a stream for a receiver.
+- **A stream read through a `/proxy` or `/ftp` route is refused** before
+  any of that, whatever host the route is on (another Stremio server's
+  proxy is no more castable than ours): an origin that will not serve
+  ranges, read forward, or a route the server names no id for. The LAN
+  listener serves published ids and nothing else, and nothing here can
+  seek such a stream for a receiver.
 
 **What is judged is the film, not its container.** The server resolves an
 id that turns out to be an archive or disc image to the member inside it
@@ -293,10 +294,14 @@ as before.
 says so.** The server keeps a player screen's torrent running from its
 first read until the screen is left (`server_release_player` in the
 player's teardown, `ServerHandle::release_player`), and a cast's from
-publish to unpublish (stream-server `docs/storage.md`, *Who keeps a torrent
-running*). Before, it guessed from the last stream opened and the reads in
-flight, and stopped the torrent a television was waiting on once anything
-else opened.
+publish to unpublish, taken while the screen still holds it so the
+hand-over has no gap (stream-server `docs/storage.md`, *Who keeps a torrent
+running*). A cast is published with the screen's play token, so its
+unpublish leaves the film sharing as the viewer's idle share, as leaving
+the player does, until the viewer plays something else (it runs only while
+idle sharing is allowed). Before, the server
+guessed from the last stream opened and the reads in flight, and stopped
+the torrent a television was waiting on once anything else opened.
 
 The server cuts the film into segments at its own keyframes (with the
 source's index, one per keyframe a second or more apart: its
@@ -432,9 +437,9 @@ withdrawn** (`media_unpublish`, which also cuts a body being served) when
 the session ends from any side, when another receiver is picked (which is
 handed a token of its own), when a start fails, when the screen moves to
 another stream and when the player is left; stopping the listener withdraws
-every token besides. A token is never logged. A link the server reads only
-forward is handed over as it is when it is on another internet host, and
-no listener is started for it.
+every token besides. A token is never logged. A stream played by URL rather
+than by id, on a host other than this device, is handed over as that URL,
+and no listener is started for it (`_castUrl`).
 
 **A plain link the receiver can play as it is goes to it as it is**
 (`directCastUrl`, `lib/features/cast/direct_cast.dart`): relaying it would
@@ -443,8 +448,8 @@ length of the film, and nothing is shared for a link either way. The
 receiver is handed the link itself when all of these hold: an addon's
 `url` stream (no torrent, archive, Drive file, file on this device or
 server route), `http` or `https` with no credentials in it, on a public
-host (not loopback, private, link-local, CGNAT, `.local`, `.lan` or a
-single-label name), with no `behaviorHints.proxyHeaders` and not
+host (not loopback, private, link-local, CGNAT, unique-local, `.local`,
+`.lan`, `.localhost`, `.home.arpa` or a single-label name), with no `behaviorHints.proxyHeaders` and not
 `notWebReady`, resolved by the server to a file it reads in process and
 not to the member of an archive, and `CastReady` by mpv's report like any
 cast -- a film that needs a rendition is repackaged here, so it is
@@ -503,10 +508,10 @@ bytes), both reset by every start and stop, give three readings:
 - **A body**: the network and the server did their part; the rest is the
   media's, and nothing is said.
 
-What the receiver reports about itself is never consulted -- the receiver
-this exists for reports a healthy session and an unknown player state -- so
-only the ways out of a session (`_cancelCastFetch`) cancel the wait, and
-picking a second receiver is one of them.
+What the receiver reports about itself never cancels the wait -- the
+receiver this exists to catch reports a healthy session -- so only the ways
+out of a session (`_cancelCastFetch`) do, and picking a second receiver is
+one of them.
 
 **The listener lives exactly as long as a session**: closed when the session
 ends, from any side, when a start fails and on `dispose`. Nothing binds it
@@ -607,6 +612,10 @@ the session ending elsewhere, another receiver picked, leaving the player
 the cast ended after 12 min: the receiver buffered 1 time, 41 s in all; 14 requests, 1.2 GB sent
 ```
 
+(`_logCastEnd`: "never buffered" for a receiver that did not stop, and "it
+read the stream from its source" in place of the counts for a link handed
+straight over.)
+
 **Casts do not binge**, by decision: `Ended` from the receiver shows no
 up-next card and never starts the next episode, whatever `bingeWatching`
 says. The viewer is at the television, not at the phone to cancel a
@@ -650,13 +659,23 @@ What a cast still gets wrong, knowingly:
 
 ## The pieces, and what is verified
 
-`lib/features/cast/`: `cast_client.dart` (the interface, `CastScope`, the
-types), `google_cast_client.dart` (over
+`lib/features/cast/`: `cast_client.dart` (the interface, `CastScope`,
+`ReceiverPictureMemory`, the types), `google_cast_client.dart` (over
 [`flutter_chrome_cast`](https://pub.dev/packages/flutter_chrome_cast)),
-`cast_compatibility.dart`, `cast_widgets.dart`; the session in
-`PlayerScreen`; `LanMediaControl` on `ServerClient`. Widget tests use
-`FakeCastClient` / `FakeLanMediaControl` (`test/support/`);
-`rust/tests/lan_media.rs` drives the listener. The manifest entries are in
+`cast_compatibility.dart`, `receiver_table.dart`, `direct_cast.dart`,
+`cast_widgets.dart` (the receiver sheet, the remote, the preparing card);
+the session in `PlayerScreen` (`player_screen_casting.dart`), its panel in
+`lib/features/player/cast_stats_overlay.dart`; `RenditionSpec` and the
+publishing calls in `lib/core/media_ids.dart`; `LanMediaControl` on
+`ServerClient`; on Android, `CastPictureChannel.kt` and
+`MainActivity.castDeviceAddress`. Widget tests use `FakeCastClient` /
+`FakeLanMediaControl` (`test/support/`), in `test/features/cast/`
+(`cast_compatibility_test.dart`, `direct_cast_test.dart`,
+`google_cast_client_test.dart`, `player_cast_test.dart`,
+`player_direct_cast_test.dart`, `player_cast_stats_test.dart`);
+`CastPictureTest.kt` is the JVM test of the picture report's parsing;
+`rust/tests/lan_media.rs` drives the listener, `rust/tests/rendition.rs`
+and `rendition_sound.rs` the renditions. The manifest entries are in
 [ANDROID.md](ANDROID.md#manifest-and-platform-channels).
 
 **One real receiver**: zond's Chromecast with Google TV 4K, on which
