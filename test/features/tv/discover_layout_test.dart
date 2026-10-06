@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/tv_density.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
@@ -258,6 +259,156 @@ void main() {
       }
       expect(pageScrollOffset(tester), greaterThan(0), reason: 'it scrolled');
     });
+  });
+
+  group('on a television, with a type chosen', () {
+    /// The catalog menu: an icon on the band, its words its tooltip.
+    Finder catalogMenu() => find.byWidgetPredicate(
+      (w) => w is Tooltip && (w.message?.startsWith('Catalog:') ?? false),
+    );
+
+    /// Up from the first tile onto the band, along it to Movies, and
+    /// select.
+    Future<void> chooseMovies(WidgetTester tester) async {
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 6 && focusedLabel(tester) != 'Movies'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      await press(tester, LogicalKeyboardKey.select);
+      expect(catalogMenu(), findsOneWidget);
+    }
+
+    testWidgets('its catalog menu is on the types\' band, to their right, '
+        'inside the safe area, and the rows have not moved', (tester) async {
+      useTv(tester);
+      await pumpApp(tester);
+      final boardBefore = board(tester);
+      await chooseMovies(tester);
+
+      final types = tester.getRect(find.byType(SegmentedButton<int>));
+      final menu = tester.getRect(catalogMenu());
+      expect(menu.center.dy, closeTo(types.center.dy, 1), reason: 'the band');
+      expect(menu.left, greaterThan(types.right), reason: 'to their right');
+      expect(menu.top, greaterThanOrEqualTo(band));
+      expect(
+        menu.right,
+        lessThanOrEqualTo(logical.width * 0.95 - TvDensity.minTarget),
+        reason: 'clear of the status light\'s room',
+      );
+      expect(types.height, TvDensity.topBandHeight, reason: 'one line');
+      // No row of menus under the band: the rows are where they were.
+      expect(board(tester), boardBefore);
+      expect(board(tester).bottom, logical.height - band);
+      expect(
+        tester
+                .widget<SliverFixedExtentList>(
+                  find.byType(SliverFixedExtentList),
+                )
+                .itemExtent *
+            2,
+        lessThanOrEqualTo(board(tester).height),
+        reason: 'two whole rows still fit',
+      );
+    });
+
+    testWidgets('the remote walks the band to it and back, down to the rows, '
+        'and up stays on the band', (tester) async {
+      useTv(tester);
+      await pumpApp(tester);
+      await chooseMovies(tester);
+      // Along the band to its last type, and on to the menu.
+      for (var i = 0; i < 6 && focusedTooltip() == null; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), startsWith('Catalog:'));
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusIn<SegmentedButton<int>>(), isTrue, reason: 'back');
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedTooltip(), startsWith('Catalog:'));
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedTooltip(), startsWith('Catalog:'), reason: 'up stays');
+      // Down is the first row, Continue watching, though its one tile is
+      // far to the left of the menu.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<LibraryItemTile>(), isTrue, reason: 'down: the first row');
+      // And from the band's first type, up stays too.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 6 && focusedLabel(tester) != 'All'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowLeft);
+      }
+      expect(focusedLabel(tester), 'All');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), 'All');
+    });
+
+    testWidgets('an open catalog\'s filters join it on the band', (
+      tester,
+    ) async {
+      useTv(tester);
+      final core = await pumpApp(tester);
+      core.setState(CoreField.discover, loadDiscoverFixture());
+      await chooseMovies(tester);
+      for (var i = 0; i < 6 && focusedTooltip() == null; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      await press(tester, LogicalKeyboardKey.select);
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Popular').first);
+      await tester.pumpAndSettle();
+
+      final genre = find.byWidgetPredicate(
+        (w) => w is Tooltip && (w.message?.startsWith('Genre') ?? false),
+      );
+      expect(genre, findsOneWidget);
+      final types = tester.getRect(find.byType(SegmentedButton<int>));
+      final at = tester.getRect(genre);
+      expect(at.center.dy, closeTo(types.center.dy, 1));
+      expect(at.left, greaterThan(tester.getRect(catalogMenu()).right));
+      expect(
+        at.right,
+        lessThanOrEqualTo(logical.width * 0.95 - TvDensity.minTarget),
+      );
+    });
+
+    testWidgets('its menu checks the catalog in force', (tester) async {
+      useTv(tester);
+      await pumpApp(tester);
+      await chooseMovies(tester);
+      for (var i = 0; i < 6 && focusedTooltip() == null; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      await press(tester, LogicalKeyboardKey.select);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(
+            MenuItemButton,
+            DiscoverScreen.anyCatalogLabel,
+          ),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  testWidgets('a phone keeps its catalog menu on a row under the types', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester, device: DeviceProfile.fallback);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Movies'));
+    await tester.pumpAndSettle();
+
+    final menu = tester.getRect(find.byType(DropdownMenu<int>));
+    final types = tester.getRect(find.byType(ChoiceChip).first);
+    expect(menu.top, greaterThan(types.bottom));
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Tooltip && (w.message?.startsWith('Catalog:') ?? false),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('a phone keeps its title, its types under it and its posters', (

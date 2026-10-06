@@ -57,21 +57,38 @@ class FilterSegments<R> extends StatelessWidget {
   final ValueChanged<R> onSelect;
 
   @override
-  Widget build(BuildContext context) => SegmentedButton<int>(
-    showSelectedIcon: false,
-    segments: [
-      for (final (index, option) in options.indexed)
-        ButtonSegment(value: index, label: Text(option.label)),
-    ],
-    selected: {
-      for (final (index, option) in options.indexed)
-        if (option.selected) index,
-    },
-    emptySelectionAllowed: true,
-    onSelectionChanged: (selection) {
-      if (selection.isNotEmpty) onSelect(options[selection.first].request);
-    },
-  );
+  Widget build(BuildContext context) {
+    // A television's band holds the types beside other controls, and a
+    // label that wrapped to a second line there would grow the band and
+    // push the rows under it down: one line, cut short at its end where
+    // the band is too narrow.
+    final isTv = DeviceScope.isTv(context);
+    return SegmentedButton<int>(
+      showSelectedIcon: false,
+      segments: [
+        for (final (index, option) in options.indexed)
+          ButtonSegment(
+            value: index,
+            label: isTv
+                ? Text(
+                    option.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : Text(option.label),
+          ),
+      ],
+      selected: {
+        for (final (index, option) in options.indexed)
+          if (option.selected) index,
+      },
+      emptySelectionAllowed: true,
+      onSelectionChanged: (selection) {
+        if (selection.isNotEmpty) onSelect(options[selection.first].request);
+      },
+    );
+  }
 }
 
 /// The options as choice chips (narrow layouts).

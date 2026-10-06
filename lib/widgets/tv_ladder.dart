@@ -56,12 +56,22 @@ import 'remote_press.dart';
 /// decide, not this widget's: which rung a title is *for* is a question
 /// about the title.
 class TvLadder extends StatefulWidget {
-  const TvLadder({super.key, this.controller, required this.child});
+  const TvLadder({
+    super.key,
+    this.controller,
+    this.pastTheEnds,
+    required this.child,
+  });
 
   /// The rows' controller, for a screen that has to ask where the remote
   /// is on its ladder or put it somewhere itself ([TvLadderController.locate],
   /// [TvLadderController.focusStop]). One is made when null.
   final TvLadderController? controller;
+
+  /// What a press up from the topmost row, or down from the lowest, does
+  /// instead of nothing: answers whether it moved the remote (or kept it,
+  /// on purpose). Null leaves such a press to directional traversal.
+  final bool Function({required bool up})? pastTheEnds;
 
   final Widget child;
 
@@ -77,7 +87,7 @@ class _TvLadderState extends State<TvLadder> {
 
   @override
   Widget build(BuildContext context) => _TvLadderScope(
-    controller: widget.controller ?? _own,
+    controller: (widget.controller ?? _own).._pastTheEnds = widget.pastTheEnds,
     child: widget.child,
   );
 }
@@ -95,6 +105,9 @@ class _TvLadderScope extends InheritedWidget {
 /// The rows of one screen, in the order the viewer walks them.
 class TvLadderController {
   final Map<int, TvLadderRowState> _rows = {};
+
+  /// [TvLadder.pastTheEnds].
+  bool Function({required bool up})? _pastTheEnds;
 
   /// Where the remote was in each row, by level and not by row.
   ///
@@ -126,7 +139,7 @@ class TvLadderController {
     for (final level in candidates) {
       if (_rows[level]?.focusRemembered(up: up) ?? false) return true;
     }
-    return false;
+    return _pastTheEnds?.call(up: up) ?? false;
   }
 
   /// Where [node] is on this ladder: the level of the row it is a stop

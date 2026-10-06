@@ -939,7 +939,8 @@ void main() {
       await pressUntil(
         tester,
         LogicalKeyboardKey.tab,
-        () => focusedLabel(tester)?.startsWith('Catalog:') ?? false,
+        // An icon on the band; its words are its tooltip.
+        () => focusedTooltip()?.startsWith('Catalog:') ?? false,
         target: 'the Catalog button',
       );
       await press(tester, LogicalKeyboardKey.select);

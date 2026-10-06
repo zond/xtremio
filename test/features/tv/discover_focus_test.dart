@@ -66,8 +66,12 @@ void main() {
         .action;
     expect(lastRowsLoad(), CoreActions.loadBoard(type: 'series').action);
 
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), startsWith('Catalog:'));
+    // The type's catalog menu is on the same band, to the right of the
+    // types: an icon, its words its tooltip.
+    for (var i = 0; i < 6 && focusedTooltip() == null; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(focusedTooltip(), startsWith('Catalog:'));
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusIn<PosterTile>(), isTrue, reason: 'on the rows');
 
@@ -77,7 +81,12 @@ void main() {
       CoreActions.loadBoard().action,
       reason: 'Back from a type\'s rows is All',
     );
-    expect(find.textContaining('Catalog:'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Tooltip && (w.message?.startsWith('Catalog:') ?? false),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('the D-pad walks the filter bar, then the grid, row by row', (

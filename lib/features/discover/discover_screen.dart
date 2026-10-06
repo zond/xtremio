@@ -567,30 +567,71 @@ class _BrowseHeader extends StatelessWidget {
           request: each,
         ),
     ];
-    // Two rungs on a television: the types, and the type's menus. The
-    // menus start at the left edge while the chosen type may be far to its
-    // right, and directional focus takes whatever is straight below -- the
-    // rows -- stepping over the menus a press down was meant for. The rows
-    // are no rung: a press down off the menus falls through to them.
+    final isTv = DeviceScope.isTv(context);
+    // The type's menus: the catalog, and an open catalog's filters. On a
+    // television they are icons on the types' own band, their words in
+    // their tooltips and the choice in force checked in their menus --
+    // five types' pills leave no room for "Catalog: Popular" in 960 dp.
+    final menus = <Widget>[
+      if (type != null) ...[
+        FilterMenu(
+          label: 'Catalog',
+          options: _catalogOptions(type),
+          onSelect: onCatalog,
+          icon: isTv ? Icons.view_list_outlined : null,
+        ),
+        for (final extra in selectable?.extra ?? const <SelectableExtra>[])
+          if (extra.options.isNotEmpty)
+            FilterMenu(
+              label: capitalise(extra.name),
+              options: [
+                for (final option in extra.options)
+                  FilterOption(
+                    label: option.value ?? _FilterBar.anyOptionLabel,
+                    selected: option.selected,
+                    request: option.request,
+                  ),
+              ],
+              onSelect: onFilter,
+              icon: isTv ? Icons.filter_list : null,
+            ),
+      ],
+    ];
+    final typeControl = isWide
+        ? FilterSegments(options: types, onSelect: onType)
+        : FilterChips(options: types, onSelect: onType);
+    if (isTv) {
+      return Padding(
+        // A television's types are the top of the screen, at the edge of
+        // the band the shell keeps clear, with no title above them to keep
+        // a gap from, and clear of the status light at the right end of
+        // their band.
+        padding: const EdgeInsets.fromLTRB(12, 0, TvDensity.lightRoom, 4),
+        child: TvLadder(
+          // One band, one rung: the types, then the menus beside them.
+          // Down off it is the first row ([_pastTheBand]).
+          pastTheEnds: ({required bool up}) => _pastTheBand(context, up: up),
+          child: TvLadderRow(
+            level: _typesLevel,
+            child: Row(
+              children: [
+                Flexible(child: typeControl),
+                for (final menu in menus) ...[const SizedBox(width: 12), menu],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    // Off a television, two rows: the types, and the type's menus.
     return Padding(
-      // A television's types are the top of the screen, at the edge of
-      // the band the shell keeps clear, with no title above them to keep a
-      // gap from, and clear of the status light at the right end of their
-      // band.
-      padding: DeviceScope.isTv(context)
-          ? const EdgeInsets.fromLTRB(12, 0, TvDensity.lightRoom, 4)
-          : const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: TvLadder(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TvLadderRow(
-              level: _typesLevel,
-              child: isWide
-                  ? FilterSegments(options: types, onSelect: onType)
-                  : FilterChips(options: types, onSelect: onType),
-            ),
-            if (type != null)
+            TvLadderRow(level: _typesLevel, child: typeControl),
+            if (menus.isNotEmpty)
               TvLadderRow(
                 level: _menusLevel,
                 child: Padding(
@@ -599,29 +640,7 @@ class _BrowseHeader extends StatelessWidget {
                     spacing: 12,
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      FilterMenu(
-                        label: 'Catalog',
-                        options: _catalogOptions(type),
-                        onSelect: onCatalog,
-                      ),
-                      for (final extra
-                          in selectable?.extra ?? const <SelectableExtra>[])
-                        if (extra.options.isNotEmpty)
-                          FilterMenu(
-                            label: capitalise(extra.name),
-                            options: [
-                              for (final option in extra.options)
-                                FilterOption(
-                                  label:
-                                      option.value ?? _FilterBar.anyOptionLabel,
-                                  selected: option.selected,
-                                  request: option.request,
-                                ),
-                            ],
-                            onSelect: onFilter,
-                          ),
-                    ],
+                    children: menus,
                   ),
                 ),
               ),
@@ -629,6 +648,41 @@ class _BrowseHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Down past the band is the first row; up is left alone (nothing is
+  /// above the band, and directional traversal finds nothing there).
+  ///
+  /// The menus sit at the band's right, where the first row -- Continue
+  /// watching, often a tile or two at its left -- may have nothing under
+  /// them, and directional traversal then takes the nearest tile below by
+  /// distance, which is the second row's. So down is the nearest stop of
+  /// the topmost row under the band, wherever the press was made from on
+  /// it.
+  static bool _pastTheBand(BuildContext context, {required bool up}) {
+    if (up) return false;
+    final from = FocusManager.instance.primaryFocus;
+    final scope = from?.nearestScope;
+    final box = context.findRenderObject();
+    if (from == null || scope == null || box is! RenderBox) return false;
+    final band = box.localToGlobal(Offset.zero) & box.size;
+    FocusNode? best;
+    for (final candidate in scope.traversalDescendants) {
+      if (!candidate.canRequestFocus || candidate.context == null) continue;
+      final at = candidate.rect;
+      if (at.top < band.bottom || at.right <= band.left) continue;
+      final bestAt = best?.rect;
+      final better =
+          bestAt == null ||
+          at.top < bestAt.top - 1 ||
+          (at.top <= bestAt.top + 1 &&
+              (at.center.dx - from.rect.center.dx).abs() <
+                  (bestAt.center.dx - from.rect.center.dx).abs());
+      if (better) best = candidate;
+    }
+    if (best == null) return false;
+    best.requestFocus();
+    return true;
   }
 
   static const int _typesLevel = 0;

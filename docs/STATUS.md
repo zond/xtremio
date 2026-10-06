@@ -284,7 +284,9 @@ typed on a screen of its own
 ([ANDROID.md](ANDROID.md#typing-with-a-remote)).
 
 Discover has no title there: the rail already says which tab is open, so
-the types are the top of the screen, and the rows below them share the
+the types are the top of the screen -- a type's catalog menu, and an open
+catalog's filters, beside them on the same band as icons, their choice in
+the tooltip and checked in the menu -- and the rows below them share the
 board two at a time -- a heading of one line, the catalog's subtitle after
 its title, a caption of one line cut short at its end, and posters as big
 as two whole rows allow (94 x 141 dp, on a 1080p Google TV's 960 x 540,
