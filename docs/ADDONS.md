@@ -120,7 +120,8 @@ auto-disable — the whole ask was to *decide*.
 
 ## What addons are told
 
-Besides the questions it asks them, stremio-core (from 0.64) **tells** an
+Besides the questions it asks them, stremio-core (from 0.64; `rust/Cargo.toml`
+pins the fork at `a98918c`, rebased onto upstream 0.64.1) **tells** an
 installed addon what the viewer does, if the addon asks to be told: one
 whose manifest declares the `player` resource hears about playback, and
 one that declares `library` hears about the library. An addon that
@@ -147,12 +148,14 @@ carry it; and the profile's Local Files addon is answered on the device
 | `player` `pause` | Playback pauses once it has begun, and on every `Seek` while paused |
 | `player` `stop` | The video ends (`Ended`), or the player is left or loads another stream before it ended |
 | `library` `libraryAdd` / `libraryRemove` | A title is added that was not in the library, or one that was is removed |
-| `library` `watched` / `unwatched` | A title, a video or a season is marked by hand, from the library or the details page |
+| `library` `watched` / `unwatched` | A title is marked by hand from the Library's menu (`LibraryItemMarkAsWatched`), or an episode from the details page (`MarkVideoAsWatched`) |
 
 `currentTime` and `duration` are milliseconds, the player's last report
-(0 before the first); `videoId` is the episode or film being played. A
-season marked watched sends the ids of the videos whose mark actually
-changed, comma-separated, a hundred to a request. **A `player` request
+(0 before the first); `videoId` is the episode or film being played, or
+on a `watched` request the episode whose mark changed. The core can also
+mark a whole season, sending the ids of the videos whose mark actually
+changed, comma-separated, a hundred to a request; this app has no season
+mark, so it never sends one. **A `player` request
 goes to every addon that declares the resource, whatever the stream came
 from**: a downloaded, local or Drive play is loaded with a stream request
 too (so the core keeps its progress), and that request is what names the
