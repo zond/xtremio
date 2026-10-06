@@ -137,12 +137,11 @@ class SimilarTitlesRow extends StatelessWidget {
       posterSizeOf(context).height +
       _captionBoxOf(context);
 
-  /// The caption's box, text grown: [captionHeight], or on a television one
-  /// line, as every poster's there is -- the name and then the year, cut
-  /// short at the end ([PosterTile.tvCaptionHeight]) -- and the inset.
-  static double _captionBoxOf(BuildContext context) => DeviceScope.isTv(context)
-      ? PosterTile.tvCaptionHeight * _textFactor(context) + FocusRing.textInset
-      : captionHeight * _textFactor(context);
+  /// The caption's box, text grown: [captionHeight]. On a television too:
+  /// its poster is narrow, so the year goes under the name rather than
+  /// beside it, and this row is not one of the fixed-extent catalog rows.
+  static double _captionBoxOf(BuildContext context) =>
+      captionHeight * _textFactor(context);
 
   @override
   Widget build(BuildContext context) {
@@ -216,47 +215,29 @@ class _SimilarPoster extends StatelessWidget {
                     FocusRing.textInset,
                     FocusRing.textInset,
                   ),
-                  // The name cut short at its end, then the year, which is
-                  // never cut.
-                  child: isTv
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                item.name,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ),
-                            if (year != null) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                '$year',
-                                maxLines: 1,
-                                softWrap: false,
-                                style: yearStyle,
-                              ),
-                            ],
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              item.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            if (year != null)
-                              Text('$year', maxLines: 1, style: yearStyle),
-                          ],
+                  // The name cut short at its end, the year under it: a
+                  // year beside the name left a television's narrow poster
+                  // three letters of it.
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      if (year != null)
+                        Text(
+                          '$year',
+                          maxLines: 1,
+                          softWrap: false,
+                          style: yearStyle,
                         ),
+                    ],
+                  ),
                 ),
               ),
             ],
