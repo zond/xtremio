@@ -67,19 +67,20 @@ and deferred because the copy covers what is actually watched.
 
 ## Speak to search
 
-Typing a title with a D-pad is the worst part of the television; on the
-phone it is merely slower than it needs to be.
+Typing a title with a D-pad is the worst part of the television.
 
-Android already does the hard part: `RecognizerIntent.ACTION_RECOGNIZE_SPEECH`
-opens the system's speech recogniser (Google's on a Google TV and on most
-phones) and answers with candidate transcripts, no permission or network
-code of ours. So: a microphone button in the search field (phone and TV)
-that starts it through a small Kotlin channel and fills the field with the
-top candidate; on the television, also take the remote's own search/mic
-key (`KEYCODE_SEARCH`, or the Assistant handing over a query through a
-searchable activity) straight into the search screen. Check what a Google TV
-remote's mic button actually sends to a foreground app before building on
-it -- the Assistant may keep it for itself. About a day.
+**The field half is built** (780b1a0): on a television Search's field has
+a microphone at its right end that starts Android's
+`RecognizerIntent.ACTION_RECOGNIZE_SPEECH` through the `recognizeSpeech`
+channel method and confirms the transcript as a typed entry
+([ANDROID.md](ANDROID.md#typing-with-a-remote)). A phone needs nothing of
+ours: its keyboard has a microphone.
+
+What is left is the remote's own search/mic key (`KEYCODE_SEARCH`, or the
+Assistant handing over a query through a searchable activity) going
+straight into the search screen; nothing takes it today. Check what a
+Google TV remote's mic button actually sends to a foreground app before
+building on it -- the Assistant may keep it for itself.
 
 ## Continue watching on the Google TV home screen
 
@@ -100,8 +101,10 @@ days if the plain API is honoured.
 
 ## Shrinking the stremio-core fork to nothing
 
-Three small patches would let us drop the fork and follow upstream: the
-localsearch rev pin, the flate2 widening, and the gh-pages guard. Three
+Four small patches would let us drop the fork and follow upstream: the
+subtitle properties (upstream PR Stremio/stremio-core#1045), the
+localsearch rev pin, the flate2 widening, and the gh-pages guard
+(`rust/Cargo.toml` says what each is for). Three
 more version-range widenings would do the same for stremio-core-web. Each
 is upstreamable on its own. The fork policy says minimal divergence, and
 this is how that becomes zero.
