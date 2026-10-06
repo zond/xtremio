@@ -49,14 +49,19 @@ The pieces: `lib/shell/deep_link.dart` (the source, over
 [`app_links`](https://pub.dev/packages/app_links), and
 `deepLinkAddonManifestUrl`, which decides what a link means), the listener in
 `XtremioApp` next to the lifecycle one, and the app's `navigatorKey` — a link
-arrives from the platform with no `BuildContext` to navigate with.
+arrives from the platform with no `BuildContext` to navigate with. The same
+listener takes the one other link the app answers, the Drive pairing
+`https://xtremio-xervice.web.app/link` App Link a television draws as a QR
+code; `drivePairingSessionOfLink` (`lib/core/drive_pairing.dart`) is asked
+first, and only what it turns down is read as a `stremio://` link
+([ARCHITECTURE.md](ARCHITECTURE.md#google-drive)).
 
 Registration, per platform:
 
 | Platform | How | State |
 |---|---|---|
 | **Android** | `VIEW`/`BROWSABLE` intent-filter with `<data android:scheme="stremio"/>` on the already-`singleTop` `MainActivity` | Wired |
-| **iOS / macOS** | `CFBundleURLTypes` in `Runner/Info.plist` | Wired (unbuilt here — no Mac) |
+| **iOS / macOS** | `CFBundleURLTypes` in `Runner/Info.plist` | Wired; macOS is built by `build.yml` but no link has been opened on it, and iOS is not built ([OPERATIONS.md](OPERATIONS.md#building-for-ios)) |
 | **Linux** | `linux/com.zond.xtremio.desktop` (`MimeType=x-scheme-handler/stremio;`, `Exec=xtremio %u`) plus a runner that is a single instance handling its own command line | Wired; the .desktop file must be installed by hand or by a package (see the file) |
 | **Windows** | A `HKCU\Software\Classes\stremio` URL-protocol key, which only an installer can write | **Not wired** — there is no installer in this repo |
 
@@ -68,7 +73,8 @@ route (a second, different link replaces it). Android was not run against a
 device here; the `adb` line for it is in
 [ANDROID.md](ANDROID.md#manifest-and-platform-channels).
 
-No App Links / Universal Links verification is possible for any of these: the
+No App Links / Universal Links verification is possible for any of these
+(the Drive pairing link above verifies because its host is this project's): the
 host in a `stremio://` URL is the *addon's* domain, which could be anyone's,
 so there is no domain this app could claim with an `assetlinks.json` or an
 `apple-app-site-association`. A custom scheme is all this can be, which is
