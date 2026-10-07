@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.speech.RecognizerIntent
 import android.view.Display
 import android.view.Surface
 import android.view.SurfaceView
@@ -40,11 +39,8 @@ class MainActivity : FlutterActivity() {
      */
     private var textEntry: MethodChannel.Result? = null
 
-    /**
-     * The `recognizeSpeech` call the device's recognizer is up for; at most
-     * one, answered by its result like [textEntry].
-     */
-    private var speech: MethodChannel.Result? = null
+    /** Typing by voice (SpeechInput.kt), alive for as long as the engine is. */
+    private var speech: SpeechInput? = null
 
     /**
      * What is telling Dart the rate this display is really refreshing at,
@@ -115,15 +111,16 @@ class MainActivity : FlutterActivity() {
                     // which is the only way a remote can type at all
                     // (lib/shell/tv_text_entry.dart, TextEntryActivity.kt).
                     "editText" -> editText(call, result)
-                    // The same field filled by voice: whether the device
-                    // has a recognizer, and one round of it, through
-                    // RecognizerIntent -- the recognizer's own screen and
-                    // microphone, so no RECORD_AUDIO here, and only the
-                    // text comes back.
-                    "canRecognizeSpeech" -> result.success(
-                        speechIntent(null).resolveActivity(packageManager) != null,
-                    )
-                    "recognizeSpeech" -> recognizeSpeech(call, result)
+                    // The same field filled by voice, recognized in the app
+                    // (lib/shell/speech_input.dart, SpeechInput.kt); what is
+                    // heard comes back on the `xtremio/speech` stream.
+                    "startSpeech" -> speech.let {
+                        if (it == null) result.success(SpeechInput.UNAVAILABLE) else it.start(result)
+                    }
+                    "stopSpeech" -> {
+                        speech?.stop()
+                        result.success(null)
+                    }
                     // What rate to present the picture at, asked for while
                     // a film is playing and given back when it stops
                     // (lib/shell/display_frame_rate.dart). The only two
@@ -166,6 +163,18 @@ class MainActivity : FlutterActivity() {
         localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         appUpdate = AppUpdateChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         watchNext = WatchNextChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        speech = SpeechInput(this).also {
+            EventChannel(flutterEngine.dartExecutor.binaryMessenger, SpeechInput.CHANNEL)
+                .setStreamHandler(it)
+        }
+    }
+
+    // Hidden is the end of listening: nothing is recorded while the viewer
+    // is somewhere else. Not onPause, which the microphone permission's own
+    // dialog causes in the middle of the press that asked for it.
+    override fun onStop() {
+        speech?.stop()
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -459,62 +468,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /**
-     * `ACTION_RECOGNIZE_SPEECH` for one free-form transcript. Resolving it
-     * on API 30+ needs the `<queries>` entry in the manifest.
-     */
-    private fun speechIntent(prompt: String?): Intent =
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-            )
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            if (prompt != null) putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
-        }
-
-    /**
-     * Puts the recognizer up. A second call while it, or a text-entry
-     * screen, is already up is answered null, as [editText] answers one;
-     * so is a device where nothing takes the intent after all.
-     */
-    private fun recognizeSpeech(call: MethodCall, result: MethodChannel.Result) {
-        if (speech != null || textEntry != null) {
-            result.success(null)
-            return
-        }
-        speech = result
-        try {
-            startActivityForResult(
-                speechIntent(call.argument<String>("prompt")),
-                REQUEST_SPEECH,
-            )
-        } catch (error: ActivityNotFoundException) {
-            speech = null
-            result.success(null)
-        }
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         // The picker answers its own request code and says so, which is what
         // keeps two unrelated results from reading each other's data.
         if (drivePicker?.onActivityResult(requestCode, data) == true) return
-        if (requestCode == REQUEST_SPEECH) {
-            val pending = speech ?: return
-            speech = null
-            // Cancelled, an error, or nothing heard is null: the field
-            // stays as it was.
-            pending.success(
-                if (resultCode == RESULT_OK) {
-                    data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                        ?.firstOrNull()
-                } else {
-                    null
-                },
-            )
-            return
-        }
         if (requestCode != REQUEST_TEXT_ENTRY) return
         val pending = textEntry ?: return
         textEntry = null
@@ -537,6 +495,7 @@ class MainActivity : FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         downloads?.onRequestPermissionsResult(requestCode, grantResults)
         localMedia?.onRequestPermissionsResult(requestCode, grantResults)
+        speech?.onRequestPermissionsResult(requestCode)
     }
 
     override fun onDestroy() {
@@ -555,6 +514,7 @@ class MainActivity : FlutterActivity() {
         watchNext?.detach()
         watchNext = null
         textEntry = null
+        speech?.detach()
         speech = null
         super.onDestroy()
     }
@@ -580,6 +540,5 @@ class MainActivity : FlutterActivity() {
         const val DISPLAY_CHANNEL = "xtremio/display"
         const val CAST_PICTURE_CHANNEL = "xtremio/cast_picture"
         const val REQUEST_TEXT_ENTRY = 4712
-        const val REQUEST_SPEECH = 4713
     }
 }

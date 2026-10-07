@@ -43,10 +43,7 @@ enum TvTextKind {
 /// one-field screen of its own (`TextEntryActivity.kt`), whose `EditText`
 /// carries no such flag, and takes back the string it was left with.
 /// [TvTextField] is the only caller; nothing else should need this.
-///
-/// A field can also be filled by voice ([recognizeSpeech]), which on a
-/// television is quicker than any keyboard: the same answer, by another
-/// way in.
+
 abstract final class TvTextEntry {
   /// The method `MainActivity` answers on [DeviceProfile.channel].
   static const String method = 'editText';
@@ -77,49 +74,6 @@ abstract final class TvTextEntry {
       return null;
     } on MissingPluginException {
       if (kDebugMode) debugPrint('text entry unavailable: no platform side');
-      return null;
-    }
-  }
-
-  /// The methods `MainActivity` answers for voice: whether anything on the
-  /// device takes `RecognizerIntent.ACTION_RECOGNIZE_SPEECH`, and one
-  /// round of it.
-  static const String canRecognizeSpeechMethod = 'canRecognizeSpeech';
-  static const String recognizeSpeechMethod = 'recognizeSpeech';
-
-  /// Whether the device has a speech recognizer to hand a field to. False
-  /// where there is no platform side and when the call fails.
-  static Future<bool> canRecognizeSpeech({
-    MethodChannel channel = DeviceProfile.channel,
-  }) async {
-    try {
-      return await channel.invokeMethod<bool>(canRecognizeSpeechMethod) ??
-          false;
-    } on PlatformException {
-      return false;
-    } on MissingPluginException {
-      return false;
-    }
-  }
-
-  /// Puts the device's speech recognizer up, headed with [prompt], and
-  /// answers with the one transcript it heard: the platform's own screen
-  /// and microphone, no permission of the app's, and only the text comes
-  /// back. Null when it was cancelled, heard nothing or failed, which a
-  /// caller reads exactly as a cancelled [edit].
-  static Future<String?> recognizeSpeech({
-    required String prompt,
-    MethodChannel channel = DeviceProfile.channel,
-  }) async {
-    try {
-      return await channel.invokeMethod<String>(
-        recognizeSpeechMethod,
-        <String, Object?>{'prompt': prompt},
-      );
-    } on PlatformException catch (error) {
-      if (kDebugMode) debugPrint('speech unavailable: ${error.code}');
-      return null;
-    } on MissingPluginException {
       return null;
     }
   }

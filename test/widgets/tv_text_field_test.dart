@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/speech_input.dart';
 import 'package:xtremio/shell/tv_text_entry.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
+import '../support/speech.dart';
 import '../support/tv.dart';
 
 void main() {
@@ -60,22 +64,16 @@ void main() {
 
   final mic = find.byKey(const Key('tv-text-field-voice'));
 
-  /// The device's recognizer: there or not ([canRecognize]), answering
-  /// [heard]; `editText` answers [typed]. Records every call.
-  void answersSpeech({
-    required bool canRecognize,
-    String? heard,
-    String? typed,
-  }) {
-    mockChannel((call) async {
-      calls.add(call);
-      return switch (call.method) {
-        TvTextEntry.canRecognizeSpeechMethod => canRecognize,
-        TvTextEntry.recognizeSpeechMethod => heard,
-        TvTextEntry.method => typed,
-        _ => null,
-      };
-    });
+  /// The microphone shows it is listening.
+  bool listening(WidgetTester tester) =>
+      tester.widget<IconButton>(mic).isSelected ?? false;
+
+  /// [text] is on screen in the muted colour of something not yet the
+  /// value.
+  bool muted(WidgetTester tester, String text) {
+    final shown = tester.widget<Text>(find.text(text));
+    final theme = Theme.of(tester.element(find.text(text)));
+    return shown.style?.color == theme.colorScheme.onSurfaceVariant;
   }
 
   group('on a television', () {
@@ -325,10 +323,9 @@ void main() {
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'TvTextField');
     });
 
-    testWidgets('fills the field with what was heard and confirms it', (
-      tester,
-    ) async {
-      answersSpeech(canRecognize: true, heard: 'the thing');
+    testWidgets('listens, shows what it hears muted, and confirms the end '
+        'of it', (tester) async {
+      final speech = FakeSpeech();
       final controller = TextEditingController(text: 'old');
       addTearDown(controller.dispose);
       final changed = <String>[];
@@ -343,39 +340,154 @@ void main() {
       );
 
       await tester.tap(mic);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      expect(speech.calls, [SpeechInput.startMethod]);
+      expect(speech.listenedTo, isTrue);
+      expect(listening(tester), isTrue);
+      expect(find.byIcon(Icons.mic), findsOneWidget);
+      expect(muted(tester, TvTextField.listeningText), isTrue);
 
-      expect(calls.map((call) => call.method), [
-        TvTextEntry.canRecognizeSpeechMethod,
-        TvTextEntry.recognizeSpeechMethod,
-      ]);
-      expect(calls.last.arguments, {'prompt': 'Email'});
+      speech.partial('the');
+      await tester.pump();
+      expect(muted(tester, 'the'), isTrue);
+      speech.partial('the thing');
+      await tester.pump();
+      expect(muted(tester, 'the thing'), isTrue);
+      // Not the value yet: nothing is searched for half a sentence.
+      expect(controller.text, 'old');
+      expect(changed, isEmpty);
+
+      speech.finish('the thing');
+      await tester.pump();
       expect(controller.text, 'the thing');
       expect(changed, ['the thing']);
       expect(submitted, ['the thing']);
+      expect(listening(tester), isFalse);
+      expect(muted(tester, 'the thing'), isFalse);
+      expect(speech.listenedTo, isFalse, reason: 'the press is over');
     });
 
-    testWidgets('nothing heard leaves the field alone', (tester) async {
-      answersSpeech(canRecognize: true);
+    testWidgets('a second press stops it and puts the value back', (
+      tester,
+    ) async {
+      final speech = FakeSpeech();
       final controller = TextEditingController(text: 'kept');
       addTearDown(controller.dispose);
       final changed = <String>[];
       await tester.pumpWidget(
         host(controller, voice: true, onChanged: changed.add),
       );
+      await tester.tap(mic);
+      await tester.pump();
+      speech.partial('half a');
+      await tester.pump();
 
       await tester.tap(mic);
-      await tester.pumpAndSettle();
-
-      expect(calls.last.method, TvTextEntry.recognizeSpeechMethod);
+      await tester.pump();
+      expect(speech.calls, [SpeechInput.startMethod, SpeechInput.stopMethod]);
+      expect(speech.listenedTo, isFalse);
+      expect(listening(tester), isFalse);
+      expect(find.text('half a'), findsNothing);
+      expect(find.text('kept'), findsOneWidget);
       expect(controller.text, 'kept');
       expect(changed, isEmpty);
+    });
+
+    testWidgets('Back stops it, and is spent doing so', (tester) async {
+      final speech = FakeSpeech();
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+      speech.partial('half a');
+      await tester.pump();
+
+      await systemBack(tester);
+      expect(speech.calls.last, SpeechInput.stopMethod);
+      expect(listening(tester), isFalse);
+      expect(find.text('kept'), findsOneWidget);
+    });
+
+    testWidgets('focus leaving the button stops it', (tester) async {
+      final speech = FakeSpeech();
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+      expect(listening(tester), isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'TvTextField');
+      expect(speech.calls.last, SpeechInput.stopMethod);
+      expect(listening(tester), isFalse);
+    });
+
+    testWidgets('a press ended while it was starting stops what it started', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final speech = FakeSpeech(gate: gate);
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+
+      // Away before the permission dialog has been answered.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      gate.complete();
+      await tester.pump();
+      expect(speech.calls, [
+        SpeechInput.startMethod,
+        SpeechInput.stopMethod,
+        SpeechInput.stopMethod,
+      ]);
+      expect(listening(tester), isFalse);
+      expect(speech.listenedTo, isFalse);
+    });
+
+    testWidgets('the app being hidden stops it', (tester) async {
+      final speech = FakeSpeech();
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      expect(listening(tester), isTrue, reason: 'a dialog over it is not');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      expect(speech.calls.last, SpeechInput.stopMethod);
+      expect(listening(tester), isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
+
+    testWidgets('leaving the screen stops it', (tester) async {
+      final speech = FakeSpeech();
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox());
+      expect(speech.calls.last, SpeechInput.stopMethod);
+      expect(speech.listenedTo, isFalse);
     });
 
     testWidgets('with no recognizer it opens the keyboard screen instead', (
       tester,
     ) async {
-      answersSpeech(canRecognize: false, typed: 'typed');
+      final speech = FakeSpeech(
+        answer: SpeechStart.unavailable,
+        typed: 'typed',
+      );
       final controller = TextEditingController();
       addTearDown(controller.dispose);
       await tester.pumpWidget(host(controller, voice: true));
@@ -383,12 +495,74 @@ void main() {
       await tester.tap(mic);
       await tester.pumpAndSettle();
 
-      expect(calls.map((call) => call.method), [
-        TvTextEntry.canRecognizeSpeechMethod,
-        TvTextEntry.method,
-      ]);
+      expect(speech.calls, [SpeechInput.startMethod, TvTextEntry.method]);
       expect(controller.text, 'typed');
+      expect(find.byType(SnackBar), findsNothing);
+      expect(speech.listenedTo, isFalse);
     });
+
+    testWidgets('a refused permission says so and opens the keyboard screen', (
+      tester,
+    ) async {
+      final speech = FakeSpeech(answer: SpeechStart.denied, typed: 'typed');
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+
+      await tester.tap(mic);
+      await tester.pumpAndSettle();
+
+      expect(speech.calls, [SpeechInput.startMethod, TvTextEntry.method]);
+      expect(controller.text, 'typed');
+      expect(
+        find.text('Voice search needs the microphone permission (Settings).'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a recognizer that cannot record says so and opens the '
+        'keyboard screen', (tester) async {
+      final speech = FakeSpeech(typed: 'typed');
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, voice: true));
+      await tester.tap(mic);
+      await tester.pump();
+
+      speech.fail(SpeechError.audio);
+      await tester.pumpAndSettle();
+      expect(find.text('No microphone.'), findsOneWidget);
+      expect(speech.calls.last, TvTextEntry.method);
+      expect(controller.text, 'typed');
+      expect(listening(tester), isFalse);
+    });
+
+    for (final (error, words) in [
+      (SpeechError.noMatch, "Didn't catch that."),
+      (SpeechError.network, 'No connection for voice.'),
+      (SpeechError.other, 'Voice search stopped.'),
+    ]) {
+      testWidgets('${error.name} ends it quietly, in plain words', (
+        tester,
+      ) async {
+        final speech = FakeSpeech();
+        final controller = TextEditingController(text: 'kept');
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(host(controller, voice: true));
+        await tester.tap(mic);
+        await tester.pump();
+        speech.partial('half');
+        await tester.pump();
+
+        speech.fail(error);
+        await tester.pumpAndSettle();
+        expect(find.text(words), findsOneWidget);
+        expect(listening(tester), isFalse);
+        expect(controller.text, 'kept');
+        expect(find.text('kept'), findsOneWidget);
+        expect(speech.calls, [SpeechInput.startMethod]);
+      });
+    }
 
     testWidgets('with no platform side at all it is the keyboard screen, '
         'which is not there either: nothing changes', (tester) async {

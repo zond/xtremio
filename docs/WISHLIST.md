@@ -69,11 +69,13 @@ and deferred because the copy covers what is actually watched.
 
 Typing a title with a D-pad is the worst part of the television.
 
-**The field half is built** (780b1a0): on a television Search's field has
-a microphone at its right end that starts Android's
-`RecognizerIntent.ACTION_RECOGNIZE_SPEECH` through the `recognizeSpeech`
-channel method and confirms the transcript as a typed entry
-([ANDROID.md](ANDROID.md#typing-with-a-remote)). A phone needs nothing of
+**The field half is built**: on a television Search's field has a
+microphone at its right end that recognizes speech in the app with
+Android's `SpeechRecognizer`, shows the words as they are said and
+confirms the transcript as a typed entry
+([ANDROID.md](ANDROID.md#typing-with-a-remote)). The first build handed
+off to `RecognizerIntent`, which a Chromecast with Google TV answers with
+its own search and never gives the words back. A phone needs nothing of
 ours: its keyboard has a microphone.
 
 What is left is the remote's own search/mic key (`KEYCODE_SEARCH`, or the

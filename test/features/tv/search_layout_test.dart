@@ -6,13 +6,14 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
-import 'package:xtremio/shell/tv_text_entry.dart';
+import 'package:xtremio/shell/speech_input.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_sharing.dart';
 import '../../support/fixtures.dart';
+import '../../support/speech.dart';
 import '../../support/text_entry.dart';
 import '../../support/tv.dart';
 
@@ -147,27 +148,17 @@ void main() {
       expect(mic.bottom, lessThanOrEqualTo(field.bottom));
       expect(mic.right, field.right);
 
-      final calls = <MethodCall>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        DeviceProfile.channel,
-        (call) async {
-          calls.add(call);
-          return switch (call.method) {
-            TvTextEntry.canRecognizeSpeechMethod => true,
-            TvTextEntry.recognizeSpeechMethod => recorded,
-            _ => null,
-          };
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          DeviceProfile.channel,
-          null,
-        ),
-      );
+      final speech = FakeSpeech();
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await settleTextEntry(tester);
-      expect(calls.last.method, TvTextEntry.recognizeSpeechMethod);
+      expect(speech.calls, [SpeechInput.startMethod]);
+      speech.partial('night of the');
+      await tester.pump();
+      expect(find.text('night of the'), findsOneWidget);
+      expect(searches(core), isEmpty, reason: 'not while it is said');
+
+      speech.finish(recorded);
+      await settleTextEntry(tester);
       expect(
         tester.widget<TvTextField>(find.byType(TvTextField)).controller.text,
         recorded,

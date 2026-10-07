@@ -143,13 +143,15 @@ renderer for them.
     feature; any error means "a phone", and no other platform calls it. The
     answer goes down the tree as `DeviceScope`, the only thing the TV layout
     keys on. The channel also carries `os` (the Diagnostics device line),
-    `editText`, `canRecognizeSpeech` and `recognizeSpeech` (below), the
+    `editText`, `startSpeech` and `stopSpeech` (below), the
     frame-rate calls, and `castDeviceAddress` -- the
     receiver's IPv4 address off the MediaRouter route, which
     `flutter_chrome_cast` drops and the server needs to pick an interface
     (see [CASTING.md](CASTING.md)).
   - `xtremio/display`: an event channel pushing the display's refresh rate
     (below).
+  - `xtremio/speech`: an event channel carrying what the search field's
+    microphone hears (below).
   - `xtremio/cast_picture`: an event channel, `CastPictureChannel.kt`,
     carrying the picture a cast receiver reports, which `flutter_chrome_cast`
     drops ([CASTING.md](CASTING.md#a-receiver-that-shows-no-picture)).
@@ -169,6 +171,9 @@ renderer for them.
 - **`REQUEST_INSTALL_PACKAGES`** and the unexported `InstallStatusReceiver`
   are the in-app update's: see
   [Updating from inside the app](#updating-from-inside-the-app).
+- **`RECORD_AUDIO`** is the TV search field's microphone, asked for at its
+  first press, with `android.hardware.microphone` not required; see
+  [Typing with a remote](#typing-with-a-remote).
 
 ## Updating from inside the app
 
@@ -260,20 +265,46 @@ it. Off a television `TvTextField` is an ordinary `TextField`.
 Search's field also has a microphone on a television (`TvTextField.voice`):
 a button at the right end inside the box, reached by right from the field
 (which sends right there itself, since traversal does not step onto a box
-inside the one it leaves) and left back. It asks `MainActivity`
-(`canRecognizeSpeech`) whether anything takes
-`RecognizerIntent.ACTION_RECOGNIZE_SPEECH` -- the manifest's `<queries>`
-declares it, so the resolve works on API 30+ -- and if so starts it
-(`recognizeSpeech`: free-form, one result, the field's label as the
-prompt) with `startActivityForResult`. The transcript is the field's new
-value and is confirmed as Done on the text-entry screen is, so Search runs
-it; cancelled, failed or nothing heard leaves the field alone. Where no
-recognizer resolves the button opens the text-entry screen instead, whose
-keyboard has a microphone of its own (Gboard for TV's types by voice into
-it). The app holds no `RECORD_AUDIO`: the recognizer listens on its own
-screen. **Voice search uses the device's Google speech service; xtremio
-receives only the text.** Off a television the field is unchanged; the
-keyboard there has the microphone.
+inside the one it leaves) and left back. Speech is recognized in the app
+(`SpeechInput.kt`, `lib/shell/speech_input.dart`), not handed off:
+`RecognizerIntent`'s activity route is Google TV's own search on a
+Chromecast with Google TV, which searched the whole TV and never gave the
+words back.
+
+- **A press** asks for `RECORD_AUDIO` the first time (the system dialog,
+  nothing of ours before it), then starts a `SpeechRecognizer` -- the
+  on-device one where Android 12+ has one, the device's recognition
+  service otherwise, and that one also when the on-device one has no model
+  for the language -- free-form, partial results on. `startSpeech` answers
+  `listening`, `unavailable`, `denied` or `busy`; what is heard arrives on
+  `xtremio/speech` as `partial`, then one `final` or an `error` word
+  (`SpeechEvents`, never Android's code).
+- **While it listens** the button is the filled microphone in a ring of
+  the accent colour and holds the remote's focus; what has been heard shows
+  in the field, muted, and is not the value yet. The final transcript
+  replaces the value and is confirmed as Done on the text-entry screen is,
+  so Search runs it.
+- **It stops** at the final result or an error, at a second press, Back,
+  focus leaving the button, the app hidden (Dart's `onHide`, and
+  `MainActivity.onStop`) and the field leaving the screen; each destroys
+  the recognizer, and every way but the result leaves the value as it was.
+  The microphone is open from the press to one of those and never
+  otherwise.
+- **Never a dead control.** No recognition service (`isRecognitionAvailable`,
+  which on API 30+ needs the `<queries>` entry for
+  `android.speech.RecognitionService`), the permission refused, or a
+  recognizer that cannot record (`ERROR_AUDIO`) opens the text-entry screen
+  instead, whose keyboard has a microphone of its own (Gboard for TV's types
+  by voice into it). A refusal and a recognizer that cannot record say so
+  in a snackbar; nothing understood, no connection and anything else end
+  quietly with a line in plain words.
+- `android.hardware.microphone` is declared not required, so a television
+  without one still installs and keeps the keyboard.
+
+**Voice search listens through the device's speech recognizer (on-device
+where Android offers it, otherwise Google's service); xtremio receives only
+the text.** Off a television the field is unchanged: it is a Flutter
+`TextField`, and Gboard's microphone is on the keyboard there.
 
 Search's field also `typesInPlace`: while it has focus a hardware
 keyboard's characters and Backspace change it directly, each announced to

@@ -46,6 +46,12 @@
          guide asks for it for Watch Next. Install-time; a phone has no TV
          provider and the probe says so. -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA"/>
+    <!-- Voice search on a television (SpeechInput.kt): asked for at the
+         first press of the search field's microphone, and the microphone is
+         open only from that press to its result. Not required hardware: a
+         television with no microphone keeps the keyboard. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
@@ -206,13 +212,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- The TV search field's microphone asks whether a speech
-             recognizer is there before it offers one (MainActivity,
-             canRecognizeSpeech); from API 30 a resolve sees only what is
-             declared here. The intent route needs no RECORD_AUDIO: the
-             recognizer listens, and xtremio gets the text. -->
+        <!-- The TV search field's microphone recognizes speech in the app
+             (SpeechInput.kt). From API 30, SpeechRecognizer.isRecognitionAvailable
+             sees a recognition service only when it is declared here. -->
         <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
         <!-- The TV provider, which the home-screen probe (WatchNextChannel)
              asks whether this device has; from API 30 another package's

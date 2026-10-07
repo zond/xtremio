@@ -313,7 +313,8 @@ against the 153 x 230 of the one row that used to fill it). Search is laid
 out the same way: its field is the top of the screen and its hits are
 those rows, one per catalog, the field typed on the platform's screen,
 straight into with a hardware keyboard, or spoken through the microphone
-at its right end (Android's speech recogniser). The Library has no title there
+at its right end (Android's `SpeechRecognizer`, in the app, its words
+showing as they are said). The Library has no title there
 either: its types, its sort (an icon, its order in the tooltip and checked
 in its menu) and the bar's buttons are one band across the top, the
 Remote / Local / Downloaded row under it. On those three screens the

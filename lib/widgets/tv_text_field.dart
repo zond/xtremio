@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
+import '../shell/speech_input.dart';
 import '../shell/tv_text_entry.dart';
 import 'focusable_tile.dart';
 import 'remote_press.dart';
@@ -86,12 +89,16 @@ class TvTextField extends StatefulWidget {
   final bool typesInPlace;
 
   /// On a television, a microphone button at the field's right end that
-  /// fills it by voice ([TvTextEntry.recognizeSpeech]) and then announces
-  /// the transcript as a confirmed entry is. Where the device has no
-  /// recognizer the button opens the text-entry screen instead, whose
-  /// keyboard has a microphone of its own, so it is never a dead control.
-  /// Off a television nothing changes: the keyboard there has the
-  /// microphone.
+  /// fills it by voice ([SpeechInput]): what is heard shows in the field,
+  /// muted, as it is said, and the final transcript is announced as a
+  /// confirmed entry is. Pressing it again, Back, focus leaving it or the
+  /// app being hidden stops listening and leaves the value as it was.
+  ///
+  /// Never a dead control: where the device has no recognizer, the
+  /// permission is refused or the recognizer cannot record, it opens the
+  /// text-entry screen instead, whose keyboard has a microphone of its own
+  /// -- with a line saying why, where there is something to say. Off a
+  /// television nothing changes: the keyboard there has the microphone.
   ///
   /// The button is drawn inside the field's outline, over room the
   /// decoration keeps free for it, and is a sibling of the field rather
@@ -103,6 +110,9 @@ class TvTextField extends StatefulWidget {
   /// What the text-entry screen is headed with: whatever this field is
   /// already labelled, so nothing has to be named twice.
   String get label => decoration.labelText ?? decoration.hintText ?? '';
+
+  /// What the field shows while listening, before anything is heard.
+  static const String listeningText = 'Listening…';
 
   /// One character of a masked value.
   static const String obscuringCharacter = '•';
@@ -127,8 +137,29 @@ class _TvTextFieldState extends State<TvTextField> {
   /// The microphone's room at the field's trailing edge: a suffix icon's.
   static const double _micWidth = 48;
 
+  /// A press of the microphone, from before its start is answered to its
+  /// end; null between presses.
+  StreamSubscription<SpeechEvent>? _speech;
+
+  /// The recognizer is listening.
+  bool _listening = false;
+
+  /// What it has heard so far, shown in place of the value until the end.
+  String? _heard;
+
+  /// Ends the listening when the app is hidden; there only while it lasts.
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _micFocus.addListener(_onMicFocus);
+  }
+
   @override
   void dispose() {
+    if (_speech != null) unawaited(SpeechInput.stop());
+    _endSpeech(rebuild: false);
     _fieldFocus.dispose();
     _micFocus.dispose();
     super.dispose();
@@ -155,20 +186,96 @@ class _TvTextFieldState extends State<TvTextField> {
     widget.onSubmitted?.call(typed);
   }
 
-  /// The microphone: the device's recognizer, or the text-entry screen
-  /// where there is none. Nothing heard leaves the value alone.
+  /// The microphone ([TvTextField.voice]): a press starts listening, a
+  /// press while listening stops it.
   Future<void> _speak() async {
-    if (_editing) return;
-    if (!await TvTextEntry.canRecognizeSpeech()) {
-      await _edit();
+    if (_speech != null) {
+      _cancelSpeech();
       return;
     }
     if (_editing) return;
-    _editing = true;
-    final heard = await TvTextEntry.recognizeSpeech(prompt: widget.label);
-    _editing = false;
-    if (!mounted || heard == null || heard.isEmpty) return;
-    _confirm(heard);
+    // Where Back and the D-pad go while it listens, so that either ends it.
+    _micFocus.requestFocus();
+    // Before the start: the first words can follow its answer at once.
+    final press = SpeechInput.events.listen(_onSpeech);
+    _speech = press;
+    final started = await SpeechInput.start();
+    if (!identical(_speech, press)) {
+      // Ended while the start was on its way: by focus, Back or the app
+      // going away. The recognizer it started goes too.
+      if (started == SpeechStart.listening) unawaited(SpeechInput.stop());
+      return;
+    }
+    switch (started) {
+      case SpeechStart.listening:
+        _lifecycle = AppLifecycleListener(onHide: _cancelSpeech);
+        setState(() {
+          _listening = true;
+          _heard = null;
+        });
+      case SpeechStart.unavailable:
+        _endSpeech();
+        await _edit();
+      case SpeechStart.denied:
+        _endSpeech();
+        _tell(SpeechError.permission.message);
+        await _edit();
+      case SpeechStart.busy:
+        _endSpeech();
+    }
+  }
+
+  void _onSpeech(SpeechEvent event) {
+    if (!mounted) return;
+    switch (event) {
+      case SpeechPartial(:final text):
+        setState(() => _heard = text);
+      case SpeechFinal(:final text):
+        _endSpeech();
+        _confirm(text);
+      case SpeechFailed(:final error):
+        _endSpeech();
+        _tell(error.message);
+        if (error.opensKeyboard) unawaited(_edit());
+    }
+  }
+
+  /// Stops listening on the viewer's account; the value stands as it was.
+  void _cancelSpeech() {
+    if (_speech == null) return;
+    unawaited(SpeechInput.stop());
+    _endSpeech();
+  }
+
+  /// Lets the press go: the subscription (whose end stops the recognizer
+  /// too), the listening state and what was heard.
+  void _endSpeech({bool rebuild = true}) {
+    unawaited(_speech?.cancel());
+    _speech = null;
+    _lifecycle?.dispose();
+    _lifecycle = null;
+    if (!_listening && _heard == null) return;
+    if (rebuild && mounted) {
+      setState(() {
+        _listening = false;
+        _heard = null;
+      });
+    } else {
+      _listening = false;
+      _heard = null;
+    }
+  }
+
+  /// Focus leaving the button ends the press, listening or still being
+  /// started (the permission dialog can be up).
+  void _onMicFocus() {
+    if (!_micFocus.hasFocus) _cancelSpeech();
+  }
+
+  void _tell(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Keys on the field itself: right to the microphone, which traversal
@@ -270,7 +377,8 @@ class _TvTextFieldState extends State<TvTextField> {
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) {
-        final text = widget.controller.text;
+        final heard = _listening ? (_heard ?? TvTextField.listeningText) : null;
+        final text = heard ?? widget.controller.text;
         // The ring and the fill are the app's, not this field's: the ink
         // falls through to `ThemeData.focusColor`, the theme floor's, and
         // the ring comes from the same emphasis every other control reads.
@@ -305,12 +413,17 @@ class _TvTextFieldState extends State<TvTextField> {
                   isFocused: _focused,
                   isEmpty: text.isEmpty,
                   child: Text(
-                    widget.kind.isSecret
+                    widget.kind.isSecret && heard == null
                         ? TvTextField.obscuringCharacter * text.length
                         : text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium,
+                    // What is heard is not the value yet, and looks it.
+                    style: heard == null
+                        ? theme.textTheme.titleMedium
+                        : theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                   ),
                 ),
               ),
@@ -322,7 +435,7 @@ class _TvTextFieldState extends State<TvTextField> {
         // otherwise turn select on it into the typing screen. The row is
         // there whether or not the button is, so that a first character
         // arriving does not reparent the field and take its focus with it.
-        return Row(
+        final row = Row(
           children: [
             Expanded(
               child: widget.voice
@@ -338,8 +451,26 @@ class _TvTextFieldState extends State<TvTextField> {
                             child: IconButton(
                               key: const Key('tv-text-field-voice'),
                               focusNode: _micFocus,
-                              tooltip: 'Voice input',
+                              tooltip: _listening
+                                  ? 'Stop listening'
+                                  : 'Voice input',
+                              isSelected: _listening,
                               icon: const Icon(Icons.mic_none),
+                              // Listening: the filled microphone in a ring
+                              // of the accent colour, still, so that
+                              // nothing on the screen moves but the words.
+                              selectedIcon: Icon(
+                                Icons.mic,
+                                color: theme.colorScheme.primary,
+                              ),
+                              style: _listening
+                                  ? IconButton.styleFrom(
+                                      side: BorderSide(
+                                        color: theme.colorScheme.primary,
+                                        width: 2,
+                                      ),
+                                    )
+                                  : null,
                               onPressed: widget.enabled ? _speak : null,
                             ),
                           ),
@@ -350,6 +481,16 @@ class _TvTextFieldState extends State<TvTextField> {
             ),
             _clearButton(refocus: true) ?? const SizedBox.shrink(),
           ],
+        );
+        if (!widget.voice) return row;
+        // Back while listening is the end of listening, and nothing more:
+        // the rung exists only while the microphone visibly listens.
+        return PopScope(
+          canPop: !_listening,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _cancelSpeech();
+          },
+          child: row,
         );
       },
     );
