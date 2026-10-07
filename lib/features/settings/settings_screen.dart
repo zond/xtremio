@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
@@ -6,7 +5,6 @@ import '../../core/core.dart';
 import '../../widgets/readout.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
-import '../dev/home_screen_probe.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../diagnostics/server_storage_screen.dart';
 import '../downloads/download_labels.dart';
@@ -399,11 +397,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             stream: DevStreams.bigBuckBunnyHttp,
           ),
           const _DevDownloadTile(),
-          // Whether a Google TV home screen shows this app's Watch Next
-          // entries at all; Android only, and a phone answers that it has
-          // no TV provider.
-          if (defaultTargetPlatform == TargetPlatform.android)
-            const HomeScreenProbeTiles(),
         ],
       ),
     );

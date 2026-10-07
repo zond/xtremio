@@ -84,24 +84,26 @@ straight into the search screen; nothing takes it today. Check what a
 Google TV remote's mic button actually sends to a foreground app before
 building on it -- the Assistant may keep it for itself.
 
-## Continue watching on the Google TV home screen
+## Continue watching on the Google TV home screen -- measured, closed
 
 The Google TV home screen has a "Continue watching" row that other apps put
 their half-watched titles in; xtremio's Continue watching lives only inside
-the app.
+the app, and will stay there.
 
-The Android TV route is the Watch Next channel: publish each continue-
-watching item (title, poster, position, duration, a deep link back into
-xtremio's details or player) through `androidx.tvprovider`'s
-`TvContractCompat.WatchNextPrograms`, update it as progress changes, remove it
-when watched or dismissed (our long-press "Remove from Continue watching"
-included), and handle the deep link. Unverified: whether Google TV still
-shows Watch Next entries from an app that is not on the Play Store, or now
-requires Google's Engage SDK / a partnership -- measure on zond's Chromecast
-with a single hand-published entry before building the sync. One to two
-days if the plain API is honoured.
-Settings → Developer → "Insert a home-screen probe" publishes that entry
-from the app itself ([ANDROID.md](ANDROID.md#home-screen-probe)).
+**Measured 2026-10-07 on zond's Chromecast with Google TV.** A Watch Next
+entry published by the app itself (`androidx.tvprovider`,
+`TvContractCompat.WatchNextPrograms`, a movie with a poster, a position and
+an intent back into the app, the row id answered) never appeared on the home
+screen. That is what Google documents: Google TV shows Watch Next rows only
+from apps it has certified -- the ones under Settings → Accounts & sign-in
+→ the account → Your services -- and the certification is for Play-distributed
+partners, now moving to the allow-listed Engage SDK; nothing offers a path
+to a sideloaded app. Plex and the others do exactly what the probe did; their
+package is on the list. The probe, its permission and its channel were
+removed again the same day (`git log` for "home-screen probe"). What would
+show the rows: the classic Android TV launcher on older boxes, and
+third-party launchers such as Projectivy, which read the table unfiltered.
+Not worth building for a home screen zond does not use.
 
 ## Shrinking the stremio-core fork to nothing
 

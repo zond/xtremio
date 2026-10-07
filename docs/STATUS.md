@@ -277,10 +277,8 @@ Each installed addon carries a verdict on how it has been answering
   and open source licences, including unrar-rs's.
 - **Developer**, in release builds: **Verbose logging**, **Diagnostics** (the
   core's and the server's recent log, copied redacted unless verbose
-  logging is on), entries that play a public Big Buck Bunny torrent or
-  HTTP stream, or download the torrent, without any addon, and on Android
-  a probe that puts one test entry in the TV home screen's Continue
-  watching row and takes it out again.
+  logging is on) and entries that play a public Big Buck Bunny torrent or
+  HTTP stream, or download the torrent, without any addon.
 
 A **status light** on the main screens is lit while the server moves bytes
 to or from peers with nothing playing, and offers a stop for what it shows.

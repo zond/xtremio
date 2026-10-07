@@ -162,12 +162,6 @@ renderer for them.
     ([ARCHITECTURE.md](ARCHITECTURE.md#local-videos)).
   - `xtremio/update`: `AppUpdateChannel.kt`, installing a downloaded
     release and measuring the room for it (`room`) (below).
-  - `xtremio/watch_next`: `WatchNextChannel.kt`, the developer probe of
-    the home screen's Continue watching row
-    ([Home-screen probe](#home-screen-probe)).
-- **`com.android.providers.tv.permission.WRITE_EPG_DATA`**, the
-  `android.media.tv` provider query and `androidx.tvprovider` exist only
-  for the [Home-screen probe](#home-screen-probe).
 - **`REQUEST_INSTALL_PACKAGES`** and the unexported `InstallStatusReceiver`
   are the in-app update's: see
   [Updating from inside the app](#updating-from-inside-the-app).
@@ -444,38 +438,6 @@ adb shell dumpsys notification --noredact | grep -A5 xtremio.downloads
 adb shell input keyevent KEYCODE_HOME                  # leave the app mid-download
 adb shell dumpsys deviceidle force-idle                # and watch what Doze does
 ```
-
-## Home-screen probe
-
-The open question: does a Chromecast with Google TV show Watch Next entries
-from an app it did not install from the Play Store in its home screen's
-"Continue watching" row? Google's documentation says the row is fed through
-`TvContractCompat.WatchNextPrograms`; forum reports say Google TV shows only
-certified apps' entries, and contradict each other. Only an entry the app
-itself inserts can answer it -- one inserted with `adb shell content
-insert` belongs to `com.android.shell` and proves nothing about xtremio.
-
-So Settings → Developer has two rows, on Android only:
-
-- **Insert a home-screen probe** inserts one fixed entry
-  (`WatchNextChannel.kt`): a movie, watch-next type CONTINUE, titled
-  "Xtremio probe", with The Shawshank Redemption's 2:3 poster from
-  `images.metahub.space`, ten minutes into 2 h 22 min, and an explicit
-  intent that opens `MainActivity`. Its internal provider id is
-  `xtremio-probe`. The snackbar shows the row id, or why the provider
-  refused it.
-- **Remove the home-screen probe** deletes this app's rows with that
-  provider id and says how many.
-
-A phone has no TV provider, and both rows say so. After inserting, go to
-the home screen and look at Continue watching (it can take a while to
-refresh); remove the probe afterwards. Showing up means the plain API is
-honoured and the sync in [WISHLIST.md](WISHLIST.md) is worth building; not
-showing up means it needs Google's certification or Engage SDK.
-
-This is a probe, not the feature: nothing else writes to Watch Next, and
-the `WRITE_EPG_DATA` permission, the `android.media.tv` provider query in
-the manifest and the `androidx.tvprovider` dependency exist only for it.
 
 ## Running on an emulator
 
