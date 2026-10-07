@@ -458,41 +458,104 @@ void main() {
       );
     });
 
-    testWidgets('a merged card has no long-press menu, because every action '
-        'in that sheet is about a library item', (tester) async {
-      // Asserted on the tile rather than by holding it: every action in the
-      // sheet is a `Ctx` action naming a library item id, and this title is
-      // not one -- "remove from library" on a title the library does not
-      // hold is an offer that cannot be kept.
-      await tester.pumpWidget(
-        harness(
-          fakeCore(),
-          drive: await account(
-            files: [
-              (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival),
-            ],
-          ),
-        ),
+    testWidgets('a merged card\'s long press is not the library item\'s '
+        'sheet: it takes the linked file off Remote, with an undo', (
+      tester,
+    ) async {
+      // Every action in the library item's sheet is a `Ctx` action naming a
+      // library item id, and this title is not one; forgetting the linked
+      // file is the one thing there is to do about it.
+      final drive = await account(
+        files: [(id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival)],
       );
+      final core = fakeCore();
+      await tester.pumpWidget(harness(core, drive: drive));
+      await tester.pumpAndSettle();
+      expect(cards(tester), contains('Arrival'));
+
+      await tester.longPress(find.widgetWithText(LibraryItemTile, 'Arrival'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove from library'), findsNothing);
+      expect(find.text('The file stays in your Google Drive.'), findsOneWidget);
+      await tester.tap(find.text(LibraryScreen.removeFromRemoteLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), isNot(contains('Arrival')));
+      expect(drive.files.forFile('drive-file-1'), isNull);
+      expect(
+        [for (final action in core.dispatched) action.action['action']],
+        everyElement('Load'),
+        reason:
+            'the title was never in the library, so nothing is removed '
+            'from it',
+      );
+
+      await tester.tap(find.text(LibraryScreen.undoLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), contains('Arrival'));
+      expect(drive.files.forFile('drive-file-1')?.match, arrival);
+    });
+
+    testWidgets('and on a title two files matched, both go, and the undo '
+        'puts both back in their order', (tester) async {
+      const second = LinkedDriveMatch(
+        cinemetaId: 'tt0903747',
+        type: 'series',
+        name: 'Breaking Bad',
+        year: 2008,
+        season: 1,
+        episode: 2,
+      );
+      final drive = await account(
+        files: [
+          (id: 'drive-file-1', name: 'Breaking.Bad.S01E01.mkv', match: episode),
+          (id: 'drive-file-2', name: 'Breaking.Bad.S01E02.mkv', match: second),
+          (id: 'drive-file-3', name: 'Arrival.2016.mkv', match: arrival),
+        ],
+      );
+      final before = [for (final f in drive.files.entries) f.fileId];
+      await tester.pumpWidget(harness(fakeCore(), drive: drive));
       await tester.pumpAndSettle();
 
-      expect(
-        tester
-            .widget<LibraryItemTile>(
-              find.widgetWithText(LibraryItemTile, 'Arrival'),
-            )
-            .onLongPress,
-        isNull,
+      await tester.longPress(
+        find.widgetWithText(LibraryItemTile, 'Breaking Bad'),
       );
+      await tester.pumpAndSettle();
       expect(
-        tester
-            .widget<LibraryItemTile>(
-              find.widgetWithText(LibraryItemTile, 'Lanterns'),
-            )
-            .onLongPress,
-        isNotNull,
-        reason: "the engine's own cards still have theirs",
+        find.text('The 2 files stay in your Google Drive.'),
+        findsOneWidget,
       );
+      await tester.tap(find.text(LibraryScreen.removeFromRemoteLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), isNot(contains('Breaking Bad')));
+      expect([for (final f in drive.files.entries) f.fileId], ['drive-file-3']);
+
+      await tester.tap(find.text(LibraryScreen.undoLabel));
+      await tester.pumpAndSettle();
+      expect(cards(tester), contains('Breaking Bad'));
+      expect(
+        [for (final f in drive.files.entries) f.fileId]..sort(),
+        [...before]..sort(),
+      );
+      expect(drive.files.matching('tt0903747').map((f) => f.fileId), [
+        for (final id in before)
+          if (id != 'drive-file-3') id,
+      ]);
+    });
+
+    testWidgets('a merged card\'s sheet dismissed removes nothing', (
+      tester,
+    ) async {
+      final drive = await account(
+        files: [(id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival)],
+      );
+      await tester.pumpWidget(harness(fakeCore(), drive: drive));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.widgetWithText(LibraryItemTile, 'Arrival'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(drive.files.forFile('drive-file-1'), isNotNull);
+      expect(cards(tester), contains('Arrival'));
     });
   });
 

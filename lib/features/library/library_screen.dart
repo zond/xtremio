@@ -695,6 +695,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  /// Takes every linked Drive file matched to [match]'s title off Remote,
+  /// after asking, with an undo -- the long press of a merged card, which
+  /// is the only way off the list a file that matched has. The files stay
+  /// in Drive, and picking them again links them again.
+  Future<void> _removeRemoteTitle(LinkedDriveMatch match) async {
+    final account = _drive;
+    if (account == null) return;
+    final count = account.files.matching(match.cinemetaId).length;
+    final remove = await _askFileAction(
+      name: match.name,
+      icon: Icons.link_off_outlined,
+      label: LibraryScreen.removeFromRemoteLabel,
+      detail: count == 1
+          ? 'The file stays in your Google Drive.'
+          : 'The $count files stay in your Google Drive.',
+    );
+    if (!remove || !mounted) return;
+    final gone = await account.forgetTitle(match.cinemetaId);
+    _sayRemoved(
+      'Removed from Remote',
+      undo: () => unawaited(account.rememberFiles(gone)),
+    );
+  }
+
   /// Deletes a download whose card is the Library's own, after the same
   /// question the Downloads screen asks.
   Future<void> _deleteKept(DownloadView view) async {
@@ -787,8 +811,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ///
   /// **What a merged card does not get** is everything the engine derives
   /// from its own library: no continue-watching row, no notifications, no
-  /// place in a sync, and no long-press actions -- "remove from library" on
-  /// a title the library does not hold is an offer that cannot be kept.
+  /// place in a sync, and none of the library item's long-press actions --
+  /// "remove from library" on a title the library does not hold is an offer
+  /// that cannot be kept. A Drive match's long press is "Remove from Remote"
+  /// instead ([_removeRemoteTitle]), which forgets the linked files.
   /// That is the accepted price of not writing, and the alternative was
   /// worse: a write syncs to a Stremio account and puts a title on a phone
   /// that cannot play it, and makes "remove from library" and "unlink" two
@@ -1257,11 +1283,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 }
                 if (index >= afterKept) {
                   final match = appended[index - afterKept];
+                  // Not the library item's sheet -- every action in it is a
+                  // `Ctx` action about a library item, and this title is not
+                  // one -- but what an unmatched file's card offers: off
+                  // Remote. A match among this device's files has none yet.
+                  final fromDrive =
+                      _drive?.files.matching(match.cinemetaId).isNotEmpty ??
+                      false;
                   return LibraryItemTile(
                     item: _cardFor(match),
                     onTap: () => _openDriveMatch(match),
-                    // And no long press: every action in that sheet is a `Ctx`
-                    // action about a library item, and this title is not one.
+                    onLongPress: fromDrive
+                        ? () => unawaited(_removeRemoteTitle(match))
+                        : null,
                     memoryId: 'linked-${match.cinemetaId}',
                   );
                 }

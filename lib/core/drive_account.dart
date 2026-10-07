@@ -383,10 +383,34 @@ class DriveAccount extends ChangeNotifier {
   Future<void> forgetFile(String fileId) =>
       noteReconciled(prefs.driveLinkedFiles.without(fileId));
 
+  /// Takes every file matched to [cinemetaId] off the list, as the viewer
+  /// asked of the title's card, and answers what was taken -- the card is
+  /// the title and not the file, so two episodes linked under one show go
+  /// together. [rememberFiles] is the undo.
+  Future<List<LinkedDriveFile>> forgetTitle(String cinemetaId) async {
+    final files = prefs.driveLinkedFiles;
+    final gone = files.matching(cinemetaId);
+    await noteReconciled(
+      LinkedDriveFiles([
+        for (final entry in files.entries)
+          if (!entry.isFor(cinemetaId)) entry,
+      ]),
+    );
+    return gone;
+  }
+
   /// Puts back a file [forgetFile] took off -- the undo of it -- with what
   /// was known about it.
-  Future<void> rememberFile(LinkedDriveFile file) =>
-      noteReconciled(prefs.driveLinkedFiles.linking(file));
+  Future<void> rememberFile(LinkedDriveFile file) => rememberFiles([file]);
+
+  /// Puts back what [forgetTitle] took off, in the order it was listed:
+  /// each goes to the front, so the last is put back first.
+  Future<void> rememberFiles(List<LinkedDriveFile> files) => noteReconciled(
+    files.reversed.fold(
+      prefs.driveLinkedFiles,
+      (list, file) => list.linking(file),
+    ),
+  );
 
   Future<void> noteReconciled(LinkedDriveFiles files) async {
     if (files == prefs.driveLinkedFiles) return;
