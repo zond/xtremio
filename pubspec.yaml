@@ -2,7 +2,7 @@ name: xtremio
 description: "Xtremio — a native Stremio client on a pure-Rust core"
 publish_to: 'none'
 
-version: 0.1.15+1
+version: 0.1.16+1
 
 environment:
   sdk: ^3.13.1
