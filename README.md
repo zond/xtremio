@@ -23,12 +23,11 @@ engine for addons, catalogs, library and playback state, built here from a
 What Stremio's own apps do -- catalogs and search across every installed
 addon, a library, an account, playback state -- this app does through the
 same engine, [`stremio-core`](https://github.com/Stremio/stremio-core), and
-it draws them its own way (Discover's rows end with a line naming the
-catalogs that could *not* answer, so a dead addon is never mistaken for a title nobody has; a
-title's sources as one row per release, in a section per resolution, ranked
-by peers per megabyte). The list below is what it does that they do not.
-All of it is built and runs today; [docs/STATUS.md](docs/STATUS.md) is the
-screen-by-screen inventory, and a feature with a design document links it.
+draws its own way (Discover names the catalogs that could *not* answer, so
+a dead addon is never mistaken for a title nobody has; a title's sources are
+a row per release, a section per resolution, ranked by peers per megabyte).
+The list below is what it does that they do not; all of it runs today, and
+[docs/STATUS.md](docs/STATUS.md) is the screen-by-screen inventory.
 
 - **Torrent streaming with no external binary.** `stream-server` runs
   in-process on loopback: nothing to ship beside the app, launch, or keep
@@ -39,12 +38,11 @@ screen-by-screen inventory, and a feature with a design document links it.
   a Drive file -- is cached and read ahead of the player by the server,
   inside one bounded cache.
 - **Offline downloads of any source.** A download is a pin in the embedded
-  server -- a torrent file kept piece by piece, or an addon link or a Google
-  Drive file kept in the same cache -- and never exists as a whole file. A
-  finished download plays through the same in-process server off what is
-  already on the device -- no peer, no origin, no network -- and only once
-  the server answers that it holds the file whole. On Android a foreground
-  service keeps one going after the app is left.
+  server -- a torrent file kept piece by piece, an addon link or a Google
+  Drive file kept in the same cache -- and never exists as a whole file. It
+  plays offline through the same server once the server answers that it
+  holds the file whole; on Android a foreground service keeps one going
+  after the app is left.
 - **Google Drive as a source.** A phone pairs the app with a Drive account
   through a QR code and picks files; they appear under the titles they
   match, play through the server (which renews the token itself), download
@@ -71,30 +69,22 @@ screen-by-screen inventory, and a feature with a design document links it.
   ([docs/ANDROID.md](docs/ANDROID.md)).
 - **Casting to a Chromecast** from an Android phone. What the film is comes
   from mpv's report of the bytes alone, never a file name: a film the
-  receiver decodes goes over the LAN untouched, and an H.264 or HEVC film in
-  Matroska, or one whose sound the receiver will not take, goes repackaged as
-  one fragmented MP4 with its sound converted to stereo AAC -- the picture is
-  never re-encoded, so a picture no receiver decodes (10-bit H.264, say) is
-  refused up front with a sentence saying why. The receiver fetches from a
-  second listener on the server that exists only while a cast session does
-  and serves published tokens and nothing else -- no control routes, no
-  `/proxy`. The player screen becomes a remote with its own stats panel, and
-  a cast does not binge: the end of an episode on the television never
-  starts the next one. One real receiver, a Chromecast with Google TV 4K, has
-  played and seeked it; the rules and what each refusal says are in
-  [docs/CASTING.md](docs/CASTING.md).
-- **Sharing you can see and stop.** Xtremio shares while you watch and
-  while a torrent download is on its way. *Share while idle* (Settings, on
-  by default) also keeps sharing your downloads, and the last thing you
-  watched until you watch something else, while nothing is happening --
-  except on a phone or tablet while the app is in the background. A status
-  light on the main screens is lit only while the
-  server measures bytes moving with nothing playing, never because of the
-  setting: an arrow up for uploading, down for bytes coming in (an offline
-  download filling in -- a torrent, an addon link or a Drive file -- or the
-  title played last fetching what it keeps). Pressed while it shows an
-  upload, it offers *Not now* (until the next start) or *Stop sharing*; while
-  it shows bytes coming in, a *Cancel* for each offline download on its way.
+  receiver decodes goes over the LAN untouched; an H.264 or HEVC film in
+  Matroska, or one whose sound the receiver will not take, goes repackaged
+  as one fragmented MP4 with its sound converted to AAC and its picture
+  never re-encoded, so a picture no receiver decodes is refused up front
+  with a sentence saying why. The receiver fetches from a listener that
+  exists only while a cast does and serves published tokens and nothing
+  else; the player screen becomes a remote with its own stats panel. One
+  real receiver, a Chromecast with Google TV 4K, has played and seeked it
+  ([docs/CASTING.md](docs/CASTING.md)).
+- **Sharing you can see and stop.** Xtremio shares while you watch, while a
+  torrent download is on its way, and -- *Share while idle*, on by default
+  -- your downloads and the last thing you watched until you watch something
+  else, except on a phone in the background. A status light on the main
+  screens is lit only while bytes move with nothing playing: up for
+  uploading, down for an offline download filling in. Pressed, it offers
+  *Not now*, *Stop sharing*, or a *Cancel* per download on its way.
 - **More like this.** A row of suggestions on every title, asked of a model
   once per title for everybody by this project's own service -- no key in
   the app -- and shown only when a catalogue confirms the title and year
@@ -108,37 +98,24 @@ screen-by-screen inventory, and a feature with a design document links it.
 ## Getting it
 
 Every version tag builds Linux, Windows, macOS and both Android ABIs and
-attaches them to a
-[GitHub Release](https://github.com/zond/xtremio/releases) -- that is where a
-build comes from. One thing about those builds
-is worth knowing before installing, and the release notes say it: the macOS
-build is unsigned. The APKs carry this project's own release key: to
-Android, a signing certificate *is* the app's identity, so upgrading from a
-build signed with a different key needs an uninstall first. Once
-installed, the app looks for a newer release once a day and offers it --
-on Android it first cleans the server's cache to make room (never a kept
-download), then downloads, verifies and installs it, behind Android's own
-confirmation ([docs/ANDROID.md](docs/ANDROID.md#updating-from-inside-the-app)).
+attaches them to a [GitHub Release](https://github.com/zond/xtremio/releases).
+The macOS build is unsigned. The APKs carry this project's own release key;
+to Android a signing certificate *is* the app's identity, so upgrading from
+a build signed with another key needs an uninstall first. Once installed,
+the app looks for a newer release once a day and offers it -- on Android it
+first cleans the server's cache to make room (never a kept download), then
+downloads, verifies and installs it behind Android's own confirmation
+([docs/ANDROID.md](docs/ANDROID.md#updating-from-inside-the-app)).
 
 ## Building, testing, driving, releasing
 
-- **Building** needs Flutter stable and a Rust toolchain (or the Nix shells);
-  `make run DEVICE=linux` runs it. The setup, the `make` targets and what a
-  build stamps are in
-  [docs/OPERATIONS.md](docs/OPERATIONS.md#building-and-running); Android and
-  the TV APK in [docs/ANDROID.md](docs/ANDROID.md).
-- **Testing** is `make check`: Rust format, clippy, docs and tests, then Dart
-  format, analysis and the Flutter tests, the bindings' drift check and the
-  Kotlin unit tests, stopping at the first that fails. CI runs the same on
-  every push; [AGENTS.md](AGENTS.md#verification-with-real-exit-codes) lists
-  each gate and the rules a test has to keep.
-- **Driving** a running build from a terminal -- reading the screen, acting
-  on it, opening a title and playing one of its sources -- is `tool/drive-start` and
-  `tool/drive`, on a side-by-side debug app that never touches an installed
-  release ([docs/DRIVING.md](docs/DRIVING.md)).
-- **Releasing** is a version tag: the Build workflow makes every platform's
-  download and publishes the release
-  ([docs/OPERATIONS.md](docs/OPERATIONS.md#cutting-a-release)).
+Flutter stable and a Rust toolchain (or the Nix shells); `make run
+DEVICE=linux` runs it and `make check` runs every gate CI runs. The setup
+and the targets are in [docs/OPERATIONS.md](docs/OPERATIONS.md), the
+Android and TV builds in [docs/ANDROID.md](docs/ANDROID.md), driving a
+running build from a terminal in [docs/DRIVING.md](docs/DRIVING.md), the
+gates and the rules a test keeps in [AGENTS.md](AGENTS.md), and a release
+is a version tag ([docs/OPERATIONS.md](docs/OPERATIONS.md#cutting-a-release)).
 
 ## How it works
 
@@ -186,8 +163,8 @@ reason beside it: the three forks are listed in
 
 ## Platform support
 
-The hard constraint is **BitTorrent**: the streaming path needs raw TCP/UDP
-sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
+The hard constraint is **BitTorrent**: raw sockets, a local server, a disk
+cache and libmpv. That decides everything.
 
 | Platform | Support | Notes |
 |---|---|---|
@@ -202,12 +179,10 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 ## What is next
 
 What is genuinely not built, and why, is in
-[docs/WISHLIST.md](docs/WISHLIST.md). The largest part is about the cast:
-a subtitle is not sent to a receiver, and a picture a receiver cannot decode
-(AV1 on most, 10-bit H.264, Dolby Vision profile 5, a 4K film for a 1080p
-receiver) is refused rather than re-encoded. Besides: the remote's own
-search key, Continue watching on the Google TV home screen, and archives the
-server cannot yet read inside.
+[docs/WISHLIST.md](docs/WISHLIST.md): subtitles on a receiver, pictures a
+receiver cannot decode (refused, never re-encoded), the remote's own search
+key, Continue watching on the Google TV home screen, and archives the server
+cannot yet read inside.
 
 ## What is written down where
 
