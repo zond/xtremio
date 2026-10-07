@@ -98,6 +98,8 @@ shows Watch Next entries from an app that is not on the Play Store, or now
 requires Google's Engage SDK / a partnership -- measure on zond's Chromecast
 with a single hand-published entry before building the sync. One to two
 days if the plain API is honoured.
+Settings → Developer → "Insert a home-screen probe" publishes that entry
+from the app itself ([ANDROID.md](ANDROID.md#home-screen-probe)).
 
 ## Shrinking the stremio-core fork to nothing
 

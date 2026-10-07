@@ -53,6 +53,11 @@ dependencies {
     // AuthorizationRequest.ResourceParameter, which carries the picker
     // trigger, exists from 21.6.0 onward, so that is the version floor.
     implementation("com.google.android.gms:play-services-auth:22.0.0")
+    // TvContractCompat.WatchNextPrograms, for the developer probe of the
+    // Google TV home screen's "Continue watching" row (WatchNextChannel.kt,
+    // docs/ANDROID.md, "Home-screen probe"): whether a sideloaded app's
+    // entry shows there at all.
+    implementation("androidx.tvprovider:tvprovider:1.1.0")
     // Plain JVM tests, for the Kotlin that has no Android in it.
     testImplementation("junit:junit:4.13.2")
 }

@@ -77,6 +77,9 @@ class MainActivity : FlutterActivity() {
      */
     private var appUpdate: AppUpdateChannel? = null
 
+    /** The developer probe of the Google TV home screen (WatchNextChannel). */
+    private var watchNext: WatchNextChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Answers `DeviceProfile.detect()` (lib/shell/device_profile.dart),
@@ -162,6 +165,7 @@ class MainActivity : FlutterActivity() {
         drivePicker = DrivePicker(this, flutterEngine.dartExecutor.binaryMessenger)
         localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         appUpdate = AppUpdateChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        watchNext = WatchNextChannel(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -548,6 +552,8 @@ class MainActivity : FlutterActivity() {
         drivePicker = null
         appUpdate?.detach()
         appUpdate = null
+        watchNext?.detach()
+        watchNext = null
         textEntry = null
         speech = null
         super.onDestroy()

@@ -40,6 +40,12 @@
          nothing by itself: the viewer still allows xtremio under "Install
          unknown apps", and Android confirms every install. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- The TV provider's write permission, for the developer probe of the
+         Google TV home screen's "Continue watching" row (WatchNextChannel.kt,
+         docs/ANDROID.md, "Home-screen probe") and nothing else: Google's
+         guide asks for it for Watch Next. Install-time; a phone has no TV
+         provider and the probe says so. -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
@@ -208,5 +214,9 @@
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
         </intent>
+        <!-- The TV provider, which the home-screen probe (WatchNextChannel)
+             asks whether this device has; from API 30 another package's
+             provider is seen only when declared here. -->
+        <provider android:authorities="android.media.tv"/>
     </queries>
 </manifest>
