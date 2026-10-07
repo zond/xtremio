@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/core.dart';
+import '../../widgets/internet_status_tile.dart';
 import '../../widgets/readout.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
@@ -337,6 +338,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: Text(_dht?.healthLine ?? 'Unknown'),
             ),
           ),
+          // Last in the section: not the server's own state but whether the
+          // app reaches the internet, and from which address and country.
+          const InternetStatusTile(),
           const _SectionHeader('Core'),
           Readout(
             child: ListTile(

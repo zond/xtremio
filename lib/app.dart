@@ -144,6 +144,7 @@ class XtremioApp extends StatefulWidget {
     this.serverBackground = const RustServerBackgroundControl(),
     this.sharingHold = const RustIdleSharingHold(),
     this.updates,
+    this.internetStatus,
   });
 
   /// How long after the preferences are in the daily update look waits:
@@ -154,6 +155,11 @@ class XtremioApp extends StatefulWidget {
   /// The app's updates, for tests that want one over fakes. Read once,
   /// when the app comes up, like [downloads].
   final AppUpdates? updates;
+
+  /// What checks the app's internet status, for tests that want one over
+  /// a fake fetch. Read once, when the app comes up, like [updates]; one
+  /// handed in is the caller's to dispose.
+  final InternetStatusCheck? internetStatus;
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
@@ -309,6 +315,8 @@ class _XtremioAppState extends State<XtremioApp> {
 
   /// The update look and offer: see [XtremioApp.updates].
   late final AppUpdates _updates;
+  late final InternetStatusCheck _internetStatus;
+  late final bool _ownsInternetStatus;
   Timer? _updateTimer;
 
   /// An update step waiting for the player to leave the stack.
@@ -342,6 +350,9 @@ class _XtremioAppState extends State<XtremioApp> {
           final source => LocalMedia(prefs: _prefs, source: source),
         };
     _updates = widget.updates ?? AppUpdates(prefs: _prefs);
+    _ownsInternetStatus = widget.internetStatus == null;
+    _internetStatus = widget.internetStatus ?? InternetStatusCheck();
+    unawaited(_internetStatus.recheck());
     _routes.onChanged = _onRoutesChanged;
     _ownsDrive = widget.drive == null;
     _drive =
@@ -623,6 +634,8 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing.appResumed();
     if (!_away) return;
     _away = false;
+    // Recheck that the internet is reachable after being away.
+    unawaited(_internetStatus.recheck());
     // A video deleted or added while the app was away -- from a file
     // manager, a download -- is in the Local list by the time it is looked
     // at again. Only where access is already there: this never asks.
@@ -706,6 +719,7 @@ class _XtremioAppState extends State<XtremioApp> {
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
     if (_ownsCast) _cast.dispose();
+    if (_ownsInternetStatus) _internetStatus.dispose();
     // Before the preferences it listens to, and without telling the server
     // anything: the app going away is what ends the sharing, and it ends
     // it by taking the server with it.
@@ -732,7 +746,7 @@ class _XtremioAppState extends State<XtremioApp> {
   Widget build(BuildContext context) {
     final isTv = widget.device.isTv;
 
-    return DeviceScope(
+    final app = DeviceScope(
       profile: widget.device,
       child: CoreScope(
         client: widget.core,
@@ -796,6 +810,7 @@ class _XtremioAppState extends State<XtremioApp> {
         ),
       ),
     );
+    return InternetStatusScope(check: _internetStatus, child: app);
   }
 }
 

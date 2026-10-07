@@ -26,6 +26,7 @@ export 'focus_emphasis.dart';
 export 'image_cache_usage.dart';
 export 'image_disk_cache.dart';
 export 'prefs_client.dart';
+export 'internet_status.dart';
 export 'resource.dart';
 export 'secret_store.dart';
 export 'server_client.dart';
