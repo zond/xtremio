@@ -8,8 +8,7 @@ decisions behind it. How the app works is in
 ## Prerequisites
 
 `nix develop .#android` provides these but rustup's targets
-([OPERATIONS.md](OPERATIONS.md#with-nix)) and, for now, platform 37 (its
-SDK names platforms 35 and 36 only, and Gradle cannot install into it).
+([OPERATIONS.md](OPERATIONS.md#with-nix)).
 
 - **Android SDK**: platform 36, build-tools 36.0.0, NDK 28.2.13676358 (the
   versions Flutter 3.47 pins; `android/app/build.gradle.kts` takes the NDK,
@@ -17,8 +16,11 @@ SDK names platforms 35 and 36 only, and Gradle cannot install into it).
   **platform 37**, which the app compiles against (`compileSdk = 37`):
   `flutter_chrome_cast` 1.5.0 brings `permission_handler_android` 14.1,
   compiled against API 37, and AGP's AAR metadata check makes every module
-  that depends on it do the same. `targetSdk` stays Flutter's. Gradle
-  fetches platform 37 into a writable SDK by itself.
+  that depends on it do the same. `targetSdk` stays Flutter's. Plugins
+  that pin an older one need it too: platform 35 for `flutter_chrome_cast`,
+  `jni` and `jni_flutter`. Gradle fetches a missing platform into a
+  writable SDK by itself; the Nix shell's SDK is read-only, so `flake.nix`
+  names 35, 36 and 37.
 - **JDK 21**.
 - **Rust via rustup**, with the Android targets added (cargokit adds them on
   first build, but pre-installing keeps that build predictable):

@@ -133,14 +133,22 @@
           # Apple silicon and arm64 Linux.
           #
           # Gradle installs what a build asks for and is missing, which it
-          # cannot do into a read-only SDK in the store, so everything a
-          # plugin pins is named here: platform 35 (flutter_chrome_cast, jni,
-          # jni_flutter and permission_handler_android pin `compileSdk 35`)
-          # and CMake 3.22.1 (AGP's default, which jni's native build uses).
+          # cannot do into a read-only SDK in the store, so every platform a
+          # module compiles against is named here: 37 for the app
+          # (`compileSdk = 37`, android/app/build.gradle.kts, forced by
+          # permission_handler_android 14.1, which pins 37); 36, Flutter's
+          # default, which app_links, media_kit_video,
+          # media_kit_libs_android_video and rust_builder pin too; and 35,
+          # which flutter_chrome_cast, jni and jni_flutter pin. The SDK
+          # repository names API 37 "37.0" (platforms/android-37.0) and
+          # androidenv looks it up by that key, so "37" would not evaluate.
+          # Each platform also brings the system images below that exist for
+          # it. CMake 3.22.1 is AGP's default, which jni's native build uses.
           android = pkgs.androidenv.composeAndroidPackages {
             platformVersions = [
               "35"
               "36"
+              "37.0"
             ];
             includeCmake = true;
             cmakeVersions = [ "3.22.1" ];
