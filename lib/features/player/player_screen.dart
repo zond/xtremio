@@ -2524,6 +2524,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                           child: PlaybackStatsOverlay(
                             stats: engine.stats,
                             source: _opened,
+                            read: _engineUrl,
                             isTorrent: _torrentStatsRequest != null,
                             torrent: _torrentStats,
                             dht: _dhtStatus,

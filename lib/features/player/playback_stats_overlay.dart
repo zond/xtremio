@@ -19,6 +19,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     super.key,
     required this.stats,
     this.source,
+    this.read,
     this.isTorrent = false,
     this.torrent,
     this.dht,
@@ -27,12 +28,18 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   final Stream<PlaybackStats> stats;
 
-  /// The stream's own URL, the one the screen was asked to play, shown as
-  /// the last line (a torrent reads
+  /// The stream's own URL, the one the screen was asked to play, the
+  /// `stream` row: how stremio-core names it (a torrent reads
   /// `http://127.0.0.1:<port>/<infoHash>/<fileIdx>?tr=…`, on whatever port
-  /// the embedded server bound). Not necessarily what libmpv opened: a
-  /// stream played by id is handed to mpv as `xtremio://<id>`.
+  /// the embedded server bound; an addon's link is the link). Nobody
+  /// fetches it: it says which stream this is, not how it is read.
   final Uri? source;
+
+  /// What libmpv was handed for [source], the `read` row: `xtremio://<id>`
+  /// for a stream read by id through the embedded server, the server's
+  /// `/proxy` URL for an origin it reads only forward, otherwise [source]
+  /// itself. Null until the server has answered.
+  final Uri? read;
 
   /// The stream is a torrent the embedded server is serving: the swarm
   /// rows belong in the panel, even before [torrent] has arrived. False for
@@ -141,7 +148,9 @@ class PlaybackStatsOverlay extends StatelessWidget {
             if (dht?.unavailable ?? false)
               Text(describeDht(dht!), style: style),
           ],
-          if (source != null) _wideRow('url      $source', style, maxLines: 1),
+          if (source != null) _wideRow('stream   $source', style, maxLines: 1),
+          if (read != null && read != source)
+            _wideRow('read     $read', style, maxLines: 1),
         ]);
       },
     );

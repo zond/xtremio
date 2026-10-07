@@ -145,14 +145,20 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('hwdec    software (hwdec-current: no)'), findsOneWidget);
-    // The URL libmpv is playing sits at the bottom of the panel. It is
-    // read out of the fixture rather than written down here: the recorder
-    // runs the embedded server on an ephemeral port, so the number changes
-    // every time the fixture is re-recorded.
+    // The stream's own URL sits at the bottom of the panel, and under it
+    // what libmpv was handed, which is not the same thing: a stream read
+    // by id is handed to mpv as `xtremio://<id>`. The URL is read out of
+    // the fixture rather than written down here: the recorder runs the
+    // embedded server on an ephemeral port, so the number changes every
+    // time the fixture is re-recorded.
     expect(
-      find.textContaining('url      ${playedUrl(loadPlayerFixture())}'),
+      find.textContaining('stream   ${playedUrl(loadPlayerFixture())}'),
       findsOneWidget,
     );
+    // Handed to mpv as itself here (no media registry in this harness),
+    // so there is no second row to show; `player_media_id_test` has the
+    // one where mpv reads by id.
+    expect(find.textContaining('read     '), findsNothing);
 
     // Pinned: the hover timeout does not apply.
     await tester.pump(PlayerScreen.statsHoverTimeout * 2);

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -89,6 +90,15 @@ void main() {
     expect(harness.mediaIds.registered, hasLength(1));
     expect(harness.mediaIds.resolved, ['m1', 'm1']);
     expect(harness.hints.mediaOpened, ['m1']);
+
+    // The stats panel says both: the stream's own URL, and that mpv reads
+    // it by id.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(find.textContaining('stream   '), findsOneWidget);
+    expect(find.textContaining('read     ${mediaIdUrl('m1')}'), findsOneWidget);
   });
 
   testWidgets('a metadata timeout is waited out for as long as it takes', (

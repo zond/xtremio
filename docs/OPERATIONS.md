@@ -129,10 +129,13 @@ Run the app, then either **Discover → a title → a stream**, or **Settings �
 Developer → "Play test torrent"** (Big Buck Bunny from a public torrent
 through the embedded server; "Play test HTTP stream" is the direct-play
 path, and "Download test torrent" proves the download path). The stats OSD
-(Shift+I) ends with the URL the player opened -- the stream's own, so a
-torrent reads `http://127.0.0.1:<port>/dd8255ec…/-1?tr=…`, on whatever port
-the embedded server bound this launch. What mpv was handed can differ
-(`xtremio://<id>` for a stream read by id); `tool/drive player` shows both
+(Shift+I) ends with two rows: `stream`, the stream's own URL as
+stremio-core names it (a torrent reads
+`http://127.0.0.1:<port>/dd8255ec…/-1?tr=…`, on whatever port the embedded
+server bound this launch -- nobody fetches it, it says which stream this
+is), and `read`, what mpv was handed when that differs (`xtremio://<id>`
+for a stream read by id through the server, the `/proxy` URL for an origin
+read only forward). `tool/drive player` shows the same two
 ([DRIVING.md](DRIVING.md#commands)).
 
 ### Linux video is software-rendered, for now
