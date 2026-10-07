@@ -81,8 +81,11 @@ function body(subject, about) {
   return {
     system_instruction: {parts: [{text: SYSTEM}]},
     contents: [{parts: [{text: question(subject, about)}]}],
+    // No sampling parameters: Gemini ignores them since 3.6 Flash and will
+    // refuse requests that carry them (Google's notice of 2026-10), so the
+    // model's own defaults apply. Not a change of the question or the
+    // model, so QUESTION_VERSION stays and the stored answers stand.
     generationConfig: {
-      temperature: 0.7,
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'OBJECT',
