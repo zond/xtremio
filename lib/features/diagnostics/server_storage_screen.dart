@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/core.dart';
 import '../../widgets/tv_text_field.dart';
+import 'clear_cache.dart';
 
 /// The directories this platform can offer as a torrent-data root. On
 /// Android those are the app's own external storage directories, an SD card
@@ -27,7 +28,10 @@ Future<List<String>> platformDataRoots() async {
 /// scheduled sweep behind it. The server's torrent engine and proxy cache
 /// each give back what nobody is playing and nobody kept as they go, and
 /// Clean now asks both for that slack at once. It never stops playback, so
-/// the action needs no confirmation.
+/// the action needs no confirmation. Beside it, "Clear the cache" is the
+/// one that does stop playback -- every torrent that streams, and every
+/// byte no download keeps, the title played last included -- so it asks
+/// first ([ClearCacheDialog]).
 ///
 /// **What is never taken** is a kept download, and the window around the
 /// playhead of the title played last -- which stays kept after the player
@@ -197,6 +201,20 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     await _read();
   }
 
+  /// Asks first, then stops what streams and deletes everything no
+  /// download keeps ([confirmAndClearCache]); the numbers are read again
+  /// after a clear that ran.
+  Future<void> _clear() async {
+    setState(() => _busy = true);
+    final report = await confirmAndClearCache(context, widget.client);
+    if (!mounted) return;
+    if (report == null) {
+      setState(() => _busy = false);
+      return;
+    }
+    await _read();
+  }
+
   String _cleanMessage(EvictionReport report) {
     if (report.freed > 0) {
       final files = report.deleted == 1 ? 'file' : 'files';
@@ -267,10 +285,21 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
           const Divider(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: FilledButton.icon(
-              onPressed: _busy || usage == null ? null : _clean,
-              icon: const Icon(Icons.cleaning_services_outlined),
-              label: const Text('Clean cache now'),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: _busy || usage == null ? null : _clean,
+                  icon: const Icon(Icons.cleaning_services_outlined),
+                  label: const Text('Clean cache now'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy || usage == null ? null : _clear,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text(ClearCacheTile.title),
+                ),
+              ],
             ),
           ),
           const Padding(
@@ -281,7 +310,9 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
               'once, without stopping anything that is playing. A download '
               'you kept is never touched, and neither is the part of the '
               'title you played last around where you were, until you play '
-              'something else.',
+              'something else. Clearing the cache takes all of that too: it '
+              'stops what is streaming and deletes everything a download '
+              'does not keep.',
             ),
           ),
         ],

@@ -9,6 +9,7 @@ import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
+import 'package:xtremio/features/diagnostics/clear_cache.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
@@ -865,6 +866,40 @@ void main() {
 
   /// The same walk over what a screen puts *over* itself.
   final opened = <Case>[
+    // Server storage's one dialog: "Clear the cache" asks before it stops
+    // anything, and on a television it opens on Cancel. With it the screen
+    // opens something over itself, so it is walked here rather than
+    // driven to prove it opens nothing; refresh, clean and the root
+    // control still report through a snack bar.
+    walk('server_storage_screen.dart', 'the Clear the cache confirmation', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: onTv(
+            ServerStorageScreen(
+              client: FakeServerCache(usage: overLimitEvictable),
+              roots: () async => const [
+                '/storage/emulated/0/Android/data/com.zond.xtremio/files',
+              ],
+            ),
+            pushed: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedLabel(tester) == ClearCacheTile.title,
+        target: 'the Clear the cache button',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(ClearCacheDialog), findsOneWidget);
+      await walkEveryStop(tester, stops: 6);
+    }),
     walk('discover_screen.dart', 'the Uninstall dialog on a failed catalog', (
       tester,
     ) async {
@@ -1253,57 +1288,6 @@ void main() {
       await tester.pumpAndSettle();
       return pushes;
     }),
-    // And the same for refresh and clean, on a server that is not
-    // answering -- which is the state a television sits in while the
-    // embedded server starts.
-    claim('server_storage_screen.dart', 'server storage', (tester) async {
-      final pushes = Pushed();
-      useScreen(tester, tvSize);
-      await tester.pumpWidget(
-        CoreScope(
-          client: fullCore(),
-          child: onTv(
-            const ServerStorageScreen(client: _StuckCache()),
-            pushed: true,
-            pushes: pushes,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      return pushes;
-    }),
-    // And with the root control drawn: picking a volume reports through a
-    // snack bar like everything else here, so pressing every stop on this
-    // screen still opens nothing -- there is no folder browser behind it
-    // and there must not be one, since the server is what validates a
-    // root.
-    claim(
-      'server_storage_screen.dart',
-      'server storage, with a root to '
-          'pick',
-      (tester) async {
-        final pushes = Pushed();
-        useScreen(tester, tvSize);
-        await tester.pumpWidget(
-          CoreScope(
-            client: fullCore(),
-            child: onTv(
-              ServerStorageScreen(
-                client: FakeServerCache(usage: overLimitEvictable),
-                roots: () async => const [
-                  '/storage/emulated/0/Android/data/com.zond.xtremio/files',
-                  '/storage/1A2B-3C4D/Android/data/com.zond.xtremio/files',
-                ],
-              ),
-              pushed: true,
-              pushes: pushes,
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        return pushes;
-      },
-    ),
     // The pairing screen makes no route of its own. Every press on it is
     // either the Back it was pushed with or a button that asks the service
     // for a fresh session and redraws in place -- a QR, a sentence, a tick.
@@ -1545,6 +1529,10 @@ class _StuckCache implements ServerCacheControl {
 
   @override
   Future<EvictionReport> cleanCacheNow() async =>
+      throw StateError('server not running');
+
+  @override
+  Future<CacheClearReport> clearCache() async =>
       throw StateError('server not running');
 
   @override

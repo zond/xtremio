@@ -268,12 +268,16 @@ Each installed addon carries a verdict on how it has been answering
   and the last thing watched, until something else plays), the embedded
   server's status
   (there is no choice of server), **Server storage** (where torrent data
-  lives, what it costs, "Clean cache now") and peer discovery (DHT) health.
+  lives, what it costs, "Clean cache now" and "Clear the cache"), **Clear
+  the cache** (after a confirmation, stops what is streaming and deletes
+  everything cached that a kept download does not hold, and says what it
+  freed and how many torrents it stopped) and peer discovery (DHT) health.
 - **Core**: the stremio-core storage schema version.
 - **About**: **Check for updates** (the app also looks once a day by
   itself; an Android release build installs a newer release over itself,
-  first asking the server to clean its cache and measuring that the
-  install has room, and every other build points at the release page),
+  first measuring that the install has room -- and when it has not,
+  cleaning the cache, then clearing it, before it says there is not
+  enough space -- and every other build points at the release page),
   and open source licences, including unrar-rs's.
 - **Developer**, in release builds: **Verbose logging**, **Diagnostics** (the
   core's and the server's recent log, copied redacted unless verbose

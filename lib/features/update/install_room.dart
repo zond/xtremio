@@ -71,7 +71,12 @@ class DataVolumeRoom {
 /// managed, and a "fits" is one it will.
 @immutable
 class UpdateRoom {
-  const UpdateRoom({required this.freeBytes, required this.neededBytes});
+  const UpdateRoom({
+    required this.freeBytes,
+    required this.neededBytes,
+    this.cleared = false,
+    this.freedBytes,
+  });
 
   /// What the room on [volume] says about an APK of [apkBytes]: before the
   /// download when [downloaded] is false, before the install when true.
@@ -84,6 +89,16 @@ class UpdateRoom {
     neededBytes:
         apkBytes * (downloaded ? installFactor : installFactor + 1) +
         lowStorageReserve(volume),
+  );
+
+  /// This room, measured after making room ended with the full clear:
+  /// [freedBytes] is what the server said the clean and the clear freed
+  /// between them, null when the clear did not answer.
+  UpdateRoom afterClearing({required int? freedBytes}) => UpdateRoom(
+    freeBytes: freeBytes,
+    neededBytes: neededBytes,
+    cleared: true,
+    freedBytes: freedBytes,
   );
 
   /// APKs' worth an install writes beside the downloaded one: the
@@ -108,12 +123,30 @@ class UpdateRoom {
   final int freeBytes;
   final int neededBytes;
 
+  /// Whether the full clear was asked for before this was measured: the
+  /// last of the steps making room takes (`AppUpdates.makeRoom`).
+  final bool cleared;
+
+  /// What the server said the gentle clean and the full clear freed
+  /// between them, or null when the clear did not answer.
+  final int? freedBytes;
+
   bool get fits => freeBytes >= neededBytes;
 
-  /// What the dialog says when it does not.
-  String get shortText =>
-      'The update needs ${formatBytes(neededBytes)} free on this device and '
-      'there is ${formatBytes(freeBytes)}, after emptying the torrent cache '
-      'of everything it could give back. What is left there is a download '
-      'you kept or the title you played last; Server storage shows it.';
+  /// What the dialog says when it does not: the numbers, and what was
+  /// already done to make room.
+  String get shortText {
+    final numbers =
+        'The update needs ${formatBytes(neededBytes)} free on this device '
+        'and there is ${formatBytes(freeBytes)}.';
+    final freed = freedBytes;
+    if (!cleared) return numbers;
+    if (freed == null) {
+      return '$numbers The torrent cache could not be cleared; Server '
+          'storage shows what it holds.';
+    }
+    return '$numbers Streams were stopped and the torrent cache cleared, '
+        'which freed ${formatBytes(freed)}; what it still holds is the '
+        'downloads you kept, which Server storage shows.';
+  }
 }

@@ -197,6 +197,19 @@ device's free space.
   as it goes -- and nothing it does stops playback. Pins and the last
   title's window are never taken, so a clean that leaves the cache over its
   limit says what is protected rather than that it failed.
+- **"Clear the cache"** (`server_clear_cache`, here beside the clean and in
+  Settings → Streaming server) is the one that stops playback: after a
+  confirmation ("Stops what is streaming and deletes everything cached.
+  Downloads you kept stay."; on a television focus starts on Cancel) the
+  server stops every torrent that streams, all but a kept download's,
+  fails every read open on one -- a player in the middle of a film shows
+  the error it shows for a failed read -- and deletes every piece and
+  proxied chunk no download keeps, the last title's window included. The
+  snackbar says what it freed and how many torrents it stopped ("Freed
+  1.2 GB, stopped 2 torrents"). Kept downloads, the settings, where each
+  file was last played and the app's image cache stay. An update that
+  does not fit runs it too, after the clean (see
+  [ANDROID.md](ANDROID.md#updating-from-inside-the-app), "Room first").
 - **Moving the root** writes one validated settings key and takes effect at
   the next start; nothing is copied. At that start every finished download
   the server no longer holds is marked **Not on this device**, with a button

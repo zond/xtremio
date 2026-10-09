@@ -262,6 +262,13 @@ abstract interface class ServerCacheControl implements ServerSettingsWriter {
   /// window of the title played last are never touched. Throws when the
   /// server is not running.
   Future<EvictionReport> cleanCacheNow();
+
+  /// **Clears the cache**: stops every torrent that streams (all but a
+  /// kept download's, which goes on) and deletes everything cached that no
+  /// download keeps, the title played last included. Unlike
+  /// [cleanCacheNow] this stops playback: a player reading a torrent gets
+  /// a read error. Throws when the server is not running.
+  Future<CacheClearReport> clearCache();
 }
 
 /// Thin Dart facade over the embedded, in-process `stream-server`.
@@ -375,6 +382,16 @@ class ServerClient
   @override
   Future<EvictionReport> cleanCacheNow() async =>
       EvictionReport.fromJson(_object(await rust.serverCleanCacheNow()));
+
+  /// Clears the cache and reports what that did
+  /// (`ServerHandle::clear_cache`): every torrent that streams is stopped
+  /// but a kept download's, every read open on one fails, and every byte no
+  /// download keeps is deleted. Kept downloads, the server's settings and
+  /// where each file was last played stay. Throws when the server is not
+  /// running.
+  @override
+  Future<CacheClearReport> clearCache() async =>
+      CacheClearReport.fromJson(_object(await rust.serverClearCache()));
 
   /// The mainline DHT's status right now (`ServerHandle::dht_status`):
   /// whether it is running, how many nodes are in each routing table, and

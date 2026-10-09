@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
     server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
-    server_close_proxy_streams, server_dht_status, server_set_background,
+    server_clear_cache, server_close_proxy_streams, server_dht_status, server_set_background,
     server_set_idle_sharing_held, server_settings, server_stop, server_storage_report,
     server_torrent_stats, server_update_settings, ServerConfig,
 };
@@ -301,6 +301,13 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert!(cleaned["total"].is_u64(), "{cleaned}");
     assert!(cleaned["freed"].is_u64(), "{cleaned}");
     assert!(cleaned["deleted"].is_u64(), "{cleaned}");
+    // The full clear, in place too: nothing streams in this test, so it
+    // stops nothing, and it answers what it freed for the app's message.
+    let cleared = json(&tokio::task::spawn_blocking(server_clear_cache).await??);
+    assert_eq!(cleared["stopped"], 0, "{cleared}");
+    assert!(cleared["freed"].is_u64(), "{cleared}");
+    assert!(cleared["deleted"].is_u64(), "{cleared}");
+    assert!(cleared["total"].is_u64(), "{cleared}");
     assert_eq!(server_base_url()?.as_deref(), Some(url.as_str()));
     assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
     // Nothing about the running server changed: the settings patched above

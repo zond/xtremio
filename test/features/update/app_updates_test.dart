@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/update/app_updates.dart';
+import 'package:xtremio/features/update/install_room.dart';
 import 'package:xtremio/features/update/release_version.dart';
 
+import '../../support/diagnostics_capture.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_server_cache.dart';
 import '../../support/fake_updates.dart';
@@ -36,6 +38,7 @@ void main() {
       expect(await updates.checkIfDue(), isA<UpdateAvailable>());
       expect(await updates.check(), isA<UpdateAvailable>());
       expect(cache.cleans, 0);
+      expect(cache.clears, 0, reason: 'and never clears it either');
     });
 
     test('asks GitHub once a day, and remembers it asked', () async {
@@ -210,6 +213,134 @@ void main() {
     await pumpEventQueueUntil(() => !old.existsSync());
     expect(old.existsSync(), isFalse);
     expect(part.existsSync(), isTrue);
+  });
+
+  group('making room', () {
+    /// A 4 GB volume with [free] bytes free: its reserve is 200 MB, so a
+    /// 1 kB APK needs 200,003,000 bytes before the download.
+    DataVolumeRoom fourGb(int free) =>
+        DataVolumeRoom(freeBytes: free, totalBytes: 4000000000);
+
+    test('a device with room is measured and left alone', () async {
+      final lines = captureDiagnostics();
+      final cache = FakeServerCache(cleanResult: cleanedNothing);
+      final updates = fakeUpdates(
+        cache: cache,
+        installer: FakeApkInstaller(volume: fourGb(1000000000)),
+      );
+      final room = await updates.makeRoom(apkBytes: 1000, downloaded: false);
+      expect(room!.fits, isTrue);
+      expect((cache.cleans, cache.clears), (0, 0));
+      expect(lines, [
+        'info update room before the download: 1000000000 bytes free, '
+            '200003000 needed',
+      ]);
+    });
+
+    test('the gentle clean that makes room is the last step', () async {
+      final lines = captureDiagnostics();
+      final installer = FakeApkInstaller(volume: fourGb(150000000));
+      final cache = FakeServerCache(
+        cleanResult: cleanedSome(400000000),
+        onClean: () => installer.volume = fourGb(550000000),
+      );
+      final steps = <RoomStep>[];
+      final room = await fakeUpdates(
+        cache: cache,
+        installer: installer,
+      ).makeRoom(apkBytes: 1000, downloaded: true, onStep: steps.add);
+      expect(room!.fits, isTrue);
+      expect((cache.cleans, cache.clears), (1, 0));
+      expect(steps, [RoomStep.measuring, RoomStep.cleaning]);
+      expect(lines, [
+        'info update room before the install: 150000000 bytes free, '
+            '200002000 needed',
+        'info update after the cache clean: 150000000 bytes free before, '
+            '550000000 after, 200002000 needed',
+      ]);
+    });
+
+    test('a clean that frees too little is followed by the full clear, '
+        'which makes room', () async {
+      final lines = captureDiagnostics();
+      final installer = FakeApkInstaller(volume: fourGb(150000000));
+      final cache = FakeServerCache(
+        cleanResult: cleanedSome(10000000),
+        onClean: () => installer.volume = fourGb(160000000),
+        clearResult: const CacheClearReport(
+          freed: 900000000,
+          stopped: 1,
+          deleted: 40,
+          total: 0,
+        ),
+        onClear: () => installer.volume = fourGb(1060000000),
+      );
+      final steps = <RoomStep>[];
+      final room = await fakeUpdates(
+        cache: cache,
+        installer: installer,
+      ).makeRoom(apkBytes: 1000, downloaded: false, onStep: steps.add);
+      expect(room!.fits, isTrue);
+      expect((cache.cleans, cache.clears), (1, 1));
+      expect(steps, [RoomStep.measuring, RoomStep.cleaning, RoomStep.clearing]);
+      expect(lines, [
+        'info update room before the download: 150000000 bytes free, '
+            '200003000 needed',
+        'info update after the cache clean: 150000000 bytes free before, '
+            '160000000 after, 200003000 needed',
+        'info update after the cache clear: 160000000 bytes free before, '
+            '1060000000 after, 200003000 needed',
+      ]);
+    });
+
+    test('when both free too little the room says what was cleared', () async {
+      final cache = FakeServerCache(
+        cleanResult: cleanedSome(10000000),
+        clearResult: const CacheClearReport(
+          freed: 90000000,
+          stopped: 1,
+          deleted: 40,
+          total: 0,
+        ),
+      );
+      final room = await fakeUpdates(
+        cache: cache,
+        installer: FakeApkInstaller(volume: fourGb(150000000)),
+      ).makeRoom(apkBytes: 1000, downloaded: false);
+      expect(room!.fits, isFalse);
+      expect(room.cleared, isTrue);
+      expect(room.freedBytes, 100000000, reason: 'the clean and the clear');
+      expect(
+        room.shortText,
+        'The update needs 200 MB free on this device and there is 150 MB. '
+        'Streams were stopped and the torrent cache cleared, which freed '
+        '100 MB; what it still holds is the downloads you kept, which Server '
+        'storage shows.',
+      );
+    });
+
+    test('a clear that does not answer is said as such', () async {
+      final lines = captureDiagnostics();
+      final cache = FakeServerCache(
+        cleanResult: cleanedNothing,
+        clearError: StateError('server not running'),
+      );
+      final room = await fakeUpdates(
+        cache: cache,
+        installer: FakeApkInstaller(volume: fourGb(150000000)),
+      ).makeRoom(apkBytes: 1000, downloaded: false);
+      expect(room!.freedBytes, isNull);
+      expect(
+        room.shortText,
+        'The update needs 200 MB free on this device and there is 150 MB. '
+        'The torrent cache could not be cleared; Server storage shows what '
+        'it holds.',
+      );
+      expect(
+        lines,
+        contains('warn update the cache clear did not answer (StateError)'),
+      );
+    });
   });
 }
 

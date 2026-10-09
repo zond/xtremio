@@ -6,6 +6,7 @@ import '../../widgets/internet_status_tile.dart';
 import '../../widgets/readout.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
+import '../diagnostics/clear_cache.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../diagnostics/server_storage_screen.dart';
 import '../downloads/download_labels.dart';
@@ -51,6 +52,7 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     this.dhtStatus,
     this.pickFolder = pickFolderWithTheSystem,
+    this.cache = const ServerClient(),
   });
 
   /// Where the Peer discovery row's [DhtStatus] comes from (absent,
@@ -61,6 +63,9 @@ class SettingsScreen extends StatefulWidget {
 
   /// Asks for a folder to find local videos in; a test's answers one.
   final FolderPicker pickFolder;
+
+  /// What "Clear the cache" asks; a widget test hands over a fake.
+  final ServerCacheControl cache;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -319,10 +324,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const ServerStorageScreen(),
+                builder: (_) => ServerStorageScreen(client: widget.cache),
               ),
             ),
           ),
+          // The one way to get everything back at once, whatever is
+          // playing: it stops streams, so it asks first. Beside Server
+          // storage, whose gentle clean never stops anything.
+          ClearCacheTile(client: widget.cache),
           // Directly under the server's own status: the DHT is a peer
           // *source* for that server, not a requirement (a torrent with
           // working trackers downloads fine without one), so this shows

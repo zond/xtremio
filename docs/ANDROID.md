@@ -206,12 +206,23 @@ updates" asks at any time and says "up to date" too. The code is in
   fill the disk, and Android then refuses the install
   (`INSTALL_FAILED_INSUFFICIENT_STORAGE`, "Requested internal only, but
   not enough space"). So the Update press, before the download and again
-  before the install, asks the server to clean its cache -- the Server
-  storage screen's "Clean cache now": what nobody is playing and nobody
-  kept, never a kept download or the part of the title played last around
-  where it was left -- waits up to 30 seconds for it
-  (`AppUpdates.cleanBound`), and measures the data volume (`room` on
-  `xtremio/update`). Android's installer wants the session to fit in the
+  before the install, makes room in steps (`AppUpdates.makeRoom`), each
+  taken only while the update still does not fit and each followed by a
+  measurement of the data volume (`room` on `xtremio/update`):
+  1. **Measure.** A device with room is left alone: nothing is cleaned.
+  2. **The gentle clean** -- the Server storage screen's "Clean cache
+     now": what nobody is playing and nobody kept, never a kept download
+     or the part of the title played last around where it was left.
+  3. **The full clear** -- "Clear the cache": every stream stopped and
+     everything no download keeps deleted, the title played last
+     included. No confirmation: the user already pressed Update or
+     Install; the "Making room" dialog says "Stopping streams and clearing
+     the cache…" while it runs.
+
+  Each server call is waited for up to 30 seconds (`AppUpdates.cleanBound`),
+  and what it freed by then is in the next measurement either way. Every
+  step is in the diagnostics log with the free bytes before and after it.
+  Android's installer wants the session to fit in the
   free space less its low-storage reserve
   (`InstallLocationUtils.fitsOnInternal`,
   `StorageManager.getAllocatableBytes`), and the reserve is
@@ -224,12 +235,15 @@ updates" asks at any time and says "up to date" too. The code is in
   (`UpdateRoom`, `lib/features/update/install_room.dart`). A Chromecast
   with Google TV refused a 50 MB update with 130-330 MB free and took it
   with about 500 MB; this asks it for 350-450 MB before the download and
-  300-400 MB before the install. Without the room the
-  dialog downloads and installs nothing, says how much is free and how
-  much is needed, and offers Server storage and Try again. A volume that
-  could not be measured is not taken for a full one: the install goes
-  ahead and Android decides. Nothing else reclaims the cache for an
-  update: the daily look and the offer never do.
+  300-400 MB before the install. When even the clear leaves too little the
+  dialog downloads and installs nothing, says how much is free, how much
+  is needed and what the clear did (streams stopped, how much it and the
+  clean freed -- or that the cache could not be cleared), and offers
+  Server storage and Try again. A volume that could not be measured is not
+  taken for a full one: the install goes ahead and Android decides.
+  Nothing else reclaims the cache for an update: the daily look and the
+  offer never clean or clear anything; only an Update or Install press,
+  from the offer or from "Check for updates", does.
 - **"Install unknown apps".** Android lets an app install packages only
   with that per-app switch. The dialog explains it and opens the switch
   (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`); where nothing answers that screen

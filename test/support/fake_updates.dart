@@ -190,3 +190,13 @@ const EvictionReport cleanedNothing = EvictionReport(
   deleted: 0,
   limit: null,
 );
+
+/// A clean that gave back [freed] bytes and left the cache at nothing.
+EvictionReport cleanedSome(int freed) => EvictionReport(
+  total: 0,
+  protected: 0,
+  protectedFiles: 0,
+  freed: freed,
+  deleted: 1,
+  limit: null,
+);

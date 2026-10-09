@@ -264,3 +264,37 @@ class EvictionReport {
     return limit != null && total > limit;
   }
 }
+
+/// What one full clear did (`ServerHandle::clear_cache`): every torrent
+/// that streamed was stopped -- all but a kept download's -- and every
+/// piece and proxied chunk no download keeps was deleted, the window of the
+/// title played last included. Occupancy throughout, like [CacheUsage].
+class CacheClearReport {
+  const CacheClearReport({
+    required this.freed,
+    required this.stopped,
+    required this.deleted,
+    required this.total,
+  });
+
+  factory CacheClearReport.fromJson(Map<String, dynamic> json) =>
+      CacheClearReport(
+        freed: (json['freed'] as num?)?.toInt() ?? 0,
+        stopped: (json['stopped'] as num?)?.toInt() ?? 0,
+        deleted: (json['deleted'] as num?)?.toInt() ?? 0,
+        total: (json['total'] as num?)?.toInt() ?? 0,
+      );
+
+  /// How far the cache's occupancy fell across the clear.
+  final int freed;
+
+  /// How many torrents were running before it and are stopped after it.
+  final int stopped;
+
+  /// How many piece files and chunks left the disk.
+  final int deleted;
+
+  /// What the cache holds afterwards: the kept downloads, and a link a
+  /// player was still reading.
+  final int total;
+}

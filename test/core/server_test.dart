@@ -100,8 +100,16 @@ void main() {
       // it never saw -- where the truth is that it has not looked.
       expect(await server.streamNumbers(url.resolve('$_infoHash/0')), isNull);
 
+      // ... and the full clear: nothing streams here, so it stops nothing,
+      // and the server answers at the same URL afterwards.
+      final cleared = await server.clearCache();
+      expect(cleared.stopped, 0);
+      expect(cleared.freed, greaterThanOrEqualTo(0));
+      expect(serverBaseUrlForTests(), url);
+
       await stopServerForTests();
       expect(serverBaseUrlForTests(), isNull);
+      await expectLater(server.clearCache(), throwsA(anything));
       await expectLater(server.settings(), throwsA(anything));
       await expectLater(
         server.streamNumbers(url.resolve('$_infoHash/0')),

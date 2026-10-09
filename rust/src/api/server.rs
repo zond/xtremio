@@ -333,6 +333,25 @@ pub fn server_clean_cache_now() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::server::clean_cache_now()?).map_err(Into::into))
 }
 
+/// **Clears the cache** and answers what that did, as JSON
+/// (`CacheClearReport`: `freed`, `stopped`, `deleted`, `total`).
+///
+/// Unlike [`server_clean_cache_now`] this **stops playback**: every torrent
+/// that streams is stopped -- all but a kept download's -- and every read
+/// open on one fails, so a player in the middle of a film shows the error
+/// it shows for a failed read; then every piece and proxied chunk no
+/// download keeps is deleted, the window of the title played last
+/// included. `freed` is how far the cache's occupancy fell, `stopped` how
+/// many torrents it stopped, `total` what the cache holds afterwards. Kept
+/// downloads, the settings and where each file was last played are
+/// untouched; whoever asks afterwards is served as a first ask is.
+///
+/// Blocks the FRB worker; never call from the UI thread. Errors when the
+/// server is not running.
+pub fn server_clear_cache() -> anyhow::Result<String> {
+    guarded(|| serde_json::to_string(&crate::server::clear_cache()?).map_err(Into::into))
+}
+
 /// Whether the server is moving bytes over this device's connection while
 /// nothing is playing, as JSON (`BackgroundTraffic`: `active`,
 /// `downloading`, `uploading`, `playing`, `bytesDownloaded`,

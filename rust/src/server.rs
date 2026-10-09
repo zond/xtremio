@@ -18,8 +18,8 @@ use std::time::Duration;
 use anyhow::Context;
 use enginefs::backend::DhtStatus;
 use stream_server::{
-    CacheUsage, DownloadInfo, EngineStats, EvictionReport, ProxyDownloadRequest, ProxyPinKey,
-    ServerHandle, ServerSettings, UnpinOutcome,
+    CacheClearReport, CacheUsage, DownloadInfo, EngineStats, EvictionReport, ProxyDownloadRequest,
+    ProxyPinKey, ServerHandle, ServerSettings, UnpinOutcome,
 };
 use url::Url;
 
@@ -798,6 +798,17 @@ pub fn cache_usage() -> anyhow::Result<CacheUsage> {
 /// nothing here stops playback.
 pub fn clean_cache_now() -> anyhow::Result<EvictionReport> {
     with_handle(|handle| handle.clean_cache_now())
+}
+
+/// **Clears the cache**: stops every torrent that streams -- all but a
+/// kept download's, which goes on -- fails every read open on one, and
+/// deletes every piece and proxied chunk no download keeps, the window of
+/// the title played last included (`ServerHandle::clear_cache`). What the
+/// user's "Clear the cache" and an update making room ask for, never
+/// anything on a timer. Kept downloads, the settings and where each file
+/// was last played are untouched.
+pub fn clear_cache() -> anyhow::Result<CacheClearReport> {
+    with_handle(|handle| handle.clear_cache())
 }
 
 /// [`enginefs::traffic::BackgroundTraffic`] as it crosses the FFI: the same

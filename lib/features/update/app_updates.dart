@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/diagnostics_log.dart';
 import '../../core/prefs_client.dart';
 import '../../core/server_client.dart';
 import 'apk_download.dart';
@@ -48,6 +49,19 @@ class UpdateCheckFailed extends UpdateCheck {
   final String message;
 }
 
+/// What [AppUpdates.makeRoom] is doing, for the line the dialog shows.
+enum RoomStep {
+  /// Reading the room on the data volume.
+  measuring,
+
+  /// The gentle clean: what nobody plays and nobody kept.
+  cleaning,
+
+  /// The full clear: streams stopped, everything no download keeps
+  /// deleted.
+  clearing,
+}
+
 /// The app's updates: whether a newer release is out, and what to do with
 /// one -- install it over this app (an Android release build) or point at
 /// its page (everything else).
@@ -67,12 +81,13 @@ class UpdateCheckFailed extends UpdateCheck {
 /// run. A manual check offers the skipped release as well: it was asked
 /// for.
 ///
-/// **Room before an install.** An Update press first asks the embedded
-/// server to give back its cache ([makeRoom]) and then measures the data
-/// volume, before the download and again before the install: a television
-/// whose cache has filled its disk would otherwise download the APK and
-/// have Android refuse it. Nothing else here reclaims anything -- the
-/// daily look and the offer never touch the cache.
+/// **Room before an install.** An Update press measures the data volume
+/// before the download and again before the install, and makes room in
+/// three steps when it is short ([makeRoom]): the gentle clean, then the
+/// full clear, then the "Not enough space" dialog. A television whose
+/// cache has filled its disk would otherwise download the APK and have
+/// Android refuse it. Nothing else here reclaims anything -- the daily
+/// look and the offer never touch the cache.
 class AppUpdates {
   AppUpdates({
     required this.prefs,
@@ -113,8 +128,8 @@ class AppUpdates {
   /// give back.
   final ServerCacheControl cache;
 
-  /// How long [makeRoom] waits for the server's clean before it measures
-  /// anyway.
+  /// How long [makeRoom] waits for the server's clean, and then for its
+  /// clear, before it measures anyway.
   ///
   /// A clean is the server's owners unlinking what nobody is playing and
   /// nobody kept, on this device's own flash: well under a second as a
@@ -123,6 +138,8 @@ class AppUpdates {
   /// a server that does not answer from holding an update the viewer is
   /// watching a dialog for. What it freed by then is in the measurement
   /// either way: the clean is not cancelled, only no longer waited for.
+  /// The clear deletes more and is waited for as long, for the same
+  /// reasons.
   static const Duration cleanBound = Duration(seconds: 30);
 
   /// Whether an update can be installed from inside the app rather than
@@ -175,29 +192,92 @@ class AppUpdates {
   Future<void> skip(ReleaseInfo release) =>
       prefs.setUpdateSkippedTag(release.tag);
 
-  /// Asks the server to give back its cache, waits for that (at most
-  /// [cleanBound]) and measures whether an APK of [apkBytes] fits: before
-  /// the download when [downloaded] is false, before the install when it
-  /// is true ([UpdateRoom.forApk]).
+  /// **Makes room for an APK of [apkBytes] and says whether it fits**:
+  /// before the download when [downloaded] is false, before the install
+  /// when it is true ([UpdateRoom.forApk]). Called only from an Update or
+  /// Install press -- the user asked for the update, so no step here asks
+  /// again -- never from the daily look.
   ///
-  /// The clean is the Server storage screen's "Clean cache now": what
-  /// nobody is playing and nobody kept, never a kept download or the part
-  /// of the title played last around where it was left. Called only from
-  /// an Update press.
+  /// In steps, each taken only while the APK still does not fit, and each
+  /// measured after:
+  ///
+  /// 1. **Measure.** A device with room is left alone.
+  /// 2. **The gentle clean** -- Server storage's "Clean cache now": what
+  ///    nobody is playing and nobody kept, never a kept download or the
+  ///    part of the title played last around where it was left.
+  /// 3. **The full clear** -- "Clear the cache": every stream stopped and
+  ///    everything no download keeps deleted, the title played last
+  ///    included. What is left after it is short is the dialog's, which
+  ///    says what was cleared ([UpdateRoom.afterClearing]).
+  ///
+  /// Each server call is waited for at most [cleanBound]; what it freed by
+  /// then is in the next measurement either way. [onStep] hears each step
+  /// as it starts, for the dialog's line. Every step is logged with the
+  /// free bytes before and after it.
   ///
   /// Null when the volume could not be measured: then nothing is refused
   /// here and Android decides, as it always did.
   Future<UpdateRoom?> makeRoom({
     required int apkBytes,
     required bool downloaded,
+    void Function(RoomStep step)? onStep,
   }) async {
+    final when = downloaded ? 'install' : 'download';
+    onStep?.call(RoomStep.measuring);
+    var room = await _measure(apkBytes: apkBytes, downloaded: downloaded);
+    if (room == null) {
+      DiagnosticsLog.info('update', 'room before the $when: not measurable');
+      return null;
+    }
+    DiagnosticsLog.info(
+      'update',
+      'room before the $when: ${room.freeBytes} bytes free, '
+          '${room.neededBytes} needed',
+    );
+    if (room.fits) return room;
+
+    onStep?.call(RoomStep.cleaning);
+    int? freed;
     try {
-      await cache.cleanCacheNow().timeout(cleanBound);
+      freed = (await cache.cleanCacheNow().timeout(cleanBound)).freed;
     } catch (error) {
       // No server, or still cleaning at the bound: the measurement below
       // is the answer either way.
-      if (kDebugMode) debugPrint('update clean: ${error.runtimeType}');
+      DiagnosticsLog.warn(
+        'update',
+        'the cache clean did not answer (${error.runtimeType})',
+      );
     }
+    final beforeClean = room.freeBytes;
+    room = await _measure(apkBytes: apkBytes, downloaded: downloaded);
+    _logStep('the cache clean', beforeClean, room);
+    if (room == null || room.fits) return room;
+
+    onStep?.call(RoomStep.clearing);
+    int? cleared;
+    try {
+      cleared = (await cache.clearCache().timeout(cleanBound)).freed;
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'update',
+        'the cache clear did not answer (${error.runtimeType})',
+      );
+    }
+    final beforeClear = room.freeBytes;
+    room = await _measure(apkBytes: apkBytes, downloaded: downloaded);
+    _logStep('the cache clear', beforeClear, room);
+    if (room == null || room.fits) return room;
+    return room.afterClearing(
+      freedBytes: cleared == null ? null : cleared + (freed ?? 0),
+    );
+  }
+
+  /// The room on the data volume for an APK of [apkBytes], or null when
+  /// it could not be read.
+  Future<UpdateRoom?> _measure({
+    required int apkBytes,
+    required bool downloaded,
+  }) async {
     DataVolumeRoom? volume;
     try {
       volume = await installer.room();
@@ -211,6 +291,16 @@ class AppUpdates {
       downloaded: downloaded,
     );
   }
+
+  /// One step of [makeRoom], in the log: the free bytes before and after.
+  static void _logStep(String step, int before, UpdateRoom? after) =>
+      DiagnosticsLog.info(
+        'update',
+        after == null
+            ? 'after $step: $before bytes free before, not measurable after'
+            : 'after $step: $before bytes free before, ${after.freeBytes} '
+                  'after, ${after.neededBytes} needed',
+      );
 
   /// The file [release]'s APK for [abi] is downloaded to.
   Future<File> apkFile(ReleaseInfo release, String abi) async => File(

@@ -19,9 +19,11 @@ import 'releases.dart';
 /// Update installs it where [AppUpdates.canInstall] (an Android release
 /// build) and opens its page everywhere else. Nothing is installed without
 /// a press here *and* Android's own confirmation after it, and nothing is
-/// downloaded or installed that the device has no room for
-/// ([AppUpdates.makeRoom]): the dialog says how much is free and how much
-/// is needed instead, and offers Server storage.
+/// downloaded or installed that the device has no room for: a short device
+/// is cleaned, then cleared -- streams stopped -- without another question
+/// ([AppUpdates.makeRoom]), and when even that is not enough the dialog
+/// says how much is free, how much is needed and what was cleared, and
+/// offers Server storage.
 Future<void> showUpdateDialog(
   BuildContext context, {
   required AppUpdates updates,
@@ -59,10 +61,19 @@ class UpdateDialog extends StatefulWidget {
   static const String installLabel = 'Install';
   static const String storageLabel = 'Server storage';
 
-  /// What the dialog says while the server cleans and the room is measured.
-  static const String roomText =
-      'Emptying the torrent cache of what it can give back, then checking '
-      'the space.';
+  /// What the dialog says at each step of making room
+  /// ([AppUpdates.makeRoom]).
+  static const String measuringText = 'Checking the space on this device.';
+  static const String cleaningText =
+      'Emptying the torrent cache of what it can give back.';
+  static const String clearingText = 'Stopping streams and clearing the cache…';
+
+  /// [measuringText], [cleaningText] or [clearingText] for [step].
+  static String roomText(RoomStep step) => switch (step) {
+    RoomStep.measuring => measuringText,
+    RoomStep.cleaning => cleaningText,
+    RoomStep.clearing => clearingText,
+  };
 
   @override
   State<UpdateDialog> createState() => _UpdateDialogState();
@@ -87,6 +98,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   /// What did not fit, for [_Step.short].
   UpdateRoom? _room;
+
+  /// Which step of making room is under way, for [_Step.room]'s line.
+  RoomStep _roomStep = RoomStep.measuring;
 
   /// Whether the "Install unknown apps" shortcut opened; false shows where
   /// the setting is instead.
@@ -206,17 +220,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (mounted) setState(() => _settingsOpened = opened);
   }
 
-  /// Has the server give back its cache and measures what is left, before
-  /// the download and again before the install. False -- and the dialog on
-  /// [_Step.short] -- when the update does not fit; a room nobody could
-  /// measure is not "full", and goes ahead.
+  /// Measures the room before the download and again before the install,
+  /// and makes room when it is short -- the gentle clean, then the full
+  /// clear, with no question asked: Update or Install was pressed
+  /// ([AppUpdates.makeRoom]). False -- and the dialog on [_Step.short] --
+  /// when the update still does not fit; a room nobody could measure is
+  /// not "full", and goes ahead.
   Future<bool> _makeRoom({required bool downloaded}) async {
     final asset = _asset;
     if (asset == null) return false;
-    setState(() => _step = _Step.room);
+    setState(() {
+      _step = _Step.room;
+      _roomStep = RoomStep.measuring;
+    });
     final room = await _updates.makeRoom(
       apkBytes: asset.size,
       downloaded: downloaded,
+      onStep: (step) {
+        if (mounted) setState(() => _roomStep = step);
+      },
     );
     if (!mounted) return false;
     if (room == null || room.fits) return true;
@@ -313,13 +335,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   Widget _content(BuildContext context) => switch (_step) {
     _Step.offer => _offer(context),
-    _Step.room => const Column(
+    _Step.room => Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LinearProgressIndicator(),
-        SizedBox(height: 8),
-        Text(UpdateDialog.roomText),
+        const LinearProgressIndicator(),
+        const SizedBox(height: 8),
+        Text(UpdateDialog.roomText(_roomStep)),
       ],
     ),
     _Step.downloading => _progress(context),
