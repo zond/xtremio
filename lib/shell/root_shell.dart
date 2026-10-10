@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,6 +8,7 @@ import '../features/library/library_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/sharing/sharing_light.dart';
+import '../widgets/back_rung.dart';
 import '../widgets/focusable_tile.dart';
 import 'device_profile.dart';
 import 'tv_density.dart';
@@ -75,6 +77,20 @@ class _Destination {
 /// focused while its widget is torn down, is parked in the new tab's scope
 /// and keeps the tab's tile from autofocusing. When that node is disposed,
 /// focus falls on the bare scope, where nothing shows it.
+///
+/// **Back on Android comes down a ladder.** Android's navigation guidelines
+/// expect Back to lead outward one step at a time. Each press takes the first
+/// step that applies:
+///
+/// 1. Whatever the tab has open closes. That is a [BackRung]: Discover's
+///    catalog and type, an open filter menu, the microphone while it listens.
+/// 2. On a television, the remote moves from the tab's content to its rail
+///    destination. From the sharing light it moves to the rail too.
+/// 3. Any other tab goes back to the first one, Discover.
+///
+/// On Discover with nothing open, Back does nothing. Off Android, a Back that
+/// reaches the shell does nothing at all. On a desktop it is a stray key or
+/// mouse button, and closing the window is how the app is quit.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
@@ -147,6 +163,10 @@ class _RootShellState extends State<RootShell> {
   /// only); see [_onFocusMoved] and [_railIcon].
   int _railFocus = -1;
 
+  /// The tab's own rungs of the Back ladder, asked before the shell takes
+  /// a step of its own; see [RootShell].
+  final BackRungs _rungs = BackRungs();
+
   /// The Material indicator pill behind a rail destination's icon, which
   /// is the box the focus ring is drawn on.
   static const Size _indicatorSize = Size(56, 32);
@@ -205,6 +225,9 @@ class _RootShellState extends State<RootShell> {
   ];
 
   void _select(int i) {
+    for (final memory in _tabMemories) {
+      memory.held = false;
+    }
     if (DeviceScope.isTv(context)) _railDestination(i)?.requestFocus();
     setState(() => _index = i);
   }
@@ -245,6 +268,28 @@ class _RootShellState extends State<RootShell> {
   /// which is the rail's first, since that is the only press that reaches
   /// the light at all.
   void _leaveLight() => _railDestination(0)?.requestFocus();
+
+  /// One step down the shell's Back ladder; see [RootShell].
+  void _back() {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (_rungs.anyActive) return;
+    if (DeviceScope.isTv(context)) {
+      if (_tabScopes[_index].hasFocus) {
+        _railDestination(_index)?.requestFocus();
+        return;
+      }
+      if (_lightNode.hasFocus) {
+        _leaveLight();
+        return;
+      }
+    }
+    if (_index == 0) return;
+    _select(0);
+    // Back is a step outward, so the remote stays on the rail, where the next
+    // Back leaves from. A select on the rail would take it to the tile
+    // Discover remembers instead.
+    _tabMemories[0].held = true;
+  }
 
   @override
   void dispose() {
@@ -353,12 +398,19 @@ class _RootShellState extends State<RootShell> {
 
   @override
   Widget build(BuildContext context) {
-    // The shell is the root route. Without this, a back gesture/key that
-    // reaches it pops nothing and the framework asks the platform to exit
-    // (SystemNavigator.pop), which on desktop quits the app. Quitting must
-    // be deliberate (closing the window), so a stray back is a no-op here;
-    // routes pushed on top (player, details) still pop back normally.
-    return PopScope(canPop: false, child: _buildShell(context));
+    // The shell is the root route. A back gesture or key that reaches it pops
+    // nothing, so the framework would ask the platform to exit
+    // (SystemNavigator.pop). That quits the app on a desktop and finishes the
+    // activity on Android, and neither is how this app is left. So the shell
+    // never pops, and takes the press down its own ladder instead ([_back]).
+    // Routes pushed on top (player, details) still pop back normally.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: BackRungs.scope(rungs: _rungs, child: _buildShell(context)),
+    );
   }
 
   Widget _buildShell(BuildContext context) {

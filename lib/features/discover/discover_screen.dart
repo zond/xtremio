@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
+import '../../widgets/back_rung.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
@@ -254,12 +255,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final state = ownState;
     final isTv = DeviceScope.isTv(context);
     final showsCatalog = _showsCatalog;
-    return PopScope(
-      // The shell never pops; this only takes the Back that reaches it.
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _back();
-      },
+    return BackRung(
+      active: showsCatalog || _type != null,
+      onBack: _back,
       child: TvSafeArea(
         child: Scaffold(
           // A television has no title: the rail beside it already says

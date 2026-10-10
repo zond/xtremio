@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../shell/device_profile.dart';
 import '../shell/speech_input.dart';
 import '../shell/tv_text_entry.dart';
+import 'back_rung.dart';
 import 'focusable_tile.dart';
 import 'remote_press.dart';
 
@@ -485,13 +486,7 @@ class _TvTextFieldState extends State<TvTextField> {
         if (!widget.voice) return row;
         // Back while listening is the end of listening, and nothing more:
         // the rung exists only while the microphone visibly listens.
-        return PopScope(
-          canPop: !_listening,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _cancelSpeech();
-          },
-          child: row,
-        );
+        return BackRung(active: _listening, onBack: _cancelSpeech, child: row);
       },
     );
   }

@@ -105,6 +105,7 @@ class _FocusableTileState extends State<FocusableTile> {
 
   bool _decideAutofocus(FocusMemoryStore? memory) {
     if (memory == null) return widget.defaultFocus;
+    if (memory.held) return false;
     final remembered = memory.lastFocused;
     if (remembered == null) return widget.defaultFocus;
     return widget.memoryId != null && remembered == widget.memoryId;
@@ -188,6 +189,12 @@ class _FocusableTileState extends State<FocusableTile> {
 /// moves and read it when built, and nothing has to rebuild for that.
 class FocusMemoryStore {
   String? lastFocused;
+
+  /// While set, no tile built under this memory autofocuses, neither the
+  /// remembered one nor the default. The shell sets it when Back shows a tab
+  /// and the remote is meant to stay on the rail. It clears it the next time
+  /// a tab is chosen.
+  bool held = false;
 }
 
 /// Hands a [FocusMemoryStore] to the [FocusableTile]s below it; the shell

@@ -493,4 +493,87 @@ void main() {
       );
     });
   });
+
+  group('Back comes down the ladder', () {
+    testWidgets('from Discover\'s rows: the rail, and there it stays', (
+      tester,
+    ) async {
+      useScreen(tester, const Size(1280, 720));
+      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpAndSettle();
+      expect(focusIn<DiscoverScreen>(), isTrue);
+
+      await systemBack(tester);
+      expect(focusedRailLabel(tester), 'Discover');
+
+      await systemBack(tester);
+      expect(focusedRailLabel(tester), 'Discover');
+      expect(find.byType(DiscoverScreen), findsOneWidget);
+    });
+
+    testWidgets('from another tab: its rail destination, then Discover', (
+      tester,
+    ) async {
+      useScreen(tester, const Size(1280, 720));
+      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpAndSettle();
+      await focusRailTop(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.select);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusIn<LibraryScreen>(), isTrue);
+
+      await systemBack(tester);
+      expect(focusedRailLabel(tester), 'Library');
+      expect(find.byType(LibraryScreen), findsOneWidget);
+
+      await systemBack(tester);
+      expect(focusedRailLabel(tester), 'Discover');
+      expect(find.byType(DiscoverScreen), findsOneWidget);
+
+      // The rail held the remote; right still enters the tab.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusIn<DiscoverScreen>(), isTrue);
+    });
+
+    testWidgets('a rung inside the tab takes the press, and only it does', (
+      tester,
+    ) async {
+      useScreen(tester, const Size(1280, 720));
+      final core = fakeCore();
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      // Up from the rows to the types, across to one, and select it: the
+      // tab is now on a type, which Back takes back to All.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 6 && focusedLabel(tester) != 'Series'; i++) {
+        await press(tester, LogicalKeyboardKey.tab);
+      }
+      expect(focusedLabel(tester), 'Series');
+      await press(tester, LogicalKeyboardKey.select);
+      final loads = core.dispatched.length;
+
+      await systemBack(tester);
+      expect(
+        core.dispatched
+            .skip(loads)
+            .lastWhere(
+              (action) =>
+                  action.field == CoreField.board &&
+                  action.action['action'] == 'Load',
+            )
+            .action,
+        CoreActions.loadBoard().action,
+        reason: 'the tab came back to All',
+      );
+      expect(focusIn<NavigationRail>(), isFalse, reason: 'and nothing else');
+      expect(focusIn<DiscoverScreen>(), isTrue);
+
+      // With nothing left open in the tab, the shell's own rungs follow.
+      await systemBack(tester);
+      expect(focusedRailLabel(tester), 'Discover');
+    });
+  });
 }

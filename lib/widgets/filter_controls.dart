@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
+import 'back_rung.dart';
 import 'focusable_tile.dart';
 import 'tv_ladder.dart';
 
@@ -224,7 +225,7 @@ class FilterMenu<R> extends StatelessWidget {
 /// inside itself. Select picks the focused entry (or just closes, on the
 /// one already selected) and hands focus back to the button. The remote's
 /// BACK is a route pop, which would leave the screen with the menu still
-/// drawn. While the menu is open, a [PopScope] turns BACK into closing it.
+/// drawn. While the menu is open, a [BackRung] turns BACK into closing it.
 class _FilterMenuButton<R> extends StatefulWidget {
   const _FilterMenuButton({
     required this.label,
@@ -270,11 +271,9 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
     final words = selected == null
         ? widget.label
         : '${widget.label}: $selected';
-    return PopScope(
-      canPop: !_open,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _controller.close();
-      },
+    return BackRung(
+      active: _open,
+      onBack: _controller.close,
       child: MenuAnchor(
         controller: _controller,
         childFocusNode: _button,

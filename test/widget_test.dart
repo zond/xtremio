@@ -74,6 +74,51 @@ void main() {
       expect(calls, isNot(contains('SystemNavigator.pop')));
     });
 
+    testWidgets('on Android another tab comes back to Discover', (
+      tester,
+    ) async {
+      final calls = recordPlatformCalls(tester);
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+      expect(find.text('No catalogs'), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('No catalogs'), findsOneWidget);
+      expect(calls, isNot(contains('SystemNavigator.pop')));
+    });
+
+    testWidgets('on a desktop does nothing at all', (tester) async {
+      final calls = recordPlatformCalls(tester);
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RootShell), findsOneWidget);
+      expect(
+        find.text('No catalogs'),
+        findsNothing,
+        reason: 'still on Settings',
+      );
+      expect(calls, isNot(contains('SystemNavigator.pop')));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
     testWidgets('still pops a route pushed on top of the shell', (
       tester,
     ) async {
