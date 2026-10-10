@@ -352,7 +352,8 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 /// because two stops that differ in exactly one thing (how long they last)
 /// would leave that difference to be guessed at from a pair of button labels.
 /// The dialog's one action is its way out, "Close", which changes nothing; Back
-/// (or the barrier) is the same answer.
+/// (or the barrier) is the same answer. On a television the remote opens on
+/// Close.
 class SharingStopDialog extends StatelessWidget {
   const SharingStopDialog({
     super.key,
@@ -512,6 +513,11 @@ class SharingStopDialog extends StatelessWidget {
       actions: [
         TextButton(
           key: closeKey,
+          // The remote has to land somewhere in the dialog. The light it was
+          // on leaves the tree when the dialog covers the shell, and the
+          // shell's scope would take the remote to the rail behind it. Close
+          // is the one action that is always drawn, and it changes nothing.
+          autofocus: DeviceScope.isTv(context),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
         ),

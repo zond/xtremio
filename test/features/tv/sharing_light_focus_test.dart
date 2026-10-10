@@ -28,10 +28,12 @@ void main() {
       null;
 
   /// The shell on a television, with [uploading] deciding whether the
-  /// server is giving anything to the swarm.
+  /// server is giving anything to the swarm and [downloading] whether it is
+  /// fetching anything with nothing playing.
   Future<FakeSharingActivity> mount(
     WidgetTester tester, {
     required bool uploading,
+    bool downloading = false,
   }) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
@@ -43,7 +45,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
     final server = FakeSharingActivity(
-      answer: uploading ? traffic(up: true) : traffic(),
+      answer: traffic(up: uploading, down: downloading),
     );
     final monitor = SharingActivityMonitor(
       client: server,
@@ -135,6 +137,30 @@ void main() {
     expect(find.byType(SharingStopDialog), findsOneWidget);
     expect(find.text(IdleSharing.pauseTitle), findsOneWidget);
     expect(find.text(IdleSharing.stopTitle), findsOneWidget);
+  });
+
+  group('the popup opens with the remote on Close', () {
+    for (final (name, uploading, downloading) in [
+      ('downloading', false, true),
+      ('uploading', true, false),
+      ('both', true, true),
+    ]) {
+      testWidgets('while $name', (tester) async {
+        await mount(tester, uploading: uploading, downloading: downloading);
+        await focusRailTop(tester);
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expect(focusIn<SharingLight>(), isTrue);
+
+        await press(tester, LogicalKeyboardKey.select);
+        expect(find.byType(SharingStopDialog), findsOneWidget);
+        expect(focusedLabel(tester), 'Close');
+
+        // And select there is the way out, back to the rail.
+        await press(tester, LogicalKeyboardKey.select);
+        expect(find.byType(SharingStopDialog), findsNothing);
+        expect(focusIn<NavigationRail>(), isTrue);
+      });
+    }
   });
 
   testWidgets('with nothing going out the walk is exactly what it was', (
