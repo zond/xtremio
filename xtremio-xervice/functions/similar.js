@@ -25,14 +25,28 @@
  * any title without end, and would replace the answer for everybody
  * because one viewer disliked it.
  *
+ * **A model switch re-asks, slowly, by itself.** Every stored answer names
+ * the [MODEL] that gave it. A read that finds another model's answer
+ * serves it at once -- the viewer never waits on a switch -- and then asks
+ * the current model in the background, claiming the title first exactly
+ * as a first ask does, and replaces the document when the answer lands. A
+ * re-ask that fails leaves the stored answer where it was. At most
+ * [REASK_CAP] re-asks a day are spent this way (a counter document per day
+ * in `similarReasks`), so a switch costs a few days of trickle rather than
+ * one day of every title at once; past the cap, the old answer is served
+ * and nothing is asked. Switching the model is therefore: change [MODEL],
+ * deploy, done.
+ *
  * The question's wording is measured in `tool/recommendations/`. Changing
- * it means a new [QUESTION_VERSION], which is also what makes every title
- * be asked again.
+ * it means a new [QUESTION_VERSION], which is what makes every title be
+ * asked again at once -- the old answers are to another question and are
+ * not served while the new ones arrive.
  */
 
-const {getFirestore, FieldValue} = require('firebase-admin/firestore');
-
-/** Bump when the question, the schema or the model changes. */
+/**
+ * Bump when the question or the schema changes -- not for a new model,
+ * which re-asks by itself (see the header).
+ */
 const QUESTION_VERSION = 1;
 
 const MODEL = 'gemini-3.1-flash-lite';
@@ -40,6 +54,13 @@ const GEMINI =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const CINEMETA = 'https://v3-cinemeta.strem.io/meta';
 const COUNT = 10;
+
+/**
+ * The most background re-asks for a model switch in one UTC day. Two
+ * thousand Flash-Lite calls are well under a dollar; the most-opened titles
+ * are the ones read first, so they are the ones re-asked first.
+ */
+const REASK_CAP = 2000;
 
 /** How long a claim on a title keeps a second request from asking too. */
 const CLAIM_SECONDS = 60;
@@ -118,8 +139,8 @@ class Refusal extends Error {
 }
 
 /** `Avalon (2001)`: the name Cinemeta has for [id], and its year. */
-async function subjectOf(type, id) {
-  const response = await fetch(`${CINEMETA}/${type}/${id}.json`);
+async function subjectOf(fetchImpl, type, id) {
+  const response = await fetchImpl(`${CINEMETA}/${type}/${id}.json`);
   if (!response.ok) throw new Refusal(502, 'catalogue unreachable');
   const meta = (await response.json()).meta;
   if (!meta || typeof meta.name !== 'string' || !meta.name.trim()) {
@@ -151,17 +172,45 @@ function titlesIn(answer) {
       }));
 }
 
-async function ask(key, subject, about) {
-  const response = await fetch(GEMINI, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'x-goog-api-key': key},
-    body: JSON.stringify(body(subject, about)),
-  });
+async function ask(fetchImpl, key, subject, about) {
+  let response;
+  try {
+    response = await fetchImpl(GEMINI, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'x-goog-api-key': key},
+      body: JSON.stringify(body(subject, about)),
+    });
+  } catch (error) {
+    // The error's name only: its message or cause can carry the request.
+    throw new Refusal(502, `model unreachable (${error?.name ?? 'error'})`);
+  }
   if (!response.ok) {
     // The status and nothing else: a body can quote the request back.
     throw new Refusal(502, `model answered ${response.status}`);
   }
   return titlesIn(await response.json());
+}
+
+/** The model's answer about [type]/[id]: Cinemeta's name, then the model. */
+async function askAbout(deps, key, type, id) {
+  return ask(deps.fetch, key, await subjectOf(deps.fetch, type, id), TYPES[type]);
+}
+
+/** The document an answer is written as. */
+function answered(titles, now) {
+  return {
+    status: 'ready',
+    titles,
+    model: MODEL,
+    version: QUESTION_VERSION,
+    answeredAt: new Date(now),
+  };
+}
+
+/** A stored instant in milliseconds: a Firestore Timestamp, a number, or 0. */
+function millisOf(value) {
+  if (typeof value === 'number') return value;
+  return value?.toMillis?.() ?? 0;
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -171,39 +220,60 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * none. A title being asked about by another request right now is waited
  * for rather than asked again: two devices opening a new title at once pay
  * for one call.
+ *
+ * Answers `{titles, model, stale, reask}`. `stale` is an answer from
+ * another model than [MODEL]; `reask` says this request has claimed the
+ * title for a background re-ask ([reask]) and is the one to run it.
+ *
+ * [deps] is `{db, fetch, now, sleep}`: Firestore, `fetch`, `Date.now` and
+ * a delay, each a parameter so a test can stand in for it.
  */
-async function answerFor(key, type, id) {
-  const db = getFirestore();
+async function answerFor(deps, key, type, id) {
+  const {db, now} = deps;
   const ref = db.collection('similar').doc(`v${QUESTION_VERSION}_${type}_${id}`);
-  const deadline = Date.now() + WAIT_SECONDS * 1000;
+  const deadline = now() + WAIT_SECONDS * 1000;
   for (;;) {
     const claimed = await db.runTransaction(async (tx) => {
+      const at = now();
+      const day = new Date(at).toISOString().slice(0, 10);
+      const capRef = db.collection('similarReasks').doc(day);
+      // Every read before any write, as Firestore's transactions require.
       const doc = await tx.get(ref);
       const data = doc.exists ? doc.data() : null;
-      if (data?.status === 'ready') return {ready: data.titles};
-      const claimedAt = data?.claimedAt?.toMillis?.() ?? 0;
+      if (data?.status === 'ready') {
+        const answer = {titles: data.titles, model: data.model ?? null};
+        if (data.model === MODEL) return {...answer, stale: false};
+        // Another model's answer: served whatever happens next. Re-asked
+        // only when nobody holds the title already and today's re-asks are
+        // not spent.
+        if (at - millisOf(data.reaskClaimedAt) < CLAIM_SECONDS * 1000) {
+          return {...answer, stale: true};
+        }
+        const cap = await tx.get(capRef);
+        const spent = cap.exists ? cap.data().n ?? 0 : 0;
+        if (spent >= (deps.reaskCap ?? REASK_CAP)) {
+          return {...answer, stale: true};
+        }
+        tx.set(capRef, {n: spent + 1});
+        tx.set(ref, {...data, reaskClaimedAt: at});
+        return {...answer, stale: true, reask: true};
+      }
       if (data?.status === 'pending' &&
-          Date.now() - claimedAt < CLAIM_SECONDS * 1000) {
+          at - millisOf(data.claimedAt) < CLAIM_SECONDS * 1000) {
         return {wait: true};
       }
-      tx.set(ref, {status: 'pending', claimedAt: FieldValue.serverTimestamp()});
+      tx.set(ref, {status: 'pending', claimedAt: at});
       return {claimed: true};
     });
-    if (claimed.ready) return claimed.ready;
+    if (claimed.titles) return claimed;
     if (claimed.claimed) break;
-    if (Date.now() > deadline) throw new Refusal(503, 'still being asked');
-    await sleep(1000);
+    if (now() > deadline) throw new Refusal(503, 'still being asked');
+    await (deps.sleep ?? sleep)(1000);
   }
   try {
-    const titles = await ask(key, await subjectOf(type, id), TYPES[type]);
-    await ref.set({
-      status: 'ready',
-      titles,
-      model: MODEL,
-      version: QUESTION_VERSION,
-      answeredAt: FieldValue.serverTimestamp(),
-    });
-    return titles;
+    const titles = await askAbout(deps, key, type, id);
+    await ref.set(answered(titles, now()));
+    return {titles, model: MODEL, stale: false};
   } catch (error) {
     // Let the next request try: a claim left behind would hold the title
     // for a minute for nothing.
@@ -212,28 +282,104 @@ async function answerFor(key, type, id) {
   }
 }
 
-/** Mounts the route on [app]; [key] is the Gemini API key secret. */
-function mountSimilar(app, key) {
-  app.get('/similar/:type/:id', async (req, res) => {
+/**
+ * Asks [MODEL] about a title whose stored answer came from [was], and
+ * replaces the document when it answers.
+ *
+ * A failure leaves the stored answer as it is, and leaves the claim too:
+ * the title is tried again by the first read after [CLAIM_SECONDS], not by
+ * every read in the meantime. Never throws.
+ */
+async function reask(deps, key, type, id, was) {
+  const ref = deps.db.collection('similar')
+      .doc(`v${QUESTION_VERSION}_${type}_${id}`);
+  console.log(`similar ${type} ${id}: re-asking, ${was ?? 'no model'} -> ${MODEL}`);
+  try {
+    const titles = await askAbout(deps, key, type, id);
+    await ref.set(answered(titles, deps.now()));
+  } catch (error) {
+    console.warn(`similar ${type} ${id}: re-ask failed: ${error.message}`);
+  }
+}
+
+/**
+ * What the edge may keep, and for how long.
+ *
+ * A current answer changes only when the model or the question does, so
+ * the edge keeps it a day and then, for a week more, serves it at once
+ * while it fetches the next copy behind the viewer's back
+ * (`stale-while-revalidate`): a title is never slow at the edge, and a
+ * model switch reaches it within a day of the document being replaced. A
+ * day rather than the week this used to be, because that day is how long
+ * a replaced answer waits behind the old one.
+ *
+ * Another model's answer is about to be replaced, so the edge holds it ten
+ * minutes -- long enough to carry a busy title, short enough that the new
+ * answer is picked up soon after it lands -- and revalidates in the
+ * background for a day after that.
+ */
+const CACHE_CURRENT =
+  'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800';
+const CACHE_STALE =
+  'public, max-age=600, s-maxage=600, stale-while-revalidate=86400';
+
+/**
+ * The route's handler, apart from Express so a test can call it with a
+ * request and response of its own.
+ */
+function handler(key, deps) {
+  return async (req, res) => {
     const {type, id} = req.params;
     if (!Object.hasOwn(TYPES, type) || !ID.test(id)) {
       res.status(400).json({error: 'a Cinemeta movie or series id'});
       return;
     }
+    const d = deps();
+    let result;
     try {
-      const titles = await answerFor(key.value(), type, id);
-      // An answer never changes for a question version, so the edge may
-      // keep it: a repeat request is then not even a Firestore read.
-      res.set('Cache-Control', 'public, max-age=86400, s-maxage=604800');
-      res.json({titles, version: QUESTION_VERSION});
+      result = await answerFor(d, key.value(), type, id);
     } catch (error) {
       const status = error instanceof Refusal ? error.status : 500;
       // Never kept at the edge: a failure is not the answer.
       res.set('Cache-Control', 'no-store, max-age=0');
       console.warn(`similar ${type} ${id}: ${error.message}`);
       res.status(status).json({error: error.message});
+      return;
     }
-  });
+    res.set('Cache-Control', result.stale ? CACHE_STALE : CACHE_CURRENT);
+    res.json({titles: result.titles, version: QUESTION_VERSION,
+      model: result.model});
+    // After the answer has gone, and awaited rather than left floating: on
+    // Cloud Run (functions v2) an instance's CPU is throttled once nothing
+    // is still running for a request, so a promise left behind after the
+    // handler returned could stall for minutes or never finish, holding
+    // the claim for nothing. The viewer has the stored answer already;
+    // only the request's server side stays open until the re-ask is done.
+    if (result.reask) await reask(d, key.value(), type, id, result.model);
+  };
 }
 
-module.exports = {mountSimilar, titlesIn, question, QUESTION_VERSION};
+/** The real dependencies, made when the first request needs them. */
+function liveDeps() {
+  const {getFirestore} = require('firebase-admin/firestore');
+  return {db: getFirestore(), fetch, now: Date.now, sleep};
+}
+
+/** Mounts the route on [app]; [key] is the Gemini API key secret. */
+function mountSimilar(app, key, deps = liveDeps) {
+  app.get('/similar/:type/:id', handler(key, deps));
+}
+
+module.exports = {
+  mountSimilar,
+  handler,
+  answerFor,
+  titlesIn,
+  question,
+  QUESTION_VERSION,
+  MODEL,
+  REASK_CAP,
+  CLAIM_SECONDS,
+  CACHE_CURRENT,
+  CACHE_STALE,
+};

@@ -104,7 +104,8 @@ nothing.
 ## More like this
 
 `GET /similar/{type}/{id}` (a Cinemeta id, `movie` or `series`) answers
-`{"titles": [{title, year, kind, why}, …]}`: what a model suggests watching
+`{"titles": [{title, year, kind, why}, …], "version": 1, "model": "…"}`:
+what a model suggests watching
 after that title. It is its own function (`functions/similar.js`) with its
 own secret, `GEMINI_API_KEY`, so a Gemini outage cannot touch pairing. The
 question is built here from Cinemeta's name and year for the id, so nobody
@@ -113,6 +114,21 @@ stored in Firestore under the title and `QUESTION_VERSION` and served to
 everyone after -- one model call per title, ever, until the question
 changes. There is no "ask again". How the model and the wording were chosen
 is `tool/recommendations/README.md`.
+
+**Changing the model** is: change `MODEL` in `functions/similar.js`, deploy,
+done. Every stored answer names the model that gave it; a read that finds
+another model's answer serves it at once and then asks the new model in the
+background, replacing the stored answer when it lands (a failed re-ask
+leaves the old one). At most 2000 re-asks a day are spent this way
+(`REASK_CAP`, counted in `similarReasks/{day}`), so a switch trickles through
+the titles people actually open rather than spiking the bill; past the cap
+the old answer is served unchanged. `QUESTION_VERSION` is bumped only for a
+changed question or answer schema, and that re-asks every title at once.
+
+The edge keeps a current answer a day and serves it for a week beyond that
+while it fetches a fresh copy (`stale-while-revalidate`), so a replaced
+answer reaches the edge within a day; an answer from another model is kept
+ten minutes, so the replacement is picked up soon after it lands.
 
 ## Ratings
 
