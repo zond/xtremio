@@ -35,12 +35,16 @@ abstract final class FaceButtons {
     FocusNode? focusNode,
   }) {
     final on = current == Face.like;
-    return IconButton(
+    // On, the face is the grin on a filled accent disc: Material's filled
+    // sentiment glyphs cut the mouth so fine that both read as a neutral
+    // face from a sofa (zond, 2026-10-12), so the expression stays the
+    // outlined one and the disc says it is on.
+    return IconButton.filled(
       focusNode: focusNode,
       tooltip: on ? likedTooltip : likeTooltip,
       isSelected: on,
       icon: const Icon(Icons.sentiment_satisfied_outlined),
-      selectedIcon: const Icon(Icons.sentiment_satisfied),
+      selectedIcon: const Icon(Icons.sentiment_very_satisfied),
       onPressed: () => onFace(after(current, Face.like)),
     );
   }
@@ -52,12 +56,12 @@ abstract final class FaceButtons {
     FocusNode? focusNode,
   }) {
     final on = current == Face.dislike;
-    return IconButton(
+    return IconButton.filled(
       focusNode: focusNode,
       tooltip: on ? dislikedTooltip : dislikeTooltip,
       isSelected: on,
       icon: const Icon(Icons.sentiment_dissatisfied_outlined),
-      selectedIcon: const Icon(Icons.sentiment_dissatisfied),
+      selectedIcon: const Icon(Icons.sentiment_very_dissatisfied),
       onPressed: () => onFace(after(current, Face.dislike)),
     );
   }
