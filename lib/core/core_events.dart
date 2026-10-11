@@ -38,12 +38,18 @@ final class NewStateEvent extends CoreEvent {
   /// Wire names, including any this client does not know yet.
   final List<String> fieldNames;
 
-  /// The changed fields this client knows about.
+  /// The changed fields this client knows about, [CoreField.libraryItems]
+  /// with `ctx` ([CoreField.ridesOn]).
   List<CoreField> get fields => [
     for (final name in fieldNames) ?CoreField.fromWireName(name),
+    if (fieldNames.contains(CoreField.ctx.wireName) &&
+        !fieldNames.contains(CoreField.libraryItems.wireName))
+      CoreField.libraryItems,
   ];
 
-  bool touches(CoreField field) => fieldNames.contains(field.wireName);
+  bool touches(CoreField field) =>
+      fieldNames.contains(field.wireName) ||
+      fieldNames.contains(field.ridesOn.wireName);
 
   @override
   String toString() => 'NewStateEvent($fieldNames)';

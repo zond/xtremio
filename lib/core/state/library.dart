@@ -103,6 +103,20 @@ final class LibraryItemView {
   /// Videos (or, for movies, plays) counted as watched.
   int get timesWatched => (_state['timesWatched'] as num?)?.toInt() ?? 0;
 
+  /// `state.flaggedWatched`: the film was marked watched (a count on the
+  /// wire, read as whether it is set).
+  bool get flaggedWatched =>
+      ((_state['flaggedWatched'] as num?)?.toInt() ?? 0) > 0;
+
+  /// `state.watched`: which videos of a series were watched, as
+  /// stremio-core's `WatchedField` string (`watched_bitfield.dart` reads
+  /// it); null for a film or a series nothing was marked of.
+  String? get watchedField => _state['watched'] as String?;
+
+  /// `_ctime`: when the item was made -- for a title added by hand, when it
+  /// was added.
+  DateTime? get addedAt => _date(json['_ctime']);
+
   /// `LibraryItem::watched`: anything was ever watched to completion.
   bool get isWatched => timesWatched > 0;
 

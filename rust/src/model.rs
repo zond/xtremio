@@ -26,7 +26,7 @@ use stremio_core::runtime::msg::{Internal, Msg};
 use stremio_core::runtime::{Effects, UpdateWithCtx};
 use stremio_core::types::addon::Descriptor;
 use stremio_core::types::events::DismissedEventsBucket;
-use stremio_core::types::library::LibraryBucket;
+use stremio_core::types::library::{LibraryBucket, LibraryItem};
 use stremio_core::types::notifications::NotificationsBucket;
 use stremio_core::types::profile::Profile;
 use stremio_core::types::resource::{MetaItemPreview, PosterShape};
@@ -272,6 +272,22 @@ impl XtremioModel {
     #[cfg(test)]
     pub fn get_state_json(&self, field: &XtremioModelField) -> serde_json::Result<String> {
         self.snapshot(field)?.into_json()
+    }
+
+    /// Every item of the library bucket as `{"items": [...]}`, most recently
+    /// changed first: the ones `library` filters out too -- removed, and
+    /// temporary (played and never added) -- because the For you row reads
+    /// what was watched whether or not it was added, and leaves out
+    /// anything the library holds in any sense. Each item is the
+    /// `LibraryItem` exactly as stored.
+    pub fn library_items_json(&self) -> serde_json::Result<String> {
+        #[derive(Serialize)]
+        struct Items<'a> {
+            items: Vec<&'a LibraryItem>,
+        }
+        let mut items: Vec<&LibraryItem> = self.ctx.library.items.values().collect();
+        items.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| a.id.cmp(&b.id)));
+        serde_json::to_string(&Items { items })
     }
 
     /// Takes one field off the model in the cheapest form that no longer
@@ -632,6 +648,56 @@ mod tests {
             ctx["profile"]["settings"]["streamingServerUrl"],
             "http://127.0.0.1:11470/"
         );
+    }
+
+    #[test]
+    fn library_items_holds_removed_and_temporary_items_too() {
+        let item = |id: &str, removed: bool, temp: bool, mtime: &str| -> LibraryItem {
+            serde_json::from_value(serde_json::json!({
+                "_id": id, "name": id, "type": "movie", "poster": null,
+                "removed": removed, "temp": temp, "_ctime": mtime, "_mtime": mtime,
+                "state": {"timeWatched": 0, "timeOffset": 0, "overallTimeWatched": 0,
+                    "timesWatched": 1, "flaggedWatched": 1, "duration": 0,
+                    "lastWatched": mtime, "watched": null, "video_id": null},
+                "behaviorHints": {},
+            }))
+            .unwrap()
+        };
+        let profile = Profile::default();
+        let uid = profile.uid();
+        let (model, _effects) = XtremioModel::new(
+            profile,
+            LibraryBucket::new(
+                uid.clone(),
+                vec![
+                    item("tt1", false, false, "2026-01-01T00:00:00Z"),
+                    item("tt2", true, true, "2026-03-01T00:00:00Z"),
+                    item("tt3", true, false, "2026-02-01T00:00:00Z"),
+                ],
+            ),
+            StreamsBucket::new(uid.clone()),
+            ServerUrlsBucket::new::<XtremioEnv>(uid.clone()),
+            NotificationsBucket::new::<XtremioEnv>(uid.clone(), vec![]),
+            SearchHistoryBucket::new(uid.clone()),
+            DismissedEventsBucket::new(uid),
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&model.library_items_json().unwrap()).unwrap();
+        let ids: Vec<&str> = json["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["tt2", "tt3", "tt1"], "newest first, removed included");
+        assert_eq!(json["items"][0]["temp"], true);
+        assert_eq!(json["items"][0]["state"]["flaggedWatched"], 1);
+        // The library field itself leaves the removed ones out, which is
+        // the reason this exists.
+        let library: serde_json::Value =
+            serde_json::from_str(&model.get_state_json(&XtremioModelField::Library).unwrap())
+                .unwrap();
+        assert_eq!(library["catalog"], serde_json::json!([]), "unloaded");
     }
 
     #[test]

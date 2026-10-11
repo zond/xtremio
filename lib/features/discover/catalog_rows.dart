@@ -13,10 +13,13 @@ import '../../widgets/poster_tile.dart';
 import '../addons/addons_screen.dart';
 import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
+import '../for_you/for_you_controller.dart';
+import '../for_you/for_you_rules.dart';
 
-/// Discover's rows: a "Continue watching" row, then one row per catalog
-/// that can be asked with nothing chosen, of [type] or of every type
-/// (`board`, a `CatalogsWithExtra`).
+/// Discover's rows: a "Continue watching" row, a "For you" row
+/// ([ForYouController]), then one row per catalog that can be asked with
+/// nothing chosen, of [type] or of every type (`board`, a
+/// `CatalogsWithExtra`).
 ///
 /// `Load CatalogsWithExtra` only plans the catalogs; their first pages are
 /// fetched by `LoadRange` for the rows on screen (plus overscan), re-issued
@@ -66,6 +69,12 @@ class CatalogRows extends StatefulWidget {
       ? 260
       : 200;
 
+  /// The For you row's heading.
+  static const String forYouTitle = 'For you';
+
+  /// The For you long-press sheet's action.
+  static const String notInterestedLabel = 'Not interested';
+
   /// Rows requested beyond the visible ones, on each side.
   static const int overscanRows = 1;
 
@@ -90,6 +99,13 @@ class _CatalogRowsState extends State<CatalogRows> {
   CoreClient? _client;
   CoreFieldNotifier? _board;
   CoreFieldNotifier? _continueWatching;
+
+  /// The engine's whole library, removed and temporary items too: what
+  /// the For you row's sources and exclusions are read from.
+  CoreFieldNotifier? _libraryItems;
+  ForYouController? _forYou;
+  AppPrefs? _prefs;
+  AppPrefs? _ownPrefs;
 
   /// `ctx`, for the installed addons: a catalog that failed carries only
   /// the manifest URL it was asked at, and the profile is what turns that
@@ -123,6 +139,7 @@ class _CatalogRowsState extends State<CatalogRows> {
       _board?.removeListener(_onBoardChanged);
       _board?.dispose();
       _continueWatching?.dispose();
+      _libraryItems?.dispose();
       _ctx?.dispose();
       _client = client;
       _board = CoreFieldNotifier(client, CoreField.board)
@@ -131,12 +148,55 @@ class _CatalogRowsState extends State<CatalogRows> {
         client,
         CoreField.continueWatchingPreview,
       )..addListener(_onContinueWatchingChanged);
+      _libraryItems = CoreFieldNotifier(client, CoreField.libraryItems)
+        ..addListener(_tellForYou);
       _ctx = null;
       _requestedStart = null;
       _requestedEnd = null;
       client.dispatch(_loadAction());
       WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
     }
+    _bindForYou();
+  }
+
+  /// The preferences, and the For you row's controller over them: built
+  /// once per preferences, since it holds the work in flight.
+  void _bindForYou() {
+    final prefs =
+        PrefsScope.maybeOf(context) ?? (_ownPrefs ??= AppPrefs.inMemory());
+    if (identical(prefs, _prefs)) return;
+    _prefs?.removeListener(_onPrefsForYou);
+    _forYou?.dispose();
+    _prefs = prefs..addListener(_onPrefsForYou);
+    _forYou = ForYouController(
+      prefs: prefs,
+      ask: ForYouScope.of(context)(prefs),
+    );
+    _tellForYou();
+  }
+
+  /// Faces are preferences: a like, a dislike or a dismissal changes the
+  /// row. Only those -- every other preference leaves it alone.
+  Faces? _faces;
+  void _onPrefsForYou() {
+    final faces = _prefs?.faces;
+    if (faces == _faces) return;
+    _faces = faces;
+    _forYou?.facesChanged();
+  }
+
+  /// Hands the controller the library and the Continue watching row once
+  /// the library has been pulled.
+  void _tellForYou() {
+    final items = _libraryItems?.value;
+    final forYou = _forYou;
+    if (items == null || forYou == null) return;
+    forYou.update(
+      library: LibraryItemView.listFromJson(items['items']),
+      continueWatching: {
+        for (final item in _continueWatchingState.items) item.id,
+      },
+    );
   }
 
   @override
@@ -165,6 +225,10 @@ class _CatalogRowsState extends State<CatalogRows> {
     _board?.removeListener(_onBoardChanged);
     _board?.dispose();
     _continueWatching?.dispose();
+    _libraryItems?.dispose();
+    _prefs?.removeListener(_onPrefsForYou);
+    _forYou?.dispose();
+    _ownPrefs?.dispose();
     _ctx?.dispose();
     _boardFocus.dispose();
     super.dispose();
@@ -217,10 +281,10 @@ class _CatalogRowsState extends State<CatalogRows> {
   List<AddonFailure> _failures(CatalogsWithExtraState board) =>
       addonFailuresOf(board.failedRows, _profile);
 
-  /// The rows as laid out: continue watching first when it has items, then
-  /// every catalog row that has something to show — the ones the addon
-  /// answered empty and the ones it could not answer at all are both left
-  /// out.
+  /// The rows as laid out: continue watching first when it has items,
+  /// For you under it when it has any, then every catalog row that has
+  /// something to show — the ones the addon answered empty and the ones it
+  /// could not answer at all are both left out.
   List<_BoardRow> _rows(
     CatalogsWithExtraState board,
     ContinueWatchingState continueWatching,
@@ -230,8 +294,13 @@ class _CatalogRowsState extends State<CatalogRows> {
       for (final item in continueWatching.items)
         if (type == null || item.type == type) item,
     ];
+    final forYou = [
+      for (final title in _forYou?.titles ?? const <ForYouTitle>[])
+        if (type == null || title.item.type == type) title,
+    ];
     return [
       if (watching.isNotEmpty) _ContinueWatchingRow(watching),
+      if (forYou.isNotEmpty) _ForYouRow(forYou),
       for (final row in board.visibleRows) _CatalogRow(row),
     ];
   }
@@ -320,9 +389,29 @@ class _CatalogRowsState extends State<CatalogRows> {
     _onContinueWatchingChanged();
   }
 
+  /// The For you tile's long press: "Not interested", asked first, which
+  /// marks the title dismissed -- kept on the device and synced like a
+  /// face -- and takes it off the row at once.
+  Future<void> _forYouLongPress(ForYouTitle title) async {
+    final focused = FocusManager.instance.primaryFocus;
+    final at = _boardFocus.hasFocus ? focused?.rect : null;
+    final dismiss = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (_) => _NotInterestedSheet(title: title),
+    );
+    final prefs = _prefs;
+    if (!(dismiss ?? false) || !mounted || prefs == null) return;
+    await markFace(context, prefs, title.item.id, Face.dismissed);
+    if (at == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _refocusAfterRemoval(at),
+    );
+  }
+
   /// Once the row no longer has the title the remote was on, the remote
   /// goes to the tile nearest where it was.
   void _onContinueWatchingChanged() {
+    _tellForYou();
     final removed = _removed;
     if (removed == null ||
         _continueWatchingState.items.any((item) => item.id == removed.id)) {
@@ -363,7 +452,7 @@ class _CatalogRowsState extends State<CatalogRows> {
   Widget build(BuildContext context) => _body(_RowLayout.of(context));
 
   Widget _body(_RowLayout layout) => ListenableBuilder(
-    listenable: Listenable.merge([_board!, _continueWatching!, _ctx]),
+    listenable: Listenable.merge([_board!, _continueWatching!, _ctx, _forYou]),
     builder: (context, _) {
       if (_board!.value == null) {
         return const Center(child: CircularProgressIndicator());
@@ -404,6 +493,13 @@ class _CatalogRowsState extends State<CatalogRows> {
                 ),
                 onLongPress: (item) =>
                     unawaited(_continueWatchingLongPress(item)),
+              ),
+              _ForYouRow(:final titles) => _ForYouRowView(
+                titles: titles,
+                layout: layout,
+                isFirstRow: widget.defaultFocus && index == 0,
+                onOpen: (title) => _openDetails(title.item.type, title.item.id),
+                onLongPress: (title) => unawaited(_forYouLongPress(title)),
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
@@ -602,6 +698,13 @@ final class _ContinueWatchingRow extends _BoardRow {
 
   /// The row's items: every one, or only those of the type being shown.
   final List<LibraryItemView> items;
+}
+
+final class _ForYouRow extends _BoardRow {
+  const _ForYouRow(this.titles);
+
+  /// What the row shows: of every type, or only of the type being shown.
+  final List<ForYouTitle> titles;
 }
 
 final class _CatalogRow extends _BoardRow {
@@ -862,6 +965,196 @@ class _ContinueWatchingRowView extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "For you": suggestions from the library's watched-through and saved
+/// titles ([ForYouController]), each with the line that says which.
+///
+/// Off a television the reason is the caption's second line. On one the
+/// caption is one line like every other row's, so the reason is the
+/// heading's subtitle instead, following the remote along the row, and
+/// every tile says it to a screen reader either way.
+class _ForYouRowView extends StatefulWidget {
+  const _ForYouRowView({
+    required this.titles,
+    required this.layout,
+    required this.isFirstRow,
+    required this.onOpen,
+    required this.onLongPress,
+  });
+
+  final List<ForYouTitle> titles;
+  final _RowLayout layout;
+  final bool isFirstRow;
+  final ValueChanged<ForYouTitle> onOpen;
+  final ValueChanged<ForYouTitle> onLongPress;
+
+  @override
+  State<_ForYouRowView> createState() => _ForYouRowViewState();
+}
+
+class _ForYouRowViewState extends State<_ForYouRowView> {
+  /// The tile the remote is on, for the heading's subtitle.
+  ForYouTitle? _focused;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = widget.layout;
+    final isTv = DeviceScope.isTv(context);
+    final focused = _focused;
+    return Column(
+      children: [
+        _RowHeader(
+          title: CatalogRows.forYouTitle,
+          subtitle: isTv && focused != null && widget.titles.contains(focused)
+              ? focused.reasonLine
+              : null,
+          height: layout.headerHeight,
+          inline: layout.inlineHeader,
+        ),
+        Expanded(
+          child: _HorizontalStrip(
+            padding: layout.stripPadding,
+            itemCount: widget.titles.length,
+            itemBuilder: (context, index) {
+              final title = widget.titles[index];
+              return SizedBox(
+                width: layout.tileWidthFor(title.item.posterShape),
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  includeSemantics: false,
+                  onFocusChange: (has) {
+                    if (has) {
+                      setState(() => _focused = title);
+                    } else if (_focused == title) {
+                      setState(() => _focused = null);
+                    }
+                  },
+                  child: _ForYouTile(
+                    title: title,
+                    onTap: () => widget.onOpen(title),
+                    onLongPress: () => widget.onLongPress(title),
+                    defaultFocus: widget.isFirstRow && index == 0,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        SizedBox(height: layout.bottomPadding),
+      ],
+    );
+  }
+}
+
+/// One suggestion: the poster, the name, and -- off a television -- why.
+class _ForYouTile extends StatelessWidget {
+  const _ForYouTile({
+    required this.title,
+    required this.onTap,
+    required this.onLongPress,
+    this.defaultFocus = false,
+  });
+
+  final ForYouTitle title;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final bool defaultFocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isTv = DeviceScope.isTv(context);
+    final item = title.item;
+    return FocusableTile(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      memoryId: 'for-you/${item.id}',
+      defaultFocus: defaultFocus,
+      child: Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: '${item.name}. ${title.reasonLine}',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: PosterImage(url: item.poster)),
+            SizedBox(height: isTv ? PosterTile.tvCaptionGap : 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                PosterTile.captionInset,
+                0,
+                PosterTile.captionInset,
+                PosterTile.captionInset,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (!isTv)
+                    Text(
+                      title.reasonLine,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The For you long press: "Not interested", or Cancel -- where a
+/// television's remote starts, as on the Continue watching sheet, so a key
+/// held a moment too long dismisses nothing.
+class _NotInterestedSheet extends StatelessWidget {
+  const _NotInterestedSheet({required this.title});
+
+  final ForYouTitle title;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          title: Text(
+            title.item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          subtitle: Text(title.reasonLine, maxLines: 1),
+        ),
+        ListTile(
+          leading: const Icon(Icons.thumb_down_off_alt_outlined),
+          title: const Text(CatalogRows.notInterestedLabel),
+          onTap: () => Navigator.of(context).pop(true),
+        ),
+        ListTile(
+          autofocus: DeviceScope.isTv(context),
+          leading: const Icon(Icons.arrow_back),
+          title: const Text('Cancel'),
+          onTap: () => Navigator.of(context).pop(false),
+        ),
+      ],
+    ),
+  );
 }
 
 class _CatalogRowView extends StatelessWidget {

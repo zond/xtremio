@@ -7,7 +7,12 @@ void main() {
     expect(event, isA<NewStateEvent>());
     final newState = event as NewStateEvent;
     expect(newState.fieldNames, ['board', 'ctx']);
-    expect(newState.fields, [CoreField.board, CoreField.ctx]);
+    // The whole library rides `ctx` (`CoreField.ridesOn`).
+    expect(newState.fields, [
+      CoreField.board,
+      CoreField.ctx,
+      CoreField.libraryItems,
+    ]);
     expect(newState.touches(CoreField.board), isTrue);
     expect(newState.touches(CoreField.player), isFalse);
   });

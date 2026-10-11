@@ -156,6 +156,33 @@ and `spdif-truehd` compiled in, so `--audio-spdif=truehd` could bitstream
 to a capable receiver. Worth one experiment on the device; it helps only
 viewers with an AVR that takes it.
 
+## Recommendations for the viewer -- chosen, built, one path deferred
+
+What was wanted: a row that knows what this viewer likes, not only what one
+title is like. What was built is the For you row
+([ARCHITECTURE.md](ARCHITECTURE.md#for-you)): the viewer's own library --
+what they watched through, what they added, what they liked -- as sources,
+each source's "More like this" answer as the candidates, a weighted vote
+across them, and the catalogue check every suggestion already goes
+through. Chosen because every part of it already existed and was already
+paid for: the answers are the ones the server keeps per title for
+everybody, so the row costs no new model calls and no key on the device,
+it is worked out on the device from data the device already holds, and
+the only thing the viewer's taste adds to the service is a set of title
+ids under their account (the faces), which they can delete.
+
+**Considered and deferred: collaborative filtering over MovieLens.** The
+MovieLens ratings (tens of millions of ratings by real people) would give
+"people who liked these also liked" -- a different and in places better
+signal than a model's "feels like" -- but it is a model to train and
+host, a dataset licence that is research-only for the large sets, a
+mapping from MovieLens ids to IMDb ids that loses titles, and nothing
+newer than the last dump. The vote over per-title answers gives most of
+the row for none of that. Worth picking up if the row turns out to
+narrow too fast onto a few titles, which is what a per-title answer
+cannot correct and a co-rating model can; the faces it would need as
+input are already collected.
+
 ## Closed, and staying closed
 
 * **iOS.** No forks are carried for it.

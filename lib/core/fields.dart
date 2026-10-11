@@ -12,12 +12,23 @@ enum CoreField {
   library('library'),
   installedAddons('installed_addons'),
   remoteAddons('remote_addons'),
-  addonDetails('addon_details');
+  addonDetails('addon_details'),
+
+  /// Not a model field: the whole library bucket, removed and temporary
+  /// items too, which `ctx` holds and does not serialize (`LIBRARY_ITEMS`
+  /// in `rust/src/core.rs`). No `NewState` names it; it changes when the
+  /// library does, which is a change to `ctx`, so a `NewState` naming
+  /// `ctx` touches it too ([ridesOn]).
+  libraryItems('library_items');
 
   const CoreField(this.wireName);
 
   /// The `snake_case` name stremio-core uses for this field.
   final String wireName;
+
+  /// The model field whose `NewState` says this one changed: itself, but
+  /// for [libraryItems], which is part of `ctx`.
+  CoreField get ridesOn => this == libraryItems ? ctx : this;
 
   static final Map<String, CoreField> _byWireName = {
     for (final field in values) field.wireName: field,

@@ -72,14 +72,15 @@ final class MoreLikeThis {
     // The suggestions are remembered across restarts and the *resolution*
     // is not: it is a handful of searches against whatever the catalogues
     // hold today, and a poster that changed is a poster that should change.
-    final suggestions = await _suggestionsFor(type: type, id: id);
+    final suggestions = await suggestionsFor(type: type, id: id);
     return resolveSuggestions(suggestions, subjectId: id, search: search);
   }
 
   /// What the model said about this title: off the preferences file when
   /// this device has asked before, off the server when it has not, and an
-  /// empty list when the ask failed.
-  Future<List<SuggestedTitle>> _suggestionsFor({
+  /// empty list when the ask failed. Unresolved: the For you row ranks
+  /// these before it asks the catalogue about the best of them.
+  Future<List<SuggestedTitle>> suggestionsFor({
     required String type,
     required String id,
   }) async {

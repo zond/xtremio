@@ -10,6 +10,7 @@ import 'buffer_ahead.dart';
 import 'details_visits.dart';
 import 'drive_link.dart';
 import 'faces.dart';
+import 'show_episodes.dart';
 import 'local_media_files.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
@@ -232,6 +233,15 @@ class AppPrefs extends ChangeNotifier {
   /// disliked, not interested (see [Faces]). Ids and times only.
   static const String facesKey = 'faces';
 
+  /// The `showEpisodes` key: each series' episode list as the For you row
+  /// last asked Cinemeta for it (see [ShowEpisodesMemory]).
+  static const String showEpisodesKey = 'showEpisodes';
+
+  /// The `forYou` key: the For you row as last worked out -- its titles,
+  /// their reasons, when, and a signature of the sources
+  /// (`ForYouController`). Kept as the controller wrote it.
+  static const String forYouKey = 'forYou';
+
   /// The `titleRatings` key: the scores the server has told this device
   /// about each title (see [TitleRatingsMemory]), so a title opened again
   /// shows them in its first frame.
@@ -362,6 +372,16 @@ class AppPrefs extends ChangeNotifier {
   DetailsVisitMemory get detailsVisits => _detailsVisits;
 
   Faces _faces = Faces.empty;
+
+  ShowEpisodesMemory _showEpisodes = ShowEpisodesMemory.empty;
+
+  /// The episode lists the For you row has asked for ([showEpisodesKey]).
+  ShowEpisodesMemory get showEpisodes => _showEpisodes;
+
+  Map<String, dynamic>? _forYou;
+
+  /// The For you row as last worked out ([forYouKey]); null for never.
+  Map<String, dynamic>? get forYou => _forYou;
 
   /// What the viewer said about titles ([facesKey]).
   Faces get faces => _faces;
@@ -593,6 +613,13 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(showEpisodesKey)) {
+      _showEpisodes = ShowEpisodesMemory.fromJson(stored[showEpisodesKey]);
+    }
+    if (loaded(forYouKey)) {
+      final forYou = stored[forYouKey];
+      if (forYou is Map<String, dynamic>) _forYou = forYou;
+    }
     if (loaded(titleRatingsKey)) {
       final ratings = TitleRatingsMemory.fromJson(stored[titleRatingsKey]);
       if (ratings != _titleRatings) {
@@ -802,6 +829,20 @@ class AppPrefs extends ChangeNotifier {
       facesKey,
       value.marks.isEmpty && value.clearedAt == 0 ? null : value.toJson(),
     );
+  }
+
+  /// Stores the episode lists. Tells no listener: the row that asked has
+  /// them in hand.
+  Future<void> setShowEpisodes(ShowEpisodesMemory value) async {
+    _showEpisodes = value;
+    await _write(showEpisodesKey, value.shows.isEmpty ? null : value.toJson());
+  }
+
+  /// Stores the For you row as worked out. Tells no listener, for the same
+  /// reason.
+  Future<void> setForYou(Map<String, dynamic>? value) async {
+    _forYou = value;
+    await _write(forYouKey, value);
   }
 
   /// Stores the remembered scores, or removes the key once nothing is.

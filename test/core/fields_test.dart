@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
 void main() {
-  test('every field has the snake_case wire name of the Rust model', () {
+  test('every field has the snake_case wire name of the Rust model, and '
+      'the whole library its own', () {
     expect(
       {for (final field in CoreField.values) field: field.wireName},
       {
@@ -18,8 +19,23 @@ void main() {
         CoreField.installedAddons: 'installed_addons',
         CoreField.remoteAddons: 'remote_addons',
         CoreField.addonDetails: 'addon_details',
+        CoreField.libraryItems: 'library_items',
       },
     );
+  });
+
+  test('the whole library rides ctx: a ctx change is a library change', () {
+    final ctx =
+        CoreEvent.parse('{"name":"NewState","args":["ctx"]}') as NewStateEvent;
+    expect(ctx.touches(CoreField.libraryItems), isTrue);
+    expect(ctx.fields, [CoreField.ctx, CoreField.libraryItems]);
+    final board = CoreEvent.parse(
+      '{"name":"NewState","args":["board"]}',
+    ) as NewStateEvent;
+    expect(board.touches(CoreField.libraryItems), isFalse);
+    expect(board.fields, [CoreField.board]);
+    expect(CoreField.libraryItems.ridesOn, CoreField.ctx);
+    expect(CoreField.board.ridesOn, CoreField.board);
   });
 
   test('wire names round-trip through fromWireName', () {

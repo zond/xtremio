@@ -64,3 +64,5 @@ export 'xervice_identity.dart';
 export 'faces.dart';
 export 'faces_sync.dart';
 export 'xervice_scope.dart';
+export 'show_episodes.dart';
+export 'watched_bitfield.dart';

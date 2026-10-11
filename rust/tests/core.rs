@@ -107,6 +107,8 @@ fn core_lifecycle() -> anyhow::Result<()> {
         core_dispatch(r#"{"field":"nope","action":{"action":"Unload"}}"#.into()).unwrap_err();
     assert!(error.to_string().contains("field"), "{error}");
     assert!(core_get_state("nope".into()).is_err());
+    // The whole library, which no model field is: empty on a fresh core.
+    assert_eq!(state("library_items"), serde_json::json!({"items": []}));
     core_dispatch(r#"{"field":"discover","action":{"action":"Unload"}}"#.into())?;
     let discover = state("discover");
     assert!(discover["selected"].is_null(), "{discover}");

@@ -630,6 +630,14 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
     })
 }
 
+/// The name [`get_state`] answers the whole library under: every item of
+/// the engine's library bucket, removed and temporary ones included
+/// ([`XtremioModel::library_items_json`]). Not a model field -- `ctx`
+/// holds the bucket and does not serialize it -- so it rides `ctx`'s
+/// `NewState`: the Dart side re-pulls it whenever `ctx` changes
+/// (`CoreField.libraryItems`).
+pub const LIBRARY_ITEMS: &str = "library_items";
+
 /// Serializes one model field (`snake_case` name) to JSON.
 ///
 /// The model's read lock is held for the snapshot alone and let go before
@@ -641,6 +649,14 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
 /// ever saw. See [`crate::model::FieldSnapshot`] for what a snapshot costs
 /// per field.
 pub fn get_state(field: &str) -> anyhow::Result<String> {
+    if field == LIBRARY_ITEMS {
+        return with_runtime(|runtime| {
+            let model = runtime
+                .model()
+                .map_err(|_| anyhow::anyhow!("core model lock is poisoned; re-initialize"))?;
+            model.library_items_json().context("serialize the library")
+        });
+    }
     let field = parse_field(field)?;
     let snapshot = with_runtime(|runtime| {
         let model = runtime

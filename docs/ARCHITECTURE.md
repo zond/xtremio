@@ -1065,6 +1065,60 @@ the same title and a year within one. Nothing in this path throws; every
 failure is an empty row. Which model is asked, and how that was measured, is
 [tool/recommendations/README.md](../tool/recommendations/README.md).
 
+### For you
+
+A row on Discover under Continue watching (`_ForYouRowView` in
+`catalog_rows.dart`), worked out on the device by `ForYouController`
+(`lib/features/for_you/`) from the whole library and the faces. The whole
+library is not a model field: `ctx` holds the bucket and does not
+serialize it, so `core_get_state("library_items")` answers it
+(`XtremioModel::library_items_json`, removed and temporary items
+included), and `CoreField.libraryItems` re-pulls it whenever a `NewState`
+names `ctx` (`CoreField.ridesOn`).
+
+**Sources** (`for_you_rules.dart`). A title is a source for each of these
+it is, weight one each, so a title in both counts twice:
+
+- **watched**: a film with `timesWatched > 0` or `flaggedWatched`; a
+  series once every episode of one season numbered one or more is
+  watched, or every episode it has when it has no such season. The
+  watched marks are stremio-core's per-video bitfield (`state.watched`),
+  read by position against the show's episode list in stremio-core's own
+  order (`watched_bitfield.dart`, a port held to stremio-core's own
+  fields); the list is asked of Cinemeta once per show and kept
+  (`showEpisodes`).
+- **saved**: added by hand, `temp == false` and `removed == false`.
+
+A happy face adds one; a sad face makes the title no source at all. Only
+`movie` and `series` are sources, and only the latest 96 (`maxSources`),
+which keeps a run inside the 128 answers `SimilarMemory` keeps.
+
+**Candidates.** Each source's "More like this" answer
+(`MoreLikeThis.suggestionsFor`, through the same memory, so a title already
+opened costs nothing), asked as its own type. A title named by several
+sources scores the sum of their weights; ties go to its best place in an
+answer, then to the latest source. They are confirmed against Cinemeta in
+rank order exactly as "More like this" confirms its own -- title and year,
+or dropped -- and the row stops at 30. Anything in the library in any
+sense, on Continue watching, disliked or dismissed is left out, and the
+filter is applied again on every draw so a dismissal takes the tile off at
+once. The reason line names the heaviest source that named the title:
+"Because you liked / watched / saved X".
+
+**When.** The result is kept (`forYou`: titles, reasons, when, and a
+signature of the sources) and drawn at once on the next start; it is
+worked out again when the signature changes and otherwise at most once a
+day. The server's answers and the episode lists go four at a time, the
+catalogue searches four at a time beside them, and a first run with
+nothing kept draws the row from the first answers and fills it as the rest
+arrive. On a television the caption is the name alone, as every row's is,
+and the heading carries the focused tile's reason; every tile says it to a
+screen reader. A long press asks **Not interested**, which is a
+`dismissed` face: kept and synced like the others
+([Likes and dislikes](#likes-and-dislikes)). Tests:
+`test/features/for_you_rules_test.dart`, `test/features/for_you_row_test.dart`,
+`test/core/watched_bitfield_test.dart`.
+
 ## Ratings
 
 The details header shows a title's scores: IMDb, TMDB, Rotten Tomatoes'

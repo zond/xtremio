@@ -31,6 +31,16 @@ Android TV layout are all built. What is not is in the README's
   it rewinds the title and dismisses its new-episode notifications, as
   Stremio's own "Dismiss" does; the library and the watched marks are left
   alone.
+- **For you** is a row under Continue watching (above the catalogs, on
+  every device): titles like the ones the viewer watched through, added by
+  hand or liked, from the same "More like this" answers a details page
+  shows, each with the line that says which ("Because you watched ...").
+  It leaves out anything in the library in any sense, on Continue
+  watching, disliked or dismissed; a long press (a held select) offers
+  **Not interested**. It is worked out on the device, kept, and worked
+  out again when the sources or the faces change and otherwise once a
+  day; with nothing kept it appears as the first answers arrive. Hidden
+  when it has nothing to show ([For you](ARCHITECTURE.md#for-you)).
 - **Search** asks every addon that supports it, groups the hits per addon,
   and accounts for the addons that could not be searched the same way.
 
