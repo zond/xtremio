@@ -10,6 +10,7 @@ import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
 import 'features/cast/google_cast_client.dart';
 import 'features/downloads/downloads_screen.dart';
+import 'features/drive/drive_match.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
 import 'features/player/player_screen.dart';
@@ -142,6 +143,7 @@ class XtremioApp extends StatefulWidget {
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
     this.xervice,
+    this.driveShared = fillSharedDrive,
     this.serverBackground = const RustServerBackgroundControl(),
     this.sharingHold = const RustIdleSharingHold(),
     this.updates,
@@ -169,6 +171,10 @@ class XtremioApp extends StatefulWidget {
   /// Drive grants). Null keeps all of it on the device, which is what a
   /// test that does not hand in a fake wants: no request leaves it.
   final XerviceHttp? xervice;
+
+  /// What a Drive grant taken from the account's vault is followed by:
+  /// the files it reaches listed and matched. A test hands in its own.
+  final Future<void> Function(DriveAccount account) driveShared;
 
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
@@ -393,6 +399,7 @@ class _XtremioAppState extends State<XtremioApp> {
       final vault = _driveVault = DriveVault(
         identity: identity,
         account: _drive,
+        adopted: () => widget.driveShared(_drive),
       );
       _drive.pairedSink = vault.store;
     }

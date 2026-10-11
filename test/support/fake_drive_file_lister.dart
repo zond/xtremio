@@ -33,7 +33,12 @@ class FakeDriveFileLister implements DriveFileLister {
   static DriveListing listing(Map<String, String> namesById) =>
       DriveFilesListed({
         for (final named in namesById.entries)
-          named.key: (name: named.value, height: null, durationMillis: null),
+          named.key: (
+            name: named.value,
+            height: null,
+            durationMillis: null,
+            mimeType: 'video/x-matroska',
+          ),
       });
 
   /// A complete listing of files Drive has measured.

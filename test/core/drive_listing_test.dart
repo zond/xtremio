@@ -183,29 +183,59 @@ void main() {
       expect(account.files.forFile('drive-file-1')!.match, _arrival);
     });
 
-    test(
-      'a file the listing names that was never stored here is not added',
-      () async {
-        // The listing reaches every file the account ever picked through this
-        // client, including on somebody's other television. The stored list
-        // is what was linked *here*.
-        final account = await _account([_file('drive-file-1', 'ep6.avi')]);
+    test('a file the listing names that was never stored here is added: '
+        'picked on another device, it is the same grant', () async {
+      // The listing reaches every file the account ever picked through this
+      // client, including on somebody's other television -- which is what
+      // a grant shared through the account's vault is for.
+      final account = await _account([_file('drive-file-1', 'ep6.avi')]);
 
-        await reloadLinkedDriveFiles(
-          account: account,
-          lister: FakeDriveFileLister(
-            answers: [
-              FakeDriveFileLister.listing({
-                'drive-file-1': 'ep6.avi',
-                'picked-somewhere-else': 'Dune.2021.mkv',
-              }),
-            ],
-          ),
-        );
+      final outcome = await reloadLinkedDriveFiles(
+        account: account,
+        lister: FakeDriveFileLister(
+          answers: [
+            FakeDriveFileLister.listing({
+              'drive-file-1': 'ep6.avi',
+              'picked-somewhere-else': 'Dune.2021.mkv',
+            }),
+          ],
+        ),
+      );
 
-        expect(_stored(account), {'drive-file-1': 'ep6.avi'});
-      },
-    );
+      expect(_stored(account), {
+        'drive-file-1': 'ep6.avi',
+        'picked-somewhere-else': 'Dune.2021.mkv',
+      });
+      expect(
+        account.files.forFile('picked-somewhere-else')!.mimeType,
+        'video/x-matroska',
+      );
+      expect((outcome as DriveReloadDone).added, 1);
+      expect(
+        driveReloadMessage(outcome),
+        'Added 1 file picked on another device.',
+      );
+    });
+
+    test('a folder the listing names is not added', () async {
+      final account = await _account([]);
+      await reloadLinkedDriveFiles(
+        account: account,
+        lister: FakeDriveFileLister(
+          answers: [
+            FakeDriveFileLister.measured({
+              'a-folder': (
+                name: 'Season 1',
+                height: null,
+                durationMillis: null,
+                mimeType: driveFolderMimeType,
+              ),
+            }),
+          ],
+        ),
+      );
+      expect(account.files.entries, isEmpty);
+    });
 
     test('a file Drive named with nothing this build can read keeps its '
         'stored name rather than being emptied', () async {
@@ -242,6 +272,7 @@ void main() {
                   name: 'ep6.avi',
                   height: 1080,
                   durationMillis: 2820000,
+                  mimeType: 'video/x-msvideo',
                 ),
               }),
             ],
@@ -438,6 +469,7 @@ void main() {
           name: 'Arrival.2016.mkv',
           height: 2160,
           durationMillis: 6960000,
+          mimeType: 'video/x-matroska',
         ),
       });
       expect(page.$2, isNull, reason: 'no token is the last page');
@@ -461,11 +493,13 @@ void main() {
           name: 'ep6.avi',
           height: null,
           durationMillis: null,
+          mimeType: '',
         ));
         expect(page.$1['drive-file-2'], (
           name: 'ep7.avi',
           height: null,
           durationMillis: null,
+          mimeType: '',
         ));
       },
     );
@@ -521,6 +555,13 @@ void main() {
         driveReloadMessage(const DriveReloadDone(renamed: 2, removed: 1)),
         '2 files renamed in Drive, and removed 1 file this device can no '
         'longer reach.',
+      );
+      expect(
+        driveReloadMessage(
+          const DriveReloadDone(renamed: 1, removed: 1, added: 2),
+        ),
+        'Added 2 files picked on another device, 1 file renamed in Drive, '
+        'and removed 1 file this device can no longer reach.',
       );
     });
   });

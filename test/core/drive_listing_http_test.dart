@@ -134,6 +134,11 @@ void main() {
         'videoMediaMetadata(width,height,durationMillis))',
       );
       expect(asked.queryParameters['q'], 'trashed = false');
+      // Drive's largest page, and shared drives included: a file picked out
+      // of one is granted like any other.
+      expect(asked.queryParameters['pageSize'], '1000');
+      expect(asked.queryParameters['supportsAllDrives'], 'true');
+      expect(asked.queryParameters['includeItemsFromAllDrives'], 'true');
     });
 
     test('pages to the end, and answers one whole listing', () async {
@@ -368,7 +373,7 @@ void main() {
               'files': [
                 {'id': 'drive-file-1', 'name': 'ep6.avi'},
               ],
-              'filler': 'x' * (600 * 1024),
+              'filler': 'x' * (5 * 1024 * 1024),
             },
           ),
         ];

@@ -898,16 +898,20 @@ pairing also puts it in the account's vault on xtremio-xervice
 there with AES-256-GCM under the `GRANT_KEY` secret), and a device of the
 same account with no grant takes it from there at start and at a sign-in
 (`GET`, through `DriveAccount.adoptSharedGrant`: the same store and the
-same `grantSink` as a pairing). A device with a grant of its own, or one
+same `grantSink` as a pairing), and then lists and matches every file the
+grant reaches (`fillSharedDrive`), so the titles have their Drive sources
+before the Library is opened. A device with a grant of its own, or one
 Google refused, never takes the vault's, and only a pairing writes the
 vault, so **Forget my Drive grants everywhere** (Settings, `DELETE`) stays
 forgotten; it then points at myaccount.google.com/permissions, which is
-where the grant itself is revoked. A grant taken from the vault links no
-files: the list is what *this* device picked, and Reload adds nothing.
-Tests: `test/core/drive_vault_test.dart`, `test/app_xervice_test.dart`.
-**Reload** asks Drive what the files are called now
-(`lib/core/drive_listing.dart`), and only a complete listing writes -- a
-partial one deletes nothing.
+where the grant itself is revoked. Tests: `test/core/drive_vault_test.dart`,
+`test/features/drive_shared_grant_test.dart`, `test/app_xervice_test.dart`.
+**Reload** lists every file the grant reaches (`files.list`, a thousand a
+page, shared drives included; `lib/core/drive_listing.dart`): stored files
+take Drive's current names, stored files the listing no longer names are
+dropped, and files it names that are not stored -- picked on another
+device of the same Google account -- are added (folders aside), then
+matched. Only a complete listing writes; a partial one changes nothing.
 
 **Matching** a file to a title uses its name alone
 (`lib/features/drive/drive_match.dart`): a loose title plus a strict check,

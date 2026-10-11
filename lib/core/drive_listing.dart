@@ -183,10 +183,19 @@ class XtremioDriveFileLister implements DriveFileLister {
       'nextPageToken,files(id,name,mimeType,'
       'videoMediaMetadata(width,height,durationMillis))';
 
-  /// How many files one page asks for. Drive's own maximum is 1000; a
-  /// hundred keeps one answer small enough to read in a couple of
-  /// kilobytes and a viewer's whole list is normally one page.
-  static const int pageSize = 100;
+  /// Asked of every page: a file a viewer picked out of a shared drive is
+  /// granted like any other, and `files.list` leaves shared drives out
+  /// unless told otherwise.
+  static const Map<String, String> allDrives = {
+    'supportsAllDrives': 'true',
+    'includeItemsFromAllDrives': 'true',
+  };
+
+  /// How many files one page asks for: Drive's own maximum. A reload now
+  /// adds what other devices picked, so the listing is the account's whole
+  /// set of picks rather than this device's handful, and one page of a
+  /// thousand is fewer round trips than ten of a hundred.
+  static const int pageSize = 1000;
 
   /// How many pages are walked before the answer is refused outright.
   ///
@@ -196,11 +205,11 @@ class XtremioDriveFileLister implements DriveFileLister {
   /// keep away from the store. Fifty pages is five thousand files, against
   /// a hundred per pairing, so reaching it means a page token that never
   /// ends rather than a large Drive.
-  static const int maxPages = 50;
+  static const int maxPages = 5;
 
   /// How much of one answer is read before it is called malformed. A page
-  /// of a hundred ids and names is a few tens of kilobytes.
-  static const int _maxBodyBytes = 512 * 1024;
+  /// of a thousand ids, names and measurements is a few hundred kilobytes.
+  static const int _maxBodyBytes = 4 * 1024 * 1024;
 
   @override
   Future<DriveListing> listFiles({required String refreshToken}) async {
@@ -280,6 +289,7 @@ class XtremioDriveFileLister implements DriveFileLister {
         'fields': fields,
         'pageSize': '$pageSize',
         'pageToken': ?pageToken,
+        ...allDrives,
       },
     );
     final (status, json) = await _exchange(
@@ -348,9 +358,11 @@ class XtremioDriveFileLister implements DriveFileLister {
     final id = one['id'];
     if (id is! String || id.trim().isEmpty) continue;
     final name = one['name'];
+    final mime = one['mimeType'];
     final measured = one['videoMediaMetadata'];
     files[id.trim()] = (
       name: name is String ? name : '',
+      mimeType: mime is String ? mime : '',
       // Absent for anything Drive has not processed or could not decode,
       // which is an ordinary answer and not a malformed one -- so it is
       // null here, and nothing downstream may require it.
@@ -393,7 +405,11 @@ sealed class DriveReloaded {
 /// reload that changed nothing has to say so, or it is a button that looks
 /// broken and gets pressed again.
 final class DriveReloadDone extends DriveReloaded {
-  const DriveReloadDone({required this.renamed, required this.removed});
+  const DriveReloadDone({
+    required this.renamed,
+    required this.removed,
+    this.added = 0,
+  });
 
   /// How many stored files Drive now gives a different name.
   final int renamed;
@@ -402,8 +418,12 @@ final class DriveReloadDone extends DriveReloaded {
   /// binned, or no longer shared with this app.
   final int removed;
 
+  /// How many files the listing named that were not stored here.
+  final int added;
+
   @override
-  String toString() => 'DriveReloadDone(renamed: $renamed, removed: $removed)';
+  String toString() =>
+      'DriveReloadDone(renamed: $renamed, removed: $removed, added: $added)';
 }
 
 /// Nothing was reconciled, and this is why. **The stored list is exactly
@@ -436,13 +456,11 @@ final class DriveReloadRefused extends DriveReloaded {
 ///    probe that both lie (see [LinkedDriveFile.height]).
 ///  * a stored file **absent** from the listing loses its row: the grant is
 ///    gone or the file is, and a row that cannot play is worse than no row.
-///  * **nothing is added.** The listing reaches files this install never
-///    stored -- picked in a pairing on another device, or before the
-///    preferences were cleared -- and a list the viewer built by picking is
-///    not a mirror of their Drive. (There is no per-file unlink to fight
-///    with: [DriveAccount.unlink] is the whole account, and it takes the
-///    credential with it. Adding rows back would still be this screen
-///    inventing files nobody picked *here*.)
+///  * a file in the listing that is **not stored** is added
+///    ([LinkedDriveFiles.addingListed]): the listing is every file the
+///    Google account picked through this client, on any device, so a file
+///    picked on the phone appears here -- which is what a grant shared
+///    through the account's vault is for. Folders are left out.
 ///
 /// One write, at the end, from a listing that is complete by construction:
 /// the failed arm returns before [DriveAccount.noteReconciled] is in
@@ -482,15 +500,17 @@ Future<DriveReloaded> _reload(
       return DriveReloadRefused(reason);
     case DriveFilesListed(:final filesById):
       final before = account.files;
-      final after = before.reconciled(filesById);
+      final reconciled = before.reconciled(filesById);
       var renamed = 0;
-      for (final entry in after.entries) {
+      for (final entry in reconciled.entries) {
         if (before.forFile(entry.fileId)?.name != entry.name) renamed++;
       }
+      final after = reconciled.addingListed(filesById, account.now().toUtc());
       await account.noteReconciled(after);
       return DriveReloadDone(
         renamed: renamed,
-        removed: before.entries.length - after.entries.length,
+        removed: before.entries.length - reconciled.entries.length,
+        added: after.entries.length - reconciled.entries.length,
       );
   }
 }
@@ -499,15 +519,11 @@ Future<DriveReloaded> _reload(
 /// for the reload that found nothing to do, which is the sentence that
 /// keeps the button from looking inert.
 String driveReloadMessage(DriveReloaded outcome) => switch (outcome) {
-  DriveReloadDone(:final renamed, :final removed) when renamed + removed == 0 =>
+  DriveReloadDone(:final renamed, :final removed, :final added)
+      when renamed + removed + added == 0 =>
     'Nothing has changed in Drive since these files were linked.',
-  DriveReloadDone(:final renamed, removed: 0) =>
-    '${_files(renamed)} renamed in Drive.',
-  DriveReloadDone(renamed: 0, :final removed) =>
-    'Removed ${_files(removed)} this device can no longer reach.',
-  DriveReloadDone(:final renamed, :final removed) =>
-    '${_files(renamed)} renamed in Drive, and removed '
-        '${_files(removed)} this device can no longer reach.',
+  DriveReloadDone(:final renamed, :final removed, :final added) =>
+    '${_sentence([if (added > 0) 'added ${_files(added)} picked on another device', if (renamed > 0) '${_files(renamed)} renamed in Drive', if (removed > 0) 'removed ${_files(removed)} this device can no longer reach'])}.',
   DriveReloadRefused(:final reason) => switch (reason) {
     DriveListingFailure.pairAgain =>
       'This device is no longer linked to that Google account. Link it '
@@ -527,3 +543,13 @@ String driveReloadMessage(DriveReloaded outcome) => switch (outcome) {
 };
 
 String _files(int count) => count == 1 ? '1 file' : '$count files';
+
+/// [parts] as one sentence: "a", "a, and b", "a, b, and c", capitalised.
+String _sentence(List<String> parts) {
+  final joined = parts.length < 2
+      ? parts.join()
+      : '${parts.sublist(0, parts.length - 1).join(', ')}, and ${parts.last}';
+  return joined.isEmpty
+      ? joined
+      : joined[0].toUpperCase() + joined.substring(1);
+}

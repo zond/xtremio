@@ -230,7 +230,8 @@ server (which renews the access itself), are tracked like any other play
 and download like any other source. When Google refuses the grant, every
 screen asks for a new pairing. Signed in to Stremio, a pairing is shared
 with the account's other devices: one with no grant takes it at start or
-sign-in (with no files linked -- those are picked per device). See
+sign-in, with every file the Google account picked, matched to titles;
+**Reload** also adds files picked on another device. See
 [ARCHITECTURE.md](ARCHITECTURE.md#google-drive).
 
 ## Local videos

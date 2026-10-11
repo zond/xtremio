@@ -245,3 +245,31 @@ final class DriveMatchRun {
     }
   }
 }
+
+/// What a device does with a Drive grant it took from the account's vault
+/// (`DriveVault`): lists every file the grant reaches -- everything the
+/// Google account picked through this client, on any device -- into the
+/// linked list ([reloadLinkedDriveFiles], which adds and never takes away
+/// from a list that was empty), then matches them to titles the way the
+/// Library does, so the files are under their titles on the details pages
+/// before the Library is ever opened. Nothing here throws; a listing that
+/// failed leaves the next Reload to try.
+Future<void> fillSharedDrive(
+  DriveAccount account, {
+  DriveFileLister lister = const XtremioDriveFileLister(),
+  CatalogueSearch search = cinemetaSearch,
+}) async {
+  final outcome = await reloadLinkedDriveFiles(
+    account: account,
+    lister: lister,
+  );
+  DiagnosticsLog.info(
+    DrivePairingJob.target,
+    'shared grant: ${switch (outcome) {
+      DriveReloadDone(:final added) => 'listed $added files',
+      DriveReloadRefused(:final reason) => 'not listed (${reason.name})',
+    }}',
+  );
+  if (outcome is! DriveReloadDone) return;
+  await DriveMatchRun(account: account, search: search).run();
+}

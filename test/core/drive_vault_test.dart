@@ -20,6 +20,7 @@ void main() {
   late FakeSecretStore secrets;
   late DriveAccount account;
   late DriveVault driveVault;
+  late int filled;
 
   Future<void> boot({Map<String, String>? stored}) async {
     final prefs = AppPrefs(client: FakePrefsClient());
@@ -35,12 +36,14 @@ void main() {
     driveVault = DriveVault(
       identity: XerviceIdentity(http: service, authKey: () => signedIn),
       account: account,
+      adopted: () async => filled++,
     );
     account.pairedSink = driveVault.store;
     handedToRust.clear();
   }
 
   setUp(() {
+    filled = 0;
     signedIn = _key;
     handedToRust = [];
     vault = FakeDriveVaultStore();
@@ -64,6 +67,7 @@ void main() {
     expect(account.refreshToken, _shared);
     expect(secrets.stored[DriveAccount.refreshTokenKey], _shared);
     expect(handedToRust, [_shared]);
+    expect(filled, 1, reason: 'the files are listed after it');
     expect(
       service.requests.where((request) => request.method == 'PUT'),
       isEmpty,
@@ -94,6 +98,7 @@ void main() {
     expect(account.refreshToken, _paired);
     expect(secrets.stored[DriveAccount.refreshTokenKey], _paired);
     expect(vault.byUser['user-a'], _paired, reason: 'the pairing was shared');
+    expect(filled, 0, reason: 'nothing was adopted');
   });
 
   test('a refused grant is not replaced by the vault\'s either', () async {

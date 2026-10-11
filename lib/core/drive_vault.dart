@@ -16,6 +16,10 @@
 /// the latest pairing -- only a pairing writes it, so a grant forgotten
 /// everywhere is not put back by a device that still holds one.
 ///
+/// **The files come with it.** A grant taken from the vault reaches every
+/// file the Google account picked through this client, so the device lists
+/// them ([adopted]) rather than starting with an empty list.
+///
 /// **Never logged.** The token rides one request body or one answer and
 /// nothing here writes a line with it; a failure is logged by status.
 library;
@@ -25,10 +29,15 @@ import 'drive_account.dart';
 import 'xervice_identity.dart';
 
 class DriveVault {
-  DriveVault({required this.identity, required this.account});
+  DriveVault({required this.identity, required this.account, this.adopted});
 
   final XerviceIdentity identity;
   final DriveAccount account;
+
+  /// Run once a grant from the vault is installed: what fills the device's
+  /// list with the files the grant reaches, and matches them
+  /// (`fillSharedDrive`). Null installs the grant and nothing else.
+  final Future<void> Function()? adopted;
 
   /// Puts [refreshToken] -- a pairing's -- in the account's vault.
   Future<void> store(String refreshToken) async {
@@ -61,6 +70,8 @@ class DriveVault {
     // Which asks again: a pairing that landed while the answer was out is
     // this device's own, and it wins.
     await account.adoptSharedGrant(token);
+    // Only when it took: a device that paired meanwhile keeps its own list.
+    if (account.refreshToken == token) await adopted?.call();
   }
 
   /// Forgets the grant on the account, so no device takes it again.

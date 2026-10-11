@@ -159,7 +159,19 @@ final class LinkedDriveMatch {
 /// wrong: Drive fills `videoMediaMetadata` in after it has processed an
 /// upload, and it never fills it in for a container it did not understand.
 /// Absent is the ordinary case and not the error case.
-typedef DriveFileFacts = ({String name, int? height, int? durationMillis});
+///
+/// [mimeType] is what Drive calls the file, empty when it said nothing this
+/// build reads: what a file the listing adds ([LinkedDriveFiles.addingListed])
+/// is stored with.
+typedef DriveFileFacts = ({
+  String name,
+  int? height,
+  int? durationMillis,
+  String mimeType,
+});
+
+/// What Drive calls a folder.
+const String driveFolderMimeType = 'application/vnd.google-apps.folder';
 
 /// One file a pairing linked.
 @immutable
@@ -460,11 +472,8 @@ final class LinkedDriveFiles {
   ///  * a file that is not in [factsById] at all is dropped: the file is
   ///    gone, or the grant is, and a row that cannot play is worse than no
   ///    row.
-  ///  * an id in [factsById] that is not already a row **is not added**.
-  ///    The listing reaches every file the account has ever picked through
-  ///    this OAuth client, including on another device and including ones
-  ///    cleared from this install's preferences; the list is what was
-  ///    linked *here*, not a mirror of somebody's Drive.
+  ///  * an id in [factsById] that is not already a row is not added
+  ///    *here*: that is [addingListed]'s, the second half of a reload.
   ///
   /// The caller's half of the bargain is the completeness of [factsById]:
   /// pass half a listing and this removes the other half. `DriveListing` is
@@ -480,9 +489,43 @@ final class LinkedDriveFiles {
     return LinkedDriveFiles(kept);
   }
 
+  /// This list with every file of a complete listing it lacks added,
+  /// stamped [linkedAt], ahead of what it had -- what a reload adds, and
+  /// what a grant taken from the account's vault is filled with.
+  ///
+  /// **The listing is what the Google account picked through this OAuth
+  /// client, on any device** -- grants accumulate per user and client, and
+  /// a later pairing's token was measured reading an earlier pairing's
+  /// picks -- so a file linked on the phone appears on the television that
+  /// shares the grant. Folders are not added: a folder is not a file to
+  /// play, and what the Picker hands over for one grants nothing inside it.
+  /// Nothing already here is touched; [reconciled] is what renames and
+  /// drops. New rows are ordered by name, so a season reads in order.
+  LinkedDriveFiles addingListed(
+    Map<String, DriveFileFacts> factsById,
+    DateTime linkedAt,
+  ) {
+    final have = {for (final entry in entries) entry.fileId};
+    final added = [
+      for (final MapEntry(key: id, value: facts) in factsById.entries)
+        if (!have.contains(id) && facts.mimeType != driveFolderMimeType)
+          LinkedDriveFile(
+            fileId: id,
+            name: facts.name.isEmpty ? id : facts.name,
+            mimeType: facts.mimeType,
+            linkedAt: linkedAt,
+            height: facts.height,
+            durationMillis: facts.durationMillis,
+          ),
+    ]..sort((a, b) => a.name.compareTo(b.name));
+    if (added.isEmpty) return this;
+    return LinkedDriveFiles([...added, ...entries]);
+  }
+
   /// This list without [fileId]: the viewer took it off. Its grant stays
   /// (a `drive.file` grant cannot be given back one file at a time), so it
-  /// is only the list that forgets it, and [reconciled] never adds it back.
+  /// is only the list that forgets it -- until a reload, which lists every
+  /// file the grant reaches and so brings it back ([addingListed]).
   LinkedDriveFiles without(String fileId) => LinkedDriveFiles([
     for (final entry in entries)
       if (entry.fileId != fileId) entry,

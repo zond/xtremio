@@ -91,6 +91,7 @@ void main() {
         core: coreWith(loadCtxLoggedInFixture()),
         prefs: prefs,
         drive: own,
+        driveShared: (_) async => fail('nothing was taken from the vault'),
         sharingActivity: FakeSharingActivity(),
         xervice: service,
       ),
@@ -104,9 +105,11 @@ void main() {
     final prefs2 = AppPrefs(client: FakePrefsClient());
     await prefs2.load();
     final empty = DriveAccount(prefs: prefs2, secrets: FakeSecretStore());
+    final filled = <DriveAccount>[];
     await tester.pumpWidget(
       XtremioApp(
         key: const ValueKey('second'),
+        driveShared: (account) async => filled.add(account),
         core: coreWith(loadCtxLoggedInFixture()),
         prefs: prefs2,
         drive: empty,
@@ -116,6 +119,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(empty.refreshToken, 'shared-grant');
+    expect(filled, [empty], reason: 'the files are listed after the grant');
 
     // A pairing on this device goes to the vault.
     await empty.link(refreshToken: 'paired-here');
