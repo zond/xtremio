@@ -384,12 +384,16 @@ class ForYouController extends ChangeNotifier {
         if (item == null || out.contains(item.id) || !seen.add(item.id)) {
           continue;
         }
-        final because = batch[index].because;
+        final candidate = batch[index];
+        final because = candidate.because;
         titles.add(
           ForYouTitle(
             item: item,
             reason: because.reason,
             because: because.name,
+            sources: [
+              for (final source in candidate.sources) source.contribution,
+            ],
           ),
         );
         if (titles.length >= maxTitles) break;

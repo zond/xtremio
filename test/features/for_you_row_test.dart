@@ -213,8 +213,55 @@ void main() {
       'From Watched. Because you watched Watched Film',
       'From Saved. Because you saved Saved Film',
     ]);
-    // On a phone the reason is drawn under the name.
-    expect(find.text('Because you liked Liked Film'), findsOneWidget);
+    // The reason is a screen reader's, never drawn on the tile.
+    expect(find.textContaining('Because you'), findsNothing);
+    expect(find.text('Shared'), findsOneWidget);
+
+    // The long press tells the whole of it: every source, strongest first,
+    // in words, and the total. Shared: Both Film (watched and saved, 2),
+    // then the two of weight 1, the later first.
+    await tester.longPress(
+      find.bySemanticsLabel('Shared. Because you watched Both Film'),
+    );
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet);
+    String? below(String text) =>
+        find.descendant(of: sheet, matching: find.text(text)).evaluate().isEmpty
+        ? null
+        : text;
+    expect([
+      below('Watched and saved: Both Film (×2)'),
+      below('Watched: Watched Film'),
+      below('Saved: Saved Film'),
+      below('4 points'),
+    ], everyElement(isNotNull));
+    final tops = [
+      for (final text in [
+        'Watched and saved: Both Film (×2)',
+        'Watched: Watched Film',
+        'Saved: Saved Film',
+        '4 points',
+        CatalogRows.notInterestedLabel,
+      ])
+        tester
+            .getTopLeft(find.descendant(of: sheet, matching: find.text(text)))
+            .dy,
+    ];
+    expect(tops, orderedEquals([...tops]..sort()));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    // One source: one line.
+    await tester.longPress(
+      find.bySemanticsLabel('From Saved. Because you saved Saved Film'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: sheet, matching: find.textContaining(':')),
+      findsOneWidget,
+    );
+    expect(find.text('Saved: Saved Film'), findsOneWidget);
+    expect(find.text('1 point'), findsOneWidget);
   });
 
   testWidgets('sits under Continue watching and above the catalogs', (
@@ -411,8 +458,7 @@ void main() {
   });
 
   testWidgets('on a television: the one poster size, a one-line caption, '
-      'the reason in the heading where the remote is, and the remote walks '
-      'the row', (tester) async {
+      'a plain heading, and the remote walks the row', (tester) async {
     fake
       ..knows('First', 'tt700')
       ..knows('Second', 'tt701')
@@ -437,18 +483,17 @@ void main() {
     expect(tester.getSize(first).width, PosterTile.tvImageWidth);
     // The caption is the name alone; the reason is not drawn under it.
     expect(find.text('Because you watched Watched'), findsNothing);
-    // The first row's first tile has the remote, and says why in the heading.
     await tester.pumpAndSettle();
     expect(focusedTileName(tester), 'Second');
-    expect(
-      find.textContaining('Because you watched Watched', findRichText: true),
-      findsOneWidget,
+    final heading = tester.widget<RichText>(
+      find.textContaining(CatalogRows.forYouTitle, findRichText: true).first,
     );
+    expect(heading.text.toPlainText(), CatalogRows.forYouTitle);
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTileName(tester), 'First');
     expect(
-      find.textContaining('Because you saved Saved', findRichText: true),
-      findsOneWidget,
+      find.textContaining('Because you', findRichText: true),
+      findsNothing,
     );
   });
 

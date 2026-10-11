@@ -42,6 +42,9 @@ final class ForYouSource {
     required this.weight,
     required this.reason,
     required this.recency,
+    this.watched = false,
+    this.saved = false,
+    this.liked = false,
   });
 
   final String id;
@@ -55,12 +58,29 @@ final class ForYouSource {
   final int weight;
   final ForYouReason reason;
 
+  /// Which of the listings it is in, and whether it has a happy face: what
+  /// [weight] is the count of, said in words on the long-press sheet.
+  final bool watched;
+  final bool saved;
+  final bool liked;
+
   /// When it was last watched or added, whichever is later; what orders
   /// the sources, and what breaks a tie between two suggestions.
   final DateTime recency;
 
   /// The part of the source that changes what the row would be.
-  String get signature => '$type/$id:$weight:${reason.name}';
+  String get signature =>
+      '$type/$id:$weight:${reason.name}:'
+      '${watched ? 'w' : ''}${saved ? 's' : ''}${liked ? 'l' : ''}';
+
+  /// What it counted for, as the long-press sheet keeps it.
+  ForYouContribution get contribution => (
+    name: name,
+    watched: watched,
+    saved: saved,
+    liked: liked,
+    weight: weight,
+  );
 
   @override
   String toString() => 'ForYouSource($id, $weight, ${reason.name})';
@@ -141,6 +161,9 @@ List<ForYouSource> forYouSources(
         recency: times.isEmpty
             ? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)
             : times.reduce((a, b) => a.isAfter(b) ? a : b),
+        watched: watched,
+        saved: saved,
+        liked: liked,
       ),
     );
   }
@@ -176,6 +199,10 @@ final class ForYouCandidate {
   /// is on the reason line.
   late ForYouSource because;
 
+  /// Every source that named it, strongest first (the latest of equals):
+  /// what the long-press sheet lists.
+  final List<ForYouSource> sources = [];
+
   /// The key two namings of one title share: the title as matching reads
   /// it, and the year.
   String get key => keyOf(suggestion);
@@ -208,6 +235,7 @@ List<ForYouCandidate> rankForYou(
       final candidate = byKey[key] ??= (ForYouCandidate(suggestion)
         ..because = source);
       candidate.score += source.weight;
+      candidate.sources.add(source);
       if (rank < candidate.bestRank) candidate.bestRank = rank;
       if (source.recency.isAfter(candidate.latest)) {
         candidate.latest = source.recency;
@@ -216,6 +244,9 @@ List<ForYouCandidate> rankForYou(
         candidate.because = source;
       }
     }
+  }
+  for (final candidate in byKey.values) {
+    candidate.sources.sort(_heavierThenLater);
   }
   final ranked = byKey.values.toList()
     ..sort((a, b) {
@@ -230,12 +261,45 @@ List<ForYouCandidate> rankForYou(
   return ranked;
 }
 
+/// One source's part in a suggestion: its name, which listings it is in,
+/// whether it is liked, and the weight that comes to.
+typedef ForYouContribution = ({
+  String name,
+  bool watched,
+  bool saved,
+  bool liked,
+  int weight,
+});
+
+/// [contribution] as a line of the long-press sheet: what it counted for in
+/// words, its name, and the weight when that is more than one --
+/// `Watched and saved: Heat (×2)`.
+String forYouContributionLine(ForYouContribution contribution) {
+  final words = [
+    if (contribution.watched) 'watched',
+    if (contribution.saved) 'saved',
+    if (contribution.liked) 'liked',
+  ];
+  final what = switch (words.length) {
+    0 => 'Suggested by',
+    1 => words.single,
+    _ => '${words.sublist(0, words.length - 1).join(', ')} and ${words.last}',
+  };
+  final counted = contribution.weight > 1 ? ' (×${contribution.weight})' : '';
+  return '${what[0].toUpperCase()}${what.substring(1)}: '
+      '${contribution.name}$counted';
+}
+
+/// The sheet's total: `5 points`, `1 point`.
+String forYouPoints(int points) => points == 1 ? '1 point' : '$points points';
+
 /// A title the row shows: the catalogue's item, and why.
 final class ForYouTitle {
   const ForYouTitle({
     required this.item,
     required this.reason,
     required this.because,
+    this.sources = const [],
   });
 
   final MetaItemPreview item;
@@ -245,6 +309,12 @@ final class ForYouTitle {
   final String because;
 
   String get reasonLine => reason.line(because);
+
+  /// Every source that suggested it, strongest first.
+  final List<ForYouContribution> sources;
+
+  /// The sum of their weights: what ranked it.
+  int get points => sources.fold(0, (sum, source) => sum + source.weight);
 
   /// What the row's cache keeps: the item's own fields a tile draws, and
   /// the reason.
@@ -262,6 +332,16 @@ final class ForYouTitle {
     },
     'reason': reason.name,
     'because': because,
+    'sources': [
+      for (final source in sources)
+        {
+          'name': source.name,
+          'watched': source.watched,
+          'saved': source.saved,
+          'liked': source.liked,
+          'weight': source.weight,
+        },
+    ],
   };
 
   static ForYouTitle? fromJson(Object? json) {
@@ -275,6 +355,20 @@ final class ForYouTitle {
       item: MetaItemPreview(Map<String, dynamic>.from(item)),
       reason: reason,
       because: because,
+      sources: [
+        if (json['sources'] case final List sources)
+          for (final source in sources)
+            if (source is Map &&
+                source['name'] is String &&
+                source['weight'] is int)
+              (
+                name: source['name'] as String,
+                watched: source['watched'] == true,
+                saved: source['saved'] == true,
+                liked: source['liked'] == true,
+                weight: source['weight'] as int,
+              ),
+      ],
     );
   }
 

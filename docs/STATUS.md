@@ -34,10 +34,12 @@ Android TV layout are all built. What is not is in the README's
 - **For you** is a row under Continue watching (above the catalogs, on
   every device): titles like the ones the viewer watched through, added by
   hand or liked, from the same "More like this" answers a details page
-  shows, each with the line that says which ("Because you watched ...").
-  It leaves out anything in the library in any sense, on Continue
-  watching, disliked or dismissed; a long press (a held select) offers
-  **Not interested**. It is worked out on the device, kept, and worked
+  shows; a tile is the poster and the name, like every other row's. It
+  leaves out anything in the library in any sense, on Continue watching,
+  disliked or dismissed. A long press (a held select) shows why: every
+  title that suggested it, strongest first, with what it counted for in
+  words ("Watched and saved: Heat (×2)"), and the points that ranked it;
+  then **Not interested** and **Cancel**. It is worked out on the device, kept, and worked
   out again when the sources or the faces change and otherwise once a
   day; with nothing kept it appears as the first answers arrive. Hidden
   when it has nothing to show ([For you](ARCHITECTURE.md#for-you)).

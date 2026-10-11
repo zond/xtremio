@@ -967,14 +967,11 @@ class _ContinueWatchingRowView extends StatelessWidget {
   }
 }
 
-/// "For you": suggestions from the library's watched-through and saved
-/// titles ([ForYouController]), each with the line that says which.
-///
-/// Off a television the reason is the caption's second line. On one the
-/// caption is one line like every other row's, so the reason is the
-/// heading's subtitle instead, following the remote along the row, and
-/// every tile says it to a screen reader either way.
-class _ForYouRowView extends StatefulWidget {
+/// "For you": suggestions from the library's watched-through, saved and
+/// liked titles ([ForYouController]), each tile the poster and the name
+/// like every other row's -- there is no room on a tile for why, so why is
+/// the long press's ([_NotInterestedSheet]), and a screen reader's.
+class _ForYouRowView extends StatelessWidget {
   const _ForYouRowView({
     required this.titles,
     required this.layout,
@@ -990,65 +987,38 @@ class _ForYouRowView extends StatefulWidget {
   final ValueChanged<ForYouTitle> onLongPress;
 
   @override
-  State<_ForYouRowView> createState() => _ForYouRowViewState();
+  Widget build(BuildContext context) => Column(
+    children: [
+      _RowHeader(
+        title: CatalogRows.forYouTitle,
+        height: layout.headerHeight,
+        inline: layout.inlineHeader,
+      ),
+      Expanded(
+        child: _HorizontalStrip(
+          padding: layout.stripPadding,
+          itemCount: titles.length,
+          itemBuilder: (context, index) {
+            final title = titles[index];
+            return SizedBox(
+              width: layout.tileWidthFor(title.item.posterShape),
+              child: _ForYouTile(
+                title: title,
+                onTap: () => onOpen(title),
+                onLongPress: () => onLongPress(title),
+                defaultFocus: isFirstRow && index == 0,
+              ),
+            );
+          },
+        ),
+      ),
+      SizedBox(height: layout.bottomPadding),
+    ],
+  );
 }
 
-class _ForYouRowViewState extends State<_ForYouRowView> {
-  /// The tile the remote is on, for the heading's subtitle.
-  ForYouTitle? _focused;
-
-  @override
-  Widget build(BuildContext context) {
-    final layout = widget.layout;
-    final isTv = DeviceScope.isTv(context);
-    final focused = _focused;
-    return Column(
-      children: [
-        _RowHeader(
-          title: CatalogRows.forYouTitle,
-          subtitle: isTv && focused != null && widget.titles.contains(focused)
-              ? focused.reasonLine
-              : null,
-          height: layout.headerHeight,
-          inline: layout.inlineHeader,
-        ),
-        Expanded(
-          child: _HorizontalStrip(
-            padding: layout.stripPadding,
-            itemCount: widget.titles.length,
-            itemBuilder: (context, index) {
-              final title = widget.titles[index];
-              return SizedBox(
-                width: layout.tileWidthFor(title.item.posterShape),
-                child: Focus(
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  includeSemantics: false,
-                  onFocusChange: (has) {
-                    if (has) {
-                      setState(() => _focused = title);
-                    } else if (_focused == title) {
-                      setState(() => _focused = null);
-                    }
-                  },
-                  child: _ForYouTile(
-                    title: title,
-                    onTap: () => widget.onOpen(title),
-                    onLongPress: () => widget.onLongPress(title),
-                    defaultFocus: widget.isFirstRow && index == 0,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        SizedBox(height: layout.bottomPadding),
-      ],
-    );
-  }
-}
-
-/// One suggestion: the poster, the name, and -- off a television -- why.
+/// One suggestion: a [PosterTile], with the reason read to a screen reader
+/// and drawn nowhere.
 class _ForYouTile extends StatelessWidget {
   const _ForYouTile({
     required this.title,
@@ -1063,98 +1033,129 @@ class _ForYouTile extends StatelessWidget {
   final bool defaultFocus;
 
   @override
+  Widget build(BuildContext context) => FocusableTile(
+    onTap: onTap,
+    onLongPress: onLongPress,
+    memoryId: 'for-you/${title.item.id}',
+    defaultFocus: defaultFocus,
+    // Inside the tile, so the tile's own press stays what a reader acts on.
+    child: Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: '${title.item.name}. ${title.reasonLine}',
+      child: _ForYouPoster(item: title.item),
+    ),
+  );
+}
+
+/// A [PosterTile]'s face -- the poster and the name, one line on a
+/// television and two elsewhere -- under a [FocusableTile] of the For you
+/// row's own, which [PosterTile] cannot take a long press for.
+class _ForYouPoster extends StatelessWidget {
+  const _ForYouPoster({required this.item});
+
+  final MetaItemPreview item;
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isTv = DeviceScope.isTv(context);
-    final item = title.item;
-    return FocusableTile(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      memoryId: 'for-you/${item.id}',
-      defaultFocus: defaultFocus,
-      child: Semantics(
-        container: true,
-        excludeSemantics: true,
-        label: '${item.name}. ${title.reasonLine}',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: PosterImage(url: item.poster)),
-            SizedBox(height: isTv ? PosterTile.tvCaptionGap : 6),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                PosterTile.captionInset,
-                0,
-                PosterTile.captionInset,
-                PosterTile.captionInset,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  if (!isTv)
-                    Text(
-                      title.reasonLine,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: PosterImage(url: item.poster)),
+        SizedBox(height: isTv ? PosterTile.tvCaptionGap : 6),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            PosterTile.captionInset,
+            0,
+            PosterTile.captionInset,
+            PosterTile.captionInset,
+          ),
+          child: Text(
+            item.name,
+            maxLines: isTv ? 1 : 2,
+            softWrap: !isTv,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-/// The For you long press: "Not interested", or Cancel -- where a
-/// television's remote starts, as on the Continue watching sheet, so a key
-/// held a moment too long dismisses nothing.
+/// The For you long press (a held OK on a television, through the same
+/// `RemotePress` path as Continue watching): the title, then every source
+/// that suggested it, strongest first, each with what it counted for --
+/// `Watched and saved: Heat (×2)` -- and the total that ranked it; then
+/// "Not interested", or Cancel, where a television's remote starts, so a
+/// key held a moment too long dismisses nothing. All of it is in the row's
+/// kept result, so nothing is fetched to draw it.
 class _NotInterestedSheet extends StatelessWidget {
   const _NotInterestedSheet({required this.title});
 
   final ForYouTitle title;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          title: Text(
-            title.item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(
+              title.item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium,
+            ),
           ),
-          subtitle: Text(title.reasonLine, maxLines: 1),
-        ),
-        ListTile(
-          leading: const Icon(Icons.thumb_down_off_alt_outlined),
-          title: const Text(CatalogRows.notInterestedLabel),
-          onTap: () => Navigator.of(context).pop(true),
-        ),
-        ListTile(
-          autofocus: DeviceScope.isTv(context),
-          leading: const Icon(Icons.arrow_back),
-          title: const Text('Cancel'),
-          onTap: () => Navigator.of(context).pop(false),
-        ),
-      ],
-    ),
-  );
+          // Text, not stops: the remote goes from the title straight to
+          // the two choices, however many sources there are.
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final source in title.sources)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        forYouContributionLine(source),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  if (title.sources.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: Text(forYouPoints(title.points), style: muted),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.thumb_down_off_alt_outlined),
+            title: const Text(CatalogRows.notInterestedLabel),
+            onTap: () => Navigator.of(context).pop(true),
+          ),
+          ListTile(
+            autofocus: DeviceScope.isTv(context),
+            leading: const Icon(Icons.arrow_back),
+            title: const Text('Cancel'),
+            onTap: () => Navigator.of(context).pop(false),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _CatalogRowView extends StatelessWidget {

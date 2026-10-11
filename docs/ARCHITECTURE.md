@@ -1121,19 +1121,26 @@ rank order exactly as "More like this" confirms its own -- title and year,
 or dropped -- and the row stops at 30. Anything in the library in any
 sense, on Continue watching, disliked or dismissed is left out, and the
 filter is applied again on every draw so a dismissal takes the tile off at
-once. The reason line names the heaviest source that named the title:
-"Because you liked / watched / saved X".
+once. Each title keeps every source that named it, strongest first, with
+which listings each is in and whether it is liked
+(`ForYouTitle.sources`); a screen reader hears the heaviest one
+("Because you liked / watched / saved X").
 
-**When.** The result is kept (`forYou`: titles, reasons, when, and a
+**When.** The result is kept (`forYou`: titles, their sources, when, and a
 signature of the sources) and drawn at once on the next start; it is
 worked out again when the signature changes and otherwise at most once a
 day. The server's answers and the episode lists go four at a time, the
 catalogue searches four at a time beside them, and a first run with
 nothing kept draws the row from the first answers and fills it as the rest
-arrive. On a television the caption is the name alone, as every row's is,
-and the heading carries the focused tile's reason; every tile says it to a
-screen reader. A long press asks **Not interested**, which is a
-`dismissed` face: kept and synced like the others
+arrive. A tile is the poster and the name, as every row's is, and the
+heading is "For you" alone: a tile never had room for why. Why is the long
+press (a held select on a television, through the same `RemotePress` path
+as Continue watching): the title, every source that suggested it, one line
+each, strongest first, with what it counted for in words -- "Watched and
+saved: Heat (×2)", "Watched: Drive" -- and the total ("5 points"), all
+from the kept result, so nothing is fetched to draw it. Under them,
+**Not interested**, which is a `dismissed` face: kept and synced like the
+others
 ([Likes and dislikes](#likes-and-dislikes)). Tests:
 `test/features/for_you_rules_test.dart`, `test/features/for_you_row_test.dart`,
 `test/core/watched_bitfield_test.dart`.

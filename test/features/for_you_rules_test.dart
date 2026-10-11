@@ -225,4 +225,87 @@ void main() {
     expect(ForYouReason.saved.line('Alien'), 'Because you saved Alien');
     expect(ForYouReason.liked.line('Alien'), 'Because you liked Alien');
   });
+
+  test('a source line says in words what it counted for', () {
+    ForYouContribution c(bool w, bool s, bool l) => (
+      name: 'Heat',
+      watched: w,
+      saved: s,
+      liked: l,
+      weight: [w, s, l].where((x) => x).length,
+    );
+    expect(forYouContributionLine(c(true, false, false)), 'Watched: Heat');
+    expect(forYouContributionLine(c(false, true, false)), 'Saved: Heat');
+    expect(
+      forYouContributionLine(c(true, true, false)),
+      'Watched and saved: Heat (×2)',
+    );
+    expect(
+      forYouContributionLine(c(true, true, true)),
+      'Watched, saved and liked: Heat (×3)',
+    );
+    expect(forYouPoints(1), '1 point');
+    expect(forYouPoints(5), '5 points');
+  });
+
+  test('a candidate keeps every source that named it, strongest first, '
+      'and a kept title reads them back', () {
+    ForYouSource source(String id, int weight, String at) => ForYouSource(
+      id: id,
+      type: 'movie',
+      name: 'Name $id',
+      weight: weight,
+      reason: ForYouReason.watched,
+      recency: DateTime.parse(at),
+      watched: true,
+      saved: weight > 1,
+      liked: weight > 2,
+    );
+    const pick = SuggestedTitle(title: 'Pick', year: 2000, why: '');
+    final ranked = rankForYou(
+      [
+        source('one', 1, '2026-01-01'),
+        source('three', 3, '2026-01-01'),
+        source('two', 2, '2026-02-01'),
+      ],
+      {
+        'one': [pick],
+        'three': [pick],
+        'two': [pick],
+      },
+    );
+    expect(
+      [for (final s in ranked.single.sources) s.id],
+      ['three', 'two', 'one'],
+    );
+    final title = ForYouTitle(
+      item: const MetaItemPreview({'id': 'tt1', 'type': 'movie', 'name': 'P'}),
+      reason: ForYouReason.liked,
+      because: 'Name three',
+      sources: [for (final s in ranked.single.sources) s.contribution],
+    );
+    final back = ForYouTitle.fromJson(title.toJson())!;
+    expect(back.sources, title.sources);
+    expect(back.points, 6);
+  });
+
+  test('a source saved and liked is another source than one watched and '
+      'liked, so the kept row is worked out again', () {
+    ForYouSource source({required bool watched, required bool saved}) =>
+        ForYouSource(
+          id: 'tt1',
+          type: 'movie',
+          name: 'Heat',
+          weight: 2,
+          reason: ForYouReason.liked,
+          recency: DateTime.utc(2026),
+          watched: watched,
+          saved: saved,
+          liked: true,
+        );
+    expect(
+      source(watched: true, saved: false).signature,
+      isNot(source(watched: false, saved: true).signature),
+    );
+  });
 }
