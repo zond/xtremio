@@ -27,15 +27,22 @@
  *
  * **A model switch re-asks, slowly, by itself.** Every stored answer names
  * the [MODEL] that gave it. A read that finds another model's answer
- * serves it at once -- the viewer never waits on a switch -- and then asks
- * the current model in the background, claiming the title first exactly
- * as a first ask does, and replaces the document when the answer lands. A
- * re-ask that fails leaves the stored answer where it was. At most
- * [REASK_CAP] re-asks a day are spent this way (a counter document per day
- * in `similarReasks`), so a switch costs a few days of trickle rather than
- * one day of every title at once; past the cap, the old answer is served
- * and nothing is asked. Switching the model is therefore: change [MODEL],
- * deploy, done.
+ * serves it at once -- the viewer never waits on a switch -- and puts the
+ * title on a queue (a `similarRevalidate` document per title), and that
+ * is all the request does. The re-asking is [revalidatePass]'s, run by a
+ * scheduled function every [REVALIDATE_MINUTES] minutes: it takes up to
+ * [REVALIDATE_BATCH] queued titles, claims each exactly as a first ask
+ * does, asks the current model and replaces the document when the answer
+ * lands. Not after the response, because on Cloud Functions 2nd gen work
+ * left running once a response is flushed runs with its CPU throttled and
+ * can be stopped at any moment -- no place for a model call. A re-ask that
+ * fails leaves the stored answer where it was and the title on the queue
+ * for the next pass, [REVALIDATE_TRIES] times. At most [REASK_CAP] re-asks
+ * a day are spent this way (a counter document per day in
+ * `similarReasks`), so a switch costs a few days of trickle rather than
+ * one day of every title at once; past the cap, the queue waits for the
+ * next day. Switching the model is therefore: change [MODEL], deploy,
+ * done.
  *
  * The question's wording is measured in `tool/recommendations/`. Changing
  * it means a new [QUESTION_VERSION], which is what makes every title be
@@ -61,6 +68,18 @@ const COUNT = 10;
  * are the ones read first, so they are the ones re-asked first.
  */
 const REASK_CAP = 2000;
+
+/**
+ * How often the queue is worked ([revalidatePass], `exports.similarRevalidate`
+ * in `index.js`), and how many titles a pass takes. 144 passes of 14 is
+ * 2016 a day, so the batch alone almost keeps [REASK_CAP]; the counter is
+ * what holds it exactly.
+ */
+const REVALIDATE_MINUTES = 10;
+const REVALIDATE_BATCH = 14;
+
+/** How many passes a title that keeps failing stays queued for. */
+const REVALIDATE_TRIES = 3;
 
 /** How long a claim on a title keeps a second request from asking too. */
 const CLAIM_SECONDS = 60;
@@ -221,42 +240,32 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * for rather than asked again: two devices opening a new title at once pay
  * for one call.
  *
- * Answers `{titles, model, stale, reask}`. `stale` is an answer from
- * another model than [MODEL]; `reask` says this request has claimed the
- * title for a background re-ask ([reask]) and is the one to run it.
+ * Answers `{titles, model, stale}`. `stale` is an answer from another
+ * model than [MODEL], which this read has put on the re-ask queue unless
+ * it was already there.
  *
  * [deps] is `{db, fetch, now, sleep}`: Firestore, `fetch`, `Date.now` and
  * a delay, each a parameter so a test can stand in for it.
  */
 async function answerFor(deps, key, type, id) {
   const {db, now} = deps;
-  const ref = db.collection('similar').doc(`v${QUESTION_VERSION}_${type}_${id}`);
+  const ref = db.collection('similar').doc(docId(type, id));
   const deadline = now() + WAIT_SECONDS * 1000;
   for (;;) {
     const claimed = await db.runTransaction(async (tx) => {
       const at = now();
-      const day = new Date(at).toISOString().slice(0, 10);
-      const capRef = db.collection('similarReasks').doc(day);
+      const queued = db.collection('similarRevalidate').doc(docId(type, id));
       // Every read before any write, as Firestore's transactions require.
       const doc = await tx.get(ref);
       const data = doc.exists ? doc.data() : null;
       if (data?.status === 'ready') {
         const answer = {titles: data.titles, model: data.model ?? null};
         if (data.model === MODEL) return {...answer, stale: false};
-        // Another model's answer: served whatever happens next. Re-asked
-        // only when nobody holds the title already and today's re-asks are
-        // not spent.
-        if (at - millisOf(data.reaskClaimedAt) < CLAIM_SECONDS * 1000) {
-          return {...answer, stale: true};
-        }
-        const cap = await tx.get(capRef);
-        const spent = cap.exists ? cap.data().n ?? 0 : 0;
-        if (spent >= (deps.reaskCap ?? REASK_CAP)) {
-          return {...answer, stale: true};
-        }
-        tx.set(capRef, {n: spent + 1});
-        tx.set(ref, {...data, reaskClaimedAt: at});
-        return {...answer, stale: true, reask: true};
+        // Another model's answer: served, and queued for the scheduled
+        // pass once -- a read of a title already queued writes nothing.
+        const mark = await tx.get(queued);
+        if (!mark.exists) tx.set(queued, {type, id, markedAt: at, tries: 0});
+        return {...answer, stale: true};
       }
       if (data?.status === 'pending' &&
           at - millisOf(data.claimedAt) < CLAIM_SECONDS * 1000) {
@@ -282,24 +291,79 @@ async function answerFor(deps, key, type, id) {
   }
 }
 
+/** The document a title's answer is kept in, and its queue entry's id. */
+function docId(type, id) {
+  return `v${QUESTION_VERSION}_${type}_${id}`;
+}
+
 /**
- * Asks [MODEL] about a title whose stored answer came from [was], and
- * replaces the document when it answers.
- *
- * A failure leaves the stored answer as it is, and leaves the claim too:
- * the title is tried again by the first read after [CLAIM_SECONDS], not by
- * every read in the meantime. Never throws.
+ * One pass over the re-ask queue: up to [REVALIDATE_BATCH] queued titles,
+ * oldest first, and never past today's [REASK_CAP]. Each is claimed in a
+ * transaction that counts it against the cap -- a title already answered
+ * by [MODEL] by then, or gone, just leaves the queue -- then asked, its
+ * document replaced, and its queue entry removed. A failure keeps the
+ * stored answer and the entry, until it has failed [REVALIDATE_TRIES]
+ * times. One log line per re-ask, naming the title and both models.
+ * Answers how many were re-asked. Never throws for one title.
  */
-async function reask(deps, key, type, id, was) {
-  const ref = deps.db.collection('similar')
-      .doc(`v${QUESTION_VERSION}_${type}_${id}`);
-  console.log(`similar ${type} ${id}: re-asking, ${was ?? 'no model'} -> ${MODEL}`);
-  try {
-    const titles = await askAbout(deps, key, type, id);
-    await ref.set(answered(titles, deps.now()));
-  } catch (error) {
-    console.warn(`similar ${type} ${id}: re-ask failed: ${error.message}`);
+async function revalidatePass(deps, key, batch = REVALIDATE_BATCH) {
+  const {db, now} = deps;
+  const cap = deps.reaskCap ?? REASK_CAP;
+  const queue = db.collection('similarRevalidate');
+  const day = new Date(now()).toISOString().slice(0, 10);
+  const capRef = db.collection('similarReasks').doc(day);
+  const capDoc = await capRef.get();
+  const left = cap - (capDoc.exists ? capDoc.data().n ?? 0 : 0);
+  if (left <= 0) return 0;
+  const listed = await queue.orderBy('markedAt').limit(Math.min(batch, left))
+      .get();
+  let asked = 0;
+  for (const entry of listed.docs) {
+    const {type, id, tries = 0} = entry.data();
+    const markRef = queue.doc(entry.id);
+    if (!Object.hasOwn(TYPES, type) || !ID.test(id)) {
+      await markRef.delete();
+      continue;
+    }
+    const ref = db.collection('similar').doc(docId(type, id));
+    const claim = await db.runTransaction(async (tx) => {
+      const at = now();
+      const [doc, spent] = [await tx.get(ref), await tx.get(capRef)];
+      const data = doc.exists ? doc.data() : null;
+      if (data?.status !== 'ready' || data.model === MODEL) {
+        return {done: true};
+      }
+      if (at - millisOf(data.reaskClaimedAt) < CLAIM_SECONDS * 1000) {
+        return {held: true};
+      }
+      const n = spent.exists ? spent.data().n ?? 0 : 0;
+      if (n >= cap) return {spent: true};
+      tx.set(capRef, {n: n + 1});
+      tx.set(ref, {...data, reaskClaimedAt: at});
+      return {was: data.model ?? null};
+    });
+    if (claim.spent) break;
+    if (claim.held) continue;
+    if (claim.done) {
+      await markRef.delete();
+      continue;
+    }
+    asked++;
+    console.log(`similar ${type} ${id}: re-asking, ${claim.was ?? 'no model'} -> ${MODEL}`);
+    try {
+      const titles = await askAbout(deps, key, type, id);
+      await ref.set(answered(titles, now()));
+      await markRef.delete();
+    } catch (error) {
+      console.warn(`similar ${type} ${id}: re-ask failed: ${error.message}`);
+      if (tries + 1 >= REVALIDATE_TRIES) {
+        await markRef.delete();
+      } else {
+        await markRef.set({...entry.data(), tries: tries + 1});
+      }
+    }
   }
+  return asked;
 }
 
 /**
@@ -347,15 +411,10 @@ function handler(key, deps) {
       return;
     }
     res.set('Cache-Control', result.stale ? CACHE_STALE : CACHE_CURRENT);
+    // Nothing runs after this: a stale answer was queued, not re-asked
+    // (see the header).
     res.json({titles: result.titles, version: QUESTION_VERSION,
       model: result.model});
-    // After the answer has gone, and awaited rather than left floating: on
-    // Cloud Run (functions v2) an instance's CPU is throttled once nothing
-    // is still running for a request, so a promise left behind after the
-    // handler returned could stall for minutes or never finish, holding
-    // the claim for nothing. The viewer has the stored answer already;
-    // only the request's server side stays open until the re-ask is done.
-    if (result.reask) await reask(d, key.value(), type, id, result.model);
   };
 }
 
@@ -374,12 +433,17 @@ module.exports = {
   mountSimilar,
   handler,
   answerFor,
+  revalidatePass,
+  liveDeps,
   titlesIn,
   question,
   QUESTION_VERSION,
   MODEL,
   REASK_CAP,
   CLAIM_SECONDS,
+  REVALIDATE_MINUTES,
+  REVALIDATE_BATCH,
+  REVALIDATE_TRIES,
   CACHE_CURRENT,
   CACHE_STALE,
 };

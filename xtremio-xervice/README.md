@@ -118,13 +118,21 @@ is `tool/recommendations/README.md`.
 
 **Changing the model** is: change `MODEL` in `functions/similar.js`, deploy,
 done. Every stored answer names the model that gave it; a read that finds
-another model's answer serves it at once and then asks the new model in the
-background, replacing the stored answer when it lands (a failed re-ask
-leaves the old one). At most 2000 re-asks a day are spent this way
-(`REASK_CAP`, counted in `similarReasks/{day}`), so a switch trickles through
-the titles people actually open rather than spiking the bill; past the cap
-the old answer is served unchanged. `QUESTION_VERSION` is bumped only for a
-changed question or answer schema, and that re-asks every title at once.
+another model's answer serves it at once and queues the title
+(`similarRevalidate/{doc id}`), and that is all the request does. A
+scheduled function, `similarRevalidate` (every ten minutes, europe-west1,
+the same `GEMINI_API_KEY`), takes up to fourteen queued titles a pass,
+oldest first, claims each as a first ask does, asks the new model and
+replaces the stored answer when it lands; a failed re-ask leaves the old
+answer and the title stays queued for three passes. Not work after the
+response: on 2nd-gen functions that runs with the CPU throttled once the
+response is flushed and can be stopped at any moment. At most 2000 re-asks
+a day are spent (`REASK_CAP`, counted in `similarReasks/{day}`; 144 passes
+of 14 is 2016, so the counter is what holds it), so a switch trickles
+through the titles people actually open rather than spiking the bill; past
+the cap the queue waits for the next day. `QUESTION_VERSION` is bumped only
+for a changed question or answer schema, and that re-asks every title at
+once.
 
 The edge keeps a current answer a day and serves it for a week beyond that
 while it fetches a fresh copy (`stale-while-revalidate`), so a replaced
@@ -267,7 +275,11 @@ sed -i "s/__CLIENT_ID__/<the web client id>/" public/link.html
 sed -i "s/__API_KEY__/<the browser api key>/;s/__APP_ID__/<the project number>/" public/pick.html
 ```
 
-Deploy:
+Deploy (the scheduled `similarRevalidate` runs on Cloud Scheduler; the
+CLI enables the Cloud Scheduler API on the first deploy of a scheduled
+function, given an account that may enable APIs -- otherwise
+`gcloud services enable cloudscheduler.googleapis.com --project=xtremio-xervice`
+first):
 
 ```sh
 cd functions && npm install && cd ..

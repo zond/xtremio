@@ -631,6 +631,29 @@ exports.similar = onRequest(
 );
 
 /**
+ * The "More like this" re-ask queue, worked every ten minutes (see
+ * `similar.js`, [revalidatePass]): a read that finds another model's answer
+ * queues the title and returns, and this is where the model is asked. A
+ * scheduled function and not work after a response, which 2nd gen runs on
+ * a throttled CPU. Fourteen titles a pass, each a Cinemeta read and a
+ * model call one after another, well inside the five minutes.
+ */
+const {onSchedule} = require('firebase-functions/v2/scheduler');
+const similarDeps = require('./similar');
+exports.similarRevalidate = onSchedule(
+    {
+      schedule: `every ${similarDeps.REVALIDATE_MINUTES} minutes`,
+      region: 'europe-west1',
+      secrets: [GEMINI_API_KEY],
+      timeoutSeconds: 300,
+    },
+    async () => {
+      await similarDeps.revalidatePass(similarDeps.liveDeps(),
+          GEMINI_API_KEY.value());
+    },
+);
+
+/**
  * A title's scores from MDBList, as its own function with its own secret
  * (see `ratings.js`): MDBList's daily limit or a missing key cannot touch
  * pairing or "More like this".

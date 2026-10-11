@@ -7,6 +7,9 @@ const assert = require('node:assert/strict');
 
 const {
   handler,
+  revalidatePass,
+  REVALIDATE_BATCH,
+  REVALIDATE_TRIES,
   QUESTION_VERSION,
   MODEL,
   REASK_CAP,
@@ -35,6 +38,7 @@ function fakeDb() {
   });
   const ref = (path) => ({
     path,
+    id: path.slice(path.indexOf('/') + 1),
     async get() {
       return snapshot(path);
     },
@@ -48,7 +52,22 @@ function fakeDb() {
   });
   return {
     docs,
-    collection: (name) => ({doc: (id) => ref(`${name}/${id}`)}),
+    collection: (name) => ({
+      doc: (id) => ref(`${name}/${id}`),
+      // `orderBy(field).limit(n).get()`, which is all the pass asks.
+      orderBy: (field) => ({
+        limit: (n) => ({
+          async get() {
+            const rows = [...docs.keys()]
+                .filter((path) => path.startsWith(`${name}/`))
+                .map((path) => ({id: path.slice(name.length + 1),
+                  data: () => structuredClone(docs.get(path))}))
+                .sort((a, b) => a.data()[field] - b.data()[field]);
+            return {docs: rows.slice(0, n)};
+          },
+        }),
+      }),
+    }),
     async runTransaction(fn) {
       for (;;) {
         const read = new Map();
@@ -185,116 +204,157 @@ test('the same model is served and nothing is asked', async () => {
   assert.equal(db.docs.has('similarReasks/2026-10-11'), false);
 });
 
-test('another model\'s answer is served at once and re-asked once',
-    quietly(async () => {
+const QUEUE = `similarRevalidate/v${QUESTION_VERSION}_movie_${ID}`;
+
+/** A title answered by another model, under [id]. */
+function storeOldAt(db, id) {
+  db.docs.set(`similar/v${QUESTION_VERSION}_movie_${id}`, {
+    status: 'ready',
+    titles: [{title: 'Old', year: 1990, kind: 'film', why: 'old'}],
+    model: 'gemini-old',
+    version: QUESTION_VERSION,
+    answeredAt: new Date(START - 1000),
+  });
+}
+
+test('a stale read is served at once, queued once, and asks nothing',
+    async () => {
       const db = fakeDb();
       storeOld(db);
-      let release;
-      const gate = new Promise((resolve) => (release = resolve));
+      const d = deps(db, [gemini('New')]);
+      const res = await get(d);
+      assert.deepEqual(res.body.titles.map((t) => t.title), ['Old']);
+      assert.equal(res.body.model, 'gemini-old');
+      assert.equal(res.headers['Cache-Control'], CACHE_STALE);
+      assert.equal(d.asked, 0, 'no model call in the request');
+      assert.deepEqual(db.docs.get(QUEUE),
+          {type: 'movie', id: ID, markedAt: START, tries: 0});
+
+      d.clock.t += 5000;
+      await get(d);
+      assert.equal(db.docs.get(QUEUE).markedAt, START, 'queued once');
+      assert.equal(d.asked, 0);
+      assert.equal(db.docs.get(DOC).model, 'gemini-old');
+    });
+
+test('the scheduled pass re-asks queued titles, replaces them, empties the '
+    + 'queue, and logs one line each', async () => {
+  const db = fakeDb();
+  storeOld(db);
+  const d = deps(db, [gemini('New')]);
+  await get(d);
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => lines.push(args.join(' '));
+  try {
+    assert.equal(await revalidatePass(d, KEY), 1);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(d.asked, 1);
+  assert.equal(db.docs.get(DOC).model, MODEL);
+  assert.deepEqual(db.docs.get(DOC).titles.map((t) => t.title), ['New']);
+  assert.equal(db.docs.has(QUEUE), false);
+  assert.equal(db.docs.get('similarReasks/2026-10-11').n, 1);
+  assert.equal(lines.length, 1);
+  for (const part of [ID, 'gemini-old', MODEL]) {
+    assert.ok(lines[0].includes(part), lines[0]);
+  }
+  const after = await get(d);
+  assert.equal(after.body.model, MODEL);
+  assert.equal(after.headers['Cache-Control'], CACHE_CURRENT);
+});
+
+test('a pass takes at most its batch, oldest first', quietly(async () => {
+  const db = fakeDb();
+  const d = deps(db, []);
+  d.fetch = async (url) => {
+    if (url.startsWith('https://v3-cinemeta.strem.io/')) return AVALON;
+    d.asked++;
+    return gemini('New');
+  };
+  const ids = [];
+  for (let i = 0; i < REVALIDATE_BATCH + 3; i++) {
+    const id = `tt${1000 + i}`;
+    ids.push(id);
+    storeOldAt(db, id);
+    await get(d, id);
+    d.clock.t += 1;
+  }
+  assert.equal(d.asked, 0);
+  assert.equal(await revalidatePass(d, KEY), REVALIDATE_BATCH);
+  assert.equal(d.asked, REVALIDATE_BATCH);
+  const left = [...db.docs.keys()].filter((p) =>
+    p.startsWith('similarRevalidate/'));
+  assert.deepEqual(left.sort(), ids.slice(REVALIDATE_BATCH)
+      .map((id) => `similarRevalidate/v${QUESTION_VERSION}_movie_${id}`));
+  assert.equal(await revalidatePass(d, KEY), 3);
+}));
+
+test('a pass stops at the day\'s cap, and the next day goes on',
+    quietly(async () => {
+      const db = fakeDb();
       const d = deps(db, []);
       d.fetch = async (url) => {
         if (url.startsWith('https://v3-cinemeta.strem.io/')) return AVALON;
         d.asked++;
-        await gate;
         return gemini('New');
       };
-      // The re-ask is held open; the viewer's answer is already out.
-      const res = fakeRes();
-      const first = handler({value: () => KEY}, () => d)(
-          {params: {type: 'movie', id: ID}}, res);
-      await new Promise((resolve) => setImmediate(resolve));
-      assert.deepEqual(res.body.titles.map((t) => t.title), ['Old']);
-      assert.equal(res.body.model, 'gemini-old');
-      assert.equal(res.headers['Cache-Control'], CACHE_STALE);
-
-      // A second request while the re-ask is out is served the old answer
-      // and does not ask again.
-      const secondRes = fakeRes();
-      const second = handler({value: () => KEY}, () => d)(
-          {params: {type: 'movie', id: ID}}, secondRes);
-      for (let turn = 0; turn < 5; turn++) {
-        await new Promise((resolve) => setImmediate(resolve));
+      for (const id of ['tt1', 'tt2', 'tt3']) {
+        storeOldAt(db, id);
+        await get(d, id);
       }
-      assert.deepEqual(secondRes.body.titles.map((t) => t.title), ['Old']);
+      db.docs.set('similarReasks/2026-10-11', {n: REASK_CAP - 1});
+      assert.equal(await revalidatePass(d, KEY), 1);
+      assert.equal(db.docs.get('similarReasks/2026-10-11').n, REASK_CAP);
+      assert.equal(await revalidatePass(d, KEY), 0);
       assert.equal(d.asked, 1);
-
-      release();
-      await Promise.all([first, second]);
-      const doc = db.docs.get(DOC);
-      assert.equal(doc.model, MODEL);
-      assert.deepEqual(doc.titles.map((t) => t.title), ['New']);
-      assert.equal(db.docs.get('similarReasks/2026-10-11').n, 1);
-
-      const third = await get(d);
-      assert.deepEqual(third.body.titles.map((t) => t.title), ['New']);
-      assert.equal(third.body.model, MODEL);
-      assert.equal(third.headers['Cache-Control'], CACHE_CURRENT);
-      assert.equal(d.asked, 1);
+      d.clock.t += 24 * 60 * 60 * 1000;
+      assert.equal(await revalidatePass(d, KEY), 2);
+      assert.equal(d.asked, 3);
     }));
 
-test('one log line per re-ask names the title and both models',
-    async () => {
-      const db = fakeDb();
-      storeOld(db);
-      const lines = [];
-      const log = console.log;
-      console.log = (...args) => lines.push(args.join(' '));
-      try {
-        await get(deps(db, [gemini('New')]));
-      } finally {
-        console.log = log;
-      }
-      assert.equal(lines.length, 1);
-      assert.ok(lines[0].includes(ID), lines[0]);
-      assert.ok(lines[0].includes('gemini-old'), lines[0]);
-      assert.ok(lines[0].includes(MODEL), lines[0]);
-    });
-
-test('past the day\'s cap a stale answer is served and not re-asked',
-    async () => {
-      const db = fakeDb();
-      storeOld(db);
-      db.docs.set('similarReasks/2026-10-11', {n: REASK_CAP});
-      const d = deps(db, [gemini('New')]);
-      const res = await get(d);
-      assert.deepEqual(res.body.titles.map((t) => t.title), ['Old']);
-      assert.equal(res.headers['Cache-Control'], CACHE_STALE);
-      assert.equal(d.asked, 0);
-      assert.equal(db.docs.get(DOC).model, 'gemini-old');
-
-      // The next day has a cap of its own.
-      d.clock.t += 24 * 60 * 60 * 1000;
-      const quiet = console.log;
-      console.log = () => {};
-      try {
-        await get(d);
-      } finally {
-        console.log = quiet;
-      }
-      assert.equal(d.asked, 1);
-      assert.equal(db.docs.get(DOC).model, MODEL);
-    });
-
-test('a failed re-ask keeps the stored answer, and holds the title a while',
+test('a failed re-ask keeps the answer and the queue entry, a few times',
     quietly(async () => {
       const db = fakeDb();
       storeOld(db);
-      const d = deps(db, [response(500, {}), gemini('New')]);
-      const res = await get(d);
-      assert.equal(res.statusCode, 200);
-      assert.deepEqual(res.body.titles.map((t) => t.title), ['Old']);
-      const doc = db.docs.get(DOC);
-      assert.equal(doc.status, 'ready');
-      assert.equal(doc.model, 'gemini-old');
-      assert.deepEqual(doc.titles.map((t) => t.title), ['Old']);
-
+      const d = deps(db, [response(500, {}), response(500, {}),
+        response(500, {}), gemini('Never')]);
       await get(d);
-      assert.equal(d.asked, 1, 'held while the claim stands');
-      d.clock.t += CLAIM_SECONDS * 1000 + 1;
-      await get(d);
-      assert.equal(d.asked, 2);
-      assert.equal(db.docs.get(DOC).model, MODEL);
+      for (let pass = 1; pass <= REVALIDATE_TRIES; pass++) {
+        d.clock.t += CLAIM_SECONDS * 1000 + 1;
+        await revalidatePass(d, KEY);
+        assert.equal(db.docs.get(DOC).model, 'gemini-old');
+        assert.deepEqual(db.docs.get(DOC).titles.map((t) => t.title), ['Old']);
+        assert.equal(db.docs.has(QUEUE), pass < REVALIDATE_TRIES, `pass ${pass}`);
+      }
+      assert.equal(d.asked, REVALIDATE_TRIES);
     }));
+
+test('a title held by a claim is left for the next pass', quietly(async () => {
+  const db = fakeDb();
+  storeOld(db);
+  const d = deps(db, [response(500, {}), gemini('New')]);
+  await get(d);
+  await revalidatePass(d, KEY);
+  await revalidatePass(d, KEY);
+  assert.equal(d.asked, 1, 'held while the claim stands');
+  d.clock.t += CLAIM_SECONDS * 1000 + 1;
+  await revalidatePass(d, KEY);
+  assert.equal(d.asked, 2);
+  assert.equal(db.docs.get(DOC).model, MODEL);
+}));
+
+test('a queued title already re-answered just leaves the queue', async () => {
+  const db = fakeDb();
+  storeOld(db);
+  const d = deps(db, []);
+  await get(d);
+  db.docs.set(DOC, {...db.docs.get(DOC), model: MODEL});
+  assert.equal(await revalidatePass(d, KEY), 0);
+  assert.equal(d.asked, 0);
+  assert.equal(db.docs.has(QUEUE), false);
+});
 
 test('the key is never logged', async () => {
   const lines = [];
@@ -305,7 +365,9 @@ test('the key is never logged', async () => {
     // A first ask failing with the key in the error, and a re-ask doing so.
     await get(deps(db, [new TypeError(`fetch failed key=${KEY}`)]));
     storeOld(db);
-    await get(deps(db, [new TypeError(`fetch failed key=${KEY}`)]));
+    const d = deps(db, [new TypeError(`fetch failed key=${KEY}`)]);
+    await get(d);
+    await revalidatePass(d, KEY);
   } finally {
     console.log = log;
     console.warn = warn;
@@ -313,3 +375,44 @@ test('the key is never logged', async () => {
   assert.ok(lines.length >= 2);
   for (const line of lines) assert.ok(!line.includes(KEY), line);
 });
+
+test('oldest queued first, whatever order they were written in',
+    quietly(async () => {
+      const db = fakeDb();
+      const d = deps(db, []);
+      d.fetch = async (url) => {
+        if (url.startsWith('https://v3-cinemeta.strem.io/')) return AVALON;
+        d.asked++;
+        return gemini('New');
+      };
+      // Written newest first.
+      for (const [id, markedAt] of [['tt3', 30], ['tt2', 20], ['tt1', 10]]) {
+        storeOldAt(db, id);
+        db.docs.set(`similarRevalidate/v${QUESTION_VERSION}_movie_${id}`,
+            {type: 'movie', id, markedAt, tries: 0});
+      }
+      assert.equal(await revalidatePass(d, KEY, 1), 1);
+      assert.equal(db.docs.get(`similar/v${QUESTION_VERSION}_movie_tt1`).model,
+          MODEL);
+      assert.equal(db.docs.get(`similar/v${QUESTION_VERSION}_movie_tt3`).model,
+          'gemini-old');
+    }));
+
+test('a cap another pass spent meanwhile stops this one', quietly(async () => {
+  const db = fakeDb();
+  const d = deps(db, []);
+  d.fetch = async (url) => {
+    if (url.startsWith('https://v3-cinemeta.strem.io/')) return AVALON;
+    d.asked++;
+    // Another pass, overlapping this one, spends the rest of the day.
+    db.docs.set('similarReasks/2026-10-11', {n: REASK_CAP});
+    return gemini('New');
+  };
+  for (const id of ['tt1', 'tt2', 'tt3']) {
+    storeOldAt(db, id);
+    await get(d, id);
+  }
+  assert.equal(await revalidatePass(d, KEY), 1);
+  assert.equal(d.asked, 1);
+  assert.equal(db.docs.get('similarReasks/2026-10-11').n, REASK_CAP);
+}));
