@@ -352,6 +352,15 @@ abstract final class CoreActions {
     required bool watched,
   }) => _ctx('LibraryItemMarkAsWatched', {'id': id, 'is_watched': watched});
 
+  /// Marks a title watched from its catalogue item alone
+  /// (`ActionCtx::MetaItemMarkAsWatched`): an item the library already
+  /// holds is flagged as [libraryItemMarkAsWatched] does, and one it does
+  /// not is made a temporary item -- `temp` and `removed`, so not a saved
+  /// title -- watched once, the state a finished playback leaves a film it
+  /// was never added for. [meta] is the `MetaItemPreview` JSON.
+  static CoreAction metaItemMarkAsWatched(Map<String, dynamic> meta) =>
+      _ctx('MetaItemMarkAsWatched', {'meta_item': meta, 'is_watched': true});
+
   /// Mutes ([disabled] true, `state.noNotif`) or unmutes new-episode
   /// notifications for the item; muting dismisses its pending ones. A
   /// tuple on the wire.

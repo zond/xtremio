@@ -1138,9 +1138,18 @@ press (a held select on a television, through the same `RemotePress` path
 as Continue watching): the title, every source that suggested it, one line
 each, strongest first, with what it counted for in words -- "Watched and
 saved: Heat (×2)", "Watched: Drive" -- and the total ("5 points"), all
-from the kept result, so nothing is fetched to draw it. Under them,
-**Not interested**, which is a `dismissed` face: kept and synced like the
-others
+from the kept result, so nothing is fetched to draw it. Under them, for a
+film only, **Mark as watched**: stremio-core's own
+`MetaItemMarkAsWatched` (`CoreActions.metaItemMarkAsWatched`), which for a
+title the library has never seen makes a temporary item -- `temp` and
+`removed`, so not one of the Library's saved titles -- watched once, the
+state a finished playback leaves a film it was never added for, synced to
+the account like any library item and shown watched wherever the app
+shows it (`rust/tests/core.rs` holds the item's shape). The row hides the
+title at once, and the next computation counts it as a watched source. A
+series has no such entry: "watched" for a show is which episodes, the
+details page's. Then **Not interested**, which is a `dismissed` face:
+kept and synced like the others
 ([Likes and dislikes](#likes-and-dislikes)). Tests:
 `test/features/for_you_rules_test.dart`, `test/features/for_you_row_test.dart`,
 `test/core/watched_bitfield_test.dart`.

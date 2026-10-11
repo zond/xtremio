@@ -473,6 +473,11 @@ void main() {
           'args': {'id': 'tt1', 'is_watched': false},
         },
       );
+      expect(CoreActions.metaItemMarkAsWatched(meta).action['args'], {
+        'action': 'MetaItemMarkAsWatched',
+        'args': {'meta_item': meta, 'is_watched': true},
+      });
+      expect(CoreActions.metaItemMarkAsWatched(meta).field, CoreField.ctx);
       expect(
         CoreActions.toggleLibraryItemNotifications(
           'tt1',

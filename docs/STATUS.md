@@ -39,7 +39,11 @@ Android TV layout are all built. What is not is in the README's
   disliked or dismissed. A long press (a held select) shows why: every
   title that suggested it, strongest first, with what it counted for in
   words ("Watched and saved: Heat (×2)"), and the points that ranked it;
-  then **Not interested** and **Cancel**. It is worked out on the device, kept, and worked
+  then, for a film, **Mark as watched** (seen elsewhere: the film is
+  watched as one finished in the player is, in Stremio's own library
+  state, without being added to the library, and becomes a source of the
+  row), **Not interested** and **Cancel**. A series has no Mark as
+  watched there; which episodes were watched is the details page's. It is worked out on the device, kept, and worked
   out again when the sources or the faces change and otherwise once a
   day; with nothing kept it appears as the first answers arrive. Hidden
   when it has nothing to show ([For you](ARCHITECTURE.md#for-you)).

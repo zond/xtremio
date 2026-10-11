@@ -109,6 +109,39 @@ fn core_lifecycle() -> anyhow::Result<()> {
     assert!(core_get_state("nope".into()).is_err());
     // The whole library, which no model field is: empty on a fresh core.
     assert_eq!(state("library_items"), serde_json::json!({"items": []}));
+
+    // Marking a title watched that the library has never seen -- the For you
+    // sheet's "Mark as watched" -- is stremio-core's own
+    // `MetaItemMarkAsWatched`: a temporary item, removed (so not one of the
+    // Library's saved titles), watched once, as a finished playback leaves a
+    // film it was never added for.
+    core_dispatch(
+        r#"{"field":"ctx","action":{"action":"Ctx","args":{"action":"MetaItemMarkAsWatched","args":{"meta_item":{"id":"tt0113277","type":"movie","name":"Heat","poster":null,"posterShape":"poster"},"is_watched":true}}}}"#
+            .into(),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let marked = loop {
+        let items = state("library_items");
+        if let Some(item) = items["items"].as_array().and_then(|items| items.first()) {
+            break item.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the mark never reached the library"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(marked["_id"], "tt0113277", "{marked}");
+    assert_eq!(marked["temp"], true, "{marked}");
+    assert_eq!(marked["removed"], true, "{marked}");
+    assert_eq!(marked["state"]["timesWatched"], 1, "{marked}");
+    core_dispatch(
+        r#"{"field":"library","action":{"action":"Load","args":{"model":"LibraryWithFilters","args":{"request":{"type":null,"sort":"lastwatched","page":1}}}}}"#
+            .into(),
+    )?;
+    let library = state("library");
+    assert_eq!(library["catalog"], serde_json::json!([]), "{library}");
+    assert!(library["selected"].is_object(), "loaded: {library}");
     core_dispatch(r#"{"field":"discover","action":{"action":"Unload"}}"#.into())?;
     let discover = state("discover");
     assert!(discover["selected"].is_null(), "{discover}");

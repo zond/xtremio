@@ -72,8 +72,9 @@ class CatalogRows extends StatefulWidget {
   /// The For you row's heading.
   static const String forYouTitle = 'For you';
 
-  /// The For you long-press sheet's action.
+  /// The For you long-press sheet's actions.
   static const String notInterestedLabel = 'Not interested';
+  static const String markWatchedLabel = 'Mark as watched';
 
   /// Rows requested beyond the visible ones, on each side.
   static const int overscanRows = 1;
@@ -395,13 +396,25 @@ class _CatalogRowsState extends State<CatalogRows> {
   Future<void> _forYouLongPress(ForYouTitle title) async {
     final focused = FocusManager.instance.primaryFocus;
     final at = _boardFocus.hasFocus ? focused?.rect : null;
-    final dismiss = await showModalBottomSheet<bool>(
+    final choice = await showModalBottomSheet<_ForYouChoice>(
       context: context,
       builder: (_) => _NotInterestedSheet(title: title),
     );
     final prefs = _prefs;
-    if (!(dismiss ?? false) || !mounted || prefs == null) return;
-    await markFace(context, prefs, title.item.id, Face.dismissed);
+    if (!mounted || prefs == null) return;
+    switch (choice) {
+      case _ForYouChoice.notInterested:
+        await markFace(context, prefs, title.item.id, Face.dismissed);
+      case _ForYouChoice.markWatched:
+        // Seen elsewhere: watched as a finished film is, in the engine's own
+        // library state, which also makes it a source of the row.
+        unawaited(
+          _client?.dispatch(CoreActions.metaItemMarkAsWatched(title.item.json)),
+        );
+        _forYou?.hide(title.item.id);
+      case null:
+        return;
+    }
     if (at == null || !mounted) return;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _refocusAfterRemoval(at),
@@ -1084,11 +1097,16 @@ class _ForYouPoster extends StatelessWidget {
   }
 }
 
+/// What the For you sheet was left with; null is Cancel.
+enum _ForYouChoice { markWatched, notInterested }
+
 /// The For you long press (a held OK on a television, through the same
 /// `RemotePress` path as Continue watching): the title, then every source
 /// that suggested it, strongest first, each with what it counted for --
-/// `Watched and saved: Heat (×2)` -- and the total that ranked it; then
-/// "Not interested", or Cancel, where a television's remote starts, so a
+/// `Watched and saved: Heat (×2)` -- and the total that ranked it; then,
+/// for a film, "Mark as watched" (seen elsewhere; a series' watched state
+/// is which episodes, the details page's to say), "Not interested", or
+/// Cancel, where a television's remote starts, so a
 /// key held a moment too long dismisses nothing. All of it is in the row's
 /// kept result, so nothing is fetched to draw it.
 class _NotInterestedSheet extends StatelessWidget {
@@ -1141,16 +1159,22 @@ class _NotInterestedSheet extends StatelessWidget {
               ),
             ),
           ),
+          if (title.item.type == 'movie')
+            ListTile(
+              leading: const Icon(Icons.done_all_outlined),
+              title: const Text(CatalogRows.markWatchedLabel),
+              onTap: () => Navigator.of(context).pop(_ForYouChoice.markWatched),
+            ),
           ListTile(
             leading: const Icon(Icons.thumb_down_off_alt_outlined),
             title: const Text(CatalogRows.notInterestedLabel),
-            onTap: () => Navigator.of(context).pop(true),
+            onTap: () => Navigator.of(context).pop(_ForYouChoice.notInterested),
           ),
           ListTile(
             autofocus: DeviceScope.isTv(context),
             leading: const Icon(Icons.arrow_back),
             title: const Text('Cancel'),
-            onTap: () => Navigator.of(context).pop(false),
+            onTap: () => Navigator.of(context).pop(),
           ),
         ],
       ),

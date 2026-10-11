@@ -497,6 +497,72 @@ void main() {
     );
   });
 
+  testWidgets('a film\'s sheet offers Mark as watched and a series\' does '
+      'not', (tester) async {
+    fake
+      ..knows('A Film', 'tt800')
+      ..knows('A Show', 'tt801', type: 'series')
+      ..suggests('tt-saved', ['A Film', 'A Show']);
+    await mount(tester, library: [libraryItemJson('tt-saved', name: 'S')]);
+    await tester.longPress(
+      find.bySemanticsLabel('A Film. Because you saved S'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(CatalogRows.markWatchedLabel), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.longPress(
+      find.bySemanticsLabel('A Show. Because you saved S'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(CatalogRows.markWatchedLabel), findsNothing);
+    expect(find.text(CatalogRows.notInterestedLabel), findsOneWidget);
+  });
+
+  testWidgets('Mark as watched marks the film in the engine, takes it off the '
+      'row, and makes it a source', (tester) async {
+    fake
+      ..knows('Seen It', 'tt900')
+      ..knows('Next', 'tt901')
+      ..suggests('tt-saved', ['Seen It'])
+      ..suggests('tt900', ['Next']);
+    final library = [libraryItemJson('tt-saved', name: 'S')];
+    await mount(tester, library: library);
+    await tester.longPress(
+      find.bySemanticsLabel('Seen It. Because you saved S'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(CatalogRows.markWatchedLabel));
+    await tester.pumpAndSettle();
+
+    final marked = core.dispatched.last.toJson();
+    expect(marked['field'], 'ctx');
+    expect(marked['action']['args']['action'], 'MetaItemMarkAsWatched');
+    expect(marked['action']['args']['args']['meta_item']['id'], 'tt900');
+    expect(marked['action']['args']['args']['is_watched'], true);
+    expect(find.bySemanticsLabel(RegExp('^Seen It')), findsNothing);
+    expect(prefs.faces.of('tt900'), isNull, reason: 'not a face');
+
+    // What the engine then holds: a temporary item, watched once.
+    core.setState(
+      CoreField.libraryItems,
+      libraryItemsState([
+        ...library,
+        libraryItemJson(
+          'tt900',
+          name: 'Seen It',
+          temp: true,
+          removed: true,
+          timesWatched: 1,
+          lastWatched: '2026-10-12T00:00:00Z',
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    expect(fake.suggested, contains('movie/tt900'));
+    expect(tiles(tester), ['Next. Because you watched Seen It']);
+  });
+
   group('the controller', () {
     test('works a kept row out again once it is a day old, and asks about '
         'the latest maxSources sources only', () async {

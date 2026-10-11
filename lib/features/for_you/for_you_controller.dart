@@ -179,9 +179,20 @@ class ForYouController extends ChangeNotifier {
     ];
   }
 
+  /// Titles taken off the row by hand ahead of what says so -- marked
+  /// watched, which the library shows a moment later.
+  final Set<String> _hidden = {};
+
+  /// Takes [id] off the row now; the library or the faces say so for good
+  /// once they have caught up.
+  void hide(String id) {
+    if (_hidden.add(id)) notifyListeners();
+  }
+
   /// The ids no title of the row may be: in the library in any sense, on
   /// Continue watching, disliked, or dismissed.
   Set<String> _excluded() => {
+    ..._hidden,
     for (final item in _library) item.id,
     ..._continueWatching,
     ...prefs.faces.idsWith(Face.dislike),
