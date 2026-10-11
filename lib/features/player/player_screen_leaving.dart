@@ -60,6 +60,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     _pauseUpNext();
     _controlsTimer?.cancel();
     _controlsTimer = null;
+    _clickTimer?.cancel();
+    _clickTimer = null;
     _stuckTimer?.cancel();
     _stuckTimer = null;
     _readWaitTimer?.cancel();

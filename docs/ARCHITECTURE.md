@@ -485,6 +485,12 @@ step, ↑/↓ volume, M mute, F fullscreen, Esc (leaves fullscreen first when
 next episode, Shift+I stats. The remote's keys are in
 [ANDROID.md](ANDROID.md#driving-it-with-the-remote).
 
+On the picture, a mouse click plays or pauses at once and a double-click
+also toggles fullscreen (its two clicks toggle playback twice, so it ends
+where it was); with the up-next card counting down a click calls it off. A
+touch tap shows or hides the controls instead, and a double tap on the left
+or right third skips the seek step.
+
 ### Torrent start-up and stalls
 
 From `open` until the media loads, a torrent shows a card instead of a

@@ -1031,6 +1031,20 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   bool _controlsVisible = true;
   Timer? _controlsTimer;
+
+  /// Runs for one double-click interval after a mouse click on the video,
+  /// so the next click inside it is the double-click ([_onVideoClick]).
+  /// A timer rather than the events' timestamps, so the interval is the
+  /// clock this screen's other timers run on.
+  Timer? _clickTimer;
+
+  /// Where that click was: a second click further away than
+  /// [kDoubleTapSlop] starts over rather than doubling.
+  Offset? _clickAt;
+
+  /// The mouse button went down on the video here, and not on anything
+  /// drawn over it; null when the press was not a primary mouse click.
+  Offset? _clickDownAt;
   bool _menuOpen = false;
   bool _scrubbing = false;
 
@@ -1937,6 +1951,37 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
   }
 
+  /// A mouse click on the video: play/pause at once, and the second click
+  /// of a double-click also toggles fullscreen -- what a desktop player is
+  /// expected to do with a click. Both clicks of a double-click toggle
+  /// playback, so it ends where it was, rather than every single click
+  /// waiting out the double-click interval before it answers.
+  ///
+  /// With the up-next countdown running a click calls the hand-off off
+  /// instead, as the remote's centre key does: the card is what the click
+  /// lands in front of. Touch keeps [_onVideoTap].
+  void _onVideoClick(Offset at) {
+    final first = _clickAt;
+    final doubled =
+        _clickTimer?.isActive == true &&
+        first != null &&
+        (at - first).distance <= kDoubleTapSlop;
+    _clickTimer?.cancel();
+    if (doubled) {
+      _clickTimer = null;
+      _clickAt = null;
+    } else {
+      _clickAt = at;
+      _clickTimer = Timer(kDoubleTapTimeout, () => _clickAt = null);
+    }
+    if (_upNextSecondsLeft != null) {
+      _dismissUpNext();
+      return;
+    }
+    _togglePlay();
+    if (doubled) _toggleFullscreen();
+  }
+
   /// Double-tapping the left/right third of the video on a touch screen
   /// skips back/forward.
   void _onVideoDoubleTap(TapDownDetails details, double width) {
@@ -2480,20 +2525,46 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _onVideoTap,
-                    onDoubleTapDown: (details) =>
-                        _onVideoDoubleTap(details, width),
-                    onDoubleTap: () {},
-                    child: hasVideo
-                        ? engine.buildVideo(
-                            context,
-                            subtitleBottomPadding: _subtitleBottomPadding(
-                              controlsShown: shown,
-                            ),
-                          )
-                        : const SizedBox.expand(),
+                  // A mouse is a click ([_onVideoClick]) and everything
+                  // else a tap ([_onVideoTap]); the two never see the same
+                  // pointer.
+                  Listener(
+                    onPointerDown: (event) => _clickDownAt =
+                        event.kind == PointerDeviceKind.mouse &&
+                            event.buttons == kPrimaryMouseButton
+                        ? event.localPosition
+                        : null,
+                    onPointerUp: (event) {
+                      final down = _clickDownAt;
+                      _clickDownAt = null;
+                      if (down == null ||
+                          (event.localPosition - down).distance > kTouchSlop) {
+                        return;
+                      }
+                      _onVideoClick(event.localPosition);
+                    },
+                    onPointerCancel: (_) => _clickDownAt = null,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      supportedDevices: const {
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.stylus,
+                        PointerDeviceKind.invertedStylus,
+                        PointerDeviceKind.unknown,
+                      },
+                      onTap: _onVideoTap,
+                      onDoubleTapDown: (details) =>
+                          _onVideoDoubleTap(details, width),
+                      onDoubleTap: () {},
+                      child: hasVideo
+                          ? engine.buildVideo(
+                              context,
+                              subtitleBottomPadding: _subtitleBottomPadding(
+                                controlsShown: shown,
+                              ),
+                            )
+                          : const SizedBox.expand(),
+                    ),
                   ),
                   // Above the tap-to-show-controls surface rather than inside
                   // it: its buttons are the only thing on screen while a

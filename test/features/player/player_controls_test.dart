@@ -334,6 +334,57 @@ void main() {
     expect(engine.playOrPauseCalls, 2);
   });
 
+  group('a mouse on the picture', () {
+    /// A primary-button click with a mouse on the video, [after] the last.
+    Future<void> click(WidgetTester tester, {Duration? after}) async {
+      if (after != null) await tester.pump(after);
+      await tester.tapAt(
+        tester.getCenter(find.text('video surface')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('a click plays or pauses at once', (tester) async {
+      final harness = await pumpPlaying(tester);
+      await click(tester);
+      expect(harness.engine.playOrPauseCalls, 1);
+      expect(harness.fullscreen.enters, 0);
+      await click(tester, after: kDoubleTapTimeout * 2);
+      expect(harness.engine.playOrPauseCalls, 2);
+      expect(harness.fullscreen.enters, 0, reason: 'too far apart to double');
+    });
+
+    testWidgets('a double-click toggles fullscreen and leaves playback as '
+        'it was', (tester) async {
+      final harness = await pumpPlaying(tester);
+      await click(tester);
+      await click(tester, after: kDoubleTapMinTime);
+      expect(harness.fullscreen.enters, 1);
+      expect(harness.engine.playOrPauseCalls, 2);
+
+      await click(tester, after: kDoubleTapTimeout * 2);
+      await click(tester, after: kDoubleTapMinTime);
+      expect(harness.fullscreen.exits, 1);
+      expect(harness.engine.playOrPauseCalls, 4);
+
+      // A third click right after a double is a new first click.
+      await click(tester, after: kDoubleTapMinTime);
+      expect(harness.fullscreen.enters, 1);
+      expect(harness.fullscreen.exits, 1);
+    });
+
+    testWidgets('a touch tap still only shows and hides the controls', (
+      tester,
+    ) async {
+      final harness = await pumpPlaying(tester);
+      await tapVideo(tester);
+      await tapVideo(tester);
+      expect(harness.engine.playOrPauseCalls, 0);
+      expect(harness.fullscreen.enters, 0);
+    });
+  });
+
   testWidgets('phones get the transport in the middle and no volume slider', (
     tester,
   ) async {
