@@ -33,6 +33,7 @@ void main() {
     prefs = AppPrefs(client: FakePrefsClient());
     addTearDown(prefs.dispose);
     await prefs.load();
+    prefs.setFacesOwner('user-a');
     store = FakeFacesStore();
     vault = FakeDriveVaultStore()..byUser['user-a'] = 'a-refresh-token';
     opener = FakeLinkOpener();

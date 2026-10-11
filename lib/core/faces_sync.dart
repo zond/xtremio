@@ -15,6 +15,12 @@
 /// account's `clearedAt` -- every mark older than that is dropped wherever
 /// it is merged next.
 ///
+/// **Only the signed-in account's marks, and nobody's.** Marks are kept
+/// per account on the device ([FacesByAccount]); a sync sends the account's
+/// own and the ones made signed out, which then become the account's --
+/// once: they leave nobody's set as the answer lands. Another account's
+/// marks on this device are never sent.
+///
 /// Signed out or offline is a sync that did not happen, quietly
 /// ([XerviceIdentity]); the next change or the next start tries again.
 library;
@@ -45,7 +51,7 @@ class FacesSync {
   /// Marks [id] with [face] (null takes the mark off) on this device, and
   /// sends the set to the account.
   Future<void> setFace(String id, Face? face) async {
-    await prefs.setFaces(prefs.faces.marking(id, face, now()));
+    await prefs.markFace(id, face, now());
     await sync();
   }
 
@@ -69,29 +75,46 @@ class FacesSync {
   }
 
   Future<void> _once() async {
-    if (!identity.signedIn) return;
-    final answer = await identity.send(
-      'PUT',
-      '/faces',
-      body: prefs.faces.toJson(),
-    );
+    final owner = prefs.facesOwner;
+    if (owner == null || !identity.signedIn) return;
+    final nobodys = prefs.facesByAccount.of(null);
+    final sent = prefs.facesByAccount.of(owner).merged(nobodys);
+    final answer = await identity.send('PUT', '/faces', body: sent.toJson());
     if (answer == null) return;
     if (!answer.ok) {
       DiagnosticsLog.info('faces', 'not synced (${answer.status})');
       return;
     }
+    // Written to [owner]'s set even if another account signed in while the
+    // request was out: the answer is [owner]'s, and so is the set.
     // Merged with the set as it is now, not as it was sent: a press while
     // the request was out is newer than anything in the answer.
-    await prefs.setFaces(prefs.faces.merged(Faces.fromJson(answer.json)));
+    await prefs.setFacesOf(
+      owner,
+      prefs.facesByAccount.of(owner).merged(Faces.fromJson(answer.json)),
+    );
+    // Nobody's marks are the account's now; the ones that were sent leave.
+    final left = prefs.facesByAccount.of(null);
+    await prefs.setFacesOf(
+      null,
+      Faces({
+        for (final MapEntry(:key, :value) in left.marks.entries)
+          if (nobodys.marks[key] != value) key: value,
+      }),
+    );
   }
 
   /// Forgets every face on the account and on this device. Answers whether
   /// the account heard it: offline or signed out, nothing is forgotten
   /// anywhere, so the viewer is not told it was.
   Future<bool> forgetEverywhere() async {
+    final owner = prefs.facesOwner;
+    if (owner == null) return false;
     final answer = await identity.send('DELETE', '/faces');
     if (answer == null || !answer.ok) return false;
-    await prefs.setFaces(Faces.fromJson(answer.json));
+    await prefs.setFacesOf(owner, Faces.fromJson(answer.json));
+    // The ones made signed out would be this account's at the next sync.
+    await prefs.setFacesOf(null, Faces.empty);
     return true;
   }
 }

@@ -679,11 +679,16 @@ class _XtremioAppState extends State<XtremioApp> {
     if (await _isLoggedIn()) await _pullAccount();
   }
 
-  /// Syncs with the account whenever `ctx` shows a session key the last
-  /// sync did not run for: the first `ctx` of a signed-in start, and every
+  /// Tells the preferences who is signed in, and syncs with the account
+  /// whenever `ctx` shows a session key the last sync did not run for: the first `ctx` of a signed-in start, and every
   /// sign-in after. Waits for the preferences, which hold what is synced.
   void _onCtxForXervice() {
-    final key = stremioAuthKeyOf(_ctx.value);
+    final ctx = _ctx.value;
+    // Whose faces are shown and written, signed in or not, service or not.
+    _prefs.setFacesOwner(
+      ctx == null ? null : ProfileState.fromCtx(ctx).user?.id,
+    );
+    final key = stremioAuthKeyOf(ctx);
     if (key == _syncedFor) return;
     _syncedFor = key;
     if (key == null) return;

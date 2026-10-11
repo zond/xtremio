@@ -42,5 +42,5 @@ Future<void> markFace(
   if (sync != null && identical(sync.prefs, prefs)) {
     return sync.setFace(id, face);
   }
-  return prefs.setFaces(prefs.faces.marking(id, face, DateTime.now()));
+  return prefs.markFace(id, face, DateTime.now());
 }

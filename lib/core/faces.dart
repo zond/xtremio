@@ -180,3 +180,79 @@ final class Faces {
     ),
   );
 }
+
+/// Every account's faces on this device, apart: each mark is kept under
+/// the Stremio user id it was made under, or under [nobody] when it was
+/// made signed out.
+///
+/// So signing out of one account and into another does not hand the first
+/// one's likes to the second. The faces shown are the signed-in account's
+/// and nobody's ([shownFor]); another account's stay here untouched and
+/// come back when that account signs in again. Nobody's go to the first
+/// account that syncs, once, and leave this set as they do (`FacesSync`).
+@immutable
+final class FacesByAccount {
+  const FacesByAccount(this.accounts);
+
+  static const FacesByAccount empty = FacesByAccount({});
+
+  /// The owner of the marks made signed out.
+  static const String nobody = '';
+
+  /// Owner (a user id, or [nobody]) to that owner's marks.
+  final Map<String, Faces> accounts;
+
+  /// [owner]'s own marks; null is [nobody].
+  Faces of(String? owner) => accounts[owner ?? nobody] ?? Faces.empty;
+
+  /// What the device shows while [owner] is signed in (null: signed out):
+  /// that account's marks and nobody's, the newer on a title they share.
+  Faces shownFor(String? owner) =>
+      owner == null ? of(null) : of(owner).merged(of(null));
+
+  /// This with [owner]'s marks replaced by [faces].
+  FacesByAccount withOwner(String? owner, Faces faces) => FacesByAccount({
+    for (final MapEntry(:key, :value) in accounts.entries)
+      if (key != (owner ?? nobody)) key: value,
+    if (faces.marks.isNotEmpty || faces.clearedAt != 0) owner ?? nobody: faces,
+  });
+
+  bool get isEmpty => accounts.isEmpty;
+
+  Map<String, Object> toJson() => {
+    'byAccount': {
+      for (final MapEntry(:key, :value) in accounts.entries)
+        key: value.toJson(),
+    },
+  };
+
+  /// The stored value. A set written before marks had owners (the shape of
+  /// [Faces.toJson]) was made by nobody anybody can name now, so it is
+  /// [nobody]'s and goes to the first account that syncs.
+  static FacesByAccount fromJson(Object? json) {
+    if (json is! Map) return empty;
+    final byAccount = json['byAccount'];
+    if (byAccount is! Map) {
+      final old = Faces.fromJson(json);
+      return empty.withOwner(null, old);
+    }
+    var result = empty;
+    for (final MapEntry(:key, :value) in byAccount.entries) {
+      if (key is! String) continue;
+      result = result.withOwner(
+        key == nobody ? null : key,
+        Faces.fromJson(value),
+      );
+    }
+    return result;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is FacesByAccount && mapEquals(other.accounts, accounts);
+
+  @override
+  int get hashCode => Object.hashAllUnordered(
+    accounts.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
+}

@@ -1199,8 +1199,15 @@ only one side has, so a device's first sync adds its marks to the
 account's rather than replacing them; the only removal that travels is
 **Forget my likes everywhere** (`DELETE /faces`), which stamps the
 account's `clearedAt`, and every mark at or before it is dropped wherever
-it is merged next. Signed out, a press stays on the device and goes up at
-the next sign-in. Tests: `test/core/faces_test.dart`,
+it is merged next. Marks are kept on the device per account
+(`FacesByAccount`): each under the Stremio user id it was made under, or
+under nobody when signed out, and `AppPrefs.faces` shows the signed-in
+account's and nobody's (`setFacesOwner`, from `ctx`). A sync sends only
+those two; nobody's become the account's and leave nobody's set, so they
+reach the first account that signs in, once. Signing out of one account
+and into another hides the first one's marks without sending them
+anywhere, and they come back when it signs in again. A set stored before
+marks had owners is nobody's. Tests: `test/core/faces_test.dart`,
 `test/core/faces_sync_test.dart`, `test/features/details_faces_test.dart`,
 `test/features/xervice_section_test.dart`, `test/app_xervice_test.dart`.
 

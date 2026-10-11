@@ -230,7 +230,8 @@ class AppPrefs extends ChangeNotifier {
   static const String similarSuggestionsKey = 'similarSuggestions';
 
   /// The `faces` key: what the viewer said about titles -- liked,
-  /// disliked, not interested (see [Faces]). Ids and times only.
+  /// disliked, not interested -- kept apart per account they were said
+  /// under (see [FacesByAccount]). Ids, times and user ids only.
   static const String facesKey = 'faces';
 
   /// The `showEpisodes` key: each series' episode list as the For you row
@@ -371,7 +372,18 @@ class AppPrefs extends ChangeNotifier {
   /// Where each title's details screen was left -- see [detailsVisitsKey].
   DetailsVisitMemory get detailsVisits => _detailsVisits;
 
+  FacesByAccount _facesByAccount = FacesByAccount.empty;
+
+  /// The Stremio user id signed in now, or null; set by the app from
+  /// `ctx`, never stored. Decides whose faces are shown and written.
+  String? _facesOwner;
+  String? get facesOwner => _facesOwner;
+
+  /// [faces] as last worked out, so a read is free.
   Faces _faces = Faces.empty;
+
+  /// Every account's faces on this device ([facesKey]).
+  FacesByAccount get facesByAccount => _facesByAccount;
 
   ShowEpisodesMemory _showEpisodes = ShowEpisodesMemory.empty;
 
@@ -383,7 +395,8 @@ class AppPrefs extends ChangeNotifier {
   /// The For you row as last worked out ([forYouKey]); null for never.
   Map<String, dynamic>? get forYou => _forYou;
 
-  /// What the viewer said about titles ([facesKey]).
+  /// What the viewer said about titles, as shown to whoever is signed in
+  /// ([FacesByAccount.shownFor]): their marks and the signed-out ones.
   Faces get faces => _faces;
 
   SimilarMemory _similarSuggestions = SimilarMemory.empty;
@@ -607,9 +620,10 @@ class AppPrefs extends ChangeNotifier {
       }
     }
     if (loaded(facesKey)) {
-      final faces = Faces.fromJson(stored[facesKey]);
-      if (faces != _faces) {
-        _faces = faces;
+      final faces = FacesByAccount.fromJson(stored[facesKey]);
+      if (faces != _facesByAccount) {
+        _facesByAccount = faces;
+        _faces = faces.shownFor(_facesOwner);
         changed = true;
       }
     }
@@ -817,19 +831,38 @@ class AppPrefs extends ChangeNotifier {
     );
   }
 
-  /// Stores what the viewer said about titles, or removes the key once
-  /// nothing is said and nothing was ever forgotten. Tells every listener:
-  /// a details screen draws the faces and the For you row is ranked by
-  /// them.
-  Future<void> setFaces(Faces value) async {
-    if (_faces == value) return;
-    _faces = value;
+  /// Who is signed in, for the faces ([facesOwner]). Tells every listener
+  /// when it changes what is shown.
+  void setFacesOwner(String? owner) {
+    if (owner == _facesOwner) return;
+    _facesOwner = owner;
+    final shown = _facesByAccount.shownFor(owner);
+    if (shown == _faces) return;
+    _faces = shown;
     notifyListeners();
-    await _write(
-      facesKey,
-      value.marks.isEmpty && value.clearedAt == 0 ? null : value.toJson(),
-    );
   }
+
+  /// Marks [id] with [face] (null takes it off) at [at], under whoever is
+  /// signed in now -- or nobody.
+  Future<void> markFace(String id, Face? face, DateTime at) => setFacesOf(
+    _facesOwner,
+    _facesByAccount.of(_facesOwner).marking(id, face, at),
+  );
+
+  /// Replaces [owner]'s own marks (null: nobody's) and writes the lot, or
+  /// removes the key once no account has any. Tells every listener: a
+  /// details screen draws the faces and the For you row is ranked by them.
+  Future<void> setFacesOf(String? owner, Faces value) async {
+    final next = _facesByAccount.withOwner(owner, value);
+    if (next == _facesByAccount) return;
+    _facesByAccount = next;
+    _faces = next.shownFor(_facesOwner);
+    notifyListeners();
+    await _write(facesKey, next.isEmpty ? null : next.toJson());
+  }
+
+  /// [setFacesOf] for whoever is signed in now.
+  Future<void> setFaces(Faces value) => setFacesOf(_facesOwner, value);
 
   /// Stores the episode lists. Tells no listener: the row that asked has
   /// them in hand.

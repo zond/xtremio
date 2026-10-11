@@ -154,6 +154,7 @@ void main() {
       ..routes = (request, user) =>
           store.routes(request, user) ?? const XerviceAnswer(404);
     await freshPrefs();
+    prefs.setFacesOwner('user-a');
     final sync = FacesSync(
       prefs: prefs,
       identity: XerviceIdentity(http: service, authKey: () => key),
