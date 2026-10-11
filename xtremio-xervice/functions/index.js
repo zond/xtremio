@@ -653,7 +653,7 @@ exports.ratings = onRequest(
 const {mountAccount} = require('./account');
 const IDENTITY_KEY = defineSecret('IDENTITY_KEY');
 const accountApp = express();
-accountApp.use(express.json({limit: '256kb'}));
+accountApp.use(express.json({limit: '1mb'}));
 mountAccount(accountApp, {identity: IDENTITY_KEY});
 exports.account = onRequest(
     {secrets: [IDENTITY_KEY], region: 'europe-west1', timeoutSeconds: 30},

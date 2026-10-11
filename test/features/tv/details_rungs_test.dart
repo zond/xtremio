@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/details/face_buttons.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
 import 'package:xtremio/features/details/details_header.dart'
@@ -293,7 +294,7 @@ Map<String, dynamic> headed(
 }
 
 /// The header's focus stops, the plot and the trailer of its text column
-/// top first, and the bookmark last.
+/// top first, and the bookmark last; the faces beside it are neither.
 ({List<FocusNode> column, FocusNode bookmark}) headerStops(
   WidgetTester tester,
 ) {
@@ -312,8 +313,14 @@ Map<String, dynamic> headed(
         node.context?.findAncestorWidgetOfExactType<Tooltip>()?.message ==
         TvMetaHeader.addTooltip,
   );
+  // The faces stand right of the bookmark, in the corner and not the
+  // column (`details_faces_test.dart` walks them).
+  bool isFace(FocusNode node) => {
+    FaceButtons.likeTooltip,
+    FaceButtons.dislikeTooltip,
+  }.contains(node.context?.findAncestorWidgetOfExactType<Tooltip>()?.message);
   return (
-    column: stops.where((node) => node != bookmark).toList()
+    column: stops.where((node) => node != bookmark && !isFace(node)).toList()
       ..sort((a, b) => a.rect.top.compareTo(b.rect.top)),
     bookmark: bookmark,
   );

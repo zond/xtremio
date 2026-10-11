@@ -7,6 +7,8 @@ const assert = require('node:assert/strict');
 const {
   identityHandler,
   withAccount,
+  facesRoutes,
+  FACES_LIMIT,
   signToken,
   verifyToken,
   logName,
@@ -271,4 +273,111 @@ test('a route behind a token runs for its account, and only then',
         assert.equal(res.headers['Cache-Control'], 'no-store, max-age=0');
       }
       assert.deepEqual(seen, [USER]);
+    });
+
+/** Calls one faces route as [user] (null for no token). */
+async function facesCall(d, verb, user, body) {
+  const routes = facesRoutes(keys, () => d);
+  const res = fakeRes();
+  const headers = user ?
+    {authorization: `Bearer ${signToken(IDENTITY_KEY, user,
+        d.clock.t + 60000)}`} :
+    {};
+  await quietly(async () => {
+    await routes[verb]({method: verb.toUpperCase(), path: '/faces', headers,
+      body}, res);
+  });
+  return res;
+}
+
+test('a first PUT keeps what the device sent, and GET reads it back',
+    async () => {
+      const d = deps();
+      const sent = {faces: {
+        tt1: {kind: 'like', at: 100},
+        tt2: {kind: 'dislike', at: 200},
+        'kitsu:7': {kind: 'dismissed', at: 300},
+      }};
+      const put = await facesCall(d, 'put', USER, sent);
+      assert.equal(put.statusCode, 200);
+      assert.deepEqual(put.body, {faces: sent.faces, clearedAt: 0});
+      assert.deepEqual(d.db.docs.get(`faces/${USER}`),
+          {faces: sent.faces, clearedAt: 0});
+      const got = await facesCall(d, 'get', USER);
+      assert.deepEqual(got.body, put.body);
+      assert.equal(got.headers['Cache-Control'], 'no-store, max-age=0');
+    });
+
+test('a PUT merges: newest per title wins, and nothing is dropped',
+    async () => {
+      const d = deps();
+      await facesCall(d, 'put', USER, {faces: {
+        tt1: {kind: 'like', at: 100},
+        tt2: {kind: 'dislike', at: 500},
+        tt3: {kind: 'like', at: 100},
+      }});
+      const put = await facesCall(d, 'put', USER, {faces: {
+        tt1: {kind: 'none', at: 200}, // newer: the like was taken off
+        tt2: {kind: 'like', at: 400}, // older: the dislike stands
+        tt4: {kind: 'dismissed', at: 50}, // only here: kept
+      }});
+      assert.deepEqual(put.body.faces, {
+        tt1: {kind: 'none', at: 200},
+        tt2: {kind: 'dislike', at: 500},
+        tt3: {kind: 'like', at: 100},
+        tt4: {kind: 'dismissed', at: 50},
+      });
+    });
+
+test('DELETE forgets everything, and an older set cannot bring it back',
+    async () => {
+      const d = deps();
+      await facesCall(d, 'put', USER, {faces: {tt1: {kind: 'like', at: 100}}});
+      const forgotten = await facesCall(d, 'delete', USER);
+      assert.deepEqual(forgotten.body, {faces: {}, clearedAt: d.clock.t});
+      // A device that has not heard sends what it had, and one mark newer
+      // than the forgetting.
+      const put = await facesCall(d, 'put', USER, {faces: {
+        tt1: {kind: 'like', at: 100},
+        tt9: {kind: 'like', at: d.clock.t + 1},
+      }, clearedAt: 0});
+      assert.deepEqual(put.body, {
+        faces: {tt9: {kind: 'like', at: d.clock.t + 1}},
+        clearedAt: d.clock.t,
+      });
+    });
+
+test('faces are kept per account, and refused without a token', async () => {
+  const d = deps();
+  await facesCall(d, 'put', USER, {faces: {tt1: {kind: 'like', at: 1}}});
+  const other = await facesCall(d, 'get', 'another-user');
+  assert.deepEqual(other.body, {faces: {}, clearedAt: 0});
+  for (const verb of ['get', 'put', 'delete']) {
+    const res = await facesCall(d, verb, null, {faces: {}});
+    assert.equal(res.statusCode, 401, verb);
+  }
+  assert.deepEqual(d.db.docs.get(`faces/${USER}`).faces,
+      {tt1: {kind: 'like', at: 1}});
+});
+
+test('rows that are not faces are dropped, a body that is not a set refused',
+    async () => {
+      const d = deps();
+      const put = await facesCall(d, 'put', USER, {faces: {
+        'tt1': {kind: 'love', at: 1},
+        'tt2': {kind: 'like', at: -1},
+        'tt3': {kind: 'like', at: '5'},
+        '../x': {kind: 'like', at: 1},
+        'tt4': {kind: 'like', at: 4},
+      }});
+      assert.deepEqual(put.body.faces, {tt4: {kind: 'like', at: 4}});
+      for (const body of [{faces: []}, {faces: 'x'}, []]) {
+        assert.equal((await facesCall(d, 'put', USER, body)).statusCode, 400);
+      }
+      const many = {};
+      for (let i = 0; i <= FACES_LIMIT; i++) {
+        many[`tt${i}`] = {kind: 'like', at: 1};
+      }
+      assert.equal((await facesCall(d, 'put', USER, {faces: many})).statusCode,
+          413);
     });

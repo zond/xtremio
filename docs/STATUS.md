@@ -38,7 +38,11 @@ Android TV layout are all built. What is not is in the README's
 
 Facts and genres; for a series a season picker and episode list with
 watched state (picking an episode loads its streams); a bookmark to add or
-remove the title from the library; IMDb, TMDB, Rotten Tomatoes and
+remove the title from the library, and beside it a happy face and a sad
+one -- one replaces the other, pressing the one that is on takes it off,
+and on a television both are stops right of the bookmark -- which the For
+you row reads ([Likes and dislikes](ARCHITECTURE.md#likes-and-dislikes));
+IMDb, TMDB, Rotten Tomatoes and
 Popcornmeter scores ([Ratings](ARCHITECTURE.md#ratings)); a **More like
 this** row of suggestions
 ([Recommendations](ARCHITECTURE.md#recommendations)); and the sources every
@@ -258,7 +262,10 @@ Each installed addon carries a verdict on how it has been answering
 
 ## Settings
 
-- **Account**: sign in, create an account, sync, log out.
+- **Account**: sign in, create an account, sync, log out; signed in,
+  **Forget my likes everywhere** (asks first, then empties the faces on
+  xtremio-xervice and on this device, and says if the service could not be
+  reached).
 - **Addons** and **Downloads**: the screens above.
 - **Player**, **Subtitles**, **Interface**: the engine's own settings
   (seek steps, binge watching and the up-next countdown, pause on minimize,

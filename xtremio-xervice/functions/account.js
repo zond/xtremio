@@ -25,6 +25,11 @@
  * live credential from. The cost is that a token cannot be withdrawn
  * before it expires, which is why it lives an hour.
  *
+ * **What is kept per account.** `faces/{user id}`: what the viewer said
+ * about titles (`GET`/`PUT`/`DELETE /faces`), title ids and times in the
+ * clear, merged newest-per-title so no device's first sync can drop what
+ * another wrote.
+ *
  * **Rate limits.** `/identity` calls Stremio on demand, so it is limited
  * per calling address the way the pairing routes are ([withinRate] in
  * `index.js`), and every route behind a token is limited per account.
@@ -242,6 +247,100 @@ function withAccount(keys, deps, handler) {
   };
 }
 
+/** The words a face can be stored as; `none` is one taken off again. */
+const FACE_KINDS = ['like', 'dislike', 'dismissed', 'none'];
+
+/** A title id as the app keys faces: Cinemeta's `tt…` and the other
+ * addons' `prefix:id` shapes, and nothing that is not a plain token. */
+const TITLE_ID = /^[A-Za-z0-9:_.-]{1,96}$/;
+
+/** The most faces one account keeps: far past what anybody presses, and
+ * a document a few hundred kilobytes at most. */
+const FACES_LIMIT = 5000;
+
+/**
+ * `{faces: {id: {kind, at}}, clearedAt}` out of a stored document or a
+ * sent body, every row this cannot read dropped. Null when [json] is not
+ * that shape at all, which a sent body is refused for.
+ */
+function facesIn(json) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const sent = json.faces;
+  if (sent === undefined || sent === null) {
+    return {faces: {}, clearedAt: clearedIn(json)};
+  }
+  if (typeof sent !== 'object' || Array.isArray(sent)) return null;
+  const faces = {};
+  for (const [id, mark] of Object.entries(sent)) {
+    if (!TITLE_ID.test(id) || !mark || typeof mark !== 'object') continue;
+    if (!FACE_KINDS.includes(mark.kind)) continue;
+    if (!Number.isSafeInteger(mark.at) || mark.at < 0) continue;
+    faces[id] = {kind: mark.kind, at: mark.at};
+  }
+  return {faces, clearedAt: clearedIn(json)};
+}
+
+function clearedIn(json) {
+  const at = json?.clearedAt;
+  return Number.isSafeInteger(at) && at > 0 ? at : 0;
+}
+
+/**
+ * [stored] and [sent] together: per title the newer mark (the stored one
+ * on a tie), and nothing at or before the stored `clearedAt` -- which only
+ * `DELETE /faces` moves, so a device that has not heard of a "forget" yet
+ * cannot bring back what it forgot. A mark only one side has is kept,
+ * which is what makes a device's first sync add its set to the account's.
+ */
+function mergeFaces(stored, sent) {
+  const clearedAt = stored.clearedAt;
+  const faces = {};
+  for (const source of [stored.faces, sent.faces]) {
+    for (const [id, mark] of Object.entries(source)) {
+      if (mark.at <= clearedAt) continue;
+      if (!faces[id] || mark.at > faces[id].at) faces[id] = mark;
+    }
+  }
+  return {faces, clearedAt};
+}
+
+/** `GET`, `PUT` and `DELETE /faces`, under [sub]'s own document. */
+function facesRoutes(keys, deps) {
+  const refOf = (d, sub) => d.db.collection('faces').doc(sub);
+  return {
+    get: withAccount(keys, deps, async (req, res, sub, d) => {
+      const doc = await refOf(d, sub).get();
+      res.json(facesIn(doc.exists ? doc.data() : {}));
+    }),
+    put: withAccount(keys, deps, async (req, res, sub, d) => {
+      const sent = facesIn(req.body);
+      if (!sent) {
+        res.status(400).json({error: 'a set of faces'});
+        return;
+      }
+      const ref = refOf(d, sub);
+      const merged = await d.db.runTransaction(async (tx) => {
+        const doc = await tx.get(ref);
+        const next = mergeFaces(facesIn(doc.exists ? doc.data() : {}), sent);
+        if (Object.keys(next.faces).length > FACES_LIMIT) return null;
+        tx.set(ref, next);
+        return next;
+      });
+      if (!merged) {
+        res.status(413).json({error: `more than ${FACES_LIMIT} faces`});
+        return;
+      }
+      res.json(merged);
+    }),
+    delete: withAccount(keys, deps, async (req, res, sub, d) => {
+      const forgotten = {faces: {}, clearedAt: d.now()};
+      await refOf(d, sub).set(forgotten);
+      console.log(`faces forgotten: account ${logName(sub)}`);
+      res.json(forgotten);
+    }),
+  };
+}
+
 /** The real dependencies, made when the first request needs them. */
 function liveDeps() {
   const {getFirestore} = require('firebase-admin/firestore');
@@ -254,12 +353,19 @@ function liveDeps() {
  */
 function mountAccount(app, keys, deps = liveDeps) {
   app.post('/identity', identityHandler(keys, deps));
+  const faces = facesRoutes(keys, deps);
+  app.get('/faces', faces.get);
+  app.put('/faces', faces.put);
+  app.delete('/faces', faces.delete);
 }
 
 module.exports = {
   mountAccount,
   identityHandler,
   withAccount,
+  facesRoutes,
+  mergeFaces,
+  FACES_LIMIT,
   signToken,
   verifyToken,
   logName,

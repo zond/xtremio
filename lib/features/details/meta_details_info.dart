@@ -105,6 +105,8 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                   onToggleLibrary: () => _toggleLibrary(state, meta),
                   onTrailer: onTrailer,
                   ratings: _ratings,
+                  face: _prefs?.faces.of(meta.id),
+                  onFace: (face) => _setFace(meta.id, face),
                 ),
               )
             : DetailsMetaHeader(
@@ -116,6 +118,8 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                 onToggleLibrary: () => _toggleLibrary(state, meta),
                 onTrailer: onTrailer,
                 ratings: _ratings,
+                face: _prefs?.faces.of(meta.id),
+                onFace: (face) => _setFace(meta.id, face),
               ),
       ),
       if (state.hasVideos) ...[

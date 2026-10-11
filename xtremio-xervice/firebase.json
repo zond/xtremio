@@ -37,6 +37,10 @@
         "function": "account"
       },
       {
+        "source": "/faces",
+        "function": "account"
+      },
+      {
         "source": "/stream/**",
         "destination": "/no-streams.json"
       }

@@ -61,3 +61,6 @@ export 'subtitle_picks.dart';
 export 'subtitle_sync.dart';
 export 'units.dart';
 export 'xervice_identity.dart';
+export 'faces.dart';
+export 'faces_sync.dart';
+export 'xervice_scope.dart';

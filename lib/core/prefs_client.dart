@@ -9,6 +9,7 @@ import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
 import 'details_visits.dart';
 import 'drive_link.dart';
+import 'faces.dart';
 import 'local_media_files.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
@@ -227,6 +228,10 @@ class AppPrefs extends ChangeNotifier {
   /// its row is there without a round trip every time it is opened.
   static const String similarSuggestionsKey = 'similarSuggestions';
 
+  /// The `faces` key: what the viewer said about titles -- liked,
+  /// disliked, not interested (see [Faces]). Ids and times only.
+  static const String facesKey = 'faces';
+
   /// The `titleRatings` key: the scores the server has told this device
   /// about each title (see [TitleRatingsMemory]), so a title opened again
   /// shows them in its first frame.
@@ -355,6 +360,11 @@ class AppPrefs extends ChangeNotifier {
 
   /// Where each title's details screen was left -- see [detailsVisitsKey].
   DetailsVisitMemory get detailsVisits => _detailsVisits;
+
+  Faces _faces = Faces.empty;
+
+  /// What the viewer said about titles ([facesKey]).
+  Faces get faces => _faces;
 
   SimilarMemory _similarSuggestions = SimilarMemory.empty;
 
@@ -576,6 +586,13 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    if (loaded(facesKey)) {
+      final faces = Faces.fromJson(stored[facesKey]);
+      if (faces != _faces) {
+        _faces = faces;
+        changed = true;
+      }
+    }
     if (loaded(titleRatingsKey)) {
       final ratings = TitleRatingsMemory.fromJson(stored[titleRatingsKey]);
       if (ratings != _titleRatings) {
@@ -770,6 +787,20 @@ class AppPrefs extends ChangeNotifier {
     await _write(
       similarSuggestionsKey,
       value.entries.isEmpty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores what the viewer said about titles, or removes the key once
+  /// nothing is said and nothing was ever forgotten. Tells every listener:
+  /// a details screen draws the faces and the For you row is ranked by
+  /// them.
+  Future<void> setFaces(Faces value) async {
+    if (_faces == value) return;
+    _faces = value;
+    notifyListeners();
+    await _write(
+      facesKey,
+      value.marks.isEmpty && value.clearedAt == 0 ? null : value.toJson(),
     );
   }
 

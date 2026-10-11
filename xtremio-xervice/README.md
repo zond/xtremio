@@ -181,6 +181,17 @@ token, to prove who you are, and is not kept**: not stored, not logged,
 not in the token. Nor is the e-mail Stremio answers with. A log line names
 an account by the first twelve hex of its id's SHA-256 at most.
 
+**Faces.** `GET /faces` answers what the account has said about titles,
+`{"faces": {"<title id>": {"kind": "like" | "dislike" | "dismissed" |
+"none", "at": <ms>}}, "clearedAt": <ms>}`; `PUT /faces` with the same
+shape merges what a device sent into it -- newest per title wins, a title
+only one side has is kept -- and answers the result; `DELETE /faces`
+empties it and stamps `clearedAt`, and no mark at or before that is taken
+from any device afterwards. Kept in `faces/{user id}`, at most five
+thousand marks. **Likes are stored under the Stremio user id in the
+clear** -- they are title ids and times and nothing else -- and the app's
+Settings deletes them.
+
 `/identity` is limited to thirty calls an hour per calling address (the
 first address of `X-Forwarded-For`, which Hosting puts the caller in), and
 every route behind a token to six hundred an hour per account, in the same

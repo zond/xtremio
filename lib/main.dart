@@ -31,7 +31,7 @@ Future<void> main() async {
   // Once, before the first frame: whether this is a TV decides the layout
   // of every screen, and the answer never changes while the app runs.
   final device = await DeviceProfile.detect();
-  runApp(XtremioBootstrap(device: device));
+  runApp(XtremioBootstrap(device: device, xervice: XerviceHttpClient()));
 }
 
 /// Boots the core: the client to use and what its init reported.
@@ -193,6 +193,7 @@ class XtremioBootstrap extends StatefulWidget {
     this.deepLinks,
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
+    this.xervice,
   });
 
   /// What [DeviceProfile.detect] found, handed to [XtremioApp].
@@ -260,6 +261,10 @@ class XtremioBootstrap extends StatefulWidget {
   /// Passed through to [XtremioApp.sharingActivity].
   final SharingActivityClient sharingActivity;
 
+  /// Passed through to [XtremioApp.xervice]. Only [main] hands in the real
+  /// one, so a test that boots the app reaches no service.
+  final XerviceHttp? xervice;
+
   /// Loads the Rust library and initializes stremio-core with the app's
   /// support and cache directories.
   static Future<(CoreClient, CoreInitInfo)> bootCore() async {
@@ -321,6 +326,7 @@ class _XtremioBootstrapState extends State<XtremioBootstrap> {
           deepLinks: widget.deepLinks,
           serverSettings: widget.serverSettings,
           sharingActivity: widget.sharingActivity,
+          xervice: widget.xervice,
         );
       },
     );

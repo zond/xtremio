@@ -141,6 +141,7 @@ class XtremioApp extends StatefulWidget {
     this.device = DeviceProfile.fallback,
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
+    this.xervice,
     this.serverBackground = const RustServerBackgroundControl(),
     this.sharingHold = const RustIdleSharingHold(),
     this.updates,
@@ -163,6 +164,11 @@ class XtremioApp extends StatefulWidget {
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
+
+  /// How xtremio-xervice is reached for what it keeps per account (faces,
+  /// Drive grants). Null keeps all of it on the device, which is what a
+  /// test that does not hand in a fake wants: no request leaves it.
+  final XerviceHttp? xervice;
 
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
@@ -313,6 +319,16 @@ class _XtremioAppState extends State<XtremioApp> {
   /// player's `_createEngine`, which would then see the defaults.
   late final CoreFieldNotifier _ctx;
 
+  /// The account on xtremio-xervice, when [XtremioApp.xervice] reaches one.
+  FacesSync? _faces;
+
+  /// The session key the last account sync ran for: a sign-in -- at start
+  /// or later -- is a key this has not seen.
+  String? _syncedFor;
+
+  /// The preferences' first read: what an account sync waits for.
+  late final Future<void> _prefsLoaded;
+
   /// The update look and offer: see [XtremioApp.updates].
   late final AppUpdates _updates;
   late final InternetStatusCheck _internetStatus;
@@ -330,7 +346,8 @@ class _XtremioAppState extends State<XtremioApp> {
   @override
   void initState() {
     super.initState();
-    _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
+    _ctx = CoreFieldNotifier(widget.core, CoreField.ctx)
+      ..addListener(_onCtxForXervice);
     _ownsDownloads = widget.downloads == null;
     _downloads = widget.downloads ?? RustDownloadsClient();
     _downloadsService = DownloadsForegroundService(
@@ -362,6 +379,13 @@ class _XtremioAppState extends State<XtremioApp> {
           secrets: const SecureStorageSecretStore(),
           grantSink: rustDriveGrantSink,
         );
+    if (widget.xervice case final http?) {
+      final identity = XerviceIdentity(
+        http: http,
+        authKey: () => stremioAuthKeyOf(_ctx.value),
+      );
+      _faces = FacesSync(prefs: _prefs, identity: identity);
+    }
     _sharing = IdleSharingPolicy(
       prefs: _prefs,
       server: widget.serverSettings,
@@ -379,8 +403,10 @@ class _XtremioAppState extends State<XtremioApp> {
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
+    final loading = _prefs.load();
+    _prefsLoaded = loading;
     unawaited(
-      _prefs.load().whenComplete(() {
+      loading.whenComplete(() {
         _sharing.start();
         _trace.start();
         // After the preferences and not beside them: the pairing's state
@@ -643,6 +669,22 @@ class _XtremioAppState extends State<XtremioApp> {
     if (await _isLoggedIn()) await _pullAccount();
   }
 
+  /// Syncs with the account whenever `ctx` shows a session key the last
+  /// sync did not run for: the first `ctx` of a signed-in start, and every
+  /// sign-in after. Waits for the preferences, which hold what is synced.
+  void _onCtxForXervice() {
+    final key = stremioAuthKeyOf(_ctx.value);
+    if (key == _syncedFor) return;
+    _syncedFor = key;
+    if (key == null) return;
+    unawaited(_prefsLoaded.then((_) => _syncAccount()));
+  }
+
+  /// Everything this device keeps a copy of on the account, in step.
+  Future<void> _syncAccount() async {
+    await _faces?.sync();
+  }
+
   void _onEvent(CoreEvent event) {
     if (event is RuntimeCoreEvent && event.name == 'UserAuthenticated') {
       _pullAccount();
@@ -730,7 +772,9 @@ class _XtremioAppState extends State<XtremioApp> {
     if (_ownsDrive) _drive.dispose();
     if (_ownsLocalMedia) _localMedia?.dispose();
     if (_ownsPrefs) _prefs.dispose();
-    _ctx.dispose();
+    _ctx
+      ..removeListener(_onCtxForXervice)
+      ..dispose();
     _lifecycle.dispose();
     super.dispose();
   }
@@ -810,7 +854,11 @@ class _XtremioAppState extends State<XtremioApp> {
         ),
       ),
     );
-    return InternetStatusScope(check: _internetStatus, child: app);
+    final faces = _faces;
+    return InternetStatusScope(
+      check: _internetStatus,
+      child: faces == null ? app : XerviceScope(faces: faces, child: app),
+    );
   }
 }
 

@@ -1106,6 +1106,34 @@ dialog. Neither the key nor the token is written to a log, and
 prove who you are and is not kept: the function asks Stremio whose key it
 is, keeps the user id in the token, and forgets the key and the e-mail
 ([xtremio-xervice/README.md](../xtremio-xervice/README.md#your-account)).
+Your likes are stored under your Stremio user id in the clear; delete them
+any time from Settings.
+
+### Likes and dislikes
+
+The details header has a happy face and a sad one beside the bookmark
+(`face_buttons.dart`); a For you tile's long press adds "Not interested".
+All three are marks in `Faces` (`lib/core/faces.dart`, the `faces`
+preference): a title id, the face, and when it was given -- ids and times,
+nothing worth redacting. Taking a face off is a mark with no face rather
+than an absence, so a merge cannot bring an old face back; `clearedAt`
+does the same for the whole set. On a television the two faces are stops
+right of the bookmark, walked by hand along the corner (`_walkCorner` in
+`tv_meta_header.dart`) because Flutter's directional walk undoes its last
+move when the opposite key follows.
+
+`FacesSync` (`lib/core/faces_sync.dart`) copies the set to the account:
+`PUT /faces` on every change and whenever `ctx` shows a session key the
+last sync did not run for -- a signed-in start, every sign-in -- and merges
+the answer back. The service merges newest per title and drops nothing
+only one side has, so a device's first sync adds its marks to the
+account's rather than replacing them; the only removal that travels is
+**Forget my likes everywhere** (`DELETE /faces`), which stamps the
+account's `clearedAt`, and every mark at or before it is dropped wherever
+it is merged next. Signed out, a press stays on the device and goes up at
+the next sign-in. Tests: `test/core/faces_test.dart`,
+`test/core/faces_sync_test.dart`, `test/features/details_faces_test.dart`,
+`test/features/xervice_section_test.dart`, `test/app_xervice_test.dart`.
 
 ## Casting
 

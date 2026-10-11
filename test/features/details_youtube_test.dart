@@ -295,7 +295,11 @@ void main() {
             node,
       };
       expect(header, findsOneWidget);
-      expect(all, hasLength(3), reason: 'the plot, the trailer, the bookmark');
+      expect(
+        all,
+        hasLength(5),
+        reason: 'the plot, the trailer, the bookmark, the two faces',
+      );
 
       for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {
         await press(tester, LogicalKeyboardKey.arrowUp);

@@ -1445,6 +1445,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
+  /// The happy or sad face: what the viewer thought of the title, for the
+  /// For you row, kept on the device and synced to the account
+  /// ([markFace]).
+  void _setFace(String id, Face? face) {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    unawaited(markFace(context, prefs, id, face));
+  }
+
   void _toggleWatched(MetaDetailsState state, VideoInfo video) {
     _client?.dispatch(
       CoreActions.markVideoAsWatched(

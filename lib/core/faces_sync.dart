@@ -1,0 +1,97 @@
+/// Keeping the device's faces and the account's the same set.
+///
+/// The faces are the device's first (`AppPrefs.faces`): a press writes
+/// there and the screen answers at once, signed in or not. This copies them
+/// to the account on xtremio-xervice (`PUT /faces`, which merges) and takes
+/// back what the account holds, so a title liked on the phone is liked on
+/// the television. On every change, and whenever the app finds itself
+/// signed in -- at start and at a sign-in.
+///
+/// **A first sync adds, it never replaces.** The service merges what is
+/// sent into what it has, newest per title; a title only the device has
+/// marked survives, and so does one only the account has ([Faces.merged]
+/// here, `mergeFaces` there). The one thing that removes a mark that
+/// another device still holds is [forgetEverywhere], which stamps the
+/// account's `clearedAt` -- every mark older than that is dropped wherever
+/// it is merged next.
+///
+/// Signed out or offline is a sync that did not happen, quietly
+/// ([XerviceIdentity]); the next change or the next start tries again.
+library;
+
+import 'dart:async';
+
+import 'diagnostics_log.dart';
+import 'faces.dart';
+import 'prefs_client.dart';
+import 'xervice_identity.dart';
+
+class FacesSync {
+  FacesSync({
+    required this.prefs,
+    required this.identity,
+    this.now = DateTime.now,
+  });
+
+  final AppPrefs prefs;
+  final XerviceIdentity identity;
+
+  /// The clock a mark is stamped with.
+  final DateTime Function() now;
+
+  Future<void>? _running;
+  bool _again = false;
+
+  /// Marks [id] with [face] (null takes the mark off) on this device, and
+  /// sends the set to the account.
+  Future<void> setFace(String id, Face? face) async {
+    await prefs.setFaces(prefs.faces.marking(id, face, now()));
+    await sync();
+  }
+
+  /// Sends the device's set and keeps what the account answers merged into
+  /// it. One at a time: a sync asked for while one is out runs once more
+  /// after it, with whatever was marked meanwhile.
+  Future<void> sync() {
+    final running = _running;
+    if (running != null) {
+      _again = true;
+      return running;
+    }
+    return _running = _loop().whenComplete(() => _running = null);
+  }
+
+  Future<void> _loop() async {
+    do {
+      _again = false;
+      await _once();
+    } while (_again);
+  }
+
+  Future<void> _once() async {
+    if (!identity.signedIn) return;
+    final answer = await identity.send(
+      'PUT',
+      '/faces',
+      body: prefs.faces.toJson(),
+    );
+    if (answer == null) return;
+    if (!answer.ok) {
+      DiagnosticsLog.info('faces', 'not synced (${answer.status})');
+      return;
+    }
+    // Merged with the set as it is now, not as it was sent: a press while
+    // the request was out is newer than anything in the answer.
+    await prefs.setFaces(prefs.faces.merged(Faces.fromJson(answer.json)));
+  }
+
+  /// Forgets every face on the account and on this device. Answers whether
+  /// the account heard it: offline or signed out, nothing is forgotten
+  /// anywhere, so the viewer is not told it was.
+  Future<bool> forgetEverywhere() async {
+    final answer = await identity.send('DELETE', '/faces');
+    if (answer == null || !answer.ok) return false;
+    await prefs.setFaces(Faces.fromJson(answer.json));
+    return true;
+  }
+}

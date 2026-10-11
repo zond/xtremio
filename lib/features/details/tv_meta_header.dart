@@ -9,6 +9,7 @@ import '../../widgets/readout.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/text_overflow.dart';
 import 'details_header.dart' show TrailerButton;
+import 'face_buttons.dart';
 import 'title_scores.dart';
 
 /// What a title says about itself on a television: the logo, one line of
@@ -66,9 +67,18 @@ class TvMetaHeader extends StatelessWidget {
     required this.onToggleLibrary,
     this.onTrailer,
     this.ratings,
+    this.face,
+    this.onFace,
   });
 
   final MetaItem meta;
+
+  /// What the viewer said about this title; null for nothing.
+  final Face? face;
+
+  /// The happy or sad face was pressed: the face the title has now (null
+  /// for none). Null draws neither button.
+  final ValueChanged<Face?>? onFace;
 
   /// The scores beyond the addon's IMDb rating; null while none is known.
   final TitleRatings? ratings;
@@ -94,6 +104,12 @@ class TvMetaHeader extends StatelessWidget {
   static const double stopOrderDescription = 1;
   static const double stopOrderTrailer = 1.5;
   static const double stopOrderBookmark = 2;
+
+  /// The two faces, right of the bookmark: the corner's other stops. A
+  /// press right from the bookmark reaches them by where they are drawn,
+  /// and left from them comes back to it the same way.
+  static const double stopOrderLike = 2.1;
+  static const double stopOrderDislike = 2.2;
 
   /// How tall a logo is drawn. Wide logos are letterboxed into whatever
   /// width is left rather than overflowing it.
@@ -212,7 +228,7 @@ class TvMetaHeader extends StatelessWidget {
                 canRequestFocus: false,
                 skipTraversal: true,
                 includeSemantics: false,
-                onKeyEvent: _crossBack,
+                onKeyEvent: _onBookmarkKey,
                 child: FocusHighlighted(
                   borderRadius: const BorderRadius.all(Radius.circular(24)),
                   builder: (context, node) => IconButton(
@@ -226,6 +242,44 @@ class TvMetaHeader extends StatelessWidget {
                 ),
               ),
             ),
+            // Over the backdrop as the bookmark is, so its ring rather than
+            // the floor's fill.
+            if (onFace case final onFace?) ...[
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(stopOrderLike),
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  includeSemantics: false,
+                  onKeyEvent: _onFaceKey,
+                  child: FocusHighlighted(
+                    borderRadius: const BorderRadius.all(Radius.circular(24)),
+                    builder: (context, node) => FaceButtons.like(
+                      current: face,
+                      onFace: onFace,
+                      focusNode: node,
+                    ),
+                  ),
+                ),
+              ),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(stopOrderDislike),
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  includeSemantics: false,
+                  onKeyEvent: _onFaceKey,
+                  child: FocusHighlighted(
+                    borderRadius: const BorderRadius.all(Radius.circular(24)),
+                    builder: (context, node) => FaceButtons.dislike(
+                      current: face,
+                      onFace: onFace,
+                      focusNode: node,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -314,6 +368,50 @@ class TvMetaHeader extends StatelessWidget {
     return KeyEventResult.handled;
   }
 
+  /// The bookmark's keys: left back to the column ([_crossBack]), right
+  /// along the corner to the faces ([_walkCorner]).
+  static KeyEventResult _onBookmarkKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyUpEvent &&
+        event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      return _walkCorner(node, right: true);
+    }
+    return _crossBack(node, event);
+  }
+
+  /// A face's keys: left and right along the corner ([_walkCorner]).
+  static KeyEventResult _onFaceKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowLeft => _walkCorner(node, right: false),
+      LogicalKeyboardKey.arrowRight => _walkCorner(node, right: true),
+      _ => KeyEventResult.ignored,
+    };
+  }
+
+  /// Moves the remote one stop along the top corner -- the bookmark, then
+  /// the two faces -- by where they are drawn, and keeps a press right of
+  /// the last one in the corner.
+  ///
+  /// By hand rather than by geometry, because geometry remembers: Flutter's
+  /// directional walk undoes its last move when the opposite key follows,
+  /// so a remote put back on a face some other way and pressed right went
+  /// to wherever the last left came from rather than to the face beside
+  /// it. A header with only the bookmark leaves the press alone.
+  static KeyEventResult _walkCorner(FocusNode node, {required bool right}) {
+    final focused = FocusManager.instance.primaryFocus;
+    final corner =
+        (node.parent?.traversalDescendants ?? const <FocusNode>[])
+            .where(_isCorner)
+            .toList()
+          ..sort((a, b) => a.rect.left.compareTo(b.rect.left));
+    final at = focused == null ? -1 : corner.indexOf(focused);
+    if (at < 0 || corner.length < 2) return KeyEventResult.ignored;
+    final next = at + (right ? 1 : -1);
+    if (next < 0) return KeyEventResult.ignored;
+    if (next < corner.length) corner[next].requestFocus();
+    return KeyEventResult.handled;
+  }
+
   /// Left from the bookmark: back to the column stop [_crossToTheBookmark]
   /// came from, or the column's first when the remote got here another way.
   /// A header with no stop in its column leaves the press alone.
@@ -325,7 +423,7 @@ class TvMetaHeader extends StatelessWidget {
     final bookmark = FocusManager.instance.primaryFocus;
     final column =
         (node.parent?.traversalDescendants ?? const <FocusNode>[])
-            .where((stop) => !_isBookmark(stop))
+            .where((stop) => !_isCorner(stop))
             .toList()
           ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
     if (bookmark == null || column.isEmpty) return KeyEventResult.ignored;
@@ -336,6 +434,14 @@ class TvMetaHeader extends StatelessWidget {
 
   /// Which column stop the remote crossed to each bookmark from.
   static final Expando<FocusNode> _cameFrom = Expando('came from');
+
+  /// Whether [stop] is in the top corner -- the bookmark or a face -- by
+  /// the order it declares: not a stop of the text column.
+  static bool _isCorner(FocusNode stop) {
+    final context = stop.context;
+    final order = context == null ? null : FocusTraversalOrder.maybeOf(context);
+    return order is NumericFocusOrder && order.order >= stopOrderBookmark;
+  }
 
   /// Whether [stop] is the bookmark, by the order it declares.
   static bool _isBookmark(FocusNode stop) {

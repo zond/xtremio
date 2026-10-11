@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:xtremio/core/core.dart';
 
 /// One request a [FakeXervice] was sent, as it was sent.
@@ -35,6 +37,9 @@ class FakeXervice implements XerviceHttp {
 
   /// While set, `/identity` waits for it before answering.
   Future<void>? holdIdentity;
+
+  /// While set, every route past `/identity` waits for it before answering.
+  Future<void>? holdRoutes;
 
   /// How long an issued token says it lives.
   Duration tokenLife = const Duration(hours: 1);
@@ -83,6 +88,45 @@ class FakeXervice implements XerviceHttp {
     if (user == null) {
       return const XerviceAnswer(401, {'error': 'identity needed'});
     }
+    await holdRoutes;
     return routes?.call(request, user) ?? const XerviceAnswer(404);
   }
+}
+
+/// The account's faces as `/faces` keeps them: [routes] answers `GET`,
+/// `PUT` (merged, newest per title, the stored `clearedAt` standing) and
+/// `DELETE` the way `account.js` does.
+class FakeFacesStore {
+  FakeFacesStore({DateTime Function()? now}) : now = now ?? DateTime.now;
+
+  final DateTime Function() now;
+
+  /// Per account.
+  final Map<String, Faces> byUser = {};
+
+  XerviceAnswer? routes(XerviceRequest request, String? user) {
+    if (request.path != '/faces' || user == null) return null;
+    final stored = byUser[user] ?? Faces.empty;
+    switch (request.method) {
+      case 'GET':
+        return XerviceAnswer(200, _wire(stored));
+      case 'PUT':
+        final sent = Faces.fromJson(request.body);
+        final merged = stored.merged(Faces(sent.marks));
+        byUser[user] = merged;
+        return XerviceAnswer(200, _wire(merged));
+      case 'DELETE':
+        final forgotten = Faces(
+          const {},
+          clearedAt: now().toUtc().millisecondsSinceEpoch,
+        );
+        byUser[user] = forgotten;
+        return XerviceAnswer(200, _wire(forgotten));
+    }
+    return null;
+  }
+
+  /// Through JSON, as the wire would.
+  static Map<String, dynamic> _wire(Faces faces) =>
+      jsonDecode(jsonEncode(faces.toJson())) as Map<String, dynamic>;
 }

@@ -18,6 +18,7 @@ import '../player/player_screen.dart';
 import '../update/app_updates.dart';
 import '../update/check_for_updates_tile.dart';
 import 'account_section.dart';
+import 'xervice_section.dart';
 import 'core_settings.dart';
 
 /// Settings: the account ([AccountSection] over `ctx.profile`), the ways to
@@ -222,6 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const _SectionHeader('Account'),
           AccountSection(ctx: _ctx!),
+          XerviceSection(ctx: _ctx!),
           const _SectionHeader('Addons'),
           ListTile(
             leading: const Icon(Icons.extension_outlined),

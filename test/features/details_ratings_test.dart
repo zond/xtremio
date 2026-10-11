@@ -278,8 +278,10 @@ void main() {
       };
       expect(
         all,
-        hasLength(3),
-        reason: 'the plot, the trailer, the bookmark -- no score',
+        hasLength(5),
+        reason:
+            'the plot, the trailer, the bookmark, the two faces -- no '
+            'score',
       );
 
       for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {

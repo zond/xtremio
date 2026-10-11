@@ -11,6 +11,7 @@ import '../../widgets/poster_tile.dart';
 import '../../widgets/text_overflow.dart';
 import '../../widgets/remote_press.dart';
 import 'episode_thumbnail.dart';
+import 'face_buttons.dart';
 import 'title_scores.dart';
 import 'tv_backdrop.dart';
 import 'tv_meta_header.dart';
@@ -180,10 +181,19 @@ class DetailsMetaHeader extends StatelessWidget {
     required this.onToggleLibrary,
     this.onTrailer,
     this.ratings,
+    this.face,
+    this.onFace,
   });
 
   final MetaItem meta;
   final bool isWide;
+
+  /// What the viewer said about this title; null for nothing.
+  final Face? face;
+
+  /// The happy or sad face was pressed: the face the title has now. Null
+  /// draws neither button.
+  final ValueChanged<Face?>? onFace;
 
   /// The scores beyond the addon's IMDb rating ([DetailsScores]); null
   /// while none is known.
@@ -232,6 +242,10 @@ class DetailsMetaHeader extends StatelessWidget {
               selectedIcon: const Icon(Icons.bookmark),
               onPressed: onToggleLibrary,
             ),
+            if (onFace case final onFace?) ...[
+              FaceButtons.like(current: face, onFace: onFace),
+              FaceButtons.dislike(current: face, onFace: onFace),
+            ],
           ],
         ),
         if (downloads.isNotEmpty) ...[
