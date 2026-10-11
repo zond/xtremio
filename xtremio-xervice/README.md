@@ -2,8 +2,9 @@
 
 Pairing a television with files in a Google Drive, over a QR code -- and,
 beside it, the manifest that Drive plays are tracked under, the "More
-like this" answers ([below](#more-like-this)) and a title's scores
-([Ratings](#ratings)). Served at
+like this" answers ([below](#more-like-this)), a title's scores
+([Ratings](#ratings)) and what is kept for a signed-in account
+([Your account](#your-account)). Served at
 `https://xtremio-xervice.web.app`.
 
 The television cannot run the Google Picker — it is web-only — and cannot
@@ -160,6 +161,31 @@ query string, so neither the URL nor a fetch error's text is ever logged.
 
 Tests: `cd functions && npm test` (Node's own runner; no install needed).
 
+## Your account
+
+`POST /identity` with `{"authKey": "…"}` -- the session key of a device
+signed in to Stremio -- answers `{"token": "…", "expiresAt": "…"}`: a token
+of this service's own, good for an hour, naming the account's Stremio user
+id. The routes that keep something for an account take it as
+`Authorization: Bearer …`; a missing, forged or expired one is `401`, and
+renewing is the same call again. It is its own function
+(`functions/account.js`) with its own secret, `IDENTITY_KEY`, which signs
+the tokens (HMAC-SHA256; a token carries its own expiry, so nothing about
+a session is stored).
+
+The function asks Stremio whose key it is -- `POST
+https://api.strem.io/api/getUser` with `{"type": "GetUser", "authKey"}`,
+the request stremio-core itself sends -- and reads one field of the
+answer, the user's `_id`. **The auth key passes through here once per
+token, to prove who you are, and is not kept**: not stored, not logged,
+not in the token. Nor is the e-mail Stremio answers with. A log line names
+an account by the first twelve hex of its id's SHA-256 at most.
+
+`/identity` is limited to thirty calls an hour per calling address (the
+first address of `X-Forwarded-For`, which Hosting puts the caller in), and
+every route behind a token to six hundred an hour per account, in the same
+`rate` collection as the pairing limits.
+
 $a
 
 App Check attests that a request came from a build Google Play
@@ -200,6 +226,10 @@ firebase functions:secrets:set OAUTH_CLIENT_ID        # the web client id
 firebase functions:secrets:set OAUTH_CLIENT_SECRET    # its secret
 firebase functions:secrets:set GEMINI_API_KEY         # for /similar
 firebase functions:secrets:set MDBLIST_API_KEY        # for /ratings
+# Signs the /identity tokens. Paste 32 random bytes, base64, at the prompt
+# (`openssl rand -base64 32`). Changing it refuses every token out until
+# the device renews it, which it does by itself on the refusal.
+firebase functions:secrets:set IDENTITY_KEY           # for /identity
 
 # The pages carry two public values; neither is a secret.
 sed -i "s/__CLIENT_ID__/<the web client id>/" public/link.html

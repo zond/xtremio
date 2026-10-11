@@ -23,6 +23,7 @@ in [AGENTS.md](../AGENTS.md); running and checking it is in
 [Addons](#addons) ·
 [Recommendations](#recommendations) ·
 [Ratings](#ratings) ·
+[What xervice keeps for an account](#what-xervice-keeps-for-an-account) ·
 [Casting](#casting) ·
 [Pinned forks](#pinned-forks)
 
@@ -1083,6 +1084,28 @@ that is a day old; an answer with no scores, or a failure, is not written
 down and changes nothing on screen. Only a `movie` or `series` with a `tt`
 id is asked about. On a television the scores are one line of text under
 the facts, never a focus stop.
+
+## What xervice keeps for an account
+
+A signed-in account can keep things on the xtremio-xervice service that
+another of its devices reads back. Every such request goes through
+`XerviceIdentity` (`lib/core/xervice_identity.dart`): it sends the Stremio
+session key -- `ctx.profile.auth.key`, read by `stremioAuthKeyOf` and by
+nothing else in the app -- to `POST /identity`, gets back a token good for
+an hour that names the account's Stremio user id, and sends that as the
+bearer of every request after. The token is renewed when it is two minutes
+from expiry or the service refuses it, and dropped on a sign-out or a
+sign-in as somebody else. Signed out, offline, or a service that will not
+answer is a quiet null and a one-line log by kind: everything kept there
+is a copy of something the device already has, so nothing is ever a
+dialog. Neither the key nor the token is written to a log, and
+`redactSecrets` knows both names (`authKey`, `token`) as the second lock
+(`test/core/xervice_identity_test.dart`).
+
+**The trust statement.** The Stremio auth key transits xervice once to
+prove who you are and is not kept: the function asks Stremio whose key it
+is, keeps the user id in the token, and forgets the key and the e-mail
+([xtremio-xervice/README.md](../xtremio-xervice/README.md#your-account)).
 
 ## Casting
 

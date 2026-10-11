@@ -1,0 +1,274 @@
+// `node --test` from functions/: the account routes against a Firestore and
+// a Stremio API that live in this file. Nothing here needs node_modules.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  identityHandler,
+  withAccount,
+  signToken,
+  verifyToken,
+  logName,
+  TOKEN_SECONDS,
+  IDENTITY_PER_HOUR,
+  STREMIO_GET_USER,
+} = require('../account');
+
+const IDENTITY_KEY = 'identity-key-for-tests';
+const AUTH_KEY = 'stremio-session-key-0123456789';
+const USER = '5f2a0c3b9d1e4a0012345678';
+
+/** The part of Firestore the routes use, kept in a Map. */
+function fakeDb() {
+  const docs = new Map();
+  const ref = (path) => ({
+    path,
+    async get() {
+      return snapshot(path);
+    },
+    async set(data, options) {
+      const before = options?.merge ? docs.get(path) ?? {} : {};
+      docs.set(path, structuredClone({...before, ...data}));
+    },
+    async delete() {
+      docs.delete(path);
+    },
+    collection: (name) => ({doc: (id) => ref(`${path}/${name}/${id}`)}),
+  });
+  const snapshot = (path) => ({
+    exists: docs.has(path),
+    data: () => structuredClone(docs.get(path)),
+  });
+  return {
+    docs,
+    collection: (name) => ({doc: (id) => ref(`${name}/${id}`)}),
+    async runTransaction(fn) {
+      const writes = [];
+      const result = await fn({
+        get: async (r) => snapshot(r.path),
+        set: (r, data) => writes.push([r.path, data]),
+      });
+      for (const [path, data] of writes) docs.set(path, structuredClone(data));
+      return result;
+    },
+  };
+}
+
+function response(status, body) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => {
+      if (typeof body === 'string') throw new SyntaxError('not json');
+      return body;
+    },
+  };
+}
+
+/** Deps whose Stremio answers [answers] in turn. */
+function deps(answers = [], clock = {t: Date.UTC(2026, 9, 11, 12)}) {
+  const calls = [];
+  return {
+    calls,
+    clock,
+    db: fakeDb(),
+    now: () => clock.t,
+    fetch: async (url, init) => {
+      calls.push({url, init});
+      const next = answers.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    },
+  };
+}
+
+function fakeRes() {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: undefined,
+    headersSent: false,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    set(name, value) {
+      this.headers[name] = value;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      this.headersSent = true;
+      return this;
+    },
+  };
+}
+
+const keys = {identity: {value: () => IDENTITY_KEY}};
+
+async function identify(d, authKey = AUTH_KEY, headers = {}) {
+  const res = fakeRes();
+  await identityHandler(keys, () => d)(
+      {body: {authKey}, headers, ip: '10.0.0.1'}, res);
+  return res;
+}
+
+/** Captures console output for the length of [fn]. */
+async function quietly(fn) {
+  const lines = [];
+  const saved = [console.log, console.warn, console.error];
+  console.log = console.warn = console.error =
+    (...args) => lines.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    [console.log, console.warn, console.error] = saved;
+  }
+  return lines;
+}
+
+test('a key Stremio knows is a token naming its user, for an hour',
+    async () => {
+      const d = deps([response(200, {result: {
+        _id: USER, email: 'someone@example.com', avatar: null,
+      }})]);
+      let res;
+      const lines = await quietly(async () => {
+        res = await identify(d);
+      });
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.headers['Cache-Control'], 'no-store, max-age=0');
+      assert.equal(res.body.expiresAt,
+          new Date(d.clock.t + TOKEN_SECONDS * 1000).toISOString());
+      assert.equal(verifyToken(IDENTITY_KEY, res.body.token, d.clock.t), USER);
+      // Stremio was asked the way stremio-core asks it.
+      assert.equal(d.calls.length, 1);
+      assert.equal(d.calls[0].url, STREMIO_GET_USER);
+      assert.equal(d.calls[0].init.method, 'POST');
+      assert.deepEqual(JSON.parse(d.calls[0].init.body),
+          {type: 'GetUser', authKey: AUTH_KEY});
+      // The token carries the id and nothing of the key or the e-mail.
+      const payload = Buffer.from(res.body.token.split('.')[1], 'base64url')
+          .toString('utf8');
+      assert.ok(!payload.includes(AUTH_KEY));
+      assert.ok(!payload.includes('someone@example.com'));
+      // Nothing is stored but the rate counter.
+      for (const path of d.db.docs.keys()) assert.match(path, /^rate\//);
+      // The log names the account by a hash, never the key or the id.
+      assert.deepEqual(lines, [`identity: account ${logName(USER)}`]);
+    });
+
+test('a key Stremio refuses is a 401, and so is an answer with no id',
+    async () => {
+      for (const answer of [
+        response(200, {error: {message: 'Session not found', code: 1}}),
+        response(401, {}),
+      ]) {
+        const d = deps([answer]);
+        let res;
+        await quietly(async () => {
+          res = await identify(d);
+        });
+        assert.equal(res.statusCode, 401);
+        assert.equal(res.body.token, undefined);
+      }
+    });
+
+test('a Stremio that does not answer is a 502, not a 401', async () => {
+  for (const answer of [new TypeError('fetch failed'), response(500, 'x'),
+    response(200, 'not json'), response(200, {result: {}})]) {
+    const d = deps([answer]);
+    let res;
+    await quietly(async () => {
+      res = await identify(d);
+    });
+    assert.equal(res.statusCode, 502);
+  }
+});
+
+test('no key, or not a string, is refused unasked', async () => {
+  for (const authKey of [null, '', 42, 'x'.repeat(513)]) {
+    const d = deps();
+    const res = await identify(d, authKey);
+    assert.equal(res.statusCode, 400);
+    assert.equal(d.calls.length, 0);
+  }
+});
+
+test('the auth key is never logged, whatever Stremio says', async () => {
+  const leaky = new TypeError(`fetch failed for ${AUTH_KEY}`);
+  const lines = await quietly(async () => {
+    await identify(deps([leaky]));
+    await identify(deps([response(200, {error: {message: AUTH_KEY}})]));
+    await identify(deps([response(200, {result: {_id: USER}})]));
+  });
+  assert.equal(lines.length, 3);
+  for (const line of lines) {
+    assert.ok(!line.includes(AUTH_KEY), line);
+    assert.ok(!line.includes(USER), line);
+  }
+});
+
+test('one address is held to IDENTITY_PER_HOUR an hour', async () => {
+  const d = deps();
+  d.fetch = async () => response(200, {result: {_id: USER}});
+  const headers = {'x-forwarded-for': '203.0.113.9, 10.0.0.1'};
+  await quietly(async () => {
+    for (let i = 0; i < IDENTITY_PER_HOUR; i++) {
+      assert.equal((await identify(d, AUTH_KEY, headers)).statusCode, 200);
+    }
+    assert.equal((await identify(d, AUTH_KEY, headers)).statusCode, 429);
+    // Another caller has a bucket of its own.
+    assert.equal((await identify(d, AUTH_KEY,
+        {'x-forwarded-for': '198.51.100.7'})).statusCode, 200);
+    // And the next hour is a new one.
+    d.clock.t += 3600 * 1000;
+    assert.equal((await identify(d, AUTH_KEY, headers)).statusCode, 200);
+  });
+});
+
+test('a token verifies until it expires, and not with another key', () => {
+  const now = Date.UTC(2026, 9, 11);
+  const token = signToken(IDENTITY_KEY, USER, now + 1000);
+  assert.equal(verifyToken(IDENTITY_KEY, token, now), USER);
+  assert.equal(verifyToken(IDENTITY_KEY, token, now + 999), USER);
+  assert.equal(verifyToken(IDENTITY_KEY, token, now + 1000), null);
+  assert.equal(verifyToken('another key', token, now), null);
+  // A payload changed under the signature is refused.
+  const [v, , signature] = token.split('.');
+  const forged = Buffer.from(JSON.stringify({sub: 'someone-else',
+    exp: now + 1000})).toString('base64url');
+  assert.equal(verifyToken(IDENTITY_KEY, `${v}.${forged}.${signature}`, now),
+      null);
+  for (const junk of [undefined, '', 'v1', 'v1.a.b', 'v2.a.b', token + 'x']) {
+    assert.equal(verifyToken(IDENTITY_KEY, junk, now), null, String(junk));
+  }
+});
+
+test('a route behind a token runs for its account, and only then',
+    async () => {
+      const d = deps();
+      const seen = [];
+      const route = withAccount(keys, () => d, async (req, res, sub) => {
+        seen.push(sub);
+        res.json({ok: true});
+      });
+      const call = async (authorization) => {
+        const res = fakeRes();
+        await route({method: 'GET', path: '/x',
+          headers: authorization ? {authorization} : {}}, res);
+        return res;
+      };
+      const live = signToken(IDENTITY_KEY, USER, d.clock.t + 1000);
+      assert.equal((await call(`Bearer ${live}`)).statusCode, 200);
+      assert.deepEqual(seen, [USER]);
+      const expired = signToken(IDENTITY_KEY, USER, d.clock.t);
+      for (const header of [undefined, `Bearer ${expired}`, live,
+        `Bearer ${signToken('wrong', USER, d.clock.t + 1000)}`]) {
+        const res = await call(header);
+        assert.equal(res.statusCode, 401, String(header));
+        assert.equal(res.headers['Cache-Control'], 'no-store, max-age=0');
+      }
+      assert.deepEqual(seen, [USER]);
+    });

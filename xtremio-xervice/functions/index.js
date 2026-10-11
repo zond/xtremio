@@ -643,3 +643,19 @@ exports.ratings = onRequest(
     {secrets: [MDBLIST_API_KEY], region: 'europe-west1', timeoutSeconds: 30},
     ratingsApp,
 );
+
+/**
+ * What xervice keeps for one Stremio account, as its own function with its
+ * own secrets (see `account.js`): `POST /identity` proves who a device is
+ * signed in as, and every route behind it takes the token that answers.
+ * Pairing, "More like this" and ratings stay open and untouched by it.
+ */
+const {mountAccount} = require('./account');
+const IDENTITY_KEY = defineSecret('IDENTITY_KEY');
+const accountApp = express();
+accountApp.use(express.json({limit: '256kb'}));
+mountAccount(accountApp, {identity: IDENTITY_KEY});
+exports.account = onRequest(
+    {secrets: [IDENTITY_KEY], region: 'europe-west1', timeoutSeconds: 30},
+    accountApp,
+);

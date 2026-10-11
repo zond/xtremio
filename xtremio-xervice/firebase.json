@@ -33,6 +33,10 @@
         "function": "ratings"
       },
       {
+        "source": "/identity",
+        "function": "account"
+      },
+      {
         "source": "/stream/**",
         "destination": "/no-streams.json"
       }
