@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'drive_vault.dart';
 import 'faces.dart';
 import 'faces_sync.dart';
 import 'prefs_client.dart';
@@ -9,15 +10,24 @@ import 'prefs_client.dart';
 /// mounts none gets faces that stay on the device, which is exactly what a
 /// signed-out viewer gets too.
 class XerviceScope extends InheritedWidget {
-  const XerviceScope({super.key, required this.faces, required super.child});
+  const XerviceScope({
+    super.key,
+    required this.faces,
+    required this.driveVault,
+    required super.child,
+  });
 
   final FacesSync faces;
+
+  /// The account's copy of the Drive grant.
+  final DriveVault driveVault;
 
   static XerviceScope? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<XerviceScope>();
 
   @override
-  bool updateShouldNotify(XerviceScope oldWidget) => faces != oldWidget.faces;
+  bool updateShouldNotify(XerviceScope oldWidget) =>
+      faces != oldWidget.faces || driveVault != oldWidget.driveVault;
 }
 
 /// Marks [id] with [face] (null takes the mark off): through the account's

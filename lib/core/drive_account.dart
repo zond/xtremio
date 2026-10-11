@@ -43,6 +43,11 @@ enum DriveLinkState {
 /// its own or none.
 typedef DriveGrantSink = Future<void> Function(String? refreshToken);
 
+/// Told the refresh token of every pairing (not of a grant taken from the
+/// account's vault): `DriveVault.store`, which keeps a copy for the
+/// account's other devices.
+typedef DrivePairedSink = Future<void> Function(String refreshToken);
+
 /// What [DriveAccount.link] managed to do with the token it was given.
 enum DriveLinkOutcome {
   /// It is in the platform's secure store and will be there after a
@@ -114,6 +119,10 @@ class DriveAccount extends ChangeNotifier {
   /// Where the grant goes when it changes; see the class comment. None in
   /// a test that has no Rust under it.
   final DriveGrantSink? grantSink;
+
+  /// Told each pairing's token ([DrivePairedSink]); set by the app once the
+  /// vault exists, since the vault needs this account. Null shares nothing.
+  DrivePairedSink? pairedSink;
 
   /// Where a pairing is finished. Held here rather than by the screen that
   /// starts one, which is the whole point -- see [DrivePairingJob].
@@ -249,9 +258,13 @@ class DriveAccount extends ChangeNotifier {
   /// because the whole of it has to be one write: a store write and a
   /// preferences write per file would leave the list disagreeing with what
   /// was picked if one of them failed half way down a season.
+  ///
+  /// [shared] is a grant taken from the account's vault rather than made
+  /// by a pairing here, which is not sent back to it ([pairedSink]).
   Future<DriveLinkOutcome> link({
     required String refreshToken,
     Iterable<LinkedDriveFile> files = const [],
+    bool shared = false,
   }) async {
     final outcome = await _store(refreshToken);
     _refreshToken = refreshToken;
@@ -261,7 +274,33 @@ class DriveAccount extends ChangeNotifier {
     await prefs.setDriveTokenDead(false);
     notifyListeners();
     await _handOver();
+    if (!shared) await _tellPaired(refreshToken);
     return outcome;
+  }
+
+  /// Installs a grant another device of the account paired, taken from the
+  /// vault (`DriveVault.reconcile`): stored and handed to Rust as a pairing
+  /// is, and with no files, since this device has linked none. Does nothing
+  /// when this device has a grant of its own -- or one Google refused --
+  /// by now: the device's own always wins over a copy.
+  Future<void> adoptSharedGrant(String refreshToken) async {
+    if (state != DriveLinkState.unlinked) return;
+    await link(refreshToken: refreshToken, shared: true);
+  }
+
+  /// Hands a pairing's token to [pairedSink]; a sink that throws is
+  /// reported by type, and the pairing stands regardless.
+  Future<void> _tellPaired(String refreshToken) async {
+    final sink = pairedSink;
+    if (sink == null) return;
+    try {
+      await sink(refreshToken);
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'drive',
+        'the grant could not be shared (${error.runtimeType})',
+      );
+    }
   }
 
   /// [link], with every file one pairing named, described the way the

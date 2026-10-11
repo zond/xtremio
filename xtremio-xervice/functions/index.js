@@ -647,15 +647,21 @@ exports.ratings = onRequest(
 /**
  * What xervice keeps for one Stremio account, as its own function with its
  * own secrets (see `account.js`): `POST /identity` proves who a device is
- * signed in as, and every route behind it takes the token that answers.
+ * signed in as, and every route behind it -- the faces, the Drive vault --
+ * takes the token that answers. `GRANT_KEY` seals the vault.
  * Pairing, "More like this" and ratings stay open and untouched by it.
  */
 const {mountAccount} = require('./account');
 const IDENTITY_KEY = defineSecret('IDENTITY_KEY');
+const GRANT_KEY = defineSecret('GRANT_KEY');
 const accountApp = express();
 accountApp.use(express.json({limit: '1mb'}));
-mountAccount(accountApp, {identity: IDENTITY_KEY});
+mountAccount(accountApp, {identity: IDENTITY_KEY, grant: GRANT_KEY});
 exports.account = onRequest(
-    {secrets: [IDENTITY_KEY], region: 'europe-west1', timeoutSeconds: 30},
+    {
+      secrets: [IDENTITY_KEY, GRANT_KEY],
+      region: 'europe-west1',
+      timeoutSeconds: 30,
+    },
     accountApp,
 );

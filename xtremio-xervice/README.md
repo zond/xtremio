@@ -192,6 +192,22 @@ thousand marks. **Likes are stored under the Stremio user id in the
 clear** -- they are title ids and times and nothing else -- and the app's
 Settings deletes them.
 
+**The Drive vault.** `PUT /vault/drive` with `{"refreshToken": "…"}` keeps
+the account's Google Drive grant -- the latest pairing's -- and answers
+`{"storedAt"}`; `GET /vault/drive` answers `{"refreshToken", "storedAt"}`
+or `404`; `DELETE /vault/drive` forgets it. It is kept in `vault/{user id}`
+**encrypted at rest**: AES-256-GCM under the `GRANT_KEY` secret, a random
+IV per write, the user id as additional data so a sealed grant opens only
+under its own account. The function opens it only to hand it to a device
+holding a live token for that account, and never logs it. Revoking the
+grant itself is Google's: myaccount.google.com/permissions.
+
+**The trust statement.** The Stremio auth key transits xervice once to
+prove who you are and is not kept; your likes are stored under your
+Stremio user id in the clear, your Drive grants encrypted at rest; delete
+them any time from Settings (the app's Settings -> Account has "Forget my
+likes everywhere" and "Forget my Drive grants everywhere").
+
 `/identity` is limited to thirty calls an hour per calling address (the
 first address of `X-Forwarded-For`, which Hosting puts the caller in), and
 every route behind a token to six hundred an hour per account, in the same
@@ -241,6 +257,10 @@ firebase functions:secrets:set MDBLIST_API_KEY        # for /ratings
 # (`openssl rand -base64 32`). Changing it refuses every token out until
 # the device renews it, which it does by itself on the refusal.
 firebase functions:secrets:set IDENTITY_KEY           # for /identity
+# Seals the Drive vault: 32 random bytes, base64, the same way. Keep it:
+# a new one cannot open what the old one sealed, and every account's
+# vault reads as unreadable until its next pairing writes it again.
+firebase functions:secrets:set GRANT_KEY              # for /vault/drive
 
 # The pages carry two public values; neither is a secret.
 sed -i "s/__CLIENT_ID__/<the web client id>/" public/link.html
@@ -328,8 +348,10 @@ included too, which is the only thing multiselect cannot do.
 
 ## What is deliberately not here
 
-* **No token on this server after pickup.** The session is deleted in the
-  same request that hands it over.
+* **No pairing's token on this server after pickup.** The session is
+  deleted in the same request that hands it over. The one refresh token
+  kept is the one a signed-in device chose to put in its account's vault
+  ([Your account](#your-account)), sealed under `GRANT_KEY`.
 * **No client-side Firestore access.** The rules deny everything; only
   the function, running as admin, touches it.
 * **No App Check**, for the reason above.

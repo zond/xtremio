@@ -228,7 +228,9 @@ sources on those titles and in the library, play through the embedded
 server (which renews the access itself), are tracked like any other play
 (resume point, watched, Continue Watching, the next episode's linked file),
 and download like any other source. When Google refuses the grant, every
-screen asks for a new pairing. See
+screen asks for a new pairing. Signed in to Stremio, a pairing is shared
+with the account's other devices: one with no grant takes it at start or
+sign-in (with no files linked -- those are picked per device). See
 [ARCHITECTURE.md](ARCHITECTURE.md#google-drive).
 
 ## Local videos
@@ -275,7 +277,9 @@ Each installed addon carries a verdict on how it has been answering
 - **Account**: sign in, create an account, sync, log out; signed in,
   **Forget my likes everywhere** (asks first, then empties the faces on
   xtremio-xervice and on this device, and says if the service could not be
-  reached).
+  reached) and **Forget my Drive grants everywhere** (the copy kept for the
+  account's other devices; afterwards it points at Google's own permissions
+  page, where the grant itself is revoked).
 - **Addons** and **Downloads**: the screens above.
 - **Player**, **Subtitles**, **Interface**: the engine's own settings
   (seek steps, binge watching and the up-next countdown, pause on minimize,

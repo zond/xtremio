@@ -66,3 +66,4 @@ export 'faces_sync.dart';
 export 'xervice_scope.dart';
 export 'show_episodes.dart';
 export 'watched_bitfield.dart';
+export 'drive_vault.dart';

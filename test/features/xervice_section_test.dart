@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/xervice_section.dart';
+import 'package:xtremio/shell/external_link.dart';
 
+import '../support/fake_link_opener.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_xervice.dart';
 
@@ -22,6 +24,8 @@ void main() {
 
   late FakeXervice service;
   late FakeFacesStore store;
+  late FakeDriveVaultStore vault;
+  late FakeLinkOpener opener;
   late AppPrefs prefs;
   late ValueNotifier<Map<String, dynamic>?> ctx;
 
@@ -30,23 +34,36 @@ void main() {
     addTearDown(prefs.dispose);
     await prefs.load();
     store = FakeFacesStore();
+    vault = FakeDriveVaultStore()..byUser['user-a'] = 'a-refresh-token';
+    opener = FakeLinkOpener();
     service = FakeXervice(accounts: {key: 'user-a'})
       ..routes = (request, user) =>
-          store.routes(request, user) ?? const XerviceAnswer(404);
+          store.routes(request, user) ??
+          vault.routes(request, user) ??
+          const XerviceAnswer(404);
     ctx = ValueNotifier(signedIn());
     addTearDown(ctx.dispose);
-    final section = MaterialApp(
-      home: Scaffold(body: XerviceSection(ctx: ctx)),
-    );
-    final sync = FacesSync(
-      prefs: prefs,
-      identity: XerviceIdentity(
-        http: service,
-        authKey: () => stremioAuthKeyOf(ctx.value),
+    final section = ExternalLinkScope(
+      opener: opener,
+      child: MaterialApp(
+        home: Scaffold(body: XerviceSection(ctx: ctx)),
       ),
     );
+    final identity = XerviceIdentity(
+      http: service,
+      authKey: () => stremioAuthKeyOf(ctx.value),
+    );
+    final sync = FacesSync(prefs: prefs, identity: identity);
+    final account = DriveAccount(prefs: prefs);
+    addTearDown(account.dispose);
     await tester.pumpWidget(
-      scope ? XerviceScope(faces: sync, child: section) : section,
+      scope
+          ? XerviceScope(
+              faces: sync,
+              driveVault: DriveVault(identity: identity, account: account),
+              child: section,
+            )
+          : section,
     );
     await prefs.setFaces(
       Faces.empty.marking('tt1', Face.like, DateTime.utc(2026)),
@@ -102,5 +119,34 @@ void main() {
 
     await mount(tester, scope: false);
     expect(find.text(XerviceSection.forgetLikesTitle), findsNothing);
+  });
+
+  testWidgets('forgetting the Drive grant asks, deletes it on the account, '
+      'and points at where Google revokes it', (tester) async {
+    await mount(tester);
+    await tester.tap(find.text(XerviceSection.forgetDriveTitle));
+    await tester.pumpAndSettle();
+    expect(find.text(XerviceSection.forgetDriveQuestion), findsOneWidget);
+    await tester.tap(find.text('Forget'));
+    await tester.pumpAndSettle();
+    expect(vault.byUser, isEmpty);
+    expect(find.text(XerviceSection.revokeThere), findsOneWidget);
+    await tester.tap(find.text(XerviceSection.openPermissions));
+    await tester.pumpAndSettle();
+    expect(opener.opened, [Uri.parse(XerviceSection.googlePermissions)]);
+  });
+
+  testWidgets('forgetting the Drive grant offline says nothing was', (
+    tester,
+  ) async {
+    await mount(tester);
+    service.offline = true;
+    await tester.tap(find.text(XerviceSection.forgetDriveTitle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Forget'));
+    await tester.pumpAndSettle();
+    expect(find.text(XerviceSection.notReached), findsOneWidget);
+    expect(find.text(XerviceSection.revokeThere), findsNothing);
+    expect(vault.byUser, isNotEmpty);
   });
 }

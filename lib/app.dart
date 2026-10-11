@@ -321,6 +321,7 @@ class _XtremioAppState extends State<XtremioApp> {
 
   /// The account on xtremio-xervice, when [XtremioApp.xervice] reaches one.
   FacesSync? _faces;
+  DriveVault? _driveVault;
 
   /// The session key the last account sync ran for: a sign-in -- at start
   /// or later -- is a key this has not seen.
@@ -328,6 +329,10 @@ class _XtremioAppState extends State<XtremioApp> {
 
   /// The preferences' first read: what an account sync waits for.
   late final Future<void> _prefsLoaded;
+
+  /// The Drive pairing's first read, after the preferences.
+  final Completer<void> _driveRead = Completer<void>();
+  Future<void> get _driveLoaded => _driveRead.future;
 
   /// The update look and offer: see [XtremioApp.updates].
   late final AppUpdates _updates;
@@ -385,6 +390,11 @@ class _XtremioAppState extends State<XtremioApp> {
         authKey: () => stremioAuthKeyOf(_ctx.value),
       );
       _faces = FacesSync(prefs: _prefs, identity: identity);
+      final vault = _driveVault = DriveVault(
+        identity: identity,
+        account: _drive,
+      );
+      _drive.pairedSink = vault.store;
     }
     _sharing = IdleSharingPolicy(
       prefs: _prefs,
@@ -412,7 +422,7 @@ class _XtremioAppState extends State<XtremioApp> {
         // After the preferences and not beside them: the pairing's state
         // is half the secure store and half this file, and a read of one
         // half before the other is an answer about neither.
-        unawaited(_drive.load());
+        unawaited(_drive.load().whenComplete(_driveRead.complete));
         // A scan only where access is already there: the first launch asks
         // nothing, and the Local list is where the asking happens.
         unawaited(_localMedia?.refresh());
@@ -680,9 +690,14 @@ class _XtremioAppState extends State<XtremioApp> {
     unawaited(_prefsLoaded.then((_) => _syncAccount()));
   }
 
-  /// Everything this device keeps a copy of on the account, in step.
+  /// Everything this device keeps a copy of on the account, in step. The
+  /// vault waits for the Drive pairing's own load: before it, a linked
+  /// device reads as unlinked and would take the vault's grant over its
+  /// own.
   Future<void> _syncAccount() async {
     await _faces?.sync();
+    await _driveLoaded;
+    await _driveVault?.reconcile();
   }
 
   void _onEvent(CoreEvent event) {
@@ -855,9 +870,12 @@ class _XtremioAppState extends State<XtremioApp> {
       ),
     );
     final faces = _faces;
+    final vault = _driveVault;
     return InternetStatusScope(
       check: _internetStatus,
-      child: faces == null ? app : XerviceScope(faces: faces, child: app),
+      child: faces == null || vault == null
+          ? app
+          : XerviceScope(faces: faces, driveVault: vault, child: app),
     );
   }
 }

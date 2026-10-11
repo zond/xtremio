@@ -130,3 +130,37 @@ class FakeFacesStore {
   static Map<String, dynamic> _wire(Faces faces) =>
       jsonDecode(jsonEncode(faces.toJson())) as Map<String, dynamic>;
 }
+
+/// The account's Drive vault as `/vault/drive` keeps it, one grant per
+/// account, answered the way `account.js` answers.
+class FakeDriveVaultStore {
+  /// Per account: the grant.
+  final Map<String, String> byUser = {};
+
+  XerviceAnswer? routes(XerviceRequest request, String? user) {
+    if (request.path != '/vault/drive' || user == null) return null;
+    switch (request.method) {
+      case 'PUT':
+        final token = request.body?['refreshToken'];
+        if (token is! String || token.isEmpty) {
+          return const XerviceAnswer(400, {'error': 'a refreshToken'});
+        }
+        byUser[user] = token;
+        return const XerviceAnswer(200, {
+          'storedAt': '2026-10-12T00:00:00.000Z',
+        });
+      case 'GET':
+        final token = byUser[user];
+        return token == null
+            ? const XerviceAnswer(404, {'error': 'no grant'})
+            : XerviceAnswer(200, {
+                'refreshToken': token,
+                'storedAt': '2026-10-12T00:00:00.000Z',
+              });
+      case 'DELETE':
+        byUser.remove(user);
+        return const XerviceAnswer(200, {'ok': true});
+    }
+    return null;
+  }
+}

@@ -890,6 +890,21 @@ list is what to show, not a set of grants: `drive.file` grants accumulate
 per user and client, so one token reaches every file ever picked, and there
 is no unlinking one file. When the service answers `pairAgain`, that is
 stored (`driveTokenDead`) and every screen asks for a fresh pairing.
+
+**Where the grant lives.** The device's secure store is the primary copy;
+Rust memory holds it while linked (`grantSink`). Signed in to Stremio, a
+pairing also puts it in the account's vault on xtremio-xervice
+(`DriveVault`, `lib/core/drive_vault.dart`; `PUT /vault/drive`, sealed
+there with AES-256-GCM under the `GRANT_KEY` secret), and a device of the
+same account with no grant takes it from there at start and at a sign-in
+(`GET`, through `DriveAccount.adoptSharedGrant`: the same store and the
+same `grantSink` as a pairing). A device with a grant of its own, or one
+Google refused, never takes the vault's, and only a pairing writes the
+vault, so **Forget my Drive grants everywhere** (Settings, `DELETE`) stays
+forgotten; it then points at myaccount.google.com/permissions, which is
+where the grant itself is revoked. A grant taken from the vault links no
+files: the list is what *this* device picked, and Reload adds nothing.
+Tests: `test/core/drive_vault_test.dart`, `test/app_xervice_test.dart`.
 **Reload** asks Drive what the files are called now
 (`lib/core/drive_listing.dart`), and only a complete listing writes -- a
 partial one deletes nothing.
@@ -1160,8 +1175,8 @@ dialog. Neither the key nor the token is written to a log, and
 prove who you are and is not kept: the function asks Stremio whose key it
 is, keeps the user id in the token, and forgets the key and the e-mail
 ([xtremio-xervice/README.md](../xtremio-xervice/README.md#your-account)).
-Your likes are stored under your Stremio user id in the clear; delete them
-any time from Settings.
+Your likes are stored under your Stremio user id in the clear, your Drive
+grants encrypted at rest; delete them any time from Settings.
 
 ### Likes and dislikes
 

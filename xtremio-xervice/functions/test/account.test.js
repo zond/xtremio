@@ -8,6 +8,9 @@ const {
   identityHandler,
   withAccount,
   facesRoutes,
+  vaultRoutes,
+  seal,
+  unseal,
   FACES_LIMIT,
   signToken,
   verifyToken,
@@ -107,7 +110,11 @@ function fakeRes() {
   };
 }
 
-const keys = {identity: {value: () => IDENTITY_KEY}};
+const GRANT_KEY = Buffer.alloc(32, 7).toString('base64');
+const keys = {
+  identity: {value: () => IDENTITY_KEY},
+  grant: {value: () => GRANT_KEY},
+};
 
 async function identify(d, authKey = AUTH_KEY, headers = {}) {
   const res = fakeRes();
@@ -381,3 +388,84 @@ test('rows that are not faces are dropped, a body that is not a set refused',
       assert.equal((await facesCall(d, 'put', USER, {faces: many})).statusCode,
           413);
     });
+
+const REFRESH = '1//0g-a-refresh-token-for-tests';
+
+/** Calls one vault route as [user] (null for no token). */
+async function vaultCall(d, verb, user, body, lines = []) {
+  const routes = vaultRoutes(keys, () => d);
+  const res = fakeRes();
+  const headers = user ?
+    {authorization: `Bearer ${signToken(IDENTITY_KEY, user,
+        d.clock.t + 60000)}`} :
+    {};
+  lines.push(...await quietly(async () => {
+    await routes[verb]({method: verb.toUpperCase(), path: '/vault/drive',
+      headers, body}, res);
+  }));
+  return res;
+}
+
+test('a grant is stored sealed, and handed back only to its account',
+    async () => {
+      const d = deps();
+      const lines = [];
+      const put = await vaultCall(d, 'put', USER, {refreshToken: REFRESH},
+          lines);
+      assert.equal(put.statusCode, 200);
+      assert.equal(put.body.storedAt, new Date(d.clock.t).toISOString());
+      const stored = d.db.docs.get(`vault/${USER}`);
+      assert.ok(!JSON.stringify(stored).includes(REFRESH), 'sealed at rest');
+      assert.deepEqual(Object.keys(stored.drive).sort(),
+          ['data', 'iv', 'storedAt', 'tag']);
+
+      const got = await vaultCall(d, 'get', USER, undefined, lines);
+      assert.equal(got.statusCode, 200);
+      assert.equal(got.body.refreshToken, REFRESH);
+      assert.equal(got.headers['Cache-Control'], 'no-store, max-age=0');
+
+      // Another account has none, and no token is no grant.
+      assert.equal((await vaultCall(d, 'get', 'another-user')).statusCode, 404);
+      for (const verb of ['get', 'put', 'delete']) {
+        const res = await vaultCall(d, verb, null, {refreshToken: 'x'});
+        assert.equal(res.statusCode, 401, verb);
+      }
+      for (const line of lines) assert.ok(!line.includes(REFRESH), line);
+    });
+
+test('each write is sealed with a fresh IV', async () => {
+  const d = deps();
+  await vaultCall(d, 'put', USER, {refreshToken: REFRESH});
+  const first = d.db.docs.get(`vault/${USER}`).drive;
+  await vaultCall(d, 'put', USER, {refreshToken: REFRESH});
+  const second = d.db.docs.get(`vault/${USER}`).drive;
+  assert.notEqual(first.iv, second.iv);
+  assert.notEqual(first.data, second.data);
+});
+
+test('a sealed grant opens only under its account and its key', () => {
+  const sealed = seal(GRANT_KEY, REFRESH, USER);
+  assert.equal(unseal(GRANT_KEY, sealed, USER), REFRESH);
+  assert.throws(() => unseal(GRANT_KEY, sealed, 'another-user'));
+  assert.throws(() =>
+    unseal(Buffer.alloc(32, 8).toString('base64'), sealed, USER));
+  assert.throws(() => seal('too-short', REFRESH, USER), /32 bytes/);
+});
+
+test('DELETE forgets the grant everywhere', async () => {
+  const d = deps();
+  await vaultCall(d, 'put', USER, {refreshToken: REFRESH});
+  const gone = await vaultCall(d, 'delete', USER);
+  assert.deepEqual(gone.body, {ok: true});
+  assert.equal(d.db.docs.has(`vault/${USER}`), false);
+  assert.equal((await vaultCall(d, 'get', USER)).statusCode, 404);
+});
+
+test('a PUT with no token is refused, and stores nothing', async () => {
+  const d = deps();
+  for (const body of [{}, {refreshToken: ''}, {refreshToken: 5},
+    {refreshToken: 'x'.repeat(4097)}]) {
+    assert.equal((await vaultCall(d, 'put', USER, body)).statusCode, 400);
+  }
+  assert.equal(d.db.docs.has(`vault/${USER}`), false);
+});

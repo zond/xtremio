@@ -73,7 +73,16 @@ void main() {
       ),
     );
     await tester.pumpWidget(
-      sync == null ? screen : XerviceScope(faces: sync, child: screen),
+      sync == null
+          ? screen
+          : XerviceScope(
+              faces: sync,
+              driveVault: DriveVault(
+                identity: sync.identity,
+                account: DriveAccount(prefs: prefs),
+              ),
+              child: screen,
+            ),
     );
     await tester.pumpAndSettle();
   }

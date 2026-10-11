@@ -114,7 +114,11 @@ bug report or the text of a logged exception (log the exception's *type*):
   Rust memory while linked (`DriveAccount.grantSink` →
   `server_drive_grant`, `null` on unlink and `pairAgain`), for the Drive
   pins nobody presses a button for and the Drive media ids the player
-  resolves. Rust writes it nowhere.
+  resolves. Rust writes it nowhere. Signed in, a pairing also sends it to
+  the account's vault on xtremio-xervice (`DriveVault`), sealed there and
+  handed only to a device that proved it is the account's; it crosses in
+  one request body and one answer and is never logged
+  (`test/core/drive_vault_test.dart`).
 - **A published cast token** (`media_publish`, `media_publish_rendition`):
   `<lan base>/cast/<token>` is a URL into this device for as long as it is
   published. The player logs the listener's address and never the URL

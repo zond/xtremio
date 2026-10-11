@@ -30,6 +30,10 @@
  * clear, merged newest-per-title so no device's first sync can drop what
  * another wrote.
  *
+ * `vault/{user id}`: the account's Google Drive refresh token, encrypted
+ * at rest with AES-256-GCM under the `GRANT_KEY` secret and opened only to
+ * hand to a device holding a live token (`/vault/drive`).
+ *
  * **Rate limits.** `/identity` calls Stremio on demand, so it is limited
  * per calling address the way the pairing routes are ([withinRate] in
  * `index.js`), and every route behind a token is limited per account.
@@ -341,6 +345,89 @@ function facesRoutes(keys, deps) {
   };
 }
 
+/**
+ * Seals [plain] with AES-256-GCM under [keyB64] (the `GRANT_KEY` secret:
+ * 32 random bytes, base64), a fresh 12-byte IV per write, and [account]
+ * as the additional data -- so a sealed grant opens only under the account
+ * it was stored for, even moved to another document.
+ */
+function seal(keyB64, plain, account) {
+  const key = grantKey(keyB64);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(Buffer.from(account, 'utf8'));
+  const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  return {
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    data: data.toString('base64'),
+  };
+}
+
+/** [sealed] opened, or a throw for one that is not [account]'s or was
+ * sealed under another key. */
+function unseal(keyB64, sealed, account) {
+  const decipher = crypto.createDecipheriv('aes-256-gcm', grantKey(keyB64),
+      Buffer.from(sealed.iv, 'base64'));
+  decipher.setAAD(Buffer.from(account, 'utf8'));
+  decipher.setAuthTag(Buffer.from(sealed.tag, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(sealed.data, 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+function grantKey(keyB64) {
+  const key = Buffer.from(String(keyB64 ?? '').trim(), 'base64');
+  if (key.length !== 32) throw new Error('GRANT_KEY is not 32 bytes');
+  return key;
+}
+
+/**
+ * `PUT`, `GET` and `DELETE /vault/drive`: the account's Google Drive
+ * refresh token, sealed at rest ([seal]) in `vault/{user id}`.
+ *
+ * The token is opened only to hand it to a device that proved it is the
+ * account's ([withAccount]), and never logged. One per account: the
+ * latest pairing's, which reaches every file the Google account picked
+ * through this OAuth client (grants accumulate per user and client).
+ */
+function vaultRoutes(keys, deps) {
+  const refOf = (d, sub) => d.db.collection('vault').doc(sub);
+  return {
+    put: withAccount(keys, deps, async (req, res, sub, d) => {
+      const token = req.body?.refreshToken;
+      if (typeof token !== 'string' || !token || token.length > 4096) {
+        res.status(400).json({error: 'a refreshToken'});
+        return;
+      }
+      const storedAt = d.now();
+      await refOf(d, sub).set({
+        drive: {...seal(keys.grant.value(), token, sub), storedAt},
+      });
+      console.log(`vault: drive grant stored, account ${logName(sub)}`);
+      res.json({storedAt: new Date(storedAt).toISOString()});
+    }),
+    get: withAccount(keys, deps, async (req, res, sub, d) => {
+      const doc = await refOf(d, sub).get();
+      const sealed = doc.exists ? doc.data().drive : null;
+      if (!sealed) {
+        res.status(404).json({error: 'no grant'});
+        return;
+      }
+      res.json({
+        refreshToken: unseal(keys.grant.value(), sealed, sub),
+        storedAt: new Date(sealed.storedAt).toISOString(),
+      });
+    }),
+    delete: withAccount(keys, deps, async (req, res, sub, d) => {
+      await refOf(d, sub).delete();
+      console.log(`vault: drive grant forgotten, account ${logName(sub)}`);
+      res.json({ok: true});
+    }),
+  };
+}
+
 /** The real dependencies, made when the first request needs them. */
 function liveDeps() {
   const {getFirestore} = require('firebase-admin/firestore');
@@ -348,8 +435,8 @@ function liveDeps() {
 }
 
 /**
- * Mounts the account routes on [app]. [keys] is `{identity}`, each a
- * secret with a `value()`.
+ * Mounts the account routes on [app]. [keys] is `{identity, grant}`, each
+ * a secret with a `value()`.
  */
 function mountAccount(app, keys, deps = liveDeps) {
   app.post('/identity', identityHandler(keys, deps));
@@ -357,6 +444,10 @@ function mountAccount(app, keys, deps = liveDeps) {
   app.get('/faces', faces.get);
   app.put('/faces', faces.put);
   app.delete('/faces', faces.delete);
+  const vault = vaultRoutes(keys, deps);
+  app.put('/vault/drive', vault.put);
+  app.get('/vault/drive', vault.get);
+  app.delete('/vault/drive', vault.delete);
 }
 
 module.exports = {
@@ -364,6 +455,9 @@ module.exports = {
   identityHandler,
   withAccount,
   facesRoutes,
+  vaultRoutes,
+  seal,
+  unseal,
   mergeFaces,
   FACES_LIMIT,
   signToken,

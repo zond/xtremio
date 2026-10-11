@@ -41,6 +41,10 @@
         "function": "account"
       },
       {
+        "source": "/vault/**",
+        "function": "account"
+      },
+      {
         "source": "/stream/**",
         "destination": "/no-streams.json"
       }
