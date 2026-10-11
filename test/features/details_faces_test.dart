@@ -100,37 +100,53 @@ void main() {
           .isSelected ??
       false;
 
-  testWidgets('one face replaces the other, and pressing it again clears it', (
-    tester,
-  ) async {
-    await mount(tester);
-    expect(button(FaceButtons.likeTooltip), findsOneWidget);
-    expect(button(FaceButtons.dislikeTooltip), findsOneWidget);
-    expect(isOn(tester, FaceButtons.likeTooltip), isFalse);
+  for (final (pressed, on, other) in [
+    (
+      FaceButtons.likeTooltip,
+      FaceButtons.likedTooltip,
+      FaceButtons.dislikeTooltip,
+    ),
+    (
+      FaceButtons.dislikeTooltip,
+      FaceButtons.dislikedTooltip,
+      FaceButtons.likeTooltip,
+    ),
+  ]) {
+    testWidgets('both at rest; "$pressed" is highlighted and the other goes; '
+        'pressed again, both come back', (tester) async {
+      await mount(tester);
+      expect(button(FaceButtons.likeTooltip), findsOneWidget);
+      expect(button(FaceButtons.dislikeTooltip), findsOneWidget);
+      expect(isOn(tester, pressed), isFalse);
+      expect(isOn(tester, other), isFalse);
 
-    await tester.tap(button(FaceButtons.likeTooltip));
-    await tester.pumpAndSettle();
-    expect(prefs.faces.of(movieId), Face.like);
-    expect(isOn(tester, FaceButtons.likedTooltip), isTrue);
-    expect(isOn(tester, FaceButtons.dislikeTooltip), isFalse);
+      await tester.tap(button(pressed));
+      await tester.pumpAndSettle();
+      expect(
+        prefs.faces.of(movieId),
+        pressed == FaceButtons.likeTooltip ? Face.like : Face.dislike,
+      );
+      expect(isOn(tester, on), isTrue);
+      expect(button(other), findsNothing);
+      final semantics = tester.ensureSemantics();
+      await tester.pump();
+      // What a screen reader says of the face that is left.
+      expect(tester.getSemantics(button(on)).tooltip, on);
+      semantics.dispose();
 
-    await tester.tap(button(FaceButtons.dislikeTooltip));
-    await tester.pumpAndSettle();
-    expect(prefs.faces.of(movieId), Face.dislike);
-    expect(button(FaceButtons.likeTooltip), findsOneWidget);
-    expect(isOn(tester, FaceButtons.dislikedTooltip), isTrue);
-
-    await tester.tap(button(FaceButtons.dislikedTooltip));
-    await tester.pumpAndSettle();
-    expect(prefs.faces.of(movieId), isNull);
-    expect(prefs.faces.marks[movieId]?.face, isNull);
-    expect(
-      prefs.faces.marks.containsKey(movieId),
-      isTrue,
-      reason: 'a cleared face is a mark, so a merge cannot bring it back',
-    );
-    expect(isOn(tester, FaceButtons.dislikeTooltip), isFalse);
-  });
+      await tester.tap(button(on));
+      await tester.pumpAndSettle();
+      expect(prefs.faces.of(movieId), isNull);
+      expect(
+        prefs.faces.marks.containsKey(movieId),
+        isTrue,
+        reason: 'a cleared face is a mark, so a merge cannot bring it back',
+      );
+      expect(button(FaceButtons.likeTooltip), findsOneWidget);
+      expect(button(FaceButtons.dislikeTooltip), findsOneWidget);
+      expect(isOn(tester, pressed), isFalse);
+    });
+  }
 
   testWidgets('a title dismissed from For you shows neither face on, and a '
       'like replaces the dismissal', (tester) async {
@@ -165,9 +181,9 @@ void main() {
     expect(store.byUser['user-a']!.of(movieId), Face.dislike);
   });
 
-  testWidgets('on a television both faces are stops right of the bookmark', (
-    tester,
-  ) async {
+  testWidgets('on a television both faces are stops right of the bookmark, '
+      'and the remote stays on the pressed face as the other goes and comes '
+      'back', (tester) async {
     await mount(tester, device: tv);
     for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
       await press(tester, LogicalKeyboardKey.arrowUp);
@@ -183,12 +199,31 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), FaceButtons.dislikeTooltip);
 
+    // The happy face goes; the remote stays on the sad one.
     await press(tester, LogicalKeyboardKey.select);
     expect(prefs.faces.of(movieId), Face.dislike);
+    expect(button(FaceButtons.likeTooltip), findsNothing);
+    expect(focusedTooltip(), FaceButtons.dislikedTooltip);
+    // The corner is the bookmark and the one face now.
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedTooltip(), TvMetaHeader.addTooltip);
+    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), FaceButtons.dislikedTooltip);
 
+    // Both come back; the remote is still on the sad one.
+    await press(tester, LogicalKeyboardKey.select);
+    expect(prefs.faces.of(movieId), isNull);
+    expect(button(FaceButtons.likeTooltip), findsOneWidget);
+    expect(focusedTooltip(), FaceButtons.dislikeTooltip);
+
+    // The happy face, pressed, keeps the remote as the sad one goes.
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedTooltip(), FaceButtons.likeTooltip);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(focusedTooltip(), FaceButtons.likedTooltip);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(focusedTooltip(), FaceButtons.likeTooltip);
+
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedTooltip(), TvMetaHeader.addTooltip);
     // And left again is the text column, as it always was.

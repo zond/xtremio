@@ -243,8 +243,10 @@ class DetailsMetaHeader extends StatelessWidget {
               onPressed: onToggleLibrary,
             ),
             if (onFace case final onFace?) ...[
-              FaceButtons.like(current: face, onFace: onFace),
-              FaceButtons.dislike(current: face, onFace: onFace),
+              if (FaceButtons.showsLike(face))
+                FaceButtons.like(current: face, onFace: onFace),
+              if (FaceButtons.showsDislike(face))
+                FaceButtons.dislike(current: face, onFace: onFace),
             ],
           ],
         ),

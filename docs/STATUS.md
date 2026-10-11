@@ -51,9 +51,11 @@ Android TV layout are all built. What is not is in the README's
 Facts and genres; for a series a season picker and episode list with
 watched state (picking an episode loads its streams); a bookmark to add or
 remove the title from the library, and beside it a happy face and a sad
-one -- one replaces the other, pressing the one that is on takes it off,
-and on a television both are stops right of the bookmark -- which the For
-you row reads ([Likes and dislikes](ARCHITECTURE.md#likes-and-dislikes));
+one -- both at rest; pressing one marks the title, draws that face filled
+in the accent colour and takes the other away, and pressing it again
+clears the mark and brings both back (on a television both are stops
+right of the bookmark, and the remote stays on the pressed face) -- which
+the For you row reads ([Likes and dislikes](ARCHITECTURE.md#likes-and-dislikes));
 IMDb, TMDB, Rotten Tomatoes and
 Popcornmeter scores ([Ratings](ARCHITECTURE.md#ratings)); a **More like
 this** row of suggestions

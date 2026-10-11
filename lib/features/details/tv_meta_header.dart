@@ -244,41 +244,47 @@ class TvMetaHeader extends StatelessWidget {
             ),
             // Over the backdrop as the bookmark is, so its ring rather than
             // the floor's fill.
+            // Keyed, because one comes and goes beside the other: the face
+            // pressed keeps its element, its focus node and so the remote.
             if (onFace case final onFace?) ...[
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(stopOrderLike),
-                child: Focus(
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  includeSemantics: false,
-                  onKeyEvent: _onFaceKey,
-                  child: FocusHighlighted(
-                    borderRadius: const BorderRadius.all(Radius.circular(24)),
-                    builder: (context, node) => FaceButtons.like(
-                      current: face,
-                      onFace: onFace,
-                      focusNode: node,
+              if (FaceButtons.showsLike(face))
+                FocusTraversalOrder(
+                  key: const ValueKey('face-like'),
+                  order: const NumericFocusOrder(stopOrderLike),
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    includeSemantics: false,
+                    onKeyEvent: _onFaceKey,
+                    child: FocusHighlighted(
+                      borderRadius: const BorderRadius.all(Radius.circular(24)),
+                      builder: (context, node) => FaceButtons.like(
+                        current: face,
+                        onFace: onFace,
+                        focusNode: node,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(stopOrderDislike),
-                child: Focus(
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  includeSemantics: false,
-                  onKeyEvent: _onFaceKey,
-                  child: FocusHighlighted(
-                    borderRadius: const BorderRadius.all(Radius.circular(24)),
-                    builder: (context, node) => FaceButtons.dislike(
-                      current: face,
-                      onFace: onFace,
-                      focusNode: node,
+              if (FaceButtons.showsDislike(face))
+                FocusTraversalOrder(
+                  key: const ValueKey('face-dislike'),
+                  order: const NumericFocusOrder(stopOrderDislike),
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    includeSemantics: false,
+                    onKeyEvent: _onFaceKey,
+                    child: FocusHighlighted(
+                      borderRadius: const BorderRadius.all(Radius.circular(24)),
+                      builder: (context, node) => FaceButtons.dislike(
+                        current: face,
+                        onFace: onFace,
+                        focusNode: node,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ],
         ),
