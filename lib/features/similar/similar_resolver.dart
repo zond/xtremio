@@ -1,34 +1,33 @@
 /// Turning what a model said into catalogue items, and dropping what it
 /// made up.
 ///
-/// **This is where the correctness of "More like this" lives.** A model
-/// answers with text, and some of that text names films that do not
-/// exist: one measured model invented `Heat and Bone (2019)`, another
-/// invented twenty titles out of seventy-one. The failure is not that a
-/// row comes up short -- it is that searching an invented title *succeeds*.
-/// `The Otherside (2022)` does not exist, and the catalogue answers that
-/// query happily with a 2008 film and a 2013 one. Show either and the
-/// viewer is looking at a real poster for a film nothing recommended.
+/// **This is where the correctness of "More like this" lives.** A model answers
+/// with text, and some of that text names films that do not exist: one measured
+/// model invented `Heat and Bone (2019)`, another invented twenty titles out of
+/// seventy-one. The failure is not that a row comes up short. It is that
+/// searching an invented title *succeeds*. `The Otherside (2022)` does not
+/// exist, and the catalogue answers that query happily with a 2008 film and a
+/// 2013 one. Show either and the viewer is looking at a real poster for a film
+/// nothing recommended.
 ///
-/// So every suggestion is resolved against a catalogue and kept only when
-/// the answer matches on **both** the title and the year, within a year
-/// either way. A year is allowed to be off by one because festival and
-/// territory dates genuinely differ by one; two years apart is not a
-/// release date, it is a different film.
+/// So every suggestion is resolved against a catalogue and kept only when the
+/// answer matches on **both** the title and the year, within a year either way.
+/// A year is allowed to be off by one because festival and territory dates
+/// genuinely differ by one. Two years apart is not a release date, it is a
+/// different film.
 ///
 /// The other half is which catalogue. A model asked what is like *Wave
-/// Twisters* answered *Æon Flux*, which is a television series, and was
-/// right -- the app plays series. Asked for the film catalogue only, that
-/// suggestion would either vanish or, worse, land on the 2005 film of the
-/// same name. So a suggestion that names its kind is looked for in that
-/// kind's catalogue, and one that names none is looked for in both: the
-/// year is what tells the 1991 series from the 2005 film.
+/// Twisters* answered *Æon Flux*, which is a television series, and was right:
+/// the app plays series. Asked for the film catalogue only, that suggestion
+/// would either vanish or, worse, land on the 2005 film of the same name. So a
+/// suggestion that names its kind is looked for in that kind's catalogue, and
+/// one that names none is looked for in both: the year is what tells the 1991
+/// series from the 2005 film.
 ///
-/// Nothing here throws. A search that fails, times out or answers
-/// something that is not JSON drops that one suggestion and leaves the
-/// rest; an empty result is an ordinary outcome -- a model that named ten
-/// films none of which exist -- and not an error for anything upstream to
-/// report.
+/// Nothing here throws. A search that fails, times out or answers something
+/// that is not JSON drops that one suggestion and leaves the rest. An empty
+/// result (a model that named ten films none of which exist) is an ordinary
+/// outcome, not an error for anything upstream to report.
 library;
 
 import 'dart:async';
@@ -41,11 +40,11 @@ import '../../core/core.dart';
 /// `query` the title as the model wrote it.
 ///
 /// A function rather than a client interface for the reason
-/// `PlaybackScope.dhtStatus` is one: it is the only question this
-/// feature asks over the network apart from the model, a test answers it
-/// with a list, and there is nothing else about a catalogue this wants to
-/// know. Failures are the function's own business -- it may throw, and
-/// [resolveSuggestions] turns that into one dropped suggestion.
+/// `PlaybackScope.dhtStatus` is one: it is the only question this feature asks
+/// over the network apart from the model, a test answers it with a list, and
+/// there is nothing else about a catalogue this wants to know. Failures are the
+/// function's own business: it may throw, and [resolveSuggestions] turns that
+/// into one dropped suggestion.
 typedef CatalogueSearch = Future<List<Map<String, dynamic>>> Function(
   String type,
   String query,
@@ -60,8 +59,8 @@ final Uri cinemeta = Uri.parse('https://v3-cinemeta.strem.io');
 final class SimilarTitle {
   const SimilarTitle({required this.item, required this.why});
 
-  /// What the catalogue answered with -- a real item, with a real id and a
-  /// real poster, which is the only kind of thing that reaches a row.
+  /// What the catalogue answered with: a real item, with a real id and a real
+  /// poster, which is the only kind of thing that reaches a row.
   final MetaItemPreview item;
 
   /// The model's reason, in its own words. Empty when it gave none.
@@ -74,8 +73,8 @@ final class SimilarTitle {
 /// Asks Cinemeta's search catalogue for [query] of [type].
 ///
 /// `GET /catalog/{type}/top/search={query}.json`, answering `metas[]` with
-/// `name`, `releaseInfo` and `imdb_id` on each -- which is exactly the
-/// three things the guard above needs.
+/// `name`, `releaseInfo` and `imdb_id` on each, which are exactly the three
+/// things the guard above needs.
 ///
 /// **Deliberately provisional.** The addon-aware version of this question
 /// asks the viewer's own installed meta addons rather than one addon this
@@ -109,12 +108,12 @@ Future<List<Map<String, dynamic>>> _search(
   String type,
   String query,
 ) async {
-  // The title is one path *segment* with `search=` in front of it and
-  // `.json` after it, encoded here rather than by [Uri]: a title with a
-  // slash, an ampersand or a question mark in it must not become a path of
-  // its own or a query string. An escape already in the path is left as it
-  // is, which is why the path is written out rather than built from
-  // segments -- that would encode these escapes a second time.
+  // The title is one path *segment* with `search=` in front of it and `.json`
+  // after it, encoded here rather than by [Uri]: a title with a slash, an
+  // ampersand or a question mark in it must not become a path of its own or a
+  // query string. An escape already in the path is left as it is, which is why
+  // the path is written out rather than built from segments. Segments would
+  // encode these escapes a second time.
   final url = base.replace(
     path:
         '${base.path}/catalog/$type/top/'
@@ -143,18 +142,18 @@ Future<List<Map<String, dynamic>>> _search(
 /// which is the one thing about the subject that cannot be spelled two
 /// ways.
 ///
-/// Duplicates collapse by id -- two suggestions can resolve to one item
-/// where a model names a film and its re-release -- and the first of them
-/// keeps its reason, since that is the one the model thought of first.
+/// Duplicates collapse by id, since two suggestions can resolve to one item
+/// where a model names a film and its re-release. The first of them keeps its
+/// reason, since that is the one the model thought of first.
 Future<List<SimilarTitle>> resolveSuggestions(
   List<SuggestedTitle> suggestions, {
   required String subjectId,
   CatalogueSearch search = cinemetaSearch,
 }) async {
-  // One query is one answer for the length of this call: a model that
-  // names the same title twice, or two titles that search the same, costs
-  // one search -- the future is what is kept, so a second asker waits on
-  // the first one's search rather than starting its own.
+  // One query is one answer for the length of this call: a model that names the
+  // same title twice, or two titles that search the same, costs one search. The
+  // future is what is kept, so a second asker waits on the first one's search
+  // rather than starting its own.
   final asked = <String, Future<List<Map<String, dynamic>>>>{};
 
   Future<List<Map<String, dynamic>>> ask(String type, String query) =>
@@ -190,9 +189,9 @@ Future<List<SimilarTitle>> resolveSuggestions(
     return null;
   }
 
-  // Every suggestion at once -- a row of ten is ten round trips to the
-  // catalogue, and one after another they were the whole wait -- and then
-  // read back in the order they were suggested.
+  // Every suggestion is asked at once, then read back in the order they were
+  // suggested. A row of ten is ten round trips to the catalogue, and one after
+  // another they were the whole wait.
   final items = await Future.wait(suggestions.map(resolve));
   final resolved = <SimilarTitle>[];
   final seen = <String>{subjectId};
@@ -205,9 +204,9 @@ Future<List<SimilarTitle>> resolveSuggestions(
 
 /// The first meta in [metas] that is this suggestion, or null.
 ///
-/// Both halves must agree. The title comparison is loose -- case,
-/// punctuation and a leading article are not what a model gets wrong --
-/// and the year comparison is what carries the weight.
+/// Both halves must agree. The title comparison is loose, since case,
+/// punctuation and a leading article are not what a model gets wrong. The year
+/// comparison is what carries the weight.
 Map<String, dynamic>? _matchIn(
   List<Map<String, dynamic>> metas,
   SuggestedTitle suggestion,
@@ -242,11 +241,11 @@ Map<String, dynamic>? _matchIn(
 ///
 /// The same normalisation the benchmark scores with
 /// (`tool/recommendations/recommend_bench.py`), so that a title counted as
-/// found there is one that resolves here. Dropping the article makes *The
-/// Heat* and *Heat* one key, which the year then separates -- 2013 against
-/// 1995 -- and which is the trade this whole file is built on: a loose
-/// title with a strict year keeps the near-misses and drops the
-/// inventions, where the reverse keeps the inventions.
+/// found there is one that resolves here. Dropping the article makes *The Heat*
+/// and *Heat* one key, which the year then separates (2013 against 1995). That
+/// is the trade this whole file is built on: a loose title with a strict year
+/// keeps the near-misses and drops the inventions, where the reverse keeps the
+/// inventions.
 String similarTitleKey(String title) {
   var key = title.toLowerCase().trim();
   key = key.replaceFirst(RegExp(r'^(the|a|an)\b'), '');
@@ -255,9 +254,8 @@ String similarTitleKey(String title) {
 
 /// The year a `releaseInfo` starts with, or null.
 ///
-/// A film's is `1995`; a series' is a range -- `2008-2013`, or `2008-` for
-/// one still running -- and the year a suggestion means is the year it
-/// started.
+/// A film's is `1995`. A series' is a range (`2008-2013`, or `2008-` for one
+/// still running), and the year a suggestion means is the year it started.
 int? yearIn(Object? releaseInfo) {
   if (releaseInfo is int) return releaseInfo;
   if (releaseInfo is! String) return null;

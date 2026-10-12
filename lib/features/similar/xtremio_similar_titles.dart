@@ -3,10 +3,9 @@
 /// One `GET {base}/similar/{type}/{id}`, answered with
 /// `{"titles":[{"title","year","kind","why"}, …], "version": 1}`. The server
 /// (`xtremio-xervice/functions/similar.js`) holds the Gemini key, builds the
-/// question from the name and year Cinemeta has for the id, and keeps the
-/// first answer for a title for everybody -- so nothing is sent from here
-/// but a type and an id, and there is nothing secret in this file or in
-/// the request.
+/// question from the name and year Cinemeta has for the id, and keeps the first
+/// answer for a title for everybody. So nothing is sent from here but a type
+/// and an id, and there is nothing secret in this file or in the request.
 ///
 /// Every failure comes back as a [SimilarTrouble] rather than an exception
 /// to print, so a log read a week later can say *the server was busy with
@@ -49,8 +48,8 @@ final class XtremioSimilarTitles implements SimilarTitlesProvider {
     } on SimilarTitlesFailure {
       rethrow;
     } on Object catch (error) {
-      // No HTTP at all: no network, no DNS, a TLS refusal. The type is
-      // worth keeping and the message is not -- it can carry the URL.
+      // No HTTP at all: no network, no DNS, a TLS refusal. The type is worth
+      // keeping and the message is not: it can carry the URL.
       throw SimilarTitlesFailure(
         SimilarTrouble.unreachable,
         error.runtimeType.toString(),
@@ -90,8 +89,8 @@ final class XtremioSimilarTitles implements SimilarTitlesProvider {
     return _titlesIn(text);
   }
 
-  /// What a status code means, in the words a log can be read back in --
-  /// the statuses `similar.js` answers with.
+  /// What a status code means, in the words a log can be read back in: the
+  /// statuses `similar.js` answers with.
   static SimilarTrouble _troubleFor(int status) => switch (status) {
     HttpStatus.notFound => SimilarTrouble.unknownTitle,
     HttpStatus.serviceUnavailable => SimilarTrouble.busy,
@@ -114,12 +113,11 @@ final class XtremioSimilarTitles implements SimilarTitlesProvider {
     if (titles is! List) {
       throw const SimilarTitlesFailure(SimilarTrouble.malformed, 'titles');
     }
-    // A row that cannot be read is one suggestion lost, not an answer
-    // lost. The server passes a year or a kind it could not read on as
-    // null; a null year is a row dropped here (a suggestion without a
-    // year cannot be told from an unrelated film of the same name -- see
-    // [SuggestedTitle.year]), and a null kind is a row resolved against
-    // both catalogues.
+    // A row that cannot be read is one suggestion lost, not an answer lost. The
+    // server passes a year or a kind it could not read on as null. A null year
+    // is a row dropped here, since a suggestion without a year cannot be told
+    // from an unrelated film of the same name (see [SuggestedTitle.year]). A
+    // null kind is a row resolved against both catalogues.
     return [for (final title in titles) ?SuggestedTitle.fromJson(title)];
   }
 }

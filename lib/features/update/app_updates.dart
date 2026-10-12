@@ -62,9 +62,9 @@ enum RoomStep {
   clearing,
 }
 
-/// The app's updates: whether a newer release is out, and what to do with
-/// one -- install it over this app (an Android release build) or point at
-/// its page (everything else).
+/// The app's updates: whether a newer release is out, and what to do with one.
+/// That is to install it over this app (an Android release build) or to point
+/// at its page (everything else).
 ///
 /// **At most once a day by itself.** [checkIfDue] asks only when the last
 /// look was [interval] ago or longer, and the look is written down
@@ -75,19 +75,17 @@ enum RoomStep {
 /// "Check for updates" in Settings ([check] with `manual`) asks whenever it
 /// is pressed and says "up to date" too.
 ///
-/// **What is offered.** A release newer than this build, unless it is the
-/// one "Skip this version" named (`AppPrefs.updateSkippedTag`) -- a newer
-/// one than that is offered again. "Later" puts the offer away for this
-/// run. A manual check offers the skipped release as well: it was asked
-/// for.
+/// **What is offered.** A release newer than this build, unless it is the one
+/// "Skip this version" named (`AppPrefs.updateSkippedTag`). A newer one than
+/// that is offered again. "Later" puts the offer away for this run. A manual
+/// check offers the skipped release as well: it was asked for.
 ///
-/// **Room before an install.** An Update press measures the data volume
-/// before the download and again before the install, and makes room in
-/// three steps when it is short ([makeRoom]): the gentle clean, then the
-/// full clear, then the "Not enough space" dialog. A television whose
-/// cache has filled its disk would otherwise download the APK and have
-/// Android refuse it. Nothing else here reclaims anything -- the daily
-/// look and the offer never touch the cache.
+/// **Room before an install.** An Update press measures the data volume before
+/// the download and again before the install, and makes room in three steps
+/// when it is short ([makeRoom]): the gentle clean, then the full clear, then
+/// the "Not enough space" dialog. A television whose cache has filled its disk
+/// would otherwise download the APK and have Android refuse it. Nothing else
+/// here reclaims anything: the daily look and the offer never touch the cache.
 class AppUpdates {
   AppUpdates({
     required this.prefs,
@@ -192,11 +190,11 @@ class AppUpdates {
   Future<void> skip(ReleaseInfo release) =>
       prefs.setUpdateSkippedTag(release.tag);
 
-  /// **Makes room for an APK of [apkBytes] and says whether it fits**:
-  /// before the download when [downloaded] is false, before the install
-  /// when it is true ([UpdateRoom.forApk]). Called only from an Update or
-  /// Install press -- the user asked for the update, so no step here asks
-  /// again -- never from the daily look.
+  /// **Makes room for an APK of [apkBytes] and says whether it fits**: before
+  /// the download when [downloaded] is false, before the install when it is
+  /// true ([UpdateRoom.forApk]). Called only from an Update or Install press,
+  /// never from the daily look. The user asked for the update, so no step here
+  /// asks again.
   ///
   /// In steps, each taken only while the APK still does not fit, and each
   /// measured after:

@@ -19,10 +19,10 @@ import '../sharing/sharing_activity.dart';
 /// changed (`ProfileSettings.withValue`), since stremio-core has no
 /// per-field defaults. Settings are device-local: the API never sees them.
 ///
-/// The focus indicator is the theme floor's throughout -- switch rows,
-/// plain rows, the language dropdowns -- for the reason [SettingsScreen]
-/// gives. The one exception is drawn elsewhere and marked there: the
-/// subtitle colours are chips.
+/// The focus indicator is the theme floor's throughout (switch rows, plain
+/// rows, the language dropdowns), for the reason [SettingsScreen] gives. The
+/// one exception is drawn elsewhere and marked there: the subtitle colours are
+/// chips.
 ///
 /// And what is read rather than pressed is a [Readout], which on a
 /// television is a stop wearing the ring alone: the subtitle preview.
@@ -63,14 +63,14 @@ class PlayerSettingsSection extends StatelessWidget {
 
   static String secondsLabel(int millis) => '${millis ~/ 1000} s';
 
-  /// The up-next countdown's label. A zero is not the setting turned off:
-  /// with Binge watching on, the next episode still starts the moment this
-  /// one ends -- it just does so without the card and its seconds. The
-  /// label says that, because "Disabled" (stremio-web's word, under a title
-  /// that calls this a popup duration) read as "nothing plays next" under
-  /// a title that calls it a countdown, and a viewer who wanted exactly
-  /// that picked it and got the opposite. What does stop the next episode
-  /// is the Binge watching switch above, and the subtitle points there.
+  /// The up-next countdown's label. A zero is not the setting turned off: with
+  /// Binge watching on, the next episode still starts the moment this one ends,
+  /// just without the card and its seconds. The label says that, because
+  /// "Disabled" (stremio-web's word, under a title that calls this a popup
+  /// duration) read as "nothing plays next" under a title that calls it a
+  /// countdown. A viewer who wanted exactly that picked it and got the
+  /// opposite. What does stop the next episode is the Binge watching switch
+  /// above, and the subtitle points there.
   static String upNextLabel(int millis) =>
       millis == 0 ? 'None (play at once)' : secondsLabel(millis);
 
@@ -193,19 +193,19 @@ class BufferAheadSection extends StatelessWidget {
 /// is on is marked (see [FocusEmphasis]).
 ///
 /// The app's own preference rather than a `profile.settings` field, for the
-/// same reason "Buffer ahead" is: it is about this device's room and
-/// display, not about the account. It is offered on a television only —
-/// that is where the indicator is drawn at all, and where the viewer is
-/// three metres away from a projector screen; off one, focus follows a
-/// pointer or Tab and Material's own highlight does the job.
+/// same reason "Buffer ahead" is: it is about this device's room and display,
+/// not about the account. It is offered on a television only. That is where the
+/// indicator is drawn at all, and where the viewer is three metres away from a
+/// projector screen. Off a television, focus follows a pointer or Tab, and
+/// Material's own highlight does the job.
 ///
-/// **A switch, not a dropdown.** [FocusEmphasis] has exactly two values, so
-/// a menu is a control too many: it costs a press to open, a walk to the
-/// value and a press to choose where a switch costs one press, and on a
-/// television a dropdown risks trapping the D-pad (as one did in the
-/// streaming-server settings). It is labelled for what turning it on does
-/// rather than for the axis it sits on, and it is a [SwitchListTile] like
-/// "Binge watching" above rather than a shape of its own.
+/// **A switch, not a dropdown.** [FocusEmphasis] has exactly two values, so a
+/// menu is a control too many: it costs a press to open, a walk to the value
+/// and a press to choose, where a switch costs one press. On a television a
+/// dropdown also risks trapping the D-pad (as one did in the streaming-server
+/// settings). It is labelled for what turning it on does rather than for the
+/// axis it sits on, and it is a [SwitchListTile] like "Binge watching" above
+/// rather than a shape of its own.
 ///
 /// **The enum is still what is stored and what the ring reads**, both
 /// values and the same key, so a stored choice of Bold is unaffected and
@@ -240,39 +240,38 @@ class FocusEmphasisSection extends StatelessWidget {
 /// server goes on uploading to other people when nothing is playing (see
 /// [IdleSharing], which holds the rule and the strings).
 ///
-/// The app's own preference and not a `profile.settings` field, for the
-/// reason "Buffer ahead" and "Bold focus" are: it is about this device's
-/// connection and what powers it, not about the account -- and the same
-/// account on a television and on a phone wants opposite answers. A switch
-/// like those, labelled for what turning it on does.
+/// The app's own preference and not a `profile.settings` field, for the reason
+/// "Buffer ahead" and "Bold focus" are: it is about this device's connection
+/// and what powers it, not about the account. The same account on a television
+/// and on a phone wants opposite answers. A switch like those, labelled for
+/// what turning it on does.
 ///
 /// **It is offered on every device**, unlike "Bold focus", because the
 /// choice exists everywhere and now so does the default: sharing is on
 /// until somebody turns it off here.
 ///
-/// It writes only the preference; what reaches the server is
-/// [IdleSharingPolicy]'s to send, so that one object decides for the whole
-/// app and this screen is one of the things that can change its mind. It is
-/// the *embedded* server it governs, the one holding what this device
-/// fetched.
+/// It writes only the preference. What reaches the server is
+/// [IdleSharingPolicy]'s to send, so that one object decides for the whole app
+/// and this screen is one of the things that can change its mind. It is the
+/// *embedded* server it governs, the one holding what this device fetched.
 ///
-/// **And it says when a "Not now" is holding it off.** The status light's
-/// popup can stop the sharing for the rest of the run without touching the
-/// preference, so the switch can be on over a run in which nothing is
-/// shared; the tile says so on a line of its own rather than leaving the
-/// switch to describe something the app is not doing. The line is only
-/// ever under a switch that is on, and the policy holds that from both
-/// ends: either press of the switch lifts a pause, and none can be granted
-/// while the switch is off. So what the line promises -- sharing again at
-/// the next start -- is what the setting will still be asking for then.
+/// **And it says when a "Not now" is holding it off.** The status light's popup
+/// can stop the sharing for the rest of the run without touching the
+/// preference, so the switch can be on over a run in which nothing is shared.
+/// The tile says so on a line of its own rather than leaving the switch to
+/// describe something the app is not doing. The line is only ever under a
+/// switch that is on, and the policy holds that from both ends: either press of
+/// the switch lifts a pause, and none can be granted while the switch is off.
+/// So what the line promises, sharing again at the next start, is what the
+/// setting will still be asking for then.
 ///
-/// **And it says so while the pause is granted, not the next time the tab
-/// is opened.** The popup is drawn over whatever screen is showing, this
-/// one included, so the press that pauses the sharing lands with the tile
-/// in view: it listens to the policy ([IdleSharingPolicy] notifies when
-/// the pause goes on or off) rather than reading it once. Reading the
-/// scope is not enough on its own -- the scope holds the same policy
-/// object either side of a "Not now" and so has nothing to say about it.
+/// **And it says so while the pause is granted, not the next time the tab is
+/// opened.** The popup is drawn over whatever screen is showing, this one
+/// included, so the press that pauses the sharing lands with the tile in view.
+/// So the tile listens to the policy ([IdleSharingPolicy] notifies when the
+/// pause goes on or off) rather than reading it once. Reading the scope is not
+/// enough on its own: the scope holds the same policy object either side of a
+/// "Not now", and so has nothing to say about it.
 class IdleSharingSection extends StatelessWidget {
   const IdleSharingSection({super.key, required this.prefs});
 
@@ -323,11 +322,11 @@ class IdleSharingSection extends StatelessWidget {
 /// log carries the streaming server's retention trace and mpv's demuxer,
 /// stream and cache lines (see [AppPrefs.verboseDiagnosticsKey]).
 ///
-/// The app's own preference, like "Share while idle" above it: what it
-/// feeds is the embedded server's `diagnosticsTrace` and the next player's
-/// log level, not a `profile.settings` field. It sits with the Diagnostics
-/// tile it changes the contents of, rather than with the server settings
-/// -- somebody who turns it on is about to copy a report.
+/// The app's own preference, like "Share while idle" above it: what it feeds is
+/// the embedded server's `diagnosticsTrace` and the next player's log level,
+/// not a `profile.settings` field. It sits with the Diagnostics tile it changes
+/// the contents of, rather than with the server settings, because somebody who
+/// turns it on is about to copy a report.
 class VerboseDiagnosticsSection extends StatelessWidget {
   const VerboseDiagnosticsSection({super.key, required this.prefs});
 
@@ -545,23 +544,22 @@ class ChoiceTile<T> extends StatelessWidget {
 ///
 /// **The menu is not the tile's `trailing`,** which is where it started and
 /// where it does not fit. A [DropdownButton] measures itself against its
-/// *widest* item rather than the chosen one -- "Download the whole file"
-/// among the buffer choices, "Portuguese (Brazil)" among the languages --
-/// and `ListTile` lets `trailing` be as wide as it likes, squeezing the
-/// title and subtitle into whatever is left, clamped at zero: at a larger
-/// system font a 360 dp phone's "Buffer ahead" tile grew past 1000 dp for
-/// one row, with the title clipped away entirely at some widths.
+/// *widest* item rather than the chosen one: "Download the whole file" among
+/// the buffer choices, "Portuguese (Brazil)" among the languages. `ListTile`
+/// lets `trailing` be as wide as it likes, squeezing the title and subtitle
+/// into whatever is left, clamped at zero. At a larger system font a 360 dp
+/// phone's "Buffer ahead" tile grew past 1000 dp for one row, with the title
+/// clipped away entirely at some widths.
 ///
 /// **A widget test sees the worse end of it**, because the test font draws
 /// every glyph a square, so `trailing` claims the whole tile width and a
 /// `hasSize` assertion throws below about 436 dp.
 ///
 /// On a line of its own the menu has that line to itself at any width, so
-/// nothing here depends on how long the longest label happens to be --
-/// which is the property worth having, since one of those lists is the
-/// languages and it grows. [SettingMenu] fills the line rather than
-/// measuring the labels again, and a width breakpoint would have wanted a
-/// threshold per list.
+/// nothing here depends on how long the longest label happens to be. That is
+/// the property worth having, since one of those lists is the languages, and it
+/// grows. [SettingMenu] fills the line rather than measuring the labels again,
+/// and a width breakpoint would have wanted a threshold per list.
 class SettingTile extends StatelessWidget {
   const SettingTile({
     super.key,

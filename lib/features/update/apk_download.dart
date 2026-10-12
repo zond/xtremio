@@ -22,20 +22,19 @@ class UpdateDownloadException implements Exception {
 /// an earlier attempt, and checks it against GitHub's digest before
 /// handing it over.
 ///
-/// **Resume.** The bytes land in `<target>.part`. A second attempt asks for
-/// the rest with a `Range` header, and appends only if the server answers
-/// `206` from exactly that offset; a `200` is the whole file again and
-/// starts over, and a `416` (the part is already as long as the file, or
-/// longer) or a `206` from another offset throws the part away and asks
-/// for the whole file. A connection that drops keeps the part. A body that
-/// ends short is the digest's to catch. `HttpClient` follows
-/// `browser_download_url`'s redirect to the host that holds the bytes and
-/// takes the `Range` header with it.
+/// **Resume.** The bytes land in `<target>.part`. A second attempt asks for the
+/// rest with a `Range` header, and appends only if the server answers `206`
+/// from exactly that offset. A `200` is the whole file again and starts over. A
+/// `416` (the part is already as long as the file, or longer) or a `206` from
+/// another offset throws the part away and asks for the whole file. A
+/// connection that drops keeps the part. A body that ends short is the digest's
+/// to catch. `HttpClient` follows `browser_download_url`'s redirect to the host
+/// that holds the bytes and takes the `Range` header with it.
 ///
-/// **Nothing unverified is kept.** The finished part is hashed and renamed
-/// to [target] only when its SHA-256 is [digest]; on a mismatch, or with no
-/// digest to check against, it is deleted and this throws. An APK nobody
-/// can vouch for is never handed to the installer.
+/// **Nothing unverified is kept.** The finished part is hashed and renamed to
+/// [target] only when its SHA-256 is [digest]. On a mismatch, or with no digest
+/// to check against, it is deleted and this throws. An APK nobody can vouch for
+/// is never handed to the installer.
 class ApkDownloader {
   ApkDownloader({this.timeout = const Duration(seconds: 30)});
 
@@ -44,7 +43,7 @@ class ApkDownloader {
 
   HttpClient? _client;
 
-  /// Stops a download in progress; it throws a cancelled
+  /// Stops a download in progress. The download throws a cancelled
   /// [UpdateDownloadException] and keeps its part for the next attempt.
   void cancel() {
     _cancelled = true;

@@ -16,14 +16,13 @@ import 'releases.dart';
 /// Puts [release] to the viewer: what it is, what changed, and Update,
 /// Skip this version or Later.
 ///
-/// Update installs it where [AppUpdates.canInstall] (an Android release
-/// build) and opens its page everywhere else. Nothing is installed without
-/// a press here *and* Android's own confirmation after it, and nothing is
-/// downloaded or installed that the device has no room for: a short device
-/// is cleaned, then cleared -- streams stopped -- without another question
-/// ([AppUpdates.makeRoom]), and when even that is not enough the dialog
-/// says how much is free, how much is needed and what was cleared, and
-/// offers Server storage.
+/// Update installs it where [AppUpdates.canInstall] (an Android release build)
+/// and opens its page everywhere else. Nothing is installed without a press
+/// here *and* Android's own confirmation after it. Nothing is downloaded or
+/// installed that the device has no room for: a short device is cleaned, then
+/// cleared (streams stopped), without another question ([AppUpdates.makeRoom]).
+/// When even that is not enough, the dialog says how much is free, how much is
+/// needed and what was cleared, and offers Server storage.
 Future<void> showUpdateDialog(
   BuildContext context, {
   required AppUpdates updates,
@@ -220,12 +219,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (mounted) setState(() => _settingsOpened = opened);
   }
 
-  /// Measures the room before the download and again before the install,
-  /// and makes room when it is short -- the gentle clean, then the full
-  /// clear, with no question asked: Update or Install was pressed
-  /// ([AppUpdates.makeRoom]). False -- and the dialog on [_Step.short] --
-  /// when the update still does not fit; a room nobody could measure is
-  /// not "full", and goes ahead.
+  /// Measures the room before the download and again before the install, and
+  /// makes room when it is short: the gentle clean, then the full clear, with
+  /// no question asked, since Update or Install was pressed
+  /// ([AppUpdates.makeRoom]). False, and the dialog on [_Step.short], when the
+  /// update still does not fit. A room nobody could measure is not "full", and
+  /// goes ahead.
   Future<bool> _makeRoom({required bool downloaded}) async {
     final asset = _asset;
     if (asset == null) return false;
@@ -304,10 +303,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Back is Later while offering and Close after a failure; while room
-    // is made and during a download it is Cancel ([dispose] stops the
-    // download, which keeps its part for the next attempt; a clean under
-    // way finishes on its own).
+    // Back is Later while offering and Close after a failure. While room is
+    // made and during a download it is Cancel: [dispose] stops the download,
+    // which keeps its part for the next attempt, and a clean under way finishes
+    // on its own.
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,

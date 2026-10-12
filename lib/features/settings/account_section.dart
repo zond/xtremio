@@ -13,29 +13,28 @@ import '../../widgets/tv_text_field.dart';
 /// Settings → Account, over `ctx.profile.auth`.
 ///
 /// The form's two fields are [TvTextField]s and carry the app's ring
-/// themselves; the consent boxes and the buttons around them are Material
-/// controls on the app's own surface and take the theme floor
-/// (`FocusTheme`), which is the whole of what marks them. What is read
-/// rather than pressed -- why a sign-in was refused, what signing in is
-/// for, which account this is, and a banner's message -- is a [Readout],
-/// so that a remote can reach it: on a television the page scrolls only by
-/// moving focus, and the note under the buttons is the last thing on the
-/// section.
+/// themselves. The consent boxes and the buttons around them are Material
+/// controls on the app's own surface and take the theme floor (`FocusTheme`),
+/// which is the whole of what marks them. What is read rather than pressed is a
+/// [Readout], so that a remote can reach it: why a sign-in was refused, what
+/// signing in is for, which account this is, and a banner's message. On a
+/// television the page scrolls only by moving focus, and the note under the
+/// buttons is the last thing on the section.
 ///
 /// Signed out it is the sign-in / create-account form: `Authenticate` with
-/// `AuthRequest::Login` or `::Register` (the latter with the GDPR consent
-/// the API demands, `from: xtremio`). The engine does not serialize its
-/// "authenticating" status, so the pending spinner is local state cleared
-/// by `UserAuthenticated` or the `Error` whose source is that event, whose
-/// `error.message` is shown inline. Signed in it shows the account, "Sync
-/// now" (`SyncLibraryWithAPI`, `PullAddonsFromAPI`, `PullNotifications`)
-/// and "Log out"; banners when `profile.addonsLocked` is set (the addon
-/// collection could not be fetched after login) and when the library
-/// fetch failed (`UserLibraryMissing{true}`, delivered wrapped in an
-/// `Error` event; cleared by the plain `UserLibraryMissing{false}` a sync
-/// emits). Only event names, `source.event`, `error.message` and the
-/// `library_missing` flag are read: the args of these events carry the
-/// password and the auth key.
+/// `AuthRequest::Login` or `::Register` (the latter with the GDPR consent the
+/// API demands, `from: xtremio`). The engine does not serialize its
+/// "authenticating" status, so the pending spinner is local state cleared by
+/// `UserAuthenticated` or the `Error` whose source is that event, whose
+/// `error.message` is shown inline. Signed in it shows the account, "Sync now"
+/// (`SyncLibraryWithAPI`, `PullAddonsFromAPI`, `PullNotifications`) and "Log
+/// out". It shows banners when `profile.addonsLocked` is set (the addon
+/// collection could not be fetched after login) and when the library fetch
+/// failed. That failure is `UserLibraryMissing{true}`, delivered wrapped in an
+/// `Error` event, and is cleared by the plain `UserLibraryMissing{false}` a
+/// sync emits. Only event names, `source.event`, `error.message` and the
+/// `library_missing` flag are read: the args of these events carry the password
+/// and the auth key.
 class AccountSection extends StatefulWidget {
   const AccountSection({super.key, required this.ctx});
 
@@ -265,19 +264,18 @@ class _AccountSectionState extends State<AccountSection> {
   /// The two buttons at the foot of either state: side by side on a
   /// television, wrapped anywhere else.
   ///
-  /// Neither pair has any give in a row. Signed in, "Sync now" and
-  /// "Log out" are each laid out at the width they ask for and the row
-  /// overflows when that is wider than the screen: at Android's largest
-  /// font a 320 dp phone is 23 dp short, which is a debug error and, in a
-  /// release build, "Log out" drawn off the edge. Signed out, the pair
-  /// fitted only because the [Expanded] was around the button that
-  /// matters: it keeps whatever "Create an account" beside it did not
-  /// take, which at that same size and width is 7 dp of a label needing 67
-  /// -- the button the screen exists for, drawn blank. Roboto at the
-  /// default size fits both pairs on a phone, which is why nobody has met
-  /// this; the test font draws every glyph a square and fits neither at
-  /// any phone width, so it is also what a widget test of this screen at
-  /// 320-411 dp sees.
+  /// Neither pair has any give in a row. Signed in, "Sync now" and "Log out"
+  /// are each laid out at the width they ask for, and the row overflows when
+  /// that is wider than the screen: at Android's largest font a 320 dp phone is
+  /// 23 dp short, which is a debug error and, in a release build, "Log out"
+  /// drawn off the edge. Signed out, the pair fitted only because the
+  /// [Expanded] was around the button that matters: it keeps whatever "Create
+  /// an account" beside it did not take, which at that same size and width is 7
+  /// dp of a label needing 67. That is the button the screen exists for, drawn
+  /// blank. Roboto at the default size fits both pairs on a phone, which is why
+  /// nobody has met this. The test font draws every glyph a square and fits
+  /// neither at any phone width, so it is also what a widget test of this
+  /// screen at 320-411 dp sees.
   ///
   /// Wrapped, each button is as wide as what it says and the pair takes a
   /// second line when one line will not hold it, which no width is too
@@ -285,11 +283,11 @@ class _AccountSectionState extends State<AccountSection> {
   ///
   /// **A television keeps the row**, because there the pair is a shape the
   /// D-pad walks and not a width problem: a television is 960 dp at its
-  /// narrowest, and down out of the sign-in fields lands on [primary]
-  /// because [wide] has it spread under them, with right walking on to
-  /// [secondary]. Wrapped, both are their own width at the left of the
-  /// row, and down lands on whichever of them the field's middle is nearer
-  /// -- which is the second one.
+  /// narrowest, and down out of the sign-in fields lands on [primary] because
+  /// [wide] has it spread under them, with right walking on to [secondary].
+  /// Wrapped, both are their own width at the left of the row, and down lands
+  /// on whichever of them the field's middle is nearer, which is the second
+  /// one.
   Widget _actions(
     BuildContext context, {
     required Widget primary,

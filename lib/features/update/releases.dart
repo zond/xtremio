@@ -55,9 +55,9 @@ class ReleaseInfo {
   final List<ReleaseAsset> assets;
 
   /// What `GET /repos/zond/xtremio/releases/latest` answered, or a
-  /// [FormatException] when it is not a release this app can read -- a tag
-  /// that is not a version is one, and so is a draft or a pre-release (the
-  /// endpoint excludes both, and this says so if that ever changes).
+  /// [FormatException] when it is not a release this app can read. A tag that
+  /// is not a version is one, and so is a draft or a pre-release (the endpoint
+  /// excludes both, and this says so if that ever changes).
   factory ReleaseInfo.fromGitHub(Object? json) {
     if (json is! Map<String, dynamic>) {
       throw const FormatException('the release is not an object');
@@ -108,11 +108,11 @@ class ReleaseInfo {
 /// (`Build.SUPPORTED_ABIS[0]`), null for an ABI the release builds none
 /// for.
 ///
-/// The first ABI, because that is the one the device prefers and runs the
-/// app as: a phone with `arm64-v8a` first gets the 64-bit build, and a
-/// Chromecast with Google TV -- a 64-bit chip with a 32-bit userspace, whose
-/// list is `armeabi-v7a,armeabi` -- gets the 32-bit one, which is the only
-/// one it can install.
+/// The first ABI, because that is the one the device prefers and runs the app
+/// as. A phone with `arm64-v8a` first gets the 64-bit build. A Chromecast with
+/// Google TV, a 64-bit chip with a 32-bit userspace whose list is
+/// `armeabi-v7a,armeabi`, gets the 32-bit one, which is the only one it can
+/// install.
 String? apkAssetNameForAbi(String abi) => switch (abi) {
   'arm64-v8a' => 'xtremio-arm64-v8a.apk',
   'armeabi-v7a' => 'xtremio-armeabi-v7a.apk',
@@ -163,9 +163,9 @@ abstract interface class ReleaseSource {
 /// [ReleaseSource] over GitHub's REST API, unauthenticated.
 ///
 /// Unauthenticated means 60 requests an hour per IP address, shared with
-/// everything else on the network asking GitHub anything -- and a
-/// conditional request still counts. Which is why nothing here is polled:
-/// `AppUpdates` asks at most once a day by itself.
+/// everything else on the network asking GitHub anything, and a conditional
+/// request still counts. That is why nothing here is polled: `AppUpdates` asks
+/// at most once a day by itself.
 class GitHubReleaseSource implements ReleaseSource {
   GitHubReleaseSource({
     Uri? endpoint,

@@ -35,7 +35,7 @@ class ReleaseVersion implements Comparable<ReleaseVersion> {
     r'(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
   );
 
-  /// [text] as a version, or null when it is not one -- an empty stamp,
+  /// [text] as a version, or null when it is not one: an empty stamp,
   /// `unknown`, a tag somebody pushed by hand.
   static ReleaseVersion? parse(String text) {
     final match = _shape.firstMatch(text.trim());
@@ -100,11 +100,10 @@ class ReleaseVersion implements Comparable<ReleaseVersion> {
 /// What this build is, for the update check: the stamp the Makefile puts on
 /// it, and whether it is the release app.
 ///
-/// **Only a stamped, clean release build checks by itself.** Every other
-/// build is somebody working on the app, and a dialog about the latest
-/// release at every start is noise to them -- worse, an offer to install
-/// the release over what they are testing. So [checksByItself] wants all
-/// three of:
+/// **Only a stamped, clean release build checks by itself.** Every other build
+/// is somebody working on the app, and a dialog about the latest release at
+/// every start is noise to them. Worse, it is an offer to install the release
+/// over what they are testing. So [checksByItself] wants all three of:
 ///
 /// - **a release-mode build** ([isReleaseBuild]). Debug and profile builds
 ///   are `com.zond.xtremio.debug`, a second app signed with the debug key:

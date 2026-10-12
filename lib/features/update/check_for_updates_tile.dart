@@ -4,9 +4,9 @@ import 'app_updates.dart';
 import 'update_dialog.dart';
 
 /// Settings' "Check for updates": asks for the latest release now, past the
-/// once-a-day limit the start-up look keeps, and says what it found --
-/// the update dialog for a newer release, a line for everything else,
-/// "up to date" included.
+/// once-a-day limit the start-up look keeps, and says what it found. That is
+/// the update dialog for a newer release, and a line for everything else, "up
+/// to date" included.
 class CheckForUpdatesTile extends StatefulWidget {
   const CheckForUpdatesTile({super.key, required this.updates});
 

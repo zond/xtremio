@@ -29,25 +29,24 @@ import 'core_settings.dart';
 /// the streaming server (from the `streaming_server` model field) and the
 /// core.
 ///
-/// Nothing here draws a focus indicator of its own. Every control is a
-/// Material one on the app's own surface, so what marks the row the remote
-/// is on is the theme floor (`FocusTheme`), which fills it -- and
-/// deliberately only that: a settings row that grew and cast a shadow as
-/// the D-pad walked a screenful of them would overlap the rows above and
-/// below it on every press, which is the reason `FocusTreatment` has two
-/// values.
+/// Nothing here draws a focus indicator of its own. Every control is a Material
+/// one on the app's own surface, so what marks the row the remote is on is the
+/// theme floor (`FocusTheme`), which fills it. Deliberately only that: a
+/// settings row that grew and cast a shadow as the D-pad walked a screenful of
+/// them would overlap the rows above and below it on every press. That is the
+/// reason `FocusTreatment` has two values.
 ///
-/// Every control -- and that was the hole. A row with no `onTap` is no
-/// control, takes no focus and is therefore jumped over by a remote; and on
-/// a television the scroll view follows focus, so a row that is jumped over
-/// is a row the screen never scrolls to. The status of the server, the
-/// health of the DHT, the core's schema version: three lines a viewer came
-/// here to read, and the last of them sat under the fold with nothing able
-/// to bring it up. Those are [Readout]s now, which are stops wearing the
-/// ring alone -- marked, because the remote is standing there, and not
-/// filled, because pressing one does nothing. The section headers are not:
-/// a header is a label on the row below it, and that row is a stop whose
-/// own reveal brings the header on screen with it.
+/// Every control: and that was the hole. A row with no `onTap` is no control,
+/// takes no focus, and is therefore jumped over by a remote. On a television
+/// the scroll view follows focus, so a row that is jumped over is a row the
+/// screen never scrolls to. The status of the server, the health of the DHT,
+/// the core's schema version: three lines a viewer came here to read, and the
+/// last of them sat under the fold with nothing able to bring it up. Those are
+/// [Readout]s now, which are stops wearing the ring alone. They are marked,
+/// because the remote is standing there, and not filled, because pressing one
+/// does nothing. The section headers are not: a header is a label on the row
+/// below it, and that row is a stop whose own reveal brings the header on
+/// screen with it.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -56,13 +55,13 @@ class SettingsScreen extends StatefulWidget {
     this.cache = const ServerClient(),
   });
 
-  /// Where the Peer discovery row's [DhtStatus] comes from (absent,
-  /// `ServerClient().dhtStatus`) -- a plain function, the way
+  /// Where the Peer discovery row's [DhtStatus] comes from
+  /// (`ServerClient().dhtStatus` when absent). It is a plain function, the way
   /// `PlaybackScope.dhtStatus` is, so a widget test can hand over one that
   /// returns a chosen state or throws instead of reaching FFI.
   final DhtStatus Function()? dhtStatus;
 
-  /// Asks for a folder to find local videos in; a test's answers one.
+  /// Asks for a folder to find local videos in; a test answers one.
   final FolderPicker pickFolder;
 
   /// What "Clear the cache" asks; a widget test hands over a fake.
@@ -79,11 +78,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   CoreFieldNotifier? _server;
   CoreFieldNotifier? _ctx;
 
-  /// The DHT's status, read alongside the streaming-server row above it --
-  /// the same `NewState`-triggered pull [_server] already does, never a
-  /// timer of its own. Null both before the first pull lands and whenever
-  /// the read itself throws; either way the row shows a quiet "Unknown"
-  /// rather than an error.
+  /// The DHT's status, read alongside the streaming-server row above it, on the
+  /// same `NewState`-triggered pull [_server] already does and never on a timer
+  /// of its own. Null both before the first pull lands and whenever the read
+  /// itself throws. Either way the row shows a quiet "Unknown" rather than an
+  /// error.
   DhtStatus? _dht;
 
   /// Every value a control has sent in `UpdateSettings` that no `ctx` pull
@@ -97,10 +96,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// control back and had the next change send the old value again.
   final Map<String, Object?> _unconfirmed = {};
 
-  /// The app's own preferences, for "Buffer ahead". From the [PrefsScope]
-  /// the app puts above every screen; a screen mounted without one (a widget
-  /// test that does not care where the choice goes) gets [_ownPrefs], which
-  /// persists nothing.
+  /// The app's own preferences, for "Buffer ahead". From the [PrefsScope] the
+  /// app puts above every screen. A screen mounted without one (a widget test
+  /// that does not care where the choice goes) gets [_ownPrefs], which persists
+  /// nothing.
   AppPrefs? _prefsOrNull;
   AppPrefs? _ownPrefs;
 
@@ -176,9 +175,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return settings.isEmpty ? null : settings;
   }
 
-  /// One setting changed: `UpdateSettings` with the whole map, as the
-  /// engine has no per-field defaults; the value is [_unconfirmed] until a
-  /// pull shows it.
+  /// One setting changed: `UpdateSettings` with the whole map, as the engine
+  /// has no per-field defaults. The value is [_unconfirmed] until a pull shows
+  /// it.
   void _updateSetting(ProfileSettings settings, String key, Object? value) {
     final next = settings.withValue(key, value);
     setState(() => _unconfirmed[key] = value);
@@ -210,15 +209,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        // The default cache extent (250px) only pre-builds a couple of
-        // screens' worth around the viewport; a D-pad's directional focus
-        // move only ever considers *built* widgets, so a jump from one
-        // focusable tile, over several informational rows with no `onTap`
-        // (Status, Peer discovery, the core-schema line), to the next
-        // focusable one below (Diagnostics) can land on nothing at all if
-        // that next tile has not been built yet. This screen's whole
-        // content is short and fixed, so building generously ahead costs
-        // nothing.
+        // The default cache extent (250px) only pre-builds a couple of screens'
+        // worth around the viewport. A D-pad's directional focus move only ever
+        // considers *built* widgets. So a jump from one focusable tile, over
+        // several informational rows with no `onTap` (Status, Peer discovery,
+        // the core-schema line), to the next focusable one below (Diagnostics)
+        // can land on nothing at all if that next tile has not been built yet.
+        // This screen's whole content is short and fixed, so building
+        // generously ahead costs nothing.
         scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
         children: [
           const _SectionHeader('Account'),
@@ -313,10 +311,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          // Where the bytes go, what they cost and the one way to ask for
-          // room back -- one root and one screen for all of it, so it sits
-          // here rather than with the developer tools: moving it is an
-          // ordinary thing to want, not a debug task.
+          // Where the bytes go, what they cost and the one way to ask for room
+          // back: one root and one screen for all of it. It sits here rather
+          // than with the developer tools, because moving it is an ordinary
+          // thing to want, not a debug task.
           ListTile(
             leading: const Icon(Icons.sd_storage_outlined),
             title: const Text('Server storage'),
@@ -334,14 +332,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // playing: it stops streams, so it asks first. Beside Server
           // storage, whose gentle clean never stops anything.
           ClearCacheTile(client: widget.cache),
-          // Directly under the server's own status: the DHT is a peer
-          // *source* for that server, not a requirement (a torrent with
-          // working trackers downloads fine without one), so this shows
-          // health in both directions -- a bootstrapped DHT's node count
-          // and a never-bootstrapped one's plain explanation -- rather
-          // than only ever flagging a fault. `DhtStatus.healthLine` is the
-          // one place the wording lives; Diagnostics reads the same
-          // `unavailableMessage` constant it composes with.
+          // Directly under the server's own status: the DHT is a peer *source*
+          // for that server, not a requirement (a torrent with working trackers
+          // downloads fine without one). So this shows health in both
+          // directions rather than only ever flagging a fault: a bootstrapped
+          // DHT's node count, and a never-bootstrapped one's plain explanation.
+          // `DhtStatus.healthLine` is the one place the wording lives.
+          // Diagnostics reads the same `unavailableMessage` constant it
+          // composes with.
           Readout(
             child: ListTile(
               leading: const Icon(Icons.hub_outlined),
@@ -449,11 +447,11 @@ class _DevPlayTile extends StatelessWidget {
   );
 }
 
-/// Keeps the test torrent on the device through the same `DownloadsClient`
-/// a stream tile's download button uses, so the download path can be proven
-/// on a device with no addon installed. The entry lands in the registry
-/// under a meta id of its own, which is also what removes it again from the
-/// Downloads screen -- with the same confirmation every other removal asks
+/// Keeps the test torrent on the device through the same `DownloadsClient` a
+/// stream tile's download button uses, so the download path can be proven on a
+/// device with no addon installed. The entry lands in the registry under a meta
+/// id of its own, which is also what removes it again from the Downloads
+/// screen. That removal asks the same confirmation every other removal asks
 /// for, which is why this is safe to ship.
 class _DevDownloadTile extends StatelessWidget {
   const _DevDownloadTile();

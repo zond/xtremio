@@ -13,44 +13,42 @@ import 'sharing_activity.dart';
 /// The status light that says Xtremio is using this device's connection
 /// while nothing is playing.
 ///
-/// **It says what is happening, never what is allowed.** It is drawn only
-/// while [SharingActivityMonitor.active] -- the server measured bytes
-/// moving to or from peers over the last window, with no player reading --
-/// and never because the setting is on. An icon that is on whenever the
-/// switch is on says nothing and becomes furniture, and the point of the
-/// whole change it belongs to is that seeing the traffic is the control.
+/// **It says what is happening, never what is allowed.** It is drawn only while
+/// [SharingActivityMonitor.active], meaning the server measured bytes moving to
+/// or from peers over the last window with no player reading. It is never drawn
+/// because the setting is on. An icon that is on whenever the switch is on says
+/// nothing and becomes furniture, and the point of the whole change it belongs
+/// to is that seeing the traffic is the control.
 ///
 /// **One slot, three glyphs.** An up arrow while bytes go out (serving other
-/// people), a down arrow while they come in (an offline download filling
-/// in, or the title you last played fetching what it keeps), and one glyph with
-/// both arrows while both are true -- never two lights, because two pulsing
-/// things fight the brief of a discreet status light. What is lit is the
-/// server's own halves ([BackgroundTraffic.uploading] and
-/// [BackgroundTraffic.downloading]), judged on the Rust side over one
-/// sample with "nothing playing" already folded in; see [glyphFor].
+/// people), a down arrow while they come in (an offline download filling in, or
+/// the title you last played fetching what it keeps), and one glyph with both
+/// arrows while both are true. Never two lights, because two pulsing things
+/// fight the brief of a discreet status light. What is lit is the server's own
+/// halves ([BackgroundTraffic.uploading] and [BackgroundTraffic.downloading]),
+/// judged on the Rust side over one sample with "nothing playing" already
+/// folded in; see [glyphFor].
 ///
 /// **And only while the shell is what is on screen.** The server already
-/// answers dark while a player is reading, so this is not what keeps the
-/// light off during a film. It is what keeps the polling from costing
-/// anything while nobody could see the light: it is drawn by `RootShell`,
-/// and its route stops being the current one the moment a player (or
-/// anything else) is pushed over it, so it appears on the five shell
-/// screens and nowhere else -- not over the details or downloads screens
-/// either, which is a silence rather than a lie. That is also where the
-/// polling stops; see [SharingActivityMonitor].
+/// answers dark while a player is reading, so this is not what keeps the light
+/// off during a film. It is what keeps the polling from costing anything while
+/// nobody could see the light. It is drawn by `RootShell`, and its route stops
+/// being the current one the moment a player (or anything else) is pushed over
+/// it. So it appears on the five shell screens and nowhere else, not over the
+/// details or downloads screens either, which is a silence rather than a lie.
+/// That is also where the polling stops (see [SharingActivityMonitor]).
 ///
-/// **On a television the remote reaches it from the rail.** The node the
-/// shell hands in is skipped by traversal, so the light can never stand
-/// between a D-pad press and the poster it was meant for; what reaches it is
-/// one explicit rule of the shell's (`_onRailKey`), up from the top of the
-/// rail. Any direction key hands the remote straight back to the rail, so
-/// the ring can never be stranded on a light that goes out. Off a
-/// television it is an ordinary button: a pointer presses it, and Tab
-/// reaches it.
+/// **On a television the remote reaches it from the rail.** The node the shell
+/// hands in is skipped by traversal, so the light can never stand between a
+/// D-pad press and the poster it was meant for. What reaches it is one explicit
+/// rule of the shell's (`_onRailKey`), up from the top of the rail. Any
+/// direction key hands the remote straight back to the rail, so the ring can
+/// never be stranded on a light that goes out. Off a television it is an
+/// ordinary button: a pointer presses it, and Tab reaches it.
 ///
-/// **It is a light, not a notification.** Semi-transparent, and pulsing
-/// slowly enough that nothing pulls the eye during a poster row -- and not
-/// pulsing at all where the platform says animations are off.
+/// **It is a light, not a notification.** Semi-transparent, and pulsing slowly
+/// enough that nothing pulls the eye during a poster row, and not pulsing at
+/// all where the platform says animations are off.
 class SharingLight extends StatefulWidget {
   const SharingLight({super.key, required this.focusNode, this.onLeave});
 
@@ -68,8 +66,8 @@ class SharingLight extends StatefulWidget {
   static const IconData downloadingIcon = Icons.download_outlined;
   static const IconData bothIcon = Icons.swap_vert;
 
-  /// Which glyph [reading] lights, or null when it lights none -- which is
-  /// when the light is not drawn at all.
+  /// Which glyph [reading] lights, or null when it lights none, which is when
+  /// the light is not drawn at all.
   static IconData? glyphFor(BackgroundTraffic reading) =>
       switch ((up: reading.uploading, down: reading.downloading)) {
         (up: true, down: true) => bothIcon,
@@ -99,9 +97,9 @@ class SharingLight extends StatefulWidget {
   /// quicker than this reads as something asking to be dealt with.
   static const Duration pulse = Duration(milliseconds: 1600);
 
-  /// The two ends of the pulse. Neither is opaque -- it is drawn over
-  /// poster art and must not compete with it -- and the dimmer end stays
-  /// well clear of invisible, so the light is still there between beats.
+  /// The two ends of the pulse. Neither is opaque, since it is drawn over
+  /// poster art and must not compete with it. The dimmer end stays well clear
+  /// of invisible, so the light is still there between beats.
   static const double dimmest = 0.35;
   static const double brightest = 0.8;
 
@@ -142,9 +140,9 @@ class _SharingLightState extends State<SharingLight> {
   }
 
   /// A direction key on the light hands the remote back to the rail it came
-  /// from. There is nothing to walk here -- it is one stop -- and a key that
-  /// merely did nothing would leave the viewer pressing at a light with no
-  /// way off it.
+  /// from. There is nothing to walk here, since it is one stop, and a key that
+  /// merely did nothing would leave the viewer pressing at a light with no way
+  /// off it.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
@@ -161,12 +159,12 @@ class _SharingLightState extends State<SharingLight> {
   /// Opens the popup over the reading the light is lit by right now.
   ///
   /// While bytes are coming in, the offline downloads are listed first and
-  /// handed to the dialog, so that what it draws is decided before it is
-  /// drawn: a "Cancel" row is offered per download still on its way, and a
-  /// dialog that listed them after opening would change shape under the
-  /// viewer, or draw a row for a download that turns out not to exist. A
-  /// listing that fails is an empty list -- the popup then says no offline
-  /// download is in flight, which is all the app knows.
+  /// handed to the dialog, so that what it draws is decided before it is drawn.
+  /// A "Cancel" row is offered per download still on its way, and a dialog that
+  /// listed them after opening would change shape under the viewer, or draw a
+  /// row for a download that turns out not to exist. A listing that fails is an
+  /// empty list. The popup then says no offline download is in flight, which is
+  /// all the app knows.
   Future<void> _open() async {
     final scope = SharingScope.read(context);
     if (scope == null) return;
@@ -233,8 +231,8 @@ class _SharingLightState extends State<SharingLight> {
         ),
       );
     }
-    // The ring alone: it is one surface with nothing of its own kind beside
-    // it, so bold's dimming would only fade it out on its own -- the seek
+    // The ring alone: it is one surface with nothing of its own kind beside it,
+    // so bold's dimming would only fade it out on its own. That is the seek
     // bar's reason, and what [FocusTreatment.readout] is for.
     return RemotePress(
       onTap: _open,
@@ -322,40 +320,39 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 /// the server's measured halves (see [SharingLight]), so the dialog is
 /// built from the same two halves and from what each one's stop governs:
 ///
-/// - **Bytes going out** are what "Share while idle" governs, so the
-///   sharing rows are drawn: "Not now" ([IdleSharingPolicy.pauseUntilRestart])
-///   and "Stop sharing" (the setting). The server obeys either at its next
-///   pass, every two seconds, and the light's sample can still hold bytes
-///   from before that, so it is honestly lit for a moment in two states
-///   where a stop has no answer. With the switch already off both rows
-///   would be dead (a pause of a setting that is off, a switch turned off
-///   that is off), so the dialog says that ([IdleSharing.alreadyOffTitle])
-///   and offers neither; with a "Not now" already in force the pause row
-///   alone is dead, since the policy takes no second pause, so the dialog
-///   says the pause is in force ([IdleSharing.pausedTitle]) and offers only
-///   the switch. The pause is read from [IdleSharingPolicy.pausedForRun],
-///   not inferred from the light, which cannot tell.
-/// - **Bytes coming in** are either an offline download filling in or the
-///   title you last played fetching what it keeps. The first is governed by the
-///   downloads: one "Cancel" row per download still on its way
-///   ([downloads], listed by the light as it opened), each of which drops
-///   that download and its part-file through [DownloadsClient.remove] --
-///   what "Cancel all" on the downloads notification does, since there is
-///   no pause for a pinned file. With no offline download in flight the
-///   bytes are the second thing, which nothing here governs: the sharing
-///   setting switches uploading only, and the title stops fetching by
-///   itself once it holds what it keeps, or when something else is played.
-///   So the dialog says so ([noDownloadTitle]) and draws no stop at all --
-///   the sharing rows beside it would read as the way to stop bytes they
-///   do not touch.
-/// - **Both** draws both groups, each under a heading, so the viewer can
-///   tell which row is about which arrow.
+/// - **Bytes going out** are what "Share while idle" governs, so the sharing
+///   rows are drawn: "Not now" ([IdleSharingPolicy.pauseUntilRestart]) and
+///   "Stop sharing" (the setting). The server obeys either at its next pass,
+///   every two seconds, and the light's sample can still hold bytes from before
+///   that. So it is honestly lit for a moment in two states where a stop has no
+///   answer. With the switch already off both rows would be dead (a pause of a
+///   setting that is off, a switch turned off that is off), so the dialog says
+///   that ([IdleSharing.alreadyOffTitle]) and offers neither. With a "Not now"
+///   already in force the pause row alone is dead, since the policy takes no
+///   second pause. So the dialog says the pause is in force
+///   ([IdleSharing.pausedTitle]) and offers only the switch. The pause is read
+///   from [IdleSharingPolicy.pausedForRun], not inferred from the light, which
+///   cannot tell.
+/// - **Bytes coming in** are either an offline download filling in or the title
+///   you last played fetching what it keeps. The first is governed by the
+///   downloads: one "Cancel" row per download still on its way ([downloads],
+///   listed by the light as it opened). Each drops that download and its
+///   part-file through [DownloadsClient.remove], which is what "Cancel all" on
+///   the downloads notification does, since there is no pause for a pinned
+///   file. With no offline download in flight the bytes are the second thing,
+///   which nothing here governs. The sharing setting switches uploading only,
+///   and the title stops fetching by itself once it holds what it keeps, or
+///   when something else is played. So the dialog says so ([noDownloadTitle])
+///   and draws no stop at all, since the sharing rows beside it would read as
+///   the way to stop bytes they do not touch.
+/// - **Both** draws both groups, each under a heading, so the viewer can tell
+///   which row is about which arrow.
 ///
-/// The rows are drawn as list rows with a line each rather than as
-/// buttons, because two stops that differ in exactly one thing -- how long
-/// they last -- would leave that difference to be guessed at from a pair of
-/// button labels. The dialog's one action is its way out, "Close", which
-/// changes nothing; Back (or the barrier) is the same answer.
+/// The rows are drawn as list rows with a line each rather than as buttons,
+/// because two stops that differ in exactly one thing (how long they last)
+/// would leave that difference to be guessed at from a pair of button labels.
+/// The dialog's one action is its way out, "Close", which changes nothing; Back
+/// (or the barrier) is the same answer.
 class SharingStopDialog extends StatelessWidget {
   const SharingStopDialog({
     super.key,
@@ -390,11 +387,11 @@ class SharingStopDialog extends StatelessWidget {
   static const String downloadingHeading = 'Downloading';
 
   /// What the download group says when bytes are coming in and no offline
-  /// download is on its way: the only other thing the server downloads with
-  /// nothing playing is the title last played, which stays the live one
-  /// until something else is and fetches what the server keeps of it for a
-  /// resume. Nothing in the app stops that, and nothing needs to, so this
-  /// says what it is and that it ends.
+  /// download is on its way. The only other thing the server downloads with
+  /// nothing playing is the title last played. It stays the live one until
+  /// something else is, and fetches what the server keeps of it for a resume.
+  /// Nothing in the app stops that, and nothing needs to, so this says what it
+  /// is and that it ends.
   static const String noDownloadTitle = 'No offline download is in flight';
   static const String noDownloadDescription =
       'What is arriving is the title you last played, fetching what it '
@@ -409,8 +406,8 @@ class SharingStopDialog extends StatelessWidget {
             'that has arrived so far.'
       : 'Stops keeping it offline. Nothing has arrived yet.';
 
-  /// What is said when the removal itself failed, after the dialog has
-  /// closed; the download is then still listed and still downloading.
+  /// What is said when the removal itself failed, after the dialog has closed.
+  /// The download is then still listed and still downloading.
   static const String cancelFailed = 'This download could not be cancelled.';
 
   @override
