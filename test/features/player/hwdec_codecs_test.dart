@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 
@@ -24,6 +25,56 @@ void main() {
     // app plays them at, which is what hardware decoding is here for.
     final allowed = MediaKitEngine.hwdecCodecs.split(',');
     expect(allowed, containsAll(['h264', 'hevc', 'vp9', 'av1']));
+  });
+
+  test('a Mac asks for VideoToolbox', () {
+    // mpv on a Mac has no `mediacodec` decoder, so the Android list would
+    // leave it decoding in software.
+    expect(
+      MediaKitEngine.configurationFor(
+        hardwareDecoding: true,
+        platform: TargetPlatform.macOS,
+      ).hwdec,
+      'videotoolbox',
+    );
+    expect(
+      MediaKitEngine.configurationFor(
+        hardwareDecoding: false,
+        platform: TargetPlatform.macOS,
+      ).hwdec,
+      'no',
+    );
+    expect(
+      MediaKitEngine.configurationFor(
+        hardwareDecoding: true,
+        platform: TargetPlatform.android,
+      ).hwdec,
+      'mediacodec,mediacodec-copy',
+    );
+  });
+
+  test('every platform but a Mac asks for the Android decoders', () {
+    // Android's list is measured. Nobody has measured what Linux, Windows
+    // or iOS should ask for, so they share Android's.
+    for (final platform in TargetPlatform.values) {
+      if (platform == TargetPlatform.macOS) continue;
+      expect(
+        MediaKitEngine.configurationFor(
+          hardwareDecoding: true,
+          platform: platform,
+        ).hwdec,
+        'mediacodec,mediacodec-copy',
+        reason: '$platform',
+      );
+      expect(
+        MediaKitEngine.configurationFor(
+          hardwareDecoding: false,
+          platform: platform,
+        ).hwdec,
+        'no',
+        reason: '$platform',
+      );
+    }
   });
 
   test('and the direct decoder is still asked for first', () {

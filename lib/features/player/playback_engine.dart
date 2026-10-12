@@ -4,7 +4,8 @@ import 'dart:async';
 import 'dart:ffi' show AllocatorAlloc, Int8, Pointer, PointerPointer, nullptr;
 
 import 'package:ffi/ffi.dart' show StringUtf8Pointer, calloc;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 // Where media_kit loaded libmpv from, which the `xtremio` protocol is
@@ -693,11 +694,24 @@ class MediaKitEngine implements PlaybackEngine {
   /// first (no CPU copy), `mediacodec-copy` as the fallback. The OSD's hwdec
   /// row says which one took. ffmpeg's "Both surface and native_window are
   /// NULL" at init is logged by both and proves nothing.
+  ///
+  /// **macOS asks for `videotoolbox`**, the Mac's own hardware decoder.
+  /// mpv on a Mac has no `mediacodec` decoder, so the Android list would
+  /// leave it decoding in software. The bundled FFmpeg (6.0) decodes H.264,
+  /// HEVC and VP9 through VideoToolbox. Anything else decodes in software.
+  ///
+  /// Every other platform asks for the Android list, which mpv can use only
+  /// on Android. Nobody has measured what the others should ask for.
   static VideoControllerConfiguration configurationFor({
     required bool hardwareDecoding,
+    TargetPlatform? platform,
   }) => VideoControllerConfiguration(
     enableHardwareAcceleration: hardwareDecoding,
-    hwdec: hardwareDecoding ? 'mediacodec,mediacodec-copy' : 'no',
+    hwdec: !hardwareDecoding
+        ? 'no'
+        : (platform ?? defaultTargetPlatform) == TargetPlatform.macOS
+        ? 'videotoolbox'
+        : 'mediacodec,mediacodec-copy',
   );
 
   /// Which codecs may go to the hardware decoder.
