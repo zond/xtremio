@@ -5,13 +5,13 @@ import '../core/core.dart';
 /// Which screen a shared core field belongs to: the one that dispatched its
 /// last `Load`.
 ///
-/// Two screens can read one field at the same time — a genre chip opens
-/// Discover, whose posters open a second details screen; a popping route
+/// Two screens can read one field at the same time. A genre chip opens
+/// Discover, whose posters open a second details screen. A popping route
 /// stays in the tree for its transition while the screen beneath is already
-/// tappable — so the field is owned by whichever screen dispatched the last
-/// `Load` ([claim]), and only the owner unloads it on dispose ([release]): a
-/// screen popping off above one that has already taken the field back leaves
-/// it alone.
+/// tappable. So the field is owned by whichever screen dispatched the last
+/// `Load` ([claim]), and only the owner unloads it on dispose ([release]). A
+/// screen popping off above one that has already taken the field back
+/// leaves it alone.
 abstract final class SharedFieldOwnership {
   static final Map<CoreField, Object> _owners = {};
 
@@ -30,13 +30,13 @@ abstract final class SharedFieldOwnership {
 /// screen (typically a second instance of the same one) can load while this
 /// one is still on the stack.
 ///
-/// The screen keeps the last state that was its own ([isOwnState]) and
-/// renders that while covered; [trackRoute], called from
-/// `didChangeDependencies`, subscribes to the route's status through
-/// [ModalRoute.of] and, when the screen is current again and the field holds
-/// something else, asks for [reloadField] (a route that left the field alone,
-/// the player say, costs nothing). Every `Load` goes through [claimField] and
-/// dispose through [releaseField], so only the field's owner unloads it.
+/// The screen keeps the last state that was its own ([isOwnState]) and renders
+/// that while covered. [trackRoute], called from `didChangeDependencies`,
+/// subscribes to the route's status through [ModalRoute.of]. When the screen is
+/// current again and the field holds something else, it asks for [reloadField].
+/// A route that left the field alone (the player, say) costs nothing. Every
+/// `Load` goes through [claimField] and dispose through [releaseField], so only
+/// the field's owner unloads it.
 mixin SharedFieldScreen<T extends StatefulWidget, S> on State<T> {
   CoreField get sharedField;
   CoreClient? get coreClient;
@@ -56,8 +56,8 @@ mixin SharedFieldScreen<T extends StatefulWidget, S> on State<T> {
   /// A new own state is in (and rendered).
   void didReceiveOwnState(S state) {}
 
-  /// The field's last state that was this screen's — what is rendered, also
-  /// while another screen holds the field.
+  /// The field's last state that was this screen's. It is what is rendered,
+  /// also while another screen holds the field.
   S? ownState;
   Map<String, dynamic>? _ownJson;
 

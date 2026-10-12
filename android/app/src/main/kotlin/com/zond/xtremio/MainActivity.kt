@@ -33,9 +33,9 @@ class MainActivity : FlutterActivity() {
     private var downloads: DownloadsChannel? = null
 
     /**
-     * The `editText` call a [TextEntryActivity] is up for; at most one, and
-     * answered by its result. Dropped unanswered if the activity is torn
-     * down first -- the engine that asked is going with it.
+     * The `editText` call a [TextEntryActivity] is up for. There is at most
+     * one, and its result answers it. Dropped unanswered if the activity is
+     * torn down first, since the engine that asked is going with it.
      */
     private var textEntry: MethodChannel.Result? = null
 
@@ -109,7 +109,7 @@ class MainActivity : FlutterActivity() {
                     // (lib/shell/tv_text_entry.dart, TextEntryActivity.kt).
                     "editText" -> editText(call, result)
                     // The same field filled by voice, recognized in the app
-                    // (lib/shell/speech_input.dart, SpeechInput.kt); what is
+                    // (lib/shell/speech_input.dart, SpeechInput.kt). What is
                     // heard comes back on the `xtremio/speech` stream.
                     "startSpeech" -> speech.let {
                         if (it == null) result.success(SpeechInput.UNAVAILABLE) else it.start(result)
@@ -122,7 +122,7 @@ class MainActivity : FlutterActivity() {
                     // a film is playing and given back when it stops
                     // (lib/shell/display_frame_rate.dart). The only two
                     // calls on this channel that do something rather than
-                    // report something; both answer null, because what the
+                    // report something. Both answer null, because what the
                     // display then does is the platform's to decide.
                     "setFrameRate" -> {
                         matchFrameRate(call.argument<Double>("fps"))
@@ -181,7 +181,7 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Asks the display to present [fps] frames a second, so that a 23.976
-     * fps film is not laid out on a 59.94 Hz output's 3:2 cadence -- some
+     * fps film is not laid out on a 59.94 Hz output's 3:2 cadence: some
      * frames shown twice, some three times, and the ones that miss their
      * vsync dropped. Mismatched cadence costs frames: on the owner's
      * projector, 560 dropped at the video output against none at the
@@ -189,11 +189,11 @@ class MainActivity : FlutterActivity() {
      *
      * Only ever called for a television: the Dart side asks the device
      * profile first, and a phone's panel has no business switching. A rate
-     * that is not a rate is ignored rather than guessed at -- asking for
-     * one we do not know is worse than not asking -- and so is one outside
-     * the band real content declares ([FrameRateMode.plausible]), which is
-     * the *only* guard the surface path has: `Surface.setFrameRate` takes
-     * whatever number it is handed and `CHANGE_FRAME_RATE_ALWAYS` lets it
+     * that is not a rate is ignored rather than guessed at, because asking
+     * for one we do not know is worse than not asking. So is one outside
+     * the band real content declares ([FrameRateMode.plausible]). That band
+     * is the *only* guard the surface path has: `Surface.setFrameRate` takes
+     * whatever number it is handed, and `CHANGE_FRAME_RATE_ALWAYS` lets it
      * blank the picture to honour it.
      *
      * Two paths, and the Android version chooses:
@@ -208,18 +208,18 @@ class MainActivity : FlutterActivity() {
      * - **Android 11 (API 30) and below** name a mode outright through the
      *   window's `preferredDisplayModeId` ([FrameRateMode.matching] picks
      *   which). API 30 has a two-argument `setFrameRate`, but it predates
-     *   `CHANGE_FRAME_RATE_ALWAYS` and so only ever switches seamlessly --
-     *   which is exactly the switch a television cannot do -- so it takes
+     *   `CHANGE_FRAME_RATE_ALWAYS` and so only ever switches seamlessly.
+     *   That is exactly the switch a television cannot do, so API 30 takes
      *   the mode path with everything older.
      *
      * **The newer path is a vote, and a vote can be dropped in silence**:
-     * `setFrameRate` returns nothing, and with "Match content frame rate"
-     * unset the platform honours a seamless switch only -- which 59.94 Hz
-     * to 23.976 Hz never is. So what that setting says decides whether the
-     * older path follows the vote ([FrameRateMode.askFor] holds the
-     * reasoning), and a box with frame rate matching off is asked for
-     * nothing at all. With no surface to vote on there is no vote to
-     * follow, and the mode is named whatever the setting says.
+     * `setFrameRate` returns nothing. With "Match content frame rate" unset,
+     * the platform honours a seamless switch only, which 59.94 Hz to 23.976 Hz
+     * never is. So that setting decides whether the older path follows the vote
+     * ([FrameRateMode.askFor] holds the reasoning). A box with frame rate
+     * matching off is asked for nothing at all. With no surface to vote on
+     * there is no vote to follow, and the mode is named whatever the setting
+     * says.
      */
     private fun matchFrameRate(fps: Double?) {
         if (fps == null || !FrameRateMode.plausible(fps)) return
@@ -250,7 +250,7 @@ class MainActivity : FlutterActivity() {
      * Both paths are cleared whichever set it. Which one ran depended on
      * the Android version *and* on there being a surface to ask, so
      * clearing only the one this build would have used would leave the
-     * other in force; and clearing a preference that was never set costs a
+     * other in force. Clearing a preference that was never set costs a
      * comparison.
      */
     private fun clearFrameRate() {
@@ -268,7 +268,7 @@ class MainActivity : FlutterActivity() {
      * Tells Dart what this display is **really** refreshing at, once when it
      * is subscribed to and again whenever it changes.
      *
-     * libmpv cannot measure this for itself here -- media_kit runs it with
+     * libmpv cannot measure this for itself here. media_kit runs it with
      * `vo=gpu` and `gpu-context=android`, which answers `VO_NOTIMPL` to
      * `VOCTRL_GET_DISPLAY_FPS`, so the reported rate stays 0 and display
      * sync never starts (`MediaKitEngine.mpvOverrides` holds the reading).
@@ -282,16 +282,16 @@ class MainActivity : FlutterActivity() {
      * neighbouring mode or refuse to move at all. Handing mpv a rate the
      * display never took would replace one wrong cadence with another and
      * hide it behind a `display-sync-active` reading `yes`. So the ask is
-     * made, and then what actually happened is reported --
+     * made, and then what actually happened is reported.
      * `DisplayManager.DisplayListener.onDisplayChanged` is the callback a
      * mode change arrives on.
      *
      * `Display.getRefreshRate()` and not `getMode().getRefreshRate()`,
      * which is what [asFrameRateMode] reads for the mode choosing. The
-     * mode's rate is the panel's physical one; since Android 12 a frame
+     * mode's rate is the panel's physical one. Since Android 12, a frame
      * rate override can present an app at a divisor of it without changing
-     * the mode at all, and `getRefreshRate()` is the one that accounts for
-     * that -- the rate *this app's* frames are shown at, which is the
+     * the mode at all. `getRefreshRate()` is the one that accounts for
+     * that: the rate *this app's* frames are shown at, which is the
      * question mpv is asking. On the owner's box the two agree
      * (`FrameRateOverrides=none`, `frameRateOverrideConfig=Disabled`).
      *
@@ -375,7 +375,7 @@ class MainActivity : FlutterActivity() {
      * the surface's rate.
      *
      * Null before the view is attached, or if this ever runs against
-     * Flutter's `TextureView` renderer -- both fall through to naming a
+     * Flutter's `TextureView` renderer. Both fall through to naming a
      * mode. A vote lives only as long as the surface does, so one made
      * before the window is up is not a vote at all.
      */
@@ -397,8 +397,8 @@ class MainActivity : FlutterActivity() {
      *
      * `flutter_chrome_cast` maps a `CastDevice` to Dart without its address
      * (`GoogleCastClient` has the same note), but the route the Cast SDK
-     * discovered still carries the device, so the address is read off that
-     * -- matching on `CastDevice.getFromBundle(route.extras)?.deviceId`,
+     * discovered still carries the device, so the address is read off that.
+     * It matches on `CastDevice.getFromBundle(route.extras)?.deviceId`,
      * which is the lookup the plugin's own `selectRoute` does. Knowing
      * where the receiver is is what lets the embedded server name a local
      * interface that receiver can actually connect back to, instead of
@@ -412,9 +412,9 @@ class MainActivity : FlutterActivity() {
      * `getInet4Address()` does not exist in play-services-cast 21.5.0+.
      *
      * `getIpAddress()` is itself `@Deprecated` in 21.5.0, where the sibling
-     * `getInetAddress()` is `@NonNull` and is not -- so the next SDK bump
-     * may need to move to that one and do the narrowing itself, since it
-     * answers whatever the receiver announced and that can be an
+     * `getInetAddress()` is `@NonNull` and not deprecated. So the next SDK
+     * bump may need to move to that one and do the narrowing itself, since
+     * it answers whatever the receiver announced, and that can be an
      * `Inet6Address`.
      *
      * **Nothing here throws, and there is no test to make sure of it**, so

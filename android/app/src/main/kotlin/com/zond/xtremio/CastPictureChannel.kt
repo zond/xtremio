@@ -8,9 +8,9 @@ import io.flutter.plugin.common.EventChannel
 
 /**
  * **Whether the receiver is showing a picture**, as the receiver itself
- * reports it: the `videoInfo` of its media status (width, height, HDR type),
- * which a receiver decoding the film's picture reports from BUFFERING on
- * and one that cannot decode it never does -- measured 2026-10-05 on a
+ * reports it: the `videoInfo` of its media status (width, height, HDR type).
+ * A receiver decoding the film's picture reports it from BUFFERING on, and
+ * one that cannot decode it never does. Measured 2026-10-05 on a
  * Chromecast with Google TV 4K, where an AV1 MP4 went BUFFERING to PLAYING
  * with its position advancing and no `videoInfo` at all.
  *

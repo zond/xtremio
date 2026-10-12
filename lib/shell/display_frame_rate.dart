@@ -6,17 +6,17 @@ import 'device_profile.dart';
 /// Asks the display to present the picture at the rate the picture is, and
 /// reports back what the display is really doing.
 ///
-/// A 23.976 fps film on a 59.94 Hz output is shown on a 3:2 cadence --
-/// two refreshes for one frame, three for the next -- which is what a
-/// viewer sees as the picture jumping, and the frames that miss their
-/// vsync are dropped at the video output while the decoder drops none.
+/// A 23.976 fps film on a 59.94 Hz output is shown on a 3:2 cadence: two
+/// refreshes for one frame, three for the next. A viewer sees that as the
+/// picture jumping. The frames that miss their vsync are dropped at the
+/// video output, while the decoder drops none.
 /// Asking removes the cadence rather than covering it up: the panel runs
 /// at the film's own rate and every frame is shown for the same length of
 /// time.
 ///
-/// [request] while a film is playing and [clear] the moment it is not.
-/// Whatever the state of the display, that pair is the whole contract: a
-/// television left at 24 Hz makes the system UI judder, which is a worse
+/// Call [request] while a film is playing and [clear] the moment it is
+/// not. That pair is the whole contract, whatever the state of the display.
+/// A television left at 24 Hz makes the system UI judder, which is a worse
 /// fault than the one being asked about.
 ///
 /// [refreshRate] is the other direction and is *not* the answer to a
@@ -33,8 +33,8 @@ abstract interface class DisplayFrameRate {
   Future<void> clear();
 
   /// What the display is refreshing at, in hertz, re-emitted whenever it
-  /// changes -- and once as soon as it is listened to, since a display
-  /// that never changes would otherwise never report anything.
+  /// changes. It is also emitted once as soon as it is listened to, since a
+  /// display that never changes would otherwise never report anything.
   ///
   /// The consumer is libmpv, which cannot measure this on Android and so
   /// has to be told (`MediaKitEngine.displayRateProperties`). Nothing is
@@ -48,7 +48,7 @@ abstract interface class DisplayFrameRate {
 /// the window's `preferredDisplayModeId` below it; see docs/ANDROID.md), and
 /// the `xtremio/display` event channel, which it pushes the live rate on.
 ///
-/// Only a television is ever asked, and that gate is the caller's --
+/// Only a television is ever asked, and that gate is the caller's:
 /// [DeviceProfile.isTv], which no platform but Android ever reports. So
 /// every other platform's answer here is the same one a missing handler
 /// gives, and both are swallowed: a display that will not switch is the

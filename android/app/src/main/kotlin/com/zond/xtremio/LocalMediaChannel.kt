@@ -31,18 +31,17 @@ import java.util.concurrent.Executors
  *
  * **The index, not the disk.** MediaStore already knows every video on the
  * device's storage and on a USB drive plugged into it, so nothing here
- * walks a directory; a `content://` address is what comes back, which the
+ * walks a directory. What comes back is a `content://` address, which the
  * player opens as a file descriptor (`openFd`) and plays by media id.
- * **The camera's own folders are left out** -- `DCIM/` and `Pictures/`
- * (screen recordings live there too): a
- * phone holds hundreds of its own clips, and a list of them is not a
- * library of films.
+ * **The camera's own folders are left out**: `DCIM/` and `Pictures/`, where
+ * screen recordings live too. A phone holds hundreds of its own clips, and
+ * a list of them is not a library of films.
  *
  * The permission is `READ_MEDIA_VIDEO` from Android 13, and the storage
  * read before it. **On Android 14 a viewer may grant only the videos they
- * pick** ("partial"): MediaStore then answers with those alone, the camera
- * filter is not applied to them -- they were chosen, one by one -- and
- * asking again is how more are picked, so `requestAccess` asks whenever
+ * pick** ("partial"). MediaStore then answers with those alone, and the
+ * camera filter is not applied to them, since they were chosen one by one.
+ * Asking again is how more are picked, so `requestAccess` asks whenever
  * access is not whole.
  */
 class LocalMediaChannel(
@@ -207,7 +206,7 @@ class LocalMediaChannel(
      * Opens a `content://` document for reading and answers its descriptor,
      * **detached**: from here on it is the embedded server's, which reads
      * it by media id (`media_register_local_fd`) and closes it when the id
-     * goes. Null when it cannot be opened -- gone since the scan, or a
+     * goes. Null when it cannot be opened: gone since the scan, or a
      * folder grant that was taken back. Not gated on the media permission:
      * a folder picked through the system's picker carries its own grant.
      */

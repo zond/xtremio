@@ -1,17 +1,17 @@
 // Plays a rendition's file the way the Cast receiver plays one: a plain
-// `<video src>` in Chrome, headless -- not Media Source, which zond's
-// Chromecast with Google TV cannot do above 720p -- and seeks in it the way
-// the television's remote does (stream-server docs/design/renditions.md
+// `<video src>` in Chrome, headless. Not Media Source, which zond's
+// Chromecast with Google TV cannot do above 720p. It seeks in the file the
+// way the television's remote does (stream-server docs/design/renditions.md
 // §2.8). Point it at a file a server is serving, e.g. the one
 // `cargo test --test rendition serve -- --ignored` writes
 // (rust/tests/rendition.rs).
 //
 // It checks what a receiver needs of the file:
 //   1. it plays: the position moves, nothing errors;
-//   2. `seekable` is the whole film, `[0, duration]` -- the file has a
+//   2. `seekable` is the whole film, `[0, duration]`: the file has a
 //      length and ranges, so Chrome may seek anywhere in it;
 //   3. a seek to SEEK_TO seconds (300 by default, or 80% of a shorter
-//      film) is ONE far `Range` -- straight at the slot the `sidx` names --
+//      film) is ONE far `Range` (straight at the slot the `sidx` names),
 //      not a walk through the file, and plays on from there.
 // Prints every second's state and every request Chrome made for the file;
 // exits 1 when any check fails.

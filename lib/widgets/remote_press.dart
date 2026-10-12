@@ -12,26 +12,26 @@ import 'package:flutter/widgets.dart';
 /// every repeat while the key is held, so holding the key on a poster would
 /// open its details over and over and nothing would be left to mean "more
 /// options". This widget takes select (and the other activate keys) on the
-/// way down and decides on the way up: released within [holdDuration] it is
-/// [onTap]; held longer, [onLongPress] fires once, when the time is up, and
-/// the release does nothing. The remote's menu key
+/// way down and decides on the way up. Released within [holdDuration], it
+/// is [onTap]. Held longer, [onLongPress] fires once when the time is up,
+/// and the release does nothing. The remote's menu key
 /// ([LogicalKeyboardKey.contextMenu], Android's `KEYCODE_MENU`) is
 /// [onLongPress] too, straight away. Every other key passes through.
 ///
 /// **What is left of a held key after the long press is nobody's.** The
-/// long press usually opens something -- a sheet, a dialog -- that takes
+/// long press usually opens something (a sheet, a dialog) that takes
 /// focus while the key is still down, and Android goes on sending the
 /// key's repeats every 50 ms until it comes up. Flutter's default
 /// shortcuts activate on a repeat as well as on a press, so the first
 /// repeat pressed whatever the new sheet had focused (its Cancel, its
 /// first entry) and the next ones the tile under it again. So once the
-/// long press has fired, every remaining event of that key -- repeats and
-/// the release -- is swallowed before the focus tree sees it
+/// long press has fired, every remaining event of that key (repeats and
+/// the release) is swallowed before the focus tree sees it
 /// ([_SpentHold]), whoever has focus by then.
 ///
 /// A hold with no [onLongPress] still taps on release, as Android does.
 /// The child keeps its own tap handlers for pointers (a touch remote, a
-/// mouse); this widget only listens to keys, and only for the key events
+/// mouse). This widget only listens to keys, and only for the key events
 /// of whichever descendant holds focus. Off a television nothing needs it:
 /// the screens wrap their tiles only when [DeviceScope.isTv].
 class RemotePress extends StatefulWidget {
@@ -68,7 +68,7 @@ class RemotePress extends StatefulWidget {
 
 /// Sent up the tree when select taps a [RemotePress], after its `onTap`
 /// has run. The press itself stops at the card, so this is how an ancestor
-/// learns of it -- a [TvLadderRow] that moves the remote on after a select
+/// learns of it: a [TvLadderRow] that moves the remote on after a select
 /// (`advanceOnSelect`). Not sent for a long press, nor for a touch.
 class RemotePressed extends Notification {
   const RemotePressed();

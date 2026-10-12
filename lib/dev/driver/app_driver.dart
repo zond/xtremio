@@ -26,11 +26,11 @@ typedef DetailsPageBuilder = Widget Function(
 /// `requestData` (`tool/drive`, docs/DRIVING.md).
 ///
 /// Every message is a JSON object with a `cmd` and the command's own
-/// fields; every answer is a JSON object, `{"error": ...}` when the command
-/// could not be done. It reads what is on screen from the semantics tree
-/// -- what a screen reader is told, so the same labels a viewer reads -- and
-/// acts through the semantics owner and the app's own navigator, never by
-/// coordinates.
+/// fields. Every answer is a JSON object, `{"error": ...}` when the command
+/// could not be done. It reads what is on screen from the semantics tree,
+/// which is what a screen reader is told, so the labels are the ones a
+/// viewer reads. It acts through the semantics owner and the app's own
+/// navigator, never by coordinates.
 ///
 /// Only `lib/main_driver.dart` reaches this. Nothing in the app imports it,
 /// so a build of `lib/main.dart` does not carry it.
@@ -51,7 +51,7 @@ class AppDriver {
   /// while somebody holds one of these.
   SemanticsHandle? _semantics;
 
-  /// Turns semantics on. Called once at start-up; a command calls it too,
+  /// Turns semantics on. Called once at start-up. A command calls it too,
   /// so a handler built after the fact still sees a tree.
   void ensureSemantics() {
     _semantics ??= SemanticsBinding.instance.ensureSemantics();
@@ -389,7 +389,7 @@ class AppDriver {
 
   /// Android's back button: the binding's own handler for the engine's
   /// `popRoute` message, so the app's PopScopes and back ladder decide.
-  /// Protected and meant for tests, which is what a driver is; pushing the
+  /// Protected and meant for tests, which is what a driver is. Pushing the
   /// platform message through the channel buffers instead does the same on
   /// a device and never arrives under the test binding.
   static Future<void> _systemBack() =>

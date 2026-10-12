@@ -15,9 +15,9 @@ import 'shell/device_profile.dart';
 import 'src/rust/frb_generated.dart';
 
 Future<void> main() async {
-  // Whichever binding comes up first is the process's, and anything below
-  // that brings one up -- every plugin's own `ensureInitialized` does --
-  // has to come after.
+  // Whichever binding comes up first is the process's. Anything below that
+  // brings one up (every plugin's own `ensureInitialized` does) has to come
+  // after.
   WidgetsFlutterBinding.ensureInitialized();
   // Before anything that could fail: an unhandled error is the one line a
   // report most needs, and until the core is up there is nowhere to put it
@@ -38,22 +38,22 @@ Future<void> main() async {
 typedef CoreBoot = Future<(CoreClient, CoreInitInfo)> Function();
 
 /// Where the core and the embedded server keep what they write: the
-/// server's torrent data above all, since that is the one root everything a
-/// torrent puts on this device shares -- the streaming cache and the kept
-/// downloads alike.
+/// server's torrent data above all. That is the one root shared by
+/// everything a torrent puts on this device: the streaming cache and the
+/// kept downloads alike.
 ///
 /// It is the *default*. The server persists a `cacheRoot` of its own once
-/// anything sets one, and that wins from then on; this is what a device
+/// anything sets one, and that wins from then on. This is what a device
 /// with none gets, and it is where Settings' "Server storage" starts from.
 ///
 /// **On Android that must not be the app cache directory.** `getCacheDir()`
 /// is the system's to reclaim whenever it wants room, and with one root
-/// there is nowhere else for a kept download to be -- half a film reclaimed
+/// there is nowhere else for a kept download to be. Half a film reclaimed
 /// mid-download is not a download. The app's own external files directory
 /// is left alone until the app is uninstalled, is world-readable over adb
 /// (which is how a download is looked at from a workstation), and needs no
 /// permission at all on `minSdk` 24. Everywhere else the cache directory is
-/// the right place and there is nothing to choose; and a device with no
+/// the right place, and there is nothing to choose. A device with no
 /// external storage at all falls back to it too, because a purgeable root
 /// still beats no server.
 @visibleForTesting
@@ -68,13 +68,13 @@ Future<Directory> dataDirectory({
 /// **This is the one thing that belongs in a directory the system may
 /// reclaim, and it is the opposite of [dataDirectory]'s case.** A kept
 /// download reclaimed halfway through is not a download, which is why
-/// torrent data is kept out of `getCacheDir()` on Android; a poster
+/// torrent data is kept out of `getCacheDir()` on Android. A poster
 /// reclaimed is a poster fetched again, which is exactly what the store
-/// exists to make cheap and exactly what Android is entitled to take when
+/// exists to make cheap, and exactly what Android is entitled to take when
 /// the device is full. So the store goes where the platform puts throwaway
-/// bytes on all four platforms this app builds for -- `getCacheDir()` on
+/// bytes on all four platforms this app builds for: `getCacheDir()` on
 /// Android, `XDG_CACHE_HOME` on Linux, the caches directory on macOS,
-/// `LOCALAPPDATA` on Windows -- and the app's own ceiling
+/// `LOCALAPPDATA` on Windows. The app's own ceiling
 /// ([ImageDiskCache.defaultCeilingBytes]) bounds it whether or not the
 /// system ever bothers.
 ///
@@ -91,31 +91,32 @@ Future<ImageDiskCache?> imageDiskCacheIn(Directory purgeable) =>
 ///
 /// **This is a migration, and it exists because the default cannot reach
 /// an upgraded device.** [dataDirectory] is only what a server with no
-/// `cacheRoot` of its own is given; stream-server fills its default in
+/// `cacheRoot` of its own is given. stream-server fills its default in
 /// when the key is *empty*, and every build before this one persisted a
-/// `cacheRoot` at first start -- on Android the app cache directory. So an
-/// install that has run before comes up on `getCacheDir()` however good
-/// this build's default is, and with one root that is where the kept
-/// downloads land too: the earlier build put those in the external files
-/// directory and this one has nowhere else to put them. Left alone, a
+/// `cacheRoot` at first start: on Android, the app cache directory. So an
+/// install that has run before comes up on `getCacheDir()`, however good
+/// this build's default is. With one root, that is where the kept
+/// downloads land too. The earlier build put those in the external files
+/// directory, and this one has nowhere else to put them. Left alone, a
 /// user's downloads sit in the one directory Android reclaims without
 /// asking, and nothing in the app would ever write the key again.
 ///
-/// So the *old* root is what decides: a persisted root inside [purgeable]
-/// is replaced by [wanted], once, and after that it is no longer inside it
-/// and this does nothing for the life of the install. Nothing else is
-/// touched -- a root somebody chose on Settings -> Server storage is not
+/// So the *old* root is what decides. A persisted root inside [purgeable]
+/// is replaced by [wanted], once. After that it is no longer inside it, and
+/// this does nothing for the life of the install. Nothing else is
+/// touched: a root somebody chose on Settings -> Server storage is not
 /// under the app's cache directory and is left exactly as it is.
 ///
 /// [safe] is the directory [wanted] is under, and the guard that makes
-/// this a no-op everywhere but Android: where [dataDirectory] answers the
+/// this a no-op everywhere but Android. Where [dataDirectory] answers the
 /// cache directory itself (every desktop, and an Android device with no
-/// external storage at all) there is no safer place to move to, and moving
-/// a root onto itself would only churn the settings file.
+/// external storage at all), there is no safer place to move to. Moving a
+/// root onto itself would only churn the settings file.
 ///
 /// What a user sees: the root named on Settings -> Server storage is the
 /// new one, with the screen's own note that a root takes effect at the
-/// next start -- the running librqbit session was opened on the old one.
+/// next start, since the running librqbit session was opened on the old
+/// one.
 /// Nothing is copied, which costs nothing that was not already lost: the
 /// pieces under the old root were written by a build that stored whole
 /// files, and no build can read those as pieces.
@@ -174,10 +175,10 @@ bool _isUnder(String path, String dir) =>
 /// It is also where the process-wide ceilings go that must be in place
 /// before the first screen draws: the image cache's ([imageCacheCeilingBytes]).
 ///
-/// Everything else [XtremioApp] can be handed -- the clients it would
-/// otherwise build over FFI, and how a player's engine is made -- passes
-/// through unchanged, defaulting to what [XtremioApp] itself defaults to.
-/// [main] sets only [device]; a test that mounts the bootstrap hands in
+/// Everything else [XtremioApp] can be handed passes through unchanged,
+/// defaulting to what [XtremioApp] itself defaults to: the clients it would
+/// otherwise build over FFI, and how a player's engine is made. [main] sets
+/// only [device]. A test that mounts the bootstrap hands in
 /// the same fakes it would hand the app, so that nothing under it reaches
 /// for a Rust library the test never loaded.
 class XtremioBootstrap extends StatefulWidget {
@@ -204,13 +205,13 @@ class XtremioBootstrap extends StatefulWidget {
   /// images / 100 MiB).
   ///
   /// Every poster, backdrop and episode thumbnail is decoded at the box it
-  /// is drawn in (`cacheWidth`), so no single picture is large; a catalog
+  /// is drawn in (`cacheWidth`), so no single picture is large. A catalog
   /// is. The Board alone walks a few hundred posters past the viewer, and
   /// Flutter keeps each one until the cache is full. On a 2 GB Android TV
-  /// box the low-memory killer takes this app at 311-379 MB resident, and
-  /// a cache pinned at the framework's 100 MiB default is the single
-  /// largest thing it can be asked to give back -- so the count of images
-  /// held is the lever, and this is the number.
+  /// box the low-memory killer takes this app at 311-379 MB resident. A
+  /// cache pinned at the framework's 100 MiB default is the single largest
+  /// thing it can be asked to give back. So the count of images held is the
+  /// lever, and this is the number.
   ///
   /// [ImageDiskCache] is what makes the lower number affordable: an
   /// eviction is a read out of the app's own bounded cache directory
@@ -219,7 +220,7 @@ class XtremioBootstrap extends StatefulWidget {
   ///
   /// One number on every device rather than a television's own. A phone
   /// decodes at three times the density, so 16 MiB there holds a third as
-  /// many posters as on a television; nothing this app does on a desktop
+  /// many posters as on a television. Nothing this app does on a desktop
   /// needs a bigger cache either. If re-decoding on a phone ever shows,
   /// raise it through the device profile rather than here.
   ///

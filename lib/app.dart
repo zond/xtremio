@@ -32,7 +32,7 @@ import 'widgets/focusable_tile.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
 /// `hardwareDecoding` and this device's "Verbose diagnostics"
-/// ([AppPrefs.verboseDiagnostics], read as the player opens);
+/// ([AppPrefs.verboseDiagnostics], read as the player opens).
 /// [MediaKitEngine.new] fits.
 typedef PlaybackEngineBuilder = PlaybackEngine Function({
   required bool hardwareDecoding,
@@ -46,12 +46,13 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// bytes from an embedded `stream-server`, with `media_kit`/libmpv doing the
 /// actual video.
 ///
-/// Account housekeeping lives here, as stremio-web does it on window focus:
-/// `PullAddonsFromAPI` once at startup regardless of login (it upgrades the
-/// bundled official addons for an anonymous profile), and for a signed-in
-/// profile also `PullUserFromAPI`, `SyncLibraryWithAPI` and
-/// `PullNotifications` — at startup, after `UserAuthenticated`, and when the
-/// app resumes after having been inactive, hidden or paused.
+/// Account housekeeping lives here, done the way stremio-web does it on
+/// window focus. `PullAddonsFromAPI` goes out once at startup, signed in or
+/// not, because it upgrades the bundled official addons for an anonymous
+/// profile. A signed-in profile also gets `PullUserFromAPI`,
+/// `SyncLibraryWithAPI` and `PullNotifications`: at startup, after
+/// `UserAuthenticated`, and when the app resumes after having been
+/// inactive, hidden or paused.
 ///
 /// It also supplies the [PlaybackScope]: every player gets an engine from
 /// [engineBuilder] ([MediaKitEngine.new] by default) configured from
@@ -61,26 +62,27 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// ([DeviceProfile.detect] in `main.dart`), so every screen can ask
 /// `DeviceScope.isTv(context)` for the remote-driven layout.
 ///
-/// It holds the app's one navigator key too, so something outside the widget
-/// tree — a `stremio://` deep link arriving from the platform — can push a
-/// route. Deep links come from [deepLinks]: a `stremio://host/manifest.json`
-/// link (what every addon site's Install button produces, stremio-addons.net
-/// included) opens that addon's [AddonDetailsScreen] with the URL passed
-/// through untouched, and *nothing else* — a link never installs an addon,
-/// the Install button on that screen does. A link that arrives while a
+/// It holds the app's one navigator key too, so that something outside the
+/// widget tree can push a route: a `stremio://` deep link arriving from the
+/// platform. Deep links come from [deepLinks]. A
+/// `stremio://host/manifest.json` link (what every addon site's Install
+/// button produces, stremio-addons.net included) opens that addon's
+/// [AddonDetailsScreen] with the URL passed through untouched, and does
+/// *nothing else*. A link never installs an addon; the Install button on
+/// that screen does. A link that arrives while a
 /// details screen is already up replaces it instead of stacking a second
 /// screen over the same core field.
 ///
 /// And the [PrefsScope]: one [AppPrefs] for the whole app, read from the
-/// Rust side's preferences file at start-up — before any screen that reads
-/// one can be on the stack, so the first list is already laid out the way
-/// it was left — and written through on every change.
+/// Rust side's preferences file at start-up and written through on every
+/// change. The read comes before any screen that reads a preference can be
+/// on the stack, so the first list is already laid out the way it was left.
 ///
 /// And the [DriveAccountScope]: one [DriveAccount], which is this device's
-/// Google Drive pairing — the refresh token in the platform's secure store,
-/// the list of linked files in the preferences beside it. Loaded after the
-/// preferences and not beside them, because half of what it answers is in
-/// them: asked first it would report an unlinked device that is linked.
+/// Google Drive pairing. The refresh token is in the platform's secure
+/// store, and the list of linked files is in the preferences. It is loaded
+/// after the preferences, not beside them, because half of what it answers
+/// is in them. Asked first, it would report a linked device as unlinked.
 ///
 /// And the [CastScope]: one [CastClient] for the whole app, because the Cast
 /// SDK is a process-wide singleton behind it. Off Android and iOS the real
@@ -89,21 +91,22 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// listener half of the scope is the embedded server's own, seen through
 /// the [ServerFootprint], which has to hear it start and stop.
 ///
-/// That [ServerFootprint] is what puts the embedded server into its lean
+/// That [ServerFootprint] puts the embedded server into its lean
 /// background footprint when the app is hidden or paused, and back when it
-/// resumes -- except while a download is on its way, a cast is up or the
-/// LAN listener serves one. It tells the server through [serverBackground].
+/// resumes. The footprint stays full while a download is on its way, a cast
+/// is up or the LAN listener serves one. It tells the server through
+/// [serverBackground].
 ///
 /// On Android it also runs the downloads foreground service
-/// ([DownloadsForegroundService]): while anything is unfinished the process
-/// is held up by a `dataSync` service with an ongoing notification, so a
+/// ([DownloadsForegroundService]). A `dataSync` service with an ongoing
+/// notification holds the process up while anything is unfinished, so a
 /// download goes on after the user leaves the app. Its notification opens
 /// the [DownloadsScreen] from here, the way a deep link opens an addon.
 ///
 /// It also decides whether the embedded server may keep a title in the
-/// swarm between sessions ([IdleSharingPolicy]): one policy for the whole
-/// app, because there is one server and one answer, started once the
-/// preferences are in so that the first thing the server hears is the
+/// swarm between sessions ([IdleSharingPolicy]). There is one policy for
+/// the whole app, because there is one server and one answer. It starts
+/// once the preferences are in, so the first thing the server hears is the
 /// viewer's own choice rather than the default it overrides.
 ///
 /// And the [SharingScope], which is that policy and one
@@ -121,11 +124,11 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 ///
 /// And the [AppUpdatesScope]: one [AppUpdates], which looks for a newer
 /// release once a day, [updateCheckDelay] after start-up, and offers it in
-/// a dialog -- never while a player is on the stack: the look and the offer
-/// both wait for the player to be gone. A build that does not check by
-/// itself (`BuildIdentity.checksByItself`: debug and profile builds,
-/// unstamped and modified ones) asks nothing then; Settings' "Check for
-/// updates" asks for any build.
+/// a dialog. It never does either while a player is on the stack: the look
+/// and the offer both wait for the player to be gone. A build that does not
+/// check by itself (`BuildIdentity.checksByItself`: debug and profile
+/// builds, unstamped and modified ones) asks nothing then. Settings' "Check
+/// for updates" asks for any build.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
@@ -150,7 +153,7 @@ class XtremioApp extends StatefulWidget {
     this.internetStatus,
   });
 
-  /// How long after the preferences are in the daily update look waits:
+  /// How long the daily update look waits after the preferences are in:
   /// out of the way of start-up, and of a viewer who opened the app to
   /// press play.
   static const Duration updateCheckDelay = Duration(seconds: 20);
@@ -172,8 +175,8 @@ class XtremioApp extends StatefulWidget {
   /// test that does not hand in a fake wants: no request leaves it.
   final XerviceHttp? xervice;
 
-  /// What a Drive grant taken from the account's vault is followed by:
-  /// the files it reaches listed and matched. A test hands in its own.
+  /// What runs after a Drive grant is taken from the account's vault: the
+  /// files it reaches are listed and matched. A test hands in its own.
   final Future<void> Function(DriveAccount account) driveShared;
 
   /// The offline downloads, for tests that want a fake. Read once, when the
@@ -190,9 +193,9 @@ class XtremioApp extends StatefulWidget {
 
   /// This device's Drive pairing, for tests that want one over fakes. Read
   /// once, when the app comes up, like [downloads]. The one built here
-  /// reaches the platform's secure store, which a widget test has no
-  /// implementation of — that reads as a device nobody has paired, which
-  /// is what a test that has not paired anything wants.
+  /// reaches the platform's secure store. A widget test has no
+  /// implementation of that store, so it reads as a device nobody has
+  /// paired, which is what a test that has not paired anything wants.
   final DriveAccount? drive;
 
   /// This device's videos, for tests that want them over a fake source.
@@ -212,8 +215,8 @@ class XtremioApp extends StatefulWidget {
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
 
-  /// Where that policy is written, which is the embedded server's settings
-  /// over FFI unless a test hands over a recorder.
+  /// Where the idle-sharing policy is written: the embedded server's
+  /// settings over FFI, unless a test hands over a recorder.
   final ServerSettingsWriter serverSettings;
 
   /// Whether the embedded server is moving bytes over the connection while
@@ -320,8 +323,8 @@ class _XtremioAppState extends State<XtremioApp> {
   late final ServerFootprint _footprint;
 
   /// The `ctx` field, for the settings a new player is created with.
-  /// Created in [initState] so its first pull is in flight from start-up;
-  /// created lazily it would come into being — empty — inside the first
+  /// Created in [initState] so its first pull is in flight from start-up.
+  /// Created lazily, it would come into being empty inside the first
   /// player's `_createEngine`, which would then see the defaults.
   late final CoreFieldNotifier _ctx;
 
@@ -329,8 +332,8 @@ class _XtremioAppState extends State<XtremioApp> {
   FacesSync? _faces;
   DriveVault? _driveVault;
 
-  /// The session key the last account sync ran for: a sign-in -- at start
-  /// or later -- is a key this has not seen.
+  /// The session key the last account sync ran for. A sign-in, at start or
+  /// later, is a key this has not seen.
   String? _syncedFor;
 
   /// The preferences' first read: what an account sync waits for.
@@ -430,8 +433,8 @@ class _XtremioAppState extends State<XtremioApp> {
         // is half the secure store and half this file, and a read of one
         // half before the other is an answer about neither.
         unawaited(_drive.load().whenComplete(_driveRead.complete));
-        // A scan only where access is already there: the first launch asks
-        // nothing, and the Local list is where the asking happens.
+        // Scan only where access is already there. The first launch asks
+        // nothing; the Local list is where the asking happens.
         unawaited(_localMedia?.refresh());
         // After the preferences, because the last look's time is one.
         _scheduleUpdateCheck();
@@ -479,9 +482,9 @@ class _XtremioAppState extends State<XtremioApp> {
     if (kDebugMode) debugPrint('deep links unavailable: $error');
   }
 
-  /// A link the platform handed over. Two shapes reach this app and they
-  /// are told apart by [drivePairingSessionOfLink] first, because it is the
-  /// stricter test: an `https` URL on **this project's own domain**, claimed
+  /// A link the platform handed over. Two shapes reach this app.
+  /// [drivePairingSessionOfLink] is asked first, because it is the stricter
+  /// test: an `https` URL on **this project's own domain**, claimed
   /// through `assetlinks.json` and a signing certificate Google checks.
   /// Everything else falls through to the `stremio://` reading below.
   void _onDeepLink(String link) {
@@ -494,20 +497,19 @@ class _XtremioAppState extends State<XtremioApp> {
   }
 
   /// The Drive pairing a television is waiting on, picked natively because
-  /// this phone has the app — see [DriveNativePairScreen]. Pushed rather
+  /// this phone has the app (see [DriveNativePairScreen]). Pushed rather
   /// than replacing anything: the viewer came from their camera and will go
   /// back to their television, so what was on screen before should still be
   /// there afterwards.
   ///
-  /// **Once per session, per run.** `app_links` hands the same link over
-  /// more than once -- the launch link comes both as [DeepLinkSource.initialLink]
-  /// and as the stream's first event, and a link can be replayed as the
-  /// picker's activity hands back to this one. An addon link landing twice
-  /// is a no-op; without this guard, a pairing link landing twice would push
-  /// a second screen whose pick fails with "A pick is already on screen",
-  /// over a first pick that already worked. A session is single-use on the
-  /// service's side as well, so a link for one already opened is never
-  /// worth a second screen.
+  /// **Once per session, per run.** `app_links` hands the same link over more
+  /// than once. The launch link comes both as [DeepLinkSource.initialLink] and
+  /// as the stream's first event, and a link can be replayed as the picker's
+  /// activity hands back to this one. An addon link landing twice is a no-op.
+  /// Without this guard, a pairing link landing twice would push a second
+  /// screen whose pick fails with "A pick is already on screen", over a first
+  /// pick that already worked. A session is single-use on the service's side as
+  /// well, so a link for one already opened is never worth a second screen.
   void _openDrivePairing(String session, {bool retry = true}) {
     if (_drivePairingsOpened.contains(session)) return;
     final navigator = _navigator.currentState;
@@ -530,7 +532,7 @@ class _XtremioAppState extends State<XtremioApp> {
   }
 
   /// A `stremio://` link: the manifest URL in it opens that addon's details
-  /// screen. Nothing is installed — that stays a press on the Install button
+  /// screen. Nothing is installed: that stays a press on the Install button
   /// there, so a link cannot add an addon behind the user's back.
   void _onAddonDeepLink(String link) {
     final transportUrl = deepLinkAddonManifestUrl(link);
@@ -578,12 +580,12 @@ class _XtremioAppState extends State<XtremioApp> {
   ///
   /// Over a running player the list only shows and removes
   /// ([DownloadsScreen.canPlay] false), as the player's own way in already
-  /// has it: a title played from here would push a second [PlayerScreen]
-  /// over the first, and both load the one shared `player` field -- the
-  /// first, still mounted and still listening, opens the second's stream
-  /// on its own engine too. Two mpv instances decoding at once is what a
-  /// television box cannot afford, and the film silently replaced is what
-  /// the viewer gets on any device. The whole stack is asked, not the top:
+  /// has it. A title played from here would push a second [PlayerScreen]
+  /// over the first, and both load the one shared `player` field. The
+  /// first, still mounted and still listening, opens the second's stream on
+  /// its own engine too. Two mpv instances decoding at once is what a
+  /// television box cannot afford, and on any device the viewer gets the
+  /// film silently replaced. The whole stack is asked, not the top:
   /// a sheet or a dialog over the player is still over the player.
   void _openDownloads({bool retry = true}) {
     final navigator = _navigator.currentState;
@@ -655,8 +657,8 @@ class _XtremioAppState extends State<XtremioApp> {
   ///
   /// The decoded images are the part that is the app's own to drop, and
   /// they are dropped whole: everything no widget is showing goes
-  /// (`ImageCache.clear`; a picture still on a screen in the stack is kept
-  /// alive by that screen and comes back with it), and it is not done on
+  /// (`ImageCache.clear`). A picture still on a screen in the stack is kept
+  /// alive by that screen and comes back with it. This is not done on
   /// `inactive`, where a settings dialog would cost the board its posters
   /// every time it opened. The ceiling that bounds the same cache in the
   /// foreground is `XtremioBootstrap.imageCacheCeilingBytes`.
@@ -679,16 +681,17 @@ class _XtremioAppState extends State<XtremioApp> {
     _away = false;
     // Recheck that the internet is reachable after being away.
     unawaited(_internetStatus.recheck());
-    // A video deleted or added while the app was away -- from a file
-    // manager, a download -- is in the Local list by the time it is looked
-    // at again. Only where access is already there: this never asks.
+    // A video deleted or added while the app was away, from a file manager
+    // or a download, is in the Local list by the time it is looked at
+    // again. This scans only where access is already there; it never asks.
     unawaited(_localMedia?.refresh());
     if (await _isLoggedIn()) await _pullAccount();
   }
 
-  /// Tells the preferences who is signed in, and syncs with the account
-  /// whenever `ctx` shows a session key the last sync did not run for: the first `ctx` of a signed-in start, and every
-  /// sign-in after. Waits for the preferences, which hold what is synced.
+  /// Tells the preferences who is signed in. Syncs with the account
+  /// whenever `ctx` shows a session key the last sync did not run for: the
+  /// first `ctx` of a signed-in start, and every sign-in after. The sync
+  /// waits for the preferences, which hold what is synced.
   void _onCtxForXervice() {
     final ctx = _ctx.value;
     // Whose faces are shown and written, signed in or not, service or not.
@@ -806,10 +809,10 @@ class _XtremioAppState extends State<XtremioApp> {
     super.dispose();
   }
 
-  /// [child] under [AlwaysShowFocus] on a television and untouched
-  /// anywhere else: the pin is about a device with no pointer on it, and
-  /// off one the app is one window among many that should mark focus the
-  /// way the rest of the machine does.
+  /// [child] under [AlwaysShowFocus] on a television, and untouched
+  /// anywhere else. The pin is for a device with no pointer. Off one, the
+  /// app is one window among many and should mark focus the way the rest
+  /// of the machine does.
   Widget _showingFocus({required bool isTv, required Widget child}) =>
       isTv ? AlwaysShowFocus(child: child) : child;
 

@@ -21,10 +21,11 @@ typedef LaunchUrl = Future<bool> Function(
 /// an addon's configuration page.
 ///
 /// A launch that fails is reported as `false`, whichever way the platform
-/// says so: with `LaunchMode.externalApplication`, `url_launcher` 6.3.2
-/// itself never throws `ArgumentError` (that's only for in-app modes); some
-/// platforms' plugins throw a `PlatformException` instead of returning
-/// false when nothing opens the URL, e.g. `url_launcher_linux`.
+/// says so. With `LaunchMode.externalApplication`, `url_launcher` 6.3.2
+/// itself never throws `ArgumentError` (that is only for in-app modes).
+/// Some platforms' plugins, such as `url_launcher_linux`, throw a
+/// `PlatformException` instead of returning false when nothing opens the
+/// URL.
 /// `ArgumentError` is still caught defensively. Either would otherwise
 /// escape past the caller's "Could not open" message.
 class UrlLauncherLinkOpener implements ExternalLinkOpener {
@@ -48,9 +49,9 @@ class UrlLauncherLinkOpener implements ExternalLinkOpener {
   }
 }
 
-/// Opens [url] in the system browser through the [ExternalLinkScope] — never
-/// an in-app web view, which would hide the address bar; a SnackBar when
-/// nothing could open it.
+/// Opens [url] in the system browser through the [ExternalLinkScope], never
+/// in an in-app web view, which would hide the address bar. Shows a
+/// SnackBar when nothing could open it.
 ///
 /// The SnackBar names the host and nothing else: an addon's configure URL
 /// carries its debrid key in the path (`AGENTS.md`, "Never log auth
@@ -68,7 +69,7 @@ Future<void> openInBrowser(BuildContext context, String url) async {
 }
 
 /// Provides the [ExternalLinkOpener] to the widget tree. Without a scope
-/// the real [UrlLauncherLinkOpener] is used, so the app needs none; tests
+/// the real [UrlLauncherLinkOpener] is used, so the app needs none. Tests
 /// wrap the widget under test in one with a fake.
 class ExternalLinkScope extends InheritedWidget {
   const ExternalLinkScope({

@@ -19,7 +19,7 @@ import 'remote_press.dart';
 /// On a television it stops being a text field at all. It draws the same
 /// [InputDecoration] around the current value (masked when the [kind] is a
 /// secret) and takes focus like any other control, so the D-pad walks past
-/// it in every direction; pressing select hands the whole job to
+/// it in every direction. Pressing select hands the whole job to
 /// [TvTextEntry], which is a screen the system keyboard can actually own.
 /// See [TvTextEntry] for why Flutter's own field cannot be typed into with
 /// a remote.
@@ -56,8 +56,8 @@ class TvTextField extends StatefulWidget {
   final bool enabled;
 
   /// Takes focus when it is built. Off a television this also opens the
-  /// keyboard, as it always has; on one it only puts focus here, and the
-  /// text-entry screen still waits for a press.
+  /// keyboard, as it always has. On a television it only puts focus here,
+  /// and the text-entry screen still waits for a press.
   final bool autofocus;
 
   final Iterable<String>? autofillHints;
@@ -69,11 +69,11 @@ class TvTextField extends StatefulWidget {
   /// while there is something to clear.
   ///
   /// Off a television that button is the decoration's `suffixIcon`, drawn
-  /// inside the box, where it has always been. On one it sits beside the
-  /// box instead, as a control of its own, because inside it is neither
-  /// reachable nor pressable: the field takes focus as a whole, so
+  /// inside the box, where it has always been. On a television it sits
+  /// beside the box instead, as a control of its own, because inside it is
+  /// neither reachable nor pressable. The field takes focus as a whole, so
   /// directional traversal has nothing to the right of the text to step
-  /// to, and [RemotePress] takes select for the typing screen before any
+  /// to. And [RemotePress] takes select for the typing screen before any
   /// descendant of it can. A button drawn where a remote cannot go is
   /// worse than no button.
   final VoidCallback? onClear;
@@ -81,7 +81,7 @@ class TvTextField extends StatefulWidget {
   /// On a television, a hardware keyboard types straight into the field
   /// while it has focus, rather than only select opening the text-entry
   /// screen. For a field whose every change is acted on as it is typed
-  /// (Search); a field that only means something once it is finished keeps
+  /// (Search). A field that only means something once it is finished keeps
   /// to the screen, whose confirming is the submit.
   ///
   /// Only printable characters and Backspace are taken: the D-pad, select,
@@ -89,16 +89,16 @@ class TvTextField extends StatefulWidget {
   final bool typesInPlace;
 
   /// On a television, a microphone button at the field's right end that
-  /// fills it by voice ([SpeechInput]): what is heard shows in the field,
-  /// muted, as it is said, and the final transcript is announced as a
+  /// fills it by voice ([SpeechInput]). What is heard shows in the field,
+  /// muted, as it is said. The final transcript is announced as a
   /// confirmed entry is. Pressing it again, Back, focus leaving it or the
   /// app being hidden stops listening and leaves the value as it was.
   ///
-  /// Never a dead control: where the device has no recognizer, the
-  /// permission is refused or the recognizer cannot record, it opens the
-  /// text-entry screen instead, whose keyboard has a microphone of its own
-  /// -- with a line saying why, where there is something to say. Off a
-  /// television nothing changes: the keyboard there has the microphone.
+  /// Never a dead control. It opens the text-entry screen instead when the
+  /// device has no recognizer, the permission is refused or the recognizer
+  /// cannot record. That screen's keyboard has a microphone of its own, and
+  /// a line says why, where there is something to say. Off a television
+  /// nothing changes: the keyboard there has the microphone.
   ///
   /// The button is drawn inside the field's outline, over room the
   /// decoration keeps free for it, and is a sibling of the field rather
@@ -324,9 +324,9 @@ class _TvTextFieldState extends State<TvTextField> {
 
   /// The Clear button, or nothing when there is nothing to clear.
   ///
-  /// On a television the press hands focus to the field first: emptying
+  /// On a television the press hands focus to the field first. Emptying
   /// it takes the button out of the tree, and a focused node that leaves
-  /// the tree leaves the remote on nothing -- no ring anywhere, and the
+  /// the tree leaves the remote on nothing: no ring anywhere, and the
   /// next press of the D-pad has to find its own way back. The field is
   /// what is left where the button was, and typing something new is the
   /// usual next step anyway.
@@ -382,7 +382,7 @@ class _TvTextFieldState extends State<TvTextField> {
         // The ring and the fill are the app's, not this field's: the ink
         // falls through to `ThemeData.focusColor`, the theme floor's, and
         // the ring comes from the same emphasis every other control reads.
-        // Not a fill of its own -- that would be a cue nothing else in the
+        // Not a fill of its own: that would be a cue nothing else in the
         // app uses, and one the Bold switch could not reach. A
         // [FocusTreatment.row], because the field sits in a column of them
         // and a zoom would put it over its neighbours.

@@ -24,7 +24,8 @@ enum TvTextKind {
   /// keyboard learns from what is typed into it.
   bool get isSecret => this == TvTextKind.password;
 
-  /// Autocorrect belongs to prose only; an address of any kind is not it.
+  /// Autocorrect belongs to prose only, and an address of any kind is not
+  /// prose.
   bool get autocorrects => this == TvTextKind.text;
 }
 
@@ -33,10 +34,10 @@ enum TvTextKind {
 ///
 /// On Android TV the app window keeps input focus while the on-screen
 /// keyboard is up, so every D-pad press is delivered to Flutter and moves
-/// Flutter's focus: the keyboard can never move its own selection and is
+/// Flutter's focus. The keyboard can never move its own selection, and is
 /// decorative. What makes the difference is `IME_FLAG_NO_FULLSCREEN`, which
-/// Flutter sets on every field it creates and which Dart cannot unset —
-/// fullscreen ("extract") mode is exactly the mode in which the keyboard
+/// Flutter sets on every field it creates and which Dart cannot unset.
+/// Fullscreen ("extract") mode is exactly the mode in which the keyboard
 /// takes focus and owns the remote.
 ///
 /// So the field is not hosted here at all. [edit] asks `MainActivity` for a

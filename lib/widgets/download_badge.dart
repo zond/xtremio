@@ -11,7 +11,7 @@ import '../features/downloads/download_labels.dart';
 /// With an [onDelete] the finished state is a button instead of the check,
 /// the same gesture the stream tile makes of it: the icon that says a title
 /// is kept is the one that stops keeping it. Every other state stays
-/// passive -- a download still arriving is undone by the tile that started
+/// passive. A download still arriving is undone by the tile that started
 /// it, where there is room to say why.
 class DownloadBadge extends StatelessWidget {
   const DownloadBadge({
@@ -62,8 +62,8 @@ class DownloadBadge extends StatelessWidget {
             color: scheme.primary,
           ),
           // A download that stopped and one whose pieces are gone are the
-          // same thing to look at from across a room -- something is wrong
-          // with this one -- and the tooltip above says which.
+          // same thing to look at from across a room: something is wrong
+          // with this one. The tooltip above says which.
           DownloadState.error || DownloadState.gone => Icon(
             Icons.error_outline,
             size: size,

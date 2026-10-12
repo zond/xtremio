@@ -39,15 +39,16 @@ class RustServerBackgroundControl implements ServerBackgroundControl {
 /// Decides when the embedded server may go lean, and tells it.
 ///
 /// Lean (stream-server's `ServerHandle::set_background`) keeps every
-/// torrent running on a few peers instead of the configured limit, which is
-/// the share of a backgrounded server's memory measured to be both the
-/// largest and still growing -- and a television's low-memory killer takes
-/// the fattest background process first (see `_onHidden` in `lib/app.dart`).
+/// torrent running on a few peers instead of the configured limit. The
+/// peers are the share of a backgrounded server's memory measured to be
+/// both the largest and still growing. A television's low-memory killer
+/// takes the fattest background process first (see `_onHidden` in
+/// `lib/app.dart`).
 ///
 /// The server goes lean when the app is hidden or paused, and back to full
-/// when it resumes -- **unless something that is still working in the
-/// background needs the peers**, which keeps it full whatever the app's
-/// state:
+/// when it resumes. The exception is **something still working in the
+/// background that needs the peers**, which keeps it full whatever the
+/// app's state:
 ///
 /// - **a download on its way** ([DownloadsSummary]: unfinished and not in
 ///   error; an errored pin has no engine for lean to shrink, and counting it

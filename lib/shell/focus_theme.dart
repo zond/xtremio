@@ -7,13 +7,13 @@ import '../widgets/focusable_tile.dart';
 /// draw itself: [FocusEmphasis] derived into [ThemeData], so a Material
 /// control is clearly marked without opting in to anything.
 ///
-/// [FocusHighlight] is worn by what the app builds -- a poster, a menu row,
-/// a rail destination -- and each is wrapped by hand. Material's own
-/// controls cannot be: without this floor a settings row, a dialog's
+/// [FocusHighlight] is worn by what the app builds (a poster, a menu row,
+/// a rail destination), and each is wrapped by hand. Material's own
+/// controls cannot be. Without this floor, a settings row, a dialog's
 /// buttons, an addon's ⋮ menu and every control on Downloads and
-/// Diagnostics would wear Flutter's default focus tint -- an overlay of
-/// about a tenth of the surface colour, no outline at all, and deaf to the
-/// switch -- invisible across a room on a projector.
+/// Diagnostics would wear Flutter's default focus tint. That tint is an
+/// overlay of about a tenth of the surface colour, with no outline at all,
+/// and deaf to the switch: invisible across a room on a projector.
 ///
 /// **One stroke over a lift, not two strokes.** [FocusRing] paints strokes
 /// of opposite luminance because it is drawn over poster art and video:
@@ -22,36 +22,36 @@ import '../widgets/focusable_tile.dart';
 /// single side, so the floor cannot do that. It does not have to: every
 /// surface it covers is drawn on the app's own near-black ground or on the
 /// player's black scrim, so one near-white stroke has a known background to
-/// contrast with. What is drawn straight over unknown content is what wears
-/// a [FocusHighlight] instead, and that split is the whole division of
-/// labour here.
+/// contrast with. What is drawn straight over unknown content wears a
+/// [FocusHighlight] instead. That split is the whole division of labour
+/// here.
 ///
 /// **What it cannot reach**, and what therefore has to be wrapped:
 ///
-/// - **A chip's outline.** The fill reaches a chip like anything else --
+/// - **A chip's outline.** The fill reaches a chip like anything else:
 ///   `RawChip` builds an [InkWell] with no focus colour of its own, so it
-///   falls through to [ThemeData.focusColor] -- but the stroke cannot be
-///   given from here, although a chip does take a
-///   [WidgetStateBorderSide]: `ChipThemeData.lerp` resolves a side for the
-///   *empty* state and dereferences it, so a side that is a border only
-///   while focused throws the moment the theme animates -- which is on
-///   every flip of the switch. `CheckboxThemeData.lerp` does the same, and
-///   is why the box in the account form is given the overlay alone. So a
-///   chip is wrapped by hand for the outline and keeps the fill.
+///   falls through to [ThemeData.focusColor]. The stroke cannot be given
+///   from here, although a chip does take a [WidgetStateBorderSide].
+///   `ChipThemeData.lerp` resolves a side for the *empty* state and
+///   dereferences it. So a side that is a border only while focused throws
+///   the moment the theme animates, which is on every flip of the switch.
+///   `CheckboxThemeData.lerp` does the same, and is why the box in the
+///   account form is given the overlay alone. So a chip is wrapped by hand
+///   for the outline and keeps the fill.
 /// - **[ListTile]** takes no per-state shape, so a focused row is filled
 ///   and not outlined. That is enough on the app's own solid background,
-///   which is where every list of them is, the player's track menus
-///   included -- those are a modal bottom sheet in the app's own
+///   which is where every list of them is. That includes the player's
+///   track menus: they are a modal bottom sheet in the app's own
 ///   near-black, and their rows say in a comment that they are left to the
 ///   fill on purpose. What is drawn straight over the video is what wears
 ///   a ring: the seek bar, and the chips on the panels.
 /// - **[NavigationRail]** hands out no focus nodes at all, so the shell
-///   draws that ring itself where it keeps its own nodes; the fill below
+///   draws that ring itself where it keeps its own nodes. The fill below
 ///   still reaches it, because its ink falls back to [ThemeData.focusColor]
 ///   like any other.
 ///
 /// **A television only.** [FocusEmphasis] is a choice about a room and a
-/// panel the app knows nothing about, made with a remote; off a television
+/// panel the app knows nothing about, made with a remote. Off a television,
 /// focus follows a pointer or Tab against a background the viewer is an
 /// arm's length from, and Material's own tint is what every other desktop
 /// application draws. So `XtremioApp` applies this exactly where
@@ -59,7 +59,7 @@ import '../widgets/focusable_tile.dart';
 /// reason.
 abstract final class FocusTheme {
   /// The stroke around a focused control: [FocusRing]'s light one. Not the
-  /// theme's violet, for the reason the ring gives -- its luminance is the
+  /// theme's violet, for the reason the ring gives: its luminance is the
   /// problem being solved.
   static const Color stroke = FocusRing.innerColor;
 
@@ -69,17 +69,18 @@ abstract final class FocusTheme {
   static double strokeWidth(FocusEmphasis emphasis) =>
       FocusRing.widthFor(emphasis) / 2;
 
-  /// What a focused control is lifted by, over its own background. Small:
-  /// it is drawn *under* the control's label and icon (an ink overlay
-  /// paints below the child), so a heavy one washes out a white icon on
-  /// the player's bar, and the stroke is the cue that carries this anyway.
+  /// What a focused control is lifted by, over its own background. Small,
+  /// because it is drawn *under* the control's label and icon (an ink
+  /// overlay paints below the child). A heavy one washes out a white icon
+  /// on the player's bar, and the stroke is the cue that carries this
+  /// anyway.
   static double lift(FocusEmphasis emphasis) =>
       emphasis == FocusEmphasis.bold ? 0.28 : 0.16;
 
-  /// What a focused control with *no* stroke available is filled by --
+  /// What fills a focused control with *no* stroke available:
   /// [ThemeData.focusColor], which is where an [InkResponse] with no
-  /// overlay of its own ends up: a [ListTile], a [PopupMenuItem], a
-  /// [NavigationRail] destination. Heavier than [lift], since for these it
+  /// overlay of its own ends up (a [ListTile], a [PopupMenuItem], a
+  /// [NavigationRail] destination). Heavier than [lift], since for these it
   /// is the whole indicator.
   static double fill(FocusEmphasis emphasis) =>
       emphasis == FocusEmphasis.bold ? 0.44 : 0.28;
@@ -119,28 +120,28 @@ abstract final class FocusTheme {
       menuButtonTheme: MenuButtonThemeData(
         style: _merge(base.menuButtonTheme.style, button),
       ),
-      // A tab can wear nothing else: it takes no per-state shape, and the
+      // A tab can wear nothing else. It takes no per-state shape, and the
       // bar's own indicator says which tab is *selected*, which is a
       // different question from where the remote is standing. `TabBar`
       // hands this overlay to the [InkWell] under each tab, so the fill
-      // reaches one the way it reaches a [ListTile] -- and at the same
-      // weight, because for both of them it is the whole indicator.
+      // reaches a tab the way it reaches a [ListTile]. It does so at the
+      // same weight, because for both of them it is the whole indicator.
       tabBarTheme: base.tabBarTheme.copyWith(overlayColor: _filled(emphasis)),
       switchTheme: base.switchTheme.copyWith(overlayColor: _overlay(emphasis)),
       // The overlay and not a side: `CheckboxThemeData.lerp` reads a side
       // resolved for the empty state and asserts it is not null, so a
-      // per-state one throws the moment the theme animates -- which is on
+      // per-state one throws the moment the theme animates, which is on
       // every flip of the switch. The box is a `CheckboxListTile` in the
       // account form either way, and a list tile is filled.
       checkboxTheme: base.checkboxTheme.copyWith(
         overlayColor: _overlay(emphasis),
       ),
       radioTheme: base.radioTheme.copyWith(overlayColor: _overlay(emphasis)),
-      // No slider: `SliderThemeData.overlayColor` is one colour rather
-      // than a per-state property, and the app's one slider (the player's
-      // volume) is built only off a television, because a slider takes
-      // every arrow key for itself and a remote that landed on one could
-      // never leave again.
+      // No slider. `SliderThemeData.overlayColor` is one colour rather
+      // than a per-state property. The app's one slider (the player's
+      // volume) is built only off a television: a slider takes every arrow
+      // key for itself, and a remote that landed on one could never leave
+      // again.
     );
   }
 
@@ -189,28 +190,28 @@ abstract final class FocusTheme {
 /// A television draws focus whatever last moved it.
 ///
 /// Flutter decides whether a focus highlight is painted at all from
-/// [FocusManager.highlightMode], and on Android that starts at
-/// [FocusHighlightMode.touch] -- a phone marks nothing until a keyboard
+/// [FocusManager.highlightMode]. On Android that starts at
+/// [FocusHighlightMode.touch]: a phone marks nothing until a keyboard
 /// appears, and goes back to marking nothing at the next tap. A television
-/// is the other case entirely: there is no pointer on one, focus is the
-/// only way around, and the app draws an indicator for it on purpose. So
-/// on one the mode is pinned to [FocusHighlightMode.traditional] for as
+/// is the other case entirely. It has no pointer, focus is the only way
+/// around, and the app draws an indicator for it on purpose. So on a
+/// television the mode is pinned to [FocusHighlightMode.traditional] for as
 /// long as the app is up.
 ///
 /// Two things follow, and the second is why this exists at all:
 ///
 /// - Every fill the floor lays on is painted from the first frame rather
 ///   than from the first press. An [InkResponse] paints no focus highlight
-///   in touch mode, so a control that is focused before any key arrives --
-///   which on a set-top box is the state the app launches in -- wears
-///   nothing.
+///   in touch mode, so a control that is focused before any key arrives
+///   wears nothing. On a set-top box that is the state the app launches
+///   in.
 /// - Nothing that is *not* focused is painted with the focus colour.
 ///   `DropdownButton` fills the **selected** entry of an open menu with
-///   [ThemeData.focusColor] while the mode is touch (it is the one place
-///   Flutter reads that colour to mean something other than focus), and
-///   the floor has raised it to a near-white 0.28, or 0.44 under Bold, to
-///   mean "the remote is here". A television with a touchscreen -- and
-///   `DeviceProfile` allows for one -- opened that menu with a tap and got
+///   [ThemeData.focusColor] while the mode is touch. It is the one place
+///   Flutter reads that colour to mean something other than focus. The
+///   floor has raised that colour to a near-white 0.28, or 0.44 under
+///   Bold, to mean "the remote is here". A television with a touchscreen
+///   (`DeviceProfile` allows for one) opened that menu with a tap and got
 ///   its loudest cue on a row nobody was standing on. Traditional mode
 ///   takes that branch away: the entry Flutter autofocuses is the selected
 ///   one, so the same row is filled, and now because it really does hold
@@ -239,8 +240,8 @@ class _AlwaysShowFocusState extends State<AlwaysShowFocus> {
     // After the frame, not during it. Writing the strategy tells every
     // [InkResponse] in the tree at once, synchronously, and one that is
     // being taken down in the same frame answers by looking up its
-    // [MediaQuery] from an element the framework has already deactivated
-    // -- which is an assertion in a debug build. Nothing is focused
+    // [MediaQuery] from an element the framework has already deactivated.
+    // That is an assertion in a debug build. Nothing is focused
     // before the first frame is up anyway.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {

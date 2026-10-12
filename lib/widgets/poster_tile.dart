@@ -20,9 +20,9 @@ const SliverGridDelegateWithMaxCrossAxisExtent posterGridDelegate =
     );
 
 /// The grid of posters [context] draws: [posterGridDelegate], or on a
-/// television [TvPosterGridDelegate] -- the television's one poster size,
-/// the same as a row's ([PosterTile.tvImageHeight]), rather than whatever
-/// width the window divides into.
+/// television [TvPosterGridDelegate]. A television has one poster size, the
+/// same as a row's ([PosterTile.tvImageHeight]), rather than whatever width
+/// the window divides into.
 SliverGridDelegate posterGridDelegateOf(BuildContext context) =>
     DeviceScope.isTv(context)
     ? TvPosterGridDelegate(
@@ -32,7 +32,7 @@ SliverGridDelegate posterGridDelegateOf(BuildContext context) =>
 
 /// A grid of tiles exactly as big as a television row's: a
 /// [PosterTile.tvImageHeight] poster, two-thirds as wide, over the caption
-/// a row gives it -- its box grown with the text, as a row's is -- and as
+/// a row gives it (its box grown with the text, as a row's is), and as
 /// many across as fit, from the left.
 @immutable
 class TvPosterGridDelegate extends SliverGridDelegate {
@@ -109,7 +109,7 @@ class PosterTile extends StatelessWidget {
 
   /// How far the name is held off the tile's edges: [FocusRing.textInset],
   /// because the ring is drawn over these bounds and the bold one lands on
-  /// the words. The poster above pays for it -- the row keeps the height
+  /// the words. The poster above pays for it. The row keeps the height
   /// the board picked for it, and eight pixels off a poster is nothing
   /// anyone can see, while eight pixels across a title is the title.
   static const double captionInset = FocusRing.textInset;
@@ -118,10 +118,10 @@ class PosterTile extends StatelessWidget {
   /// size, so a title looks the same in a row as it does in a grid.
   ///
   /// The largest that puts two whole rows of Discover under its type pills
-  /// on a Google TV -- a 1920x1080 panel at a pixel ratio of 2, so 960x540
-  /// to lay out on, 430 of it under the pills once the overscan band is
-  /// kept clear -- with the one-line heading and caption at the
-  /// television's text scale. A row there is 213.9 (`CatalogRows`), two
+  /// on a Google TV, with the one-line heading and caption at the
+  /// television's text scale. A Google TV is a 1920x1080 panel at a pixel
+  /// ratio of 2, so 960x540 to lay out on, 430 of it under the pills once
+  /// the overscan band is kept clear. A row there is 213.9 (`CatalogRows`), two
   /// of them 427.8; a 142 poster would make it 215.9. Divisible by three,
   /// so [tvImageWidth] is a whole two-thirds of it.
   static const double tvImageHeight = 141;
@@ -167,20 +167,20 @@ class PosterTile extends StatelessWidget {
 /// a neutral fallback when [url] is null or fails to load.
 ///
 /// The decode is bounded to the box the poster is drawn in. This is the
-/// most numerous image in the app -- a board strip, the discover and search
-/// grids, the library -- and an addon is free to serve a poster at any
-/// size: an unbounded TMDB-backed poster (1000x1500) decodes to 5.9 MB,
-/// against a few hundred kilobytes at the tile's own width, so without this
-/// a handful of tiles fill the whole image cache and every scroll re-decodes
-/// them. `cacheWidth` counts physical pixels, which is why the device's
-/// ratio is in it; only the width is given, so the source's own aspect is
-/// kept and `cover` crops as it did.
+/// most numerous image in the app (a board strip, the discover and search
+/// grids, the library), and an addon is free to serve a poster at any size.
+/// An unbounded TMDB-backed poster (1000x1500) decodes to 5.9 MB, against a
+/// few hundred kilobytes at the tile's own width. Without this, a handful
+/// of tiles fill the whole image cache and every scroll re-decodes them.
+/// `cacheWidth` counts physical pixels, which is why the device's ratio is
+/// in it. Only the width is given, so the source's own aspect is kept and
+/// `cover` crops as it did.
 class PosterImage extends StatelessWidget {
   const PosterImage({super.key, required this.url, this.image});
 
   final String? url;
 
-  /// A picture that is not at a URL -- a video's own frame -- drawn in
+  /// A picture that is not at a URL (a video's own frame), drawn in
   /// place of [url]'s, falling back to the icon the same way.
   final ImageProvider? image;
 

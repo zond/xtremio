@@ -3,7 +3,7 @@
 #
 # The mark is a two-tone X on the app's near-black ground: the violet arm is the
 # theme seed colour, the teal arm the accent used for progress and speed. Run
-# this after changing a colour or a coordinate; nothing else in the tree draws
+# this after changing a colour or a coordinate. Nothing else in the tree draws
 # the icon, so this script is the source of truth.
 #
 # Needs ImageMagick 7 (`magick`) and Cantarell Extra Bold for the wordmark.
@@ -156,7 +156,7 @@ done
 
 # --------------------------------------------- android legacy raster icons --
 # Pre-Oreo launchers draw these unmasked, so they carry their own rounded
-# corners; the round variant is what a circular launcher asks for by name.
+# corners. The round variant is what a circular launcher asks for by name.
 render_flat() { # $1=size $2=out  -- opaque; the App Store rejects icons with alpha
   magick "$OUT/flat.svg" -resize "${1}x${1}" -background "$BG" -alpha remove -alpha off "$2"
 }

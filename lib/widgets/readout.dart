@@ -12,22 +12,22 @@ import 'focusable_tile.dart';
 ///
 /// **On a television the only way to scroll is to move focus.** The scroll
 /// view follows the focused widget, so a row that takes no focus is a row
-/// the remote jumps over and the page never scrolls to: the viewer walks
-/// from the control above it to the control below it and the words in
-/// between go past. Where such a block is the last thing on the screen, or
-/// is taller than the space left under the control above it, without this
-/// some of it can never be read at all.
+/// the remote jumps over and the page never scrolls to. The viewer walks
+/// from the control above it to the control below it, and the words in
+/// between go past. Without this, some of such a block can never be read
+/// at all where it is the last thing on the screen, or is taller than the
+/// space left under the control above it.
 ///
 /// So a block of words becomes a stop. Not a control: select does nothing
 /// here, and there is nothing for it to do.
 ///
 /// **Focused, it is marked; it is never dressed as something pressable.**
-/// That is what [FocusTreatment.readout] already means in this app -- the
-/// player's seek bar and the sharing light wear it -- and it is the ring
-/// alone: no zoom and no shadow, because nothing here is an object lifted
-/// off a row, and no dimming, because the dimming is read off a family of
-/// neighbours going dark together and a paragraph has no such family. No
-/// ink either, which is the other half of the promise: the theme floor
+/// That is what [FocusTreatment.readout] already means in this app; the
+/// player's seek bar and the sharing light wear it. It is the ring alone.
+/// There is no zoom and no shadow, because nothing here is an object lifted
+/// off a row. There is no dimming, because the dimming is read off a family
+/// of neighbours going dark together, and a paragraph has no such family.
+/// No ink either, which is the other half of the promise. The theme floor
 /// fills a control the remote is standing on, and a paragraph that filled
 /// like a button and then swallowed select would be a worse lie than one
 /// that could not be reached.
@@ -39,7 +39,7 @@ import 'focusable_tile.dart';
 ///
 /// **A phone is left alone.** Focus there is for a keyboard and for
 /// accessibility, where the words are already reachable by touch and by
-/// screen reader; an extra Tab stop in front of every note on the settings
+/// screen reader. An extra Tab stop in front of every note on the settings
 /// screen is a cost with nothing bought. Off a television this widget is
 /// its child and nothing else, like [FocusMarked] and [FocusHighlighted]
 /// above it.
@@ -62,9 +62,9 @@ class Readout extends StatefulWidget {
 
   /// Held between the ring and what is inside it, on a television only.
   ///
-  /// A block that brings its own padding -- a [ListTile], a section that
-  /// is already inset from the edges of the screen -- wants none of this
-  /// and leaves it at zero. A bare line of text wants
+  /// A block that brings its own padding (a [ListTile], a section that is
+  /// already inset from the edges of the screen) wants none of this and
+  /// leaves it at zero. A bare line of text wants
   /// [FocusRing.textInset]: the ring is drawn on the block's own bounds,
   /// and in Bold that is eight logical pixels of it over the first letter
   /// of every line.
@@ -92,10 +92,10 @@ typedef _Where = ({ScrollPosition position, double top, double bottom});
 /// remote, for the [State] of a widget that makes one a focus stop.
 ///
 /// Two halves. [revealBlock] brings the whole of the block on screen,
-/// moving as little as it can: Flutter's traversal reveals a stop with one
-/// edge against one edge of the viewport, which is enough for a row and is
-/// not a promise about the other edge, so the last lines of a tall block
-/// stay off the screen and the press that would scroll to them moves focus
+/// moving as little as it can. Flutter's traversal reveals a stop with one
+/// edge against one edge of the viewport. That is enough for a row, and is
+/// not a promise about the other edge. So the last lines of a tall block
+/// stay off the screen, and the press that would scroll to them moves focus
 /// past it instead. [walkBlock] answers the D-pad for a block taller than
 /// the viewport, which cannot be shown at once and whose middle is
 /// otherwise off the screen for good.
@@ -119,8 +119,8 @@ mixin ReadableBlock<T extends StatefulWidget> on State<T> {
   /// past before they were read.
   static const double screenful = 0.8;
 
-  /// A scroll shorter than this is not worth asking for, and -- far more
-  /// importantly -- is not worth taking a press for. Sub-pixel rounding
+  /// A scroll shorter than this is not worth asking for. Far more
+  /// importantly, it is not worth taking a press for. Sub-pixel rounding
   /// out of [RenderAbstractViewport.getOffsetToReveal] would otherwise
   /// leave a block swallowing every press of the down key with nothing
   /// moving, which is a remote trapped on a paragraph.
@@ -129,7 +129,7 @@ mixin ReadableBlock<T extends StatefulWidget> on State<T> {
   /// [revealBlock] once the frame that is being built has been laid out.
   ///
   /// A block takes focus while the list around it is still laying itself
-  /// out, and grows and shrinks when the viewer expands it; an offset read
+  /// out, and grows and shrinks when the viewer expands it. An offset read
   /// before that frame is an offset into the wrong tree.
   void revealBlockAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -154,27 +154,27 @@ mixin ReadableBlock<T extends StatefulWidget> on State<T> {
 
   /// Brings the whole block on screen, moving as little as possible.
   ///
-  /// A block that fits is pulled into the range of offsets that show all
-  /// of it -- from whichever end it was hanging over, and not at all when
-  /// it was already inside. That is the whole of the bug for most of these:
-  /// Flutter's traversal reveals a stop with one edge against one edge of
-  /// the viewport, which is enough for a row and is not a promise about
-  /// the other edge.
+  /// A block that fits is pulled into the range of offsets that show all of it,
+  /// from whichever end it was hanging over. It does not move at all when it
+  /// was already inside. That is the whole of the bug for most of these:
+  /// Flutter's traversal reveals a stop with one edge against one edge of the
+  /// viewport, which is enough for a row and is not a promise about the other
+  /// edge.
   ///
-  /// A block that is taller than the viewport cannot be shown at once, and
-  /// what it must not do is land on its *last* line -- which is exactly
-  /// what the traversal does with it on the way down the page, and what a
-  /// Tab does with it in either direction. So it starts at its first line,
-  /// whichever way the remote came, and [walkBlock] walks the rest:
-  /// reading starts at the top of a paragraph and there is only one way to
-  /// be predictable about this.
+  /// A block that is taller than the viewport cannot be shown at once.
+  /// What it must not do is land on its *last* line. That is exactly what
+  /// the traversal does with it on the way down the page, and what a Tab
+  /// does with it in either direction. So it starts at its first line,
+  /// whichever way the remote came, and [walkBlock] walks the rest. Reading
+  /// starts at the top of a paragraph, and there is only one way to be
+  /// predictable about this.
   void revealBlock() {
     final at = _where();
     if (at == null) return;
     final position = at.position;
-    // Taller than the viewport is the inverted case: `top` -- the offset
-    // that puts the block's first line at the top of the screen -- is then
-    // the *earlier* offset of the two, because showing the last line means
+    // Taller than the viewport is the inverted case. `top`, the offset that
+    // puts the block's first line at the top of the screen, is then the
+    // *earlier* offset of the two, because showing the last line means
     // scrolling past everything above it.
     final tall = at.bottom > at.top;
     final target = _clamp(
@@ -189,10 +189,10 @@ mixin ReadableBlock<T extends StatefulWidget> on State<T> {
   /// time, and hands the press on the moment there is nothing of it left
   /// in that direction.
   ///
-  /// This is the half that makes the tall case readable at all: revealing
+  /// This is the half that makes the tall case readable at all. Revealing
   /// such a block can only ever show one end of it, and the press that
   /// would show the rest is the press that moves focus to whatever is
-  /// below -- so without this the middle of a long block is off the screen
+  /// below. So without this the middle of a long block is off the screen
   /// for good. A block that fits takes none of this: after [revealBlock]
   /// there is nothing of it past either edge, so the test below answers
   /// false and the key goes where it always went.
@@ -246,7 +246,7 @@ class _ReadoutState extends State<Readout> with ReadableBlock<Readout> {
     setState(() => _focused = focused);
     // The ring changes the block's painting and not its size, but a
     // readout can take focus while the list around it is still laying
-    // itself out -- so the offsets are read after the frame, never in it.
+    // itself out. So the offsets are read after the frame, never in it.
     if (focused) revealBlockAfterFrame();
   }
 

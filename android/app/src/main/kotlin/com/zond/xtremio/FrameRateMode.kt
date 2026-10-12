@@ -24,7 +24,7 @@ enum class FrameRateAsk {
     SURFACE,
 
     /**
-     * The surface vote, and then the mode named outright -- the vote alone
+     * The surface vote, and then the mode named outright: the vote alone
      * cannot make the switch this display needs.
      */
     SURFACE_THEN_MODE,
@@ -36,8 +36,8 @@ enum class FrameRateAsk {
  *
  * A plain data class rather than `Display.Mode` so that the choosing has no
  * Android in it, and so the one piece of this feature with a right answer
- * can be tested on the JVM (`FrameRateModeTest`). Everything else here --
- * the surface, the window, the display -- needs a device.
+ * can be tested on the JVM (`FrameRateModeTest`). Everything else here
+ * (the surface, the window, the display) needs a device.
  */
 data class FrameRateMode(
     val id: Int,
@@ -50,10 +50,10 @@ data class FrameRateMode(
          * How far a mode may sit from presenting every frame for the same
          * length of time, in frames per second, and still count as a match.
          *
-         * Loose enough to take a 24.000 Hz mode for a 23.976 fps film --
-         * 0.024 apart, one repeated frame every forty seconds, against one
-         * every other frame on a 59.94 Hz output -- and tight enough that
-         * nothing else on a television's list qualifies: 59.94 Hz is 4.0
+         * Loose enough to take a 24.000 Hz mode for a 23.976 fps film.
+         * Those are 0.024 apart: one repeated frame every forty seconds,
+         * against one every other frame on a 59.94 Hz output. Tight enough
+         * that nothing else on a television's list qualifies: 59.94 Hz is 4.0
          * away from a whole multiple of 23.976, and 50 Hz is 1.02 away.
          */
         const val MAX_CADENCE_ERROR = 0.05
@@ -67,16 +67,16 @@ data class FrameRateMode(
          * timing, and a Matroska file whose `default_duration` is written
          * as one millisecond reports 1000 fps. Below the floor is the
          * same kind of damage the other way, and neither is worth a mode
-         * change -- on Android 12 and up the ask carries
+         * change. On Android 12 and up the ask carries
          * `CHANGE_FRAME_RATE_ALWAYS`, which is what permits the second of
-         * black picture, so asserting a rate the content is not costs the
-         * viewer a blank screen and leaves them on the wrong mode
+         * black picture. So asserting a rate the content is not costs the
+         * viewer a blank screen, and leaves them on the wrong mode
          * afterwards.
          *
          * The band holds every rate real content declares. The lowest is
          * film at 23.976 and the highest is 119.88 (120 fps pulled the
-         * NTSC way, which is what a 120 fps release actually reports);
-         * outside it, nothing a television can present evenly is being
+         * NTSC way, which is what a 120 fps release actually reports).
+         * Outside it, nothing a television can present evenly is being
          * described.
          */
         const val MIN_CONTENT_RATE = 20.0
@@ -87,8 +87,8 @@ data class FrameRateMode(
          * file keeps no Android in it and the choosing stays testable on
          * the JVM. The values were read off
          * `platforms/android-36/android.jar`, where AOSP spells the middle
-         * one `SEAMLESSS_ONLY` -- a reason of its own not to name it in
-         * [MainActivity], which hands the number over as it comes.
+         * one `SEAMLESSS_ONLY`. That is a reason of its own not to name it
+         * in [MainActivity], which hands the number over as it comes.
          */
         const val MATCH_CONTENT_UNKNOWN = -1
         const val MATCH_CONTENT_NEVER = 0
@@ -101,11 +101,11 @@ data class FrameRateMode(
          * answers.
          *
          * `Surface.setFrameRate` is a *vote*, and this setting decides what a
-         * vote is allowed to do. Unset reads as null, not "no": AOSP's
+         * vote is allowed to do. Unset reads as null, not "no". AOSP's
          * `DisplayModeDirector` then runs at `SWITCHING_TYPE_WITHIN_GROUPS`
-         * (`MATCH_CONTENT_FRAMERATE_SEAMLESS_ONLY`), and 59.94 Hz to 23.976
-         * Hz retrains the HDMI link and is never seamless, so the vote is
-         * dropped in silence: on a Chromecast with the setting unset,
+         * (`MATCH_CONTENT_FRAMERATE_SEAMLESS_ONLY`). 59.94 Hz to 23.976 Hz
+         * retrains the HDMI link and is never seamless, so the vote is
+         * dropped in silence. On a Chromecast with the setting unset,
          * `mActiveModeId` stayed on the 59.94 Hz mode while a 23.976 fps
          * film played.
          *
@@ -115,11 +115,11 @@ data class FrameRateMode(
          * mode a window asks for is the mode the display takes. That is the
          * fallback here.
          *
-         * So: [MATCH_CONTENT_NEVER] is `SWITCHING_TYPE_NONE`, where neither
-         * path can do anything and the viewer has said as much -- nothing is
+         * So [MATCH_CONTENT_NEVER] is `SWITCHING_TYPE_NONE`, where neither
+         * path can do anything and the viewer has said as much: nothing is
          * asked for. [MATCH_CONTENT_ALWAYS] is the box that honours the
          * vote, where naming a mode as well is only a second way of saying
-         * it. Anything else -- seamless-only, or a box that will not say --
+         * it. Anything else (seamless-only, or a box that will not say)
          * gets both, since the vote may still take on a display where the
          * switch happens to be seamless.
          */
@@ -131,8 +131,8 @@ data class FrameRateMode(
             }
 
         /**
-         * Whether [fps] is a rate worth asking the display for at all --
-         * the one question both paths ask, since [matching] is only
+         * Whether [fps] is a rate worth asking the display for at all. It
+         * is the one question both paths ask, since [matching] is only
          * reached below Android 12 and `Surface.setFrameRate` has no
          * sanity of its own.
          */
@@ -141,7 +141,7 @@ data class FrameRateMode(
 
         /**
          * The mode to ask the display for so that [fps] frames a second are
-         * presented evenly, or null when there is nothing to ask for --
+         * presented evenly, or null when there is nothing to ask for:
          * [current] is already the best of them, or none of them divides
          * into [fps] closely enough to be worth a mode change.
          *
@@ -150,17 +150,17 @@ data class FrameRateMode(
          * platform's, and a film is not a reason to change it.
          *
          * A mode matches when its refresh rate is a whole multiple of the
-         * content's -- 23.976 fps is even on 23.976 Hz and just as even on
-         * 47.952 Hz, where every frame is shown exactly twice -- and the
-         * evenest of them wins, which is why a mode that is merely near
+         * content's. 23.976 fps is even on 23.976 Hz, and just as even on
+         * 47.952 Hz, where every frame is shown exactly twice. The evenest
+         * of them wins, which is why a mode that is merely near
          * loses to one that divides.
          *
          * Two modes can be exactly as even, and 23.976 against 47.952 is
          * that case rather than a contrived one: both are stored as
          * `Float`, and `47.95199966430664 / 2` and `23.97599983215332` are
          * the same distance from 23.976 down to the last bit. The fewest
-         * refreshes per frame breaks it, so the film's own rate wins --
-         * the tie must not be settled by the order `getSupportedModes()`
+         * refreshes per frame breaks it, so the film's own rate wins. The
+         * tie must not be settled by the order `getSupportedModes()`
          * happens to return, which is the display HAL's and not ours.
          * That is also what makes the reading legible: `dumpsys display`
          * should name 23.976 while a 23.976 fps film plays.

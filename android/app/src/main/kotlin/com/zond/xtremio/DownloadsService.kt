@@ -18,7 +18,7 @@ import androidx.core.app.ServiceCompat
  * their way, and says so with an ongoing notification.
  *
  * It hosts nothing. The embedded stream-server and librqbit already run on
- * their own threads inside this process; what Android takes away when the
+ * their own threads inside this process. What Android takes away when the
  * user leaves the app is the *right to keep running*, and a `dataSync`
  * foreground service is how an app asks for it. Everything about which
  * downloads exist and how far along they are is decided on the Dart side
@@ -27,20 +27,20 @@ import androidx.core.app.ServiceCompat
  *
  * What it does not promise: the system may still kill the process under
  * memory pressure, and Doze or the per-app battery optimisation may throttle
- * or park the sockets. Nothing is lost when that happens — librqbit keeps
+ * or park the sockets. Nothing is lost when that happens: librqbit keeps
  * its verified pieces and start-up re-pins every unfinished entry. Swiping
  * the app out of recents stops it outright (`android:stopWithTask`): the
  * Flutter engine goes at the same moment, and a notification nobody can
  * move on or take down is worse than no notification.
  *
- * And it has a budget. From Android 15 a `dataSync` service may run for
- * about six hours in twenty-four while the app is not in front; at the end
- * of that the system calls [onTimeout], and a service that does not stop
- * within seconds of it is not stopped but *crashed* — the whole process,
- * `ForegroundServiceDidNotStopInTimeException`, the download halted and no
- * notification left to say so. So [onTimeout] stops the service itself, and
- * tells Dart first: the download then waits for the app to be opened, which
- * is what resets the budget and lets the service go up again.
+ * And it has a budget. From Android 15 a `dataSync` service may run for about
+ * six hours in twenty-four while the app is not in front. At the end of that
+ * the system calls [onTimeout]. A service that does not stop within seconds of
+ * it is not stopped but *crashed*, taking the whole process with it
+ * (`ForegroundServiceDidNotStopInTimeException`). The download halts, and no
+ * notification is left to say so. So [onTimeout] stops the service itself, and
+ * tells Dart first. The download then waits for the app to be opened, which is
+ * what resets the budget and lets the service go up again.
  */
 class DownloadsService : Service() {
     /** The last thing Dart asked for, so an action intent can rebuild it. */
@@ -52,9 +52,9 @@ class DownloadsService : Service() {
         if (intent != null && intent.hasExtra(EXTRA_TITLE)) {
             content = Content.from(intent)
         }
-        // Whatever brought us here — a fresh start, an update, or the action
-        // on the notification — the service has seconds to reach the
-        // foreground, so post first and act afterwards.
+        // The service has seconds to reach the foreground, whatever brought
+        // us here (a fresh start, an update, or the action on the
+        // notification). So post first and act afterwards.
         if (!startForegroundWith(content)) return START_NOT_STICKY
         if (intent?.action == ACTION_CANCEL_ALL) {
             // Only Dart can drop a download: the registry is behind the FFI.
@@ -74,7 +74,7 @@ class DownloadsService : Service() {
      * Stopping is what cancels the crash that otherwise follows in ten
      * seconds. Dart hears first so it stops feeding a service that is gone
      * and asks for a new one the next time the registry changes with the
-     * app in front — a start from the background would be refused until
+     * app in front. A start from the background would be refused until
      * then anyway.
      */
     override fun onTimeout(startId: Int, fgsType: Int) {
