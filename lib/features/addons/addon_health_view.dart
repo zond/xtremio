@@ -24,11 +24,11 @@ enum AddonHealthSort {
 
 /// Where a verdict puts an addon in [AddonHealthSort.leastUsefulFirst].
 ///
-/// Never-answered first, because it is the one verdict that can be acted on
-/// without a judgement call; then broken, useless, not-yet-known and
-/// working. An addon with no verdict at all (a protected one) sorts last,
-/// since it cannot be uninstalled and is never a decision to make. Ties
-/// keep profile order, so the sort rearranges as little as it can.
+/// Never-answered comes first, because it is the one verdict that can be acted
+/// on without a judgement call. Then come broken, useless, not-yet-known and
+/// working. An addon with no verdict at all (a protected one) sorts last, since
+/// it cannot be uninstalled and is never a decision to make. Ties keep profile
+/// order, so the sort rearranges as little as it can.
 int addonUsefulnessRank(AddonHealthVerdict? verdict) => switch (verdict) {
   AddonHealthVerdict.neverAnswered => 0,
   AddonHealthVerdict.broken => 1,
@@ -59,12 +59,11 @@ List<AddonDescriptor> sortedByHealth(
 
 /// The verdict, as a chip that opens the evidence behind it.
 ///
-/// It is tappable because a verdict nobody can check is a verdict nobody
-/// should act on: the counts, when the addon last worked, and which of its
-/// resources the numbers are about are all one tap away. The chevron is
-/// what says so -- a verdict drawn as bare words reads as a label, which
-/// is why the evidence behind it was asked for a second time by someone
-/// who already had it.
+/// It is tappable because a verdict nobody can check is a verdict nobody should
+/// act on: the counts, when the addon last worked, and which of its resources
+/// the numbers are about are all one tap away. The chevron is what says so. A
+/// verdict drawn as bare words reads as a label, and that is why someone who
+/// already had the evidence asked for it a second time.
 class AddonHealthChip extends StatelessWidget {
   const AddonHealthChip({
     super.key,
@@ -86,14 +85,13 @@ class AddonHealthChip extends StatelessWidget {
   /// it is legible without becoming the loudest thing on the row.
   static const double affordanceSize = 14;
 
-  /// The colour a verdict is drawn in: red for never having answered and
-  /// for unreachable, amber for rarely having anything, grey for not
-  /// knowing, and the theme's own accent for working. The two faults share
-  /// the one colour the scheme has for a fault, and the words are what
-  /// separate them -- a second red invented here would be a distinction the
-  /// theme never agreed to, on a set the viewer has to learn. The label
-  /// says the same thing in words, so the colour is a second reading and
-  /// never the only one.
+  /// The colour a verdict is drawn in: red for never having answered and for
+  /// unreachable, amber for rarely having anything, grey for not knowing, and
+  /// the theme's own accent for working. The two faults share the one colour
+  /// the scheme has for a fault, and the words separate them. A second red
+  /// invented here would be a distinction the theme never agreed to, on a set
+  /// the viewer has to learn. The label says the same thing in words, so the
+  /// colour is a second reading and never the only one.
   static Color colorOf(AddonHealthVerdict verdict, ThemeData theme) =>
       switch (verdict) {
         AddonHealthVerdict.neverAnswered => theme.colorScheme.error,
@@ -164,11 +162,11 @@ class AddonHealthChip extends StatelessWidget {
         child: label,
       );
     }
-    // The same indicator every focusable thing on a television wears,
-    // rather than the ink well's own highlight, which is a tint of about a
-    // tenth -- the one cue a bright room takes away. The node is the ink
-    // well's, so nothing is added to the focus tree and the remote simply
-    // finds one more stop where the chip already was.
+    // The same indicator every focusable thing on a television wears, rather
+    // than the ink well's own highlight. That highlight is a tint of about a
+    // tenth, the one cue a bright room takes away. The node is the ink well's,
+    // so nothing is added to the focus tree and the remote simply finds one
+    // more stop where the chip already was.
     return FocusHighlighted(
       borderRadius: shape,
       builder: (context, node) => InkWell(
@@ -208,11 +206,11 @@ class AddonHealthEvidence extends StatelessWidget {
   /// same as one that is gone, and this sentence is what keeps the chip
   /// from claiming otherwise.
   ///
-  /// Where the record begins is named both ways, because the row this
-  /// dialog opens from offers to forget the addon's history and the next
-  /// failed request then starts a fresh record. "Since it was installed"
-  /// alone would be a claim the app's own menu falsifies -- on the one
-  /// verdict that is meant to settle the question.
+  /// Where the record begins is named both ways, because the row this dialog
+  /// opens from offers to forget the addon's history, and the next failed
+  /// request then starts a fresh record. "Since it was installed" alone would
+  /// be a claim the app's own menu falsifies, on the one verdict that is meant
+  /// to settle the question.
   static const String neverAnsweredHere =
       'Every request this device has made of it failed. It has never once '
       'answered here, over the whole record kept for it, which begins when '
@@ -324,10 +322,10 @@ class AddonHealthEvidence extends StatelessWidget {
 /// Says that nothing has answered since the app started, which is a
 /// statement about the connection and not about any addon.
 ///
-/// It matters most exactly here: a list of addons that have all just failed
-/// is the most tempting place to uninstall a working one. The record itself
-/// is not affected — a sweep in which everything failed is recorded against
-/// nobody — so this is the only warning the viewer gets.
+/// It matters most exactly here: a list of addons that have all just failed is
+/// the most tempting place to uninstall a working one. The record itself is not
+/// affected, since a sweep in which everything failed is recorded against
+/// nobody. So this is the only warning the viewer gets.
 class AddonConnectionBanner extends StatelessWidget {
   const AddonConnectionBanner({super.key});
 

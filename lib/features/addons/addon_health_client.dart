@@ -59,12 +59,12 @@ class AddonHealthScope extends InheritedWidget {
 /// The report the Addons screen is looking at, read once when the screen
 /// mounts and again after a record is forgotten.
 ///
-/// A [ChangeNotifier] rather than a poll: the counts change while the
-/// viewer is browsing, not while they are staring at this list, and a list
-/// whose numbers move under a finger that is about to tap Uninstall is
-/// worse than one that is a minute old. A read that fails leaves the last
-/// report standing — the record is a convenience, and a screen that cannot
-/// say how an addon has been answering still lists the addons.
+/// A [ChangeNotifier] rather than a poll: the counts change while the viewer is
+/// browsing, not while they are staring at this list. A list whose numbers move
+/// under a finger that is about to tap Uninstall is worse than one that is a
+/// minute old. A read that fails leaves the last report standing. The record is
+/// a convenience, and a screen that cannot say how an addon has been answering
+/// still lists the addons.
 class AddonHealthNotifier extends ChangeNotifier {
   AddonHealthNotifier(this.client);
 
@@ -72,8 +72,8 @@ class AddonHealthNotifier extends ChangeNotifier {
 
   /// What was last read, or **null until something has been**: no client, a
   /// read still in flight, a read that failed. Null is not
-  /// [AddonHealthReport.empty] — that one says every addon has been asked
-  /// nothing, which is a claim, and this says nothing at all.
+  /// [AddonHealthReport.empty]. That one claims every addon has been asked
+  /// nothing. Null says nothing at all.
   AddonHealthReport? get report => _report;
   AddonHealthReport? _report;
 

@@ -2,10 +2,9 @@
 /// turns that into something the owner of a profile can act on.
 ///
 /// The Rust side (`rust/src/addon_health.rs`) **counts** and this side
-/// **judges**: everything below is pure and takes its `now` as an
-/// argument, so the rule can be argued with against a table of cases
-/// instead of against a live network, and can be changed without touching
-/// what is stored.
+/// **judges**. Everything below is pure and takes its `now` as an argument. So
+/// the rule can be argued with against a table of cases instead of a live
+/// network, and changed without touching what is stored.
 library;
 
 import 'dart:convert';
@@ -99,8 +98,8 @@ final class AddonHealthRecord {
   /// has been observed.
   double get failedRatio => observations == 0 ? 0 : fail / observations;
 
-  /// The record aged to [now]. Idempotent, and a clock that went backwards
-  /// ages nothing rather than inflating the counts — the same arithmetic
+  /// The record aged to [now]. Idempotent. A clock that went backwards ages
+  /// nothing rather than inflating the counts. This is the same arithmetic
   /// `decay_factor` does on the Rust side, so the app and the file never
   /// disagree about how much an old count is still worth.
   AddonHealthRecord decayedTo(DateTime now) {
@@ -145,16 +144,16 @@ final class AddonHealthRecord {
 /// The five things that can be said about an installed addon.
 enum AddonHealthVerdict {
   /// Nothing it was ever asked came back: every request failed, and it has
-  /// never once answered this device. Strictly more than [broken] -- it is
-  /// decided inside that verdict's own branch, so it can never be said on
-  /// less evidence -- and the only verdict that settles the question
-  /// without a judgement call.
+  /// never once answered this device. Strictly more than [broken]: it is
+  /// decided inside that verdict's own branch, so it can never be said on less
+  /// evidence. It is the only verdict that settles the question without a
+  /// judgement call.
   ///
-  /// The label says *here* because that is the whole of what was measured:
-  /// the record belongs to this device and begins when the addon was
-  /// installed, so an addon that answers everyone else and cannot be
-  /// reached from this network reads exactly the same. Which is still the
-  /// answer to "should this be on this device".
+  /// The label says *here* because that is all that was measured. The record
+  /// belongs to this device and begins when the addon was installed. So an
+  /// addon that answers everyone else but cannot be reached from this network
+  /// reads exactly the same, and that is still the answer to "should this be on
+  /// this device".
   neverAnswered('Never answered here'),
 
   /// Something it is asked for fails at least half the time, and nothing it
@@ -202,8 +201,8 @@ final class AddonHealth {
   /// answer and not a placeholder.
   static const int minimumObservations = 5;
 
-  /// The share of requests that must have failed, on some kind that has
-  /// been asked [minimumObservations] times, for half of [broken].
+  /// The share of requests that must have failed for half of [broken], on some
+  /// kind that has been asked [minimumObservations] times.
   static const double brokenFailureRatio = 0.5;
 
   /// How long the addon must have gone without a single answer for the
@@ -243,10 +242,10 @@ final class AddonHealth {
   /// carrying content, no answer carrying nothing, and no moment at which
   /// one did.
   ///
-  /// An empty answer counts as an answer on purpose. An addon that replied
-  /// with nothing replied, which is [AddonHealthVerdict.useless]'s
-  /// territory and the reason the record has three buckets; only a record
-  /// that is failures and nothing else can be called never-answering.
+  /// An empty answer counts as an answer on purpose. An addon that replied with
+  /// nothing replied. That is [AddonHealthVerdict.useless]'s territory, and the
+  /// reason the record has three buckets. Only a record of failures and nothing
+  /// else can be called never-answering.
   ///
   /// Read off the record as stored rather than off a decayed copy, because
   /// decay cannot change the answer: halving a count leaves zero at zero,
@@ -277,34 +276,32 @@ final class AddonHealth {
   /// **The rule.** One pure function, five outcomes, evaluated in order.
   ///
   /// - [AddonHealthVerdict.notEnoughEvidence] when no kind has been asked
-  ///   [minimumObservations] times. Checked first, because every other
-  ///   answer is a claim about an addon and none of them can be made from
-  ///   four requests.
+  ///   [minimumObservations] times. Checked first, because every other answer
+  ///   is a claim about an addon and none of them can be made from four
+  ///   requests.
   /// - [AddonHealthVerdict.broken] when *some* kind has been asked
-  ///   [minimumObservations] times and failed at least
-  ///   [brokenFailureRatio] of them, **and** the addon as a whole has not
-  ///   answered anything in [brokenSilence]. Both halves are required and
-  ///   neither is enough: the ratio alone condemns an addon that is failing
-  ///   right now but worked an hour ago (which is the network, not the
-  ///   addon), and the silence alone condemns one that is simply rarely
-  ///   asked.
-  /// - [AddonHealthVerdict.neverAnswered] for the addon that is broken
-  ///   *and* has [hasNeverAnswered]. It is decided inside broken's branch
-  ///   rather than beside it, which is what makes "at least as much
-  ///   evidence as broken" structural instead of a threshold that has to
-  ///   be kept in step: every never-answered addon is one this rule would
-  ///   otherwise have called unreachable, so a handful of failures on
-  ///   something installed yesterday is stopped by the same
-  ///   [minimumObservations] guard that stops it being called broken.
+  ///   [minimumObservations] times and failed at least [brokenFailureRatio] of
+  ///   them, **and** the addon as a whole has not answered anything in
+  ///   [brokenSilence]. Both halves are required and neither is enough. The
+  ///   ratio alone condemns an addon that is failing right now but worked an
+  ///   hour ago (which is the network, not the addon). The silence alone
+  ///   condemns one that is simply rarely asked.
+  /// - [AddonHealthVerdict.neverAnswered] for the addon that is broken *and*
+  ///   has [hasNeverAnswered]. It is decided inside broken's branch rather than
+  ///   beside it. That makes "at least as much evidence as broken" structural,
+  ///   instead of a threshold that has to be kept in step. Every never-answered
+  ///   addon is one this rule would otherwise have called unreachable. So a
+  ///   handful of failures on something installed yesterday is stopped by the
+  ///   same [minimumObservations] guard that stops it being called broken.
   /// - [AddonHealthVerdict.useless] when every kind it *declares* has been
   ///   asked [uselessObservations] times and carried content in fewer than
-  ///   [uselessAnswerRatio] of them. Every declared kind, so one live
-  ///   resource rescues the addon; and a declared kind nothing has asked
-  ///   for yet has an `n` of zero, which fails the threshold and keeps the
-  ///   verdict off. An addon that declares no kind a record is kept for
-  ///   can never be called useless, rather than being called it vacuously.
-  /// - [AddonHealthVerdict.useful] otherwise. It is the default because
-  ///   the cost of the two named verdicts is a wrongly uninstalled addon.
+  ///   [uselessAnswerRatio] of them. Every declared kind, so one live resource
+  ///   rescues the addon. A declared kind nothing has asked for yet has an `n`
+  ///   of zero, which fails the threshold and keeps the verdict off. An addon
+  ///   that declares no kind a record is kept for can never be called useless,
+  ///   rather than being called it vacuously.
+  /// - [AddonHealthVerdict.useful] otherwise. It is the default because the
+  ///   cost of the two named verdicts is a wrongly uninstalled addon.
   AddonHealthVerdict verdict(DateTime now) {
     final aged = decayedTo(now);
     if (aged.values.every(
@@ -354,10 +351,10 @@ final class AddonHealthReport {
   /// Keyed by [addonHealthKey].
   final Map<String, Map<AddonResourceKind, AddonHealthRecord>> addons;
 
-  /// Whether every answer since the app started has failed — which is a
-  /// statement about this device's connection and not about any addon. An
-  /// all-failed sweep is recorded against nobody, so it leaves no trace in
-  /// the counts and has to be carried separately.
+  /// Whether every answer since the app started has failed. That is a statement
+  /// about this device's connection and not about any addon. An all-failed
+  /// sweep is recorded against nobody, so it leaves no trace in the counts and
+  /// has to be carried separately.
   final bool everyAnswerFailed;
 
   /// What `addon_health_report` returns.
@@ -386,13 +383,12 @@ final class AddonHealthReport {
 
   /// What is known about [addon], or **null for a protected addon**.
   ///
-  /// Refusing here rather than in the widget is deliberate: Cinemeta and
-  /// the streaming server's local addon cannot be uninstalled, so a verdict
-  /// about them is advice nobody can take, and the local addon's answers
-  /// are this app's own two stubs rather than anything on the network. The
-  /// Rust side already declines to record against them; this is the second
-  /// half of the same rule, so a bad release on either side cannot put a
-  /// label on one.
+  /// Refusing here rather than in the widget is deliberate. Cinemeta and the
+  /// streaming server's local addon cannot be uninstalled, so a verdict about
+  /// them is advice nobody can take. The local addon's answers are also this
+  /// app's own two stubs rather than anything on the network. The Rust side
+  /// already declines to record against them. This is the second half of the
+  /// same rule, so a bad release on either side cannot put a label on one.
   AddonHealth? healthOf(AddonDescriptor addon) {
     if (addon.isProtected) return null;
     return AddonHealth(
@@ -415,21 +411,21 @@ const Map<String, int> _defaultPorts = {
 /// The key one addon's records are held under: `host[:port]#` and the first
 /// twelve hex characters of `sha256(transportUrl)`.
 ///
-/// This mirrors `key_for` in `rust/src/addon_health.rs`, and the mirroring
-/// is the point: **the transport URL never leaves the profile.** A manifest
-/// URL can carry a debrid API key, which `AGENTS.md` puts in the class of
-/// things that are never written down or passed on, so the app hashes the
-/// URL it already holds rather than handing it across the boundary to be
-/// hashed there. The digest still keeps two configurations of one addon
-/// apart, because it is taken over the whole URL, query included.
+/// This mirrors `key_for` in `rust/src/addon_health.rs`, and the mirroring is
+/// the point: **the transport URL never leaves the profile.** A manifest URL
+/// can carry a debrid API key, which `AGENTS.md` counts among the things that
+/// are never written down or passed on. So the app hashes the URL it already
+/// holds rather than handing it across the boundary to be hashed there. The
+/// digest still keeps two configurations of one addon apart, because it is
+/// taken over the whole URL, query included.
 ///
-/// [transportUrl] is hashed exactly as the profile stores it, byte for
-/// byte, and is never re-normalized here: the profile's string is already
+/// [transportUrl] is hashed exactly as the profile stores it, byte for byte,
+/// and is never re-normalized here. The profile's string is already
 /// `Url::as_str()`'s output, so normalizing again could only introduce a
-/// difference. One known limit: a non-ASCII host, which the `url` crate
-/// punycodes and `Uri` does not, would give a readable half the two sides
-/// spell differently — such an addon reads as "not used yet" rather than
-/// showing another addon's history.
+/// difference. One known limit: the `url` crate punycodes a non-ASCII host and
+/// `Uri` does not, so the two sides would spell the readable half differently.
+/// Such an addon reads as "not used yet" rather than showing another addon's
+/// history.
 String addonHealthKey(String transportUrl) {
   final digest = sha256
       .convert(utf8.encode(transportUrl))
