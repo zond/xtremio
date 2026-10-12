@@ -56,8 +56,8 @@ void main() {
     expect(find.text(ClearCacheTile.title), findsOneWidget);
     expect(
       find.text(
-        'Stops what is streaming and deletes everything cached; downloads '
-        'you kept stay',
+        'Stops what is streaming and deletes everything cached except your '
+        'downloads',
       ),
       findsOneWidget,
     );

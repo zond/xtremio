@@ -221,8 +221,8 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
           'from ${report.deleted} $files.';
     }
     if (report.stillOverLimit) {
-      return 'Nothing more can be freed right now -- a download you kept '
-          'or the title you played last is holding '
+      return 'Nothing more can be freed right now. A download you kept '
+          'or the title you played last is using '
           '${formatBytes(report.protected)}.';
     }
     return 'Nothing needed cleaning.';
@@ -261,11 +261,11 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
                   ? '${formatBytes(usage.protectedBytes)} in '
                         '${usage.protectedFiles} '
                         '${usage.protectedFiles == 1 ? 'file' : 'files'} '
-                        'kept: a download, or the title played last'
-                  : 'Nothing protected right now',
+                        'kept for a download or the title played last'
+                  : 'Nothing kept right now',
               warning: usage.overLimit
                   ? (usage.nothingEvictable
-                        ? 'Over its limit, and nothing is evictable right '
+                        ? 'Over its limit, and nothing can be freed right '
                               'now.'
                         : 'Over its limit.')
                   : null,
@@ -304,14 +304,13 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Text(
-              'The server gives back what nobody is playing and nobody '
-              'kept by itself, as it goes. Cleaning now asks for that at '
-              'once, without stopping anything that is playing. A download '
-              'you kept is never touched, and neither is the part of the '
-              'title you played last around where you were, until you play '
-              'something else. Clearing the cache takes all of that too: it '
-              'stops what is streaming and deletes everything a download '
-              'does not keep.',
+              'The server frees what nobody is playing or keeping as it '
+              'goes. Clean cache now does that at once, and stops nothing '
+              'that is playing. It never touches a download you kept. It '
+              'also keeps the title you played last around where you were, '
+              'until you play something else. Clear the cache frees all of '
+              'that too. It stops what is streaming and deletes everything '
+              'that is not a download.',
             ),
           ),
         ],
@@ -348,10 +347,9 @@ class _DataRoot extends StatelessWidget {
   /// in. The torrent session was opened on the old root at start-up and
   /// librqbit cannot be moved onto another one while it runs.
   static const String takesEffectNextStart =
-      'The streaming cache and everything kept offline live here, as one '
-      'file per piece. A new folder takes effect the next time the app '
-      'starts: the torrent session running now was opened on the old one, '
-      'and what is already there is not moved.';
+      'The streaming cache and everything kept offline live here. A new '
+      'folder is used from the next time the app starts. What is already '
+      'in the old folder is not moved.';
 
   @override
   Widget build(BuildContext context) {

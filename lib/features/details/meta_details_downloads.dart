@@ -151,10 +151,10 @@ class _ReplaceDialog extends StatelessWidget {
     title: Text('Replace ${replaced.name}?'),
     content: Text(
       replaced.isComplete
-          ? 'It is already downloaded from another source. Downloading this '
+          ? 'It is already downloaded from another stream. Downloading this '
                 'stream deletes those ${replaced.sizeLabel} and starts again '
                 'from nothing.'
-          : 'It is already being downloaded from another source '
+          : 'It is already being downloaded from another stream '
                 '(${replaced.downloadedLabel} so far). Downloading this stream '
                 'stops that download, deletes what it has, and starts again '
                 'from nothing.',

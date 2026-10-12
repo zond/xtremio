@@ -99,8 +99,8 @@ class ClearCacheTile extends StatelessWidget {
 
   static const String title = 'Clear the cache';
   static const String subtitle =
-      'Stops what is streaming and deletes everything cached; downloads '
-      'you kept stay';
+      'Stops what is streaming and deletes everything cached except your '
+      'downloads';
 
   @override
   Widget build(BuildContext context) => ListTile(

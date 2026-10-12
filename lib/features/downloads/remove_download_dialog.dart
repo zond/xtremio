@@ -32,7 +32,7 @@ class RemoveDownloadDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Delete ${view.name}?'),
     content: Text(
-      'It stops being kept for offline playback, and the '
+      'It is no longer kept for offline playback. The '
       '${view.downloadedLabel} already downloaded is deleted from this '
       'device. Watching it again streams it.',
     ),

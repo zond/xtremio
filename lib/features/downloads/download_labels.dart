@@ -18,16 +18,16 @@ const String kDownloadStartingTooltip = 'Starting download…';
 
 /// ... once the file is whole on the device, where the button removes the
 /// download.
-const String kDownloadDeleteTooltip = 'Downloaded — delete from this device';
+const String kDownloadDeleteTooltip = 'Downloaded. Delete from this device';
 
 /// ... when the server reported a reason it stopped; pressing it pins again.
-const String kDownloadRetryTooltip = 'Download stopped — try again';
+const String kDownloadRetryTooltip = 'Download stopped. Try again';
 
 /// ... when the pieces this row named are not on the device any more (the root
 /// they were under was moved or reclaimed). Pressing it downloads the same file
 /// again. A separate sentence from the one above because it is a separate thing
 /// to have happened: nothing is being tried.
-const String kDownloadGoneTooltip = 'No longer on this device — download again';
+const String kDownloadGoneTooltip = 'No longer on this device. Download again';
 
 /// The chip a stream tile carries once its release is the one kept on this
 /// device, so the kept source can be told from the others at a glance.

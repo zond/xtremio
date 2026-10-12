@@ -36,9 +36,8 @@ class DiagnosticsTraceSync {
   /// one a problem hides in. So the tile says the report then holds
   /// credentials, in that word.
   static const String description =
-      'Adds cache, image and player detail to the report and redacts '
-      'nothing: while on, the log includes credentials (account keys, '
-      'passwords, tokens).';
+      'Adds cache, image and player detail to the report. It also stops '
+      'hiding credentials, so the log includes passwords and account keys.';
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;

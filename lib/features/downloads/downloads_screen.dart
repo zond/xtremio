@@ -229,10 +229,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Start a fresh list?'),
         content: const Text(
-          'The list of what you downloaded cannot be read, so the app is '
-          'keeping every file on this device rather than guessing. Starting '
-          'a fresh list gives that up: the files stay until you next open '
-          'the app, and are then removed to free the space.',
+          'The list of your downloads cannot be read. The app keeps every '
+          'file on this device until it can. A fresh list gives that up. '
+          'The files stay until you next open the app, and are then removed '
+          'to free the space.',
         ),
         actions: [
           TextButton(
@@ -553,8 +553,8 @@ class _RegistryUnreadable extends StatelessWidget {
     ),
     title: const Text(message),
     subtitle: const Text(
-      'Nothing has been deleted: every file is being kept on this device '
-      'until the list can be read. New downloads cannot be added until then.',
+      'Nothing has been deleted. Every file stays on this device until the '
+      'list can be read. You cannot add new downloads until then.',
     ),
     trailing: TextButton(
       onPressed: () => onStartFresh(),

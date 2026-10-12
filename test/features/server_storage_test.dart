@@ -84,7 +84,7 @@ void main() {
     await tester.tap(find.text('Clean cache now'));
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('a download you kept or the title you played last'),
+      find.textContaining('A download you kept or the title you played last'),
       findsOneWidget,
     );
   });
@@ -144,7 +144,7 @@ void main() {
       find.textContaining('Nothing more can be freed right now'),
       findsOneWidget,
     );
-    expect(find.textContaining('holding 12.0 GB'), findsOneWidget);
+    expect(find.textContaining('using 12.0 GB'), findsOneWidget);
   });
 
   testWidgets('a server that is not running says so and cleans nothing', (
