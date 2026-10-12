@@ -1,26 +1,26 @@
 //! How each installed addon has been answering, counted -- never judged.
 //!
 //! This side COUNTS and the app JUDGES. Nothing here decides that an addon
-//! is broken or useless; it keeps the evidence a verdict could be read off
-//! (`AddonHealth.verdict` in Dart) so that the rule and the arithmetic can
-//! be changed without a migration, and so a verdict is testable against a
-//! table rather than against a live network.
+//! is broken or useless. It keeps the evidence a verdict could be read off
+//! (`AddonHealth.verdict` in Dart). So the rule and the arithmetic can be
+//! changed without a migration, and a verdict is testable against a table
+//! rather than against a live network.
 //!
 //! ## Three outcomes, never two
 //!
 //! An answer settles as [`Outcome::Answered`], [`Outcome::Empty`] or
-//! [`Outcome::Failed`], and empty is its own bucket on purpose. Folding
-//! "the addon answered, with nothing" into "the addon failed" is the bug
-//! this record exists to avoid: a public-domain catalog legitimately has
-//! nothing for this year's blockbuster, and counting that against it turns
-//! a specialist into a broken addon.
+//! [`Outcome::Failed`], and empty is its own bucket on purpose. Folding "the
+//! addon answered, with nothing" into "the addon failed" is the bug this
+//! record exists to avoid. A public-domain catalog legitimately has nothing
+//! for this year's blockbuster, and counting that against it turns a
+//! specialist into a broken addon.
 //!
 //! ## What is kept, and what is deliberately not
 //!
 //! One [`Record`] per (addon, [`ResourceKind`]) pair, addressed by
 //! [`key_for`]: `host[:port]#<12 hex of sha256(transport URL)>`. The URL
-//! itself is never stored, and neither is any query string -- a manifest
-//! URL can carry a debrid API key, which puts it in the class of things
+//! itself is never stored, and neither is any query string. A manifest URL
+//! can carry a debrid API key, which puts it in the class of things
 //! `AGENTS.md` forbids writing down. The hash still separates two
 //! configurations of the same addon, because they are two different
 //! endpoints and answer differently.
@@ -31,56 +31,56 @@
 //!
 //! ## Counts decay
 //!
-//! Every count is a float halving every [`HALF_LIFE_DAYS`] days rather than
-//! a lifetime total or a rolling window: one multiply on read and write,
-//! constant size, and self-healing, so an addon that was broken for a week
-//! in March is not still condemned in June. Two timestamps ride along
-//! because a decayed float cannot say *when* it last worked.
+//! Every count is a float halving every [`HALF_LIFE_DAYS`] days, rather than
+//! a lifetime total or a rolling window. That costs one multiply on read and
+//! write, keeps a constant size, and heals itself, so an addon that was
+//! broken for a week in March is not still condemned in June. Two timestamps
+//! ride along because a decayed float cannot say *when* it last worked.
 //!
 //! ## A broken network is recorded against nobody
 //!
-//! Observations are buffered per [`Sweep`] -- one field's load, all the
-//! addons asked at once -- and committed only if at least one of them did
-//! not fail. When DNS is down every addon fails together, and that is
-//! evidence about the connection, not about the addons. This app's own
-//! stubs -- what is on loopback, and the address Drive plays are recorded
-//! under -- are left out of the sweep entirely ([`is_own_stub`]): one of
-//! them answering says nothing about whether the network is up, and
-//! nothing about an addon it was never asked to stand for.
+//! Observations are buffered per [`Sweep`] (one field's load, all the addons
+//! asked at once). A sweep is committed only if at least one of them did not
+//! fail. When DNS is down every addon fails together, and that is evidence
+//! about the connection, not about the addons. This app's own stubs are left
+//! out of the sweep entirely ([`is_own_stub`]): what is on loopback, and the
+//! address Drive plays are recorded under. One of them answering says
+//! nothing about whether the network is up, and nothing about an addon it
+//! was never asked to stand for.
 //!
 //! ## Where it lives
 //!
-//! In memory, in [`AddonHealthState`] (one field of
-//! [`crate::state::AppState`]), behind one mutex whose guard also holds the
-//! last-write instant, exactly as the downloads registry throttles its
-//! progress writes: reading "when did we last write" under any other lock
-//! than the one that writes is a race. Observations touch memory only; the
-//! table reaches the disk through the app's generic preferences file
-//! ([`PREFS_KEY`]) when it is dirty and the last write is
-//! [`FLUSH_INTERVAL`] old, and whatever the throttle says when
-//! [`flush_in`] is called. The file is the only place the counts are
-//! *stored*: `crate::api::addon_health` is a window onto the live table,
-//! not a second store.
+//! The table lives in memory, in [`AddonHealthState`] (one field of
+//! [`crate::state::AppState`]), behind one mutex. The mutex's guard also
+//! holds the last-write instant, exactly as the downloads registry throttles
+//! its progress writes, because reading "when did we last write" under any
+//! other lock than the one that writes is a race. Observations touch memory
+//! only. The table reaches the disk through the app's generic preferences
+//! file ([`PREFS_KEY`]) when it is dirty and the last write is
+//! [`FLUSH_INTERVAL`] old, and whatever the throttle says when [`flush_in`]
+//! is called. The file is the only place the counts are *stored*.
+//! `crate::api::addon_health` is a window onto the live table, not a second
+//! store.
 //!
-//! The app does not read that key itself, for two reasons. The file is up
-//! to a flush behind, and a screen that says "not used yet" about an addon
-//! used a minute ago is worse than one that says nothing; and a
+//! The app does not read that key itself, for two reasons. First, the file
+//! is up to a flush behind, and a screen that says "not used yet" about an
+//! addon used a minute ago is worse than one that says nothing. Second, a
 //! preferences write from the app could not forget an addon at all, since
-//! the table in this process would write it straight back. So the app
-//! reads [`report`] and forgets through [`forget`], and the counts still
-//! live in exactly one place.
+//! the table in this process would write it straight back. So the app reads
+//! [`report`] and forgets through [`forget`], and the counts still live in
+//! exactly one place.
 //!
-//! Every entry point takes the [`crate::state::AppState`] it counts into --
-//! [`load_in`], [`commit_in_at`], [`flush_in`] -- the way
-//! `crate::server::stop_in` does, and for the same two reasons. The
-//! runtime-event pump outlives a shutdown by design, so an event still in
-//! flight has to be counted into the state that pump was started for and
-//! not into whatever a later `init` installed; and `crate::core::shutdown`
-//! takes the state out of the process on its first line, so the flush that
+//! Every entry point takes the [`crate::state::AppState`] it counts into
+//! ([`load_in`], [`commit_in_at`], [`flush_in`]), the way
+//! `crate::server::stop_in` does, and for the same two reasons. First, the
+//! runtime-event pump outlives a shutdown by design. An event still in
+//! flight has to be counted into the state that pump was started for, not
+//! into whatever a later `init` installed. Second, `crate::core::shutdown`
+//! takes the state out of the process on its first line. The flush that
 //! makes the last minute of counts survive can only be a flush of the state
-//! it is holding. Nothing here reaches for the process global, and a table
-//! that [`load_in`] never filled is never written at all, so no late
-//! observation can put its one record where the whole record was.
+//! it is holding. Nothing here reaches for the process global. A table that
+//! [`load_in`] never filled is never written at all, so no late observation
+//! can put its one record where the whole record was.
 //!
 //! Lock order, where both are taken: this table, then the preferences
 //! file's lock (inside [`crate::prefs::set`]). Never the other way.
@@ -110,14 +110,14 @@ pub const PREFS_KEY: &str = "addonHealth";
 /// addon which was fixed is not argued with for a month.
 pub const HALF_LIFE_DAYS: f64 = 14.0;
 
-/// At most this many addons are remembered. A profile holds a few dozen;
-/// the cap is what stops a record that only ever grows, and the addon whose
+/// At most this many addons are remembered. A profile holds a few dozen. The
+/// cap is what stops a record that only ever grows, and the addon whose
 /// newest record is oldest is the one dropped.
 pub const MAX_ADDONS: usize = 200;
 
-/// How long an addon that is no longer installed keeps its record, so that
-/// uninstalling and reinstalling the same URL in one sitting -- or
-/// reinstalling after a sync -- does not start from nothing.
+/// How long an addon that is no longer installed keeps its record. Then
+/// uninstalling and reinstalling the same URL in one sitting, or
+/// reinstalling after a sync, does not start from nothing.
 pub const FORGET_UNINSTALLED_AFTER_DAYS: i64 = 30;
 
 /// How long a change waits before it is written out. The same shape as the
@@ -130,10 +130,11 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(60);
 /// to keep one profile's addons apart.
 const KEY_DIGEST_HEX: usize = 12;
 
-/// The port stremio-core's default profile puts the streaming server, and
-/// with it the local addon, on. Not read off the running server on purpose:
-/// what matters is the port the *profile* believes in, which is where the
-/// local addon's transport URL points however the server actually bound.
+/// The port stremio-core's default profile puts the streaming server on, and
+/// with it the local addon. It is deliberately not read off the running
+/// server. What matters is the port the *profile* believes in, which is
+/// where the local addon's transport URL points however the server actually
+/// bound.
 const DEFAULT_SERVER_PORT: u16 = 11470;
 
 /// The path the streaming server serves the profile's built-in local addon
@@ -185,9 +186,9 @@ impl ResourceKind {
         }
     }
 
-    /// The name this kind is stored and read back under -- the same string
-    /// stremio-core uses on the wire, so the app can match it against what
-    /// a manifest declares without a translation table.
+    /// The name this kind is stored and read back under. It is the same
+    /// string stremio-core uses on the wire, so the app can match it against
+    /// what a manifest declares without a translation table.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Catalog => CATALOG_RESOURCE_NAME,
@@ -284,12 +285,11 @@ pub fn decay_factor(elapsed: chrono::Duration) -> f64 {
 
 /// The key an addon's records are held under: `host[:port]#<digest>`.
 ///
-/// The host stays readable so a preferences file can be understood by the
-/// person whose file it is; the rest of the URL only ever appears as a
-/// digest. **The key never contains a query string** -- that is where a
-/// debrid API key lives -- and never the path either. Two configurations of
-/// the same addon still get two keys, because the digest is over the whole
-/// URL.
+/// The host stays readable, so the person whose preferences file it is can
+/// understand it. The rest of the URL only ever appears as a digest. **The
+/// key never contains a query string**, which is where a debrid API key
+/// lives, and never the path either. Two configurations of the same addon
+/// still get two keys, because the digest is over the whole URL.
 ///
 /// The app derives the same key by hashing `AddonDescriptor.transportUrl`,
 /// which is this same normalized URL as it was serialized into the profile.
@@ -356,8 +356,8 @@ impl Table {
         self.addons.keys().map(String::as_str)
     }
 
-    /// Forgets one addon entirely -- what "Forget this addon's history"
-    /// deletes when a verdict is wrong.
+    /// Forgets one addon entirely. This is what "Forget this addon's
+    /// history" deletes when a verdict is wrong.
     pub fn forget(&mut self, key: &str) -> bool {
         self.addons.remove(key).is_some()
     }
@@ -409,11 +409,11 @@ impl Table {
         )
     }
 
-    /// The table read back, forgivingly: anything that is not a record this
-    /// build understands -- a resource kind it does not keep, a record from
-    /// a newer shape, a file someone edited -- is skipped rather than
-    /// costing the whole table. The record is derived and disposable, so
-    /// losing part of it is cheaper than refusing to start with it.
+    /// The table read back, forgivingly. Anything that is not a record this
+    /// build understands is skipped rather than costing the whole table: a
+    /// resource kind it does not keep, a record from a newer shape, a file
+    /// someone edited. The record is derived and disposable, so losing part
+    /// of it is cheaper than refusing to start with it.
     pub fn from_value(value: &Value) -> Self {
         let mut addons: BTreeMap<String, BTreeMap<ResourceKind, Record>> = BTreeMap::new();
         let Some(object) = value.as_object() else {
@@ -451,33 +451,33 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
 /// network: the embedded server, or the profile's built-in local addon.
 ///
 /// Two rules, because the bound-authority check never catches the local
-/// addon. It keeps the transport URL it was born with,
-/// `http://127.0.0.1:11470/local-addon/manifest.json`, and nothing
-/// retargets it -- `crate::core::pin_to_embedded` rewrites the
-/// streaming server URL in the settings and not the addon -- while the
-/// embedded server is always on a port the OS picked (`server::spawn`
-/// binds port 0, never 11470). So the ports never match, on every boot and
-/// not only when no server is running at all: the by-name rule is the one
-/// that applies to the local addon, and dropping it as an edge case would
-/// count its loopback answer as network evidence every time.
+/// addon. The local addon keeps the transport URL it was born with,
+/// `http://127.0.0.1:11470/local-addon/manifest.json`, and nothing retargets
+/// it: `crate::core::pin_to_embedded` rewrites the streaming server URL in
+/// the settings and not the addon. The embedded server, meanwhile, is always
+/// on a port the OS picked (`server::spawn` binds port 0, never 11470). So
+/// the ports never match, on every boot and not only when no server is
+/// running at all. The by-name rule is the one that applies to the local
+/// addon. Dropping it as an edge case would count its loopback answer as
+/// network evidence every time.
 ///
 /// Skipping it is not only about refusing to judge a protected addon. A
 /// loopback answer is not evidence that the network is up, and
-/// [`Sweep::is_evidence`] treats one non-failure as exactly that: with the
+/// [`Sweep::is_evidence`] treats one non-failure as exactly that. With the
 /// local addon in the sweep, an outage in which every real addon failed
 /// would be charged to every one of them.
 ///
 /// An addon genuinely self-hosted on loopback, on some port that is not the
-/// streaming server's, is still recorded: what is skipped is this app's own
+/// streaming server's, is still recorded. What is skipped is this app's own
 /// endpoints, not everything on this machine.
 ///
 /// The third of those is not on loopback: [`DRIVE_TRACKING_MANIFEST`], the
 /// stream request a Drive play is loaded with so the engine keeps its
 /// progress. The engine asks it for the next episode's streams like any
-/// addon, and its static empty answer is no more an addon's health, or
-/// evidence about the network the addons are on, than the local addon's.
-/// Matched exactly: it is one address, and nothing else on that host is a
-/// stream request.
+/// addon. Its static empty answer is no more an addon's health, or evidence
+/// about the network the addons are on, than the local addon's is. It is
+/// matched exactly, because it is one address and nothing else on that host
+/// is a stream request.
 fn is_own_stub(base: &Url, is_embedded: impl FnOnce(&Url) -> bool) -> bool {
     is_local_addon(base) || base.as_str() == DRIVE_TRACKING_MANIFEST || is_embedded(base)
 }
@@ -508,8 +508,8 @@ fn is_local_addon(base: &Url) -> bool {
 ///
 /// A board full of catalogs, a details screen's stream addons: they are
 /// asked together, and when the network is gone they fail together. A sweep
-/// in which *every* addon failed is recorded against nobody -- no
-/// reachability probe, no DHT check, just the observation that a result
+/// in which *every* addon failed is recorded against nobody. There is no
+/// reachability probe and no DHT check, just the observation that a result
 /// where nothing worked is a result about the connection.
 #[derive(Debug, Default)]
 pub struct Sweep {
@@ -522,7 +522,7 @@ impl Sweep {
     }
 
     /// Notes one settled answer, unless it came from this app's own stub
-    /// rather than from an addon out on the network -- see [`is_own_stub`].
+    /// rather than from an addon out on the network (see [`is_own_stub`]).
     /// `key` is [`key_for`] of `base`, which the caller holds already (the
     /// observer keys every request by it), so it is not hashed twice.
     pub fn observe(&mut self, base: &Url, key: String, kind: ResourceKind, outcome: Outcome) {
@@ -562,8 +562,8 @@ impl Sweep {
     }
 
     /// Commits the sweep into `table` if it is evidence at all, answering
-    /// whether it was. An all-failed sweep -- and an empty one -- changes
-    /// nothing.
+    /// whether it was. An all-failed sweep changes nothing, and neither does
+    /// an empty one.
     pub fn commit_into(self, table: &mut Table, now: DateTime<Utc>) -> bool {
         if !self.is_evidence() {
             return false;
@@ -578,19 +578,19 @@ impl Sweep {
 /// The addon-health half of [`crate::state::AppState`]: the table, whether
 /// it has unwritten changes, and when it was last written.
 ///
-/// One mutex over all three. `last_write` is a field of what the lock
-/// guards rather than a lock of its own, so "is a write due" is answered by
-/// the holder of the lock that would do the write -- the same arrangement
-/// the downloads registry's progress throttle uses, for the same reason.
+/// One mutex over all three. `last_write` is a field of what the lock guards
+/// rather than a lock of its own, so "is a write due" is answered by the
+/// holder of the lock that would do the write. The downloads registry's
+/// progress throttle uses the same arrangement, for the same reason.
 #[derive(Default)]
 pub struct AddonHealthState {
     counted: Mutex<Counted>,
     /// Whole sweeps offered since this run started, and how many of them
-    /// were evidence about the addons at all. Counters rather than part of
-    /// `Counted`, because they say nothing about the record and everything
-    /// about *this run*: they are what [`every_answer_failed_in`] reads,
-    /// and they are deliberately not stored -- a connection that was down
-    /// yesterday is not news today.
+    /// were evidence about the addons at all. These are counters rather than
+    /// part of `Counted`, because they say nothing about the record and
+    /// everything about *this run*. They are what [`every_answer_failed_in`]
+    /// reads. They are deliberately not stored, because a connection that
+    /// was down yesterday is not news today.
     sweeps: AtomicU64,
     evidence: AtomicU64,
 }
@@ -606,9 +606,9 @@ struct Counted {
     /// record with whatever this process happened to see since it started.
     /// So nothing reaches the disk before [`load_in`].
     loaded: bool,
-    /// When the table was last written out -- or loaded, which counts as a
-    /// write because the file already holds exactly that, and so keeps the
-    /// first observation after a start from rewriting what was read a
+    /// When the table was last written out, or loaded. A load counts as a
+    /// write because the file already holds exactly that, and so it keeps
+    /// the first observation after a start from rewriting what was read a
     /// moment ago. `None` only while `loaded` is false, and such a table is
     /// never written.
     last_write: Option<Instant>,
@@ -624,16 +624,16 @@ impl AddonHealthState {
     }
 }
 
-/// Reads the stored table into `app`. Called once at init, beside the
-/// bucket hydration, with the state init has just built. A record that is
-/// not there is an empty table; one the disk will not read is *not read*,
-/// and the table stays unloaded for the run -- so nothing this process
-/// observes is written over a record it never saw, which is the erasure
-/// [`Counted::loaded`] exists to prevent and which a read error dressed as
-/// an empty file walked straight past. It is not retried: the counts of
-/// one run are worth less than the record of every run before it.
+/// Reads the stored table into `app`. Called once at init, beside the bucket
+/// hydration, with the state init has just built. A record that is not there
+/// is an empty table. A record the disk will not read is *not read*, and the
+/// table stays unloaded for the run. So nothing this process observes is
+/// written over a record it never saw. That erasure is what
+/// [`Counted::loaded`] exists to prevent, and a read error dressed as an
+/// empty file walked straight past it. It is not retried: the counts of one
+/// run are worth less than the record of every run before it.
 ///
-/// Nothing is written out before this has run -- see [`Counted::loaded`].
+/// Nothing is written out before this has run (see [`Counted::loaded`]).
 pub fn load_in(app: &AppState) {
     let mut counted = app.addon_health.counted();
     match stored() {
@@ -660,14 +660,14 @@ fn commit_in(app: &AppState, sweep: Sweep) -> bool {
 /// Commits one sweep into `app` and writes the table out if a write is
 /// due. Answers whether the sweep was recorded (see [`Sweep::commit_into`]).
 ///
-/// As of `now` rather than the wall clock: the instant the counts are aged to
-/// and the answers stamped with is a parameter here, as it already is for
+/// The instant the counts are aged to and the answers stamped with is `now`,
+/// a parameter, not the wall clock. It already is a parameter for
 /// [`Table::record`] and [`Sweep::commit_into`] beneath. A test that records
 /// the same answer twice can then hold the clock still and see exactly two.
-/// Through the real clock the second answer lands a few microseconds after the
-/// first, and if a millisecond boundary falls between them the first count is
-/// aged by `0.5^(1ms / 14 days)` -- about `1 - 3e-10` -- before the second is
-/// added, so "two answers is 2.0" holds only when both happen to share a
+/// Through the real clock the second answer lands a few microseconds after
+/// the first. If a millisecond boundary falls between them, the first count
+/// is aged by `0.5^(1ms / 14 days)` (about `1 - 3e-10`) before the second is
+/// added. So "two answers is 2.0" holds only when both happen to share a
 /// millisecond.
 pub fn commit_in_at(app: &AppState, sweep: Sweep, now: DateTime<Utc>) -> bool {
     let mut counted = app.addon_health.counted();
@@ -684,10 +684,10 @@ pub fn commit_in_at(app: &AppState, sweep: Sweep, now: DateTime<Utc>) -> bool {
 /// What has been counted into `app` so far.
 ///
 /// A copy: the table is small, and handing out the lock's contents would
-/// make every reader a writer's problem. This is how the record is read
-/// back without going through the preferences file -- which is what a test
-/// wants, and what an FFI read would want if the app ever needs one that
-/// does not wait for a flush.
+/// make every reader a writer's problem. This is how the record is read back
+/// without going through the preferences file. A test wants that, and so
+/// would an FFI read if the app ever needs one that does not wait for a
+/// flush.
 pub fn table_in(app: &AppState) -> Table {
     app.addon_health.counted().table.clone()
 }
@@ -706,15 +706,15 @@ pub fn prune_uninstalled_in(app: &AppState, installed: &BTreeSet<String>) {
 /// offered and not one of them was evidence about the addons (see
 /// [`Sweep::commit_into`]).
 ///
-/// This is the app's "it is not them, it is your connection" signal, and it
-/// is the same observation the all-failed rule already makes, read the
-/// other way round: a sweep is refused precisely when every addon in it
-/// failed, so a run in which *no* sweep was ever accepted is a run in which
-/// nothing answered at all. No reachability probe, no DHT check, nothing
-/// asked of the network that the app was not already asking.
+/// This is the app's "it is not them, it is your connection" signal. It is
+/// the same observation the all-failed rule already makes, read the other
+/// way round. A sweep is refused precisely when every addon in it failed, so
+/// a run in which *no* sweep was ever accepted is a run in which nothing
+/// answered at all. There is no reachability probe and no DHT check: nothing
+/// is asked of the network that the app was not already asking.
 ///
-/// Per run and never stored: a connection that was down an hour ago says
-/// nothing about now, and the counters start again with the next
+/// It is per run and never stored. A connection that was down an hour ago
+/// says nothing about now, and the counters start again with the next
 /// [`AppState`].
 pub fn every_answer_failed_in(app: &AppState) -> bool {
     let health = &app.addon_health;
@@ -724,14 +724,14 @@ pub fn every_answer_failed_in(app: &AppState) -> bool {
 /// Drops one addon's whole record and writes the table out at once,
 /// answering whether there was anything to drop.
 ///
-/// This has to happen *here* rather than in the app, even though the app
-/// can already write the preferences file: the table it would edit is a
+/// This has to happen *here* rather than in the app, even though the app can
+/// already write the preferences file. The table the app would edit is a
 /// copy, and the live one in this process would write the forgotten addon
-/// straight back on its next flush. Forgetting is therefore a call into the
-/// state that owns the counts, and it forces the write rather than waiting
-/// out [`FLUSH_INTERVAL`], so a restart cannot resurrect the record either.
+/// straight back on its next flush. So forgetting is a call into the state
+/// that owns the counts. It forces the write rather than waiting out
+/// [`FLUSH_INTERVAL`], so a restart cannot resurrect the record either.
 ///
-/// A table [`load_in`] has never filled forgets nothing: an empty table is
+/// A table [`load_in`] has never filled forgets nothing. An empty table is
 /// "the history has not been read", and writing it out would be exactly the
 /// erasure [`Counted::loaded`] exists to prevent.
 pub fn forget_in(app: &AppState, key: &str) -> bool {
@@ -747,9 +747,9 @@ pub fn forget_in(app: &AppState, key: &str) -> bool {
 /// What the app reads: `{"addons": {key: {resource: record}},
 /// "everyAnswerFailed": bool}`.
 ///
-/// The counts come out of memory rather than out of the preferences file so
+/// The counts come out of memory rather than out of the preferences file, so
 /// that the screen shows what has actually been observed, including the
-/// answers since the last flush -- a list that says "not used yet" about an
+/// answers since the last flush. A list that says "not used yet" about an
 /// addon used a minute ago is worse than no list.
 pub fn report_in(app: &AppState) -> Value {
     serde_json::json!({
@@ -759,8 +759,8 @@ pub fn report_in(app: &AppState) -> Value {
 }
 
 /// [`report_in`] for the running process. Before `core_init` and after
-/// `shutdown` there is no state, and no state is an empty record rather
-/// than an error: nothing has been observed yet.
+/// `shutdown` there is no state. No state is an empty record rather than an
+/// error, because nothing has been observed yet.
 pub fn report() -> Value {
     match crate::state::current() {
         Some(app) => report_in(&app),
@@ -788,9 +788,9 @@ pub fn flush_in(app: &AppState) {
 /// and is either `force`d or [`FLUSH_INTERVAL`] old. Asked with the table's
 /// lock held, which is what makes reading `last_write` here honest.
 ///
-/// [`crate::prefs::set`] looks up no state, which matters here: the flush
-/// that matters most runs from `crate::core::shutdown`, after the state has
-/// been taken out of the process.
+/// [`crate::prefs::set`] looks up no state. That matters here, because the
+/// flush that matters most runs from `crate::core::shutdown`, after the
+/// state has been taken out of the process.
 fn flush_locked(counted: &mut Counted, force: bool) {
     // Not even `force` writes a table that was never read: it would be
     // this process's few observations in place of the whole record.
@@ -815,8 +815,8 @@ fn flush_locked(counted: &mut Counted, force: bool) {
     }
 }
 
-/// The stored table, an empty one when nothing is stored, or the error when
-/// the preferences file could not be read at all -- which is a different
+/// The stored table, or an empty one when nothing is stored. It is the error
+/// when the preferences file could not be read at all. That is a different
 /// answer from "nothing stored" and is kept apart on purpose (see
 /// [`load_in`]).
 fn stored() -> anyhow::Result<Table> {
@@ -1125,9 +1125,9 @@ mod tests {
 
     #[test]
     fn the_local_addon_is_skipped_wherever_the_embedded_server_bound() {
-        // The embedded server is on the port the OS picked, as it always
-        // is -- but the profile's local addon still carries the 11470
-        // transport URL it was born with, so the two never share a port.
+        // The embedded server is on the port the OS picked, as it always is.
+        // But the profile's local addon still carries the 11470 transport
+        // URL it was born with, so the two never share a port.
         let embedded = url("http://127.0.0.1:40503/");
         let local_addon = url("http://127.0.0.1:11470/local-addon/manifest.json");
         let remote = url("https://cinemeta.example.com/manifest.json");
@@ -1409,11 +1409,11 @@ mod tests {
         crate::env::with_storage_dir(|_| {
             crate::prefs::set(PREFS_KEY, Some(seeded_history())).expect("seed");
 
-            // A state the process does not hold -- which is what the
+            // A state the process does not hold. That is what the
             // runtime-event pump is left with the moment `core::shutdown`
             // takes the state out on its first line. It goes on delivering
-            // into the state it was started for, and that state's counts
-            // are the ones that have to reach the file.
+            // into the state it was started for, and that state's counts are
+            // the ones that have to reach the file.
             let app = Arc::new(AppState::default());
             assert!(!crate::state::is_current(&app), "not a retired state");
             load_in(&app);
@@ -1470,7 +1470,7 @@ mod tests {
 
             assert!(forget_in(&app, &key_for(&dropped)));
 
-            // At once, not at the next flush: the throttle would otherwise
+            // At once, not at the next flush. Otherwise the throttle would
             // leave the forgotten addon in the file for another minute, and
             // a restart in that minute would read it straight back.
             assert_eq!(stored_keys(), vec![key_for(&kept)]);
@@ -1521,11 +1521,11 @@ mod tests {
         });
     }
 
-    /// A record the disk will not read is not an empty record. Read as one,
-    /// `load_in` marked the table loaded and the next flush wrote this run's
-    /// few observations over every run before it -- through the very guard
-    /// that exists to prevent it. Permissions stand in for the `EIO` here;
-    /// the read fails the same way.
+    /// A record the disk will not read is not an empty record. When it was
+    /// read as one, `load_in` marked the table loaded, and the next flush
+    /// wrote this run's few observations over every run before it, through
+    /// the very guard that exists to prevent it. Permissions stand in for
+    /// the `EIO` here. The read fails the same way.
     #[cfg(unix)]
     #[test]
     fn a_record_that_cannot_be_read_is_never_written_over() {
@@ -1588,8 +1588,8 @@ mod tests {
         assert!(every_answer_failed_in(&app));
 
         // One addon answering anywhere is enough to say the connection is
-        // not the problem -- and it stays said, because the counter is
-        // "was there ever evidence this run", not "was the last sweep".
+        // not the problem. And it stays said, because the counter is "was
+        // there ever evidence this run", not "was the last sweep".
         assert!(commit_in(
             &app,
             one_answer(&url("https://good.example.com/manifest.json"))

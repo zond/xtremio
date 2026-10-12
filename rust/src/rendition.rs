@@ -2,28 +2,29 @@
 //! converted** (stream-server `docs/design/renditions.md`, steps F2 and F3).
 //!
 //! The server owns a rendition's route, its stream, cut rule, fMP4 muxer and
-//! ring; what it asks of the embedder is a [`Producer`]: given a reader over
+//! ring. What it asks of the embedder is a [`Producer`]: given a reader over
 //! the media id, a plan and a time, hand encoded samples to a
 //! [`SampleSink`]. This is that producer for the plans with the picture
-//! copied: `Copy`/`Copy` -- an H.264 or HEVC film with AAC sound in a
-//! container the receiver will not take, its samples moved into the
-//! server's fMP4 as they are -- and `Copy`/`AacStereo`, the same with the
-//! sound decoded, mixed down and encoded as stereo AAC ([`crate::sound`]),
-//! the same bytes whichever run makes them.
+//! copied. `Copy`/`Copy` is an H.264 or HEVC film with AAC sound in a
+//! container the receiver will not take, its samples moved into the server's
+//! fMP4 as they are. `Copy`/`AacStereo` is the same with the sound decoded,
+//! mixed down and encoded as stereo AAC ([`crate::sound`]), the same bytes
+//! whichever run makes them.
 //!
 //! # A run
 //!
-//! [`Producer::start`] answers at once and the run goes on **a thread of its
-//! own** (`rendition`), which is the only thread that touches it: it opens
-//! the job's [`stream_server::MediaReader`] through libavformat
+//! [`Producer::start`] answers at once, and the run goes on **a thread of
+//! its own** (`rendition`), which is the only thread that touches it. The
+//! run opens the job's [`stream_server::MediaReader`] through libavformat
 //! ([`crate::libav::Demuxer`]: a custom `AVIOContext` whose read and seek
-//! callbacks are the reader's blocking calls), picks the film's video stream and the audio stream the
-//! viewer had ([`RenditionSpec::audio_track`], an ordinal among the audio
-//! streams, as mpv numbers them), reports both formats, seeks to the sync
-//! point at or before the run's start, and then reads packet after packet
-//! into the sink. Reads and sink writes on one thread is what the server's
-//! speed rule assumes: the time blocked in each is subtracted from the run's
-//! busy time, once.
+//! callbacks are the reader's blocking calls). It picks the film's video
+//! stream and the audio stream the viewer had
+//! ([`RenditionSpec::audio_track`], an ordinal among the audio streams, as
+//! mpv numbers them) and reports both formats. It seeks to the sync point at
+//! or before the run's start, and then reads packet after packet into the
+//! sink. The server's speed rule assumes reads and sink writes on one
+//! thread: the time blocked in each is subtracted from the run's busy time,
+//! once.
 //!
 //! - **Timestamps**: a packet's presentation time, rescaled from its
 //!   stream's time base to microseconds, **less the container's start**
@@ -33,64 +34,64 @@
 //!   one's plus its duration (laced Matroska audio). The server derives
 //!   decode times itself (`mux.rs`), so only presentation times cross.
 //! - **Codec configuration**: Matroska carries H.264 as an `avcC` and its
-//!   samples length-prefixed. The server's muxer wants `csd-0`/`csd-1` --
-//!   SPS and PPS in Annex-B -- and takes a sample as length-prefixed only
-//!   when it does not begin with a start code, which a four-byte length of
-//!   256 to 511 does (`00 00 01 xx`). So both are handed over in Annex-B
-//!   ([`H264Config`]); no bitstream filter is needed for that. HEVC the
-//!   same way ([`HevcConfig`]): Matroska's `hvcC` becomes `csd-0` -- the
-//!   VPS, SPS and PPS, and the SEI messages beside them (an HDR10 encode's
-//!   mastering display and light levels) -- in Annex-B, and the samples go
-//!   over in Annex-B too, which the server's muxer turns back into the
-//!   four-byte length prefixes its `hvc1` + `hvcC` declares (ISO/IEC
-//!   14496-15). Main 10 and HDR pass through as they are: the bit depth
-//!   and the colours are in the parameter sets, which the muxer reads into
-//!   the `hvcC` and a `colr`. AAC's AudioSpecificConfig is the container's
-//!   as it is.
-//! - **Dolby Vision** is not signalled to the receiver: a film whose
+//!   samples length-prefixed. The server's muxer wants `csd-0`/`csd-1`
+//!   (SPS and PPS in Annex-B). It takes a sample as length-prefixed only
+//!   when it does not begin with a start code, and a four-byte length of
+//!   256 to 511 does begin with one (`00 00 01 xx`). So both are handed
+//!   over in Annex-B ([`H264Config`]); no bitstream filter is needed for
+//!   that. HEVC goes the same way ([`HevcConfig`]). Matroska's `hvcC`
+//!   becomes `csd-0` in Annex-B: the VPS, SPS and PPS, and the SEI
+//!   messages beside them (an HDR10 encode's mastering display and light
+//!   levels). The samples go over in Annex-B too, and the server's muxer
+//!   turns them back into the four-byte length prefixes its `hvc1` +
+//!   `hvcC` declares (ISO/IEC 14496-15). Main 10 and HDR pass through as
+//!   they are: the bit depth and the colours are in the parameter sets,
+//!   which the muxer reads into the `hvcC` and a `colr`. AAC's
+//!   AudioSpecificConfig is the container's as it is.
+//! - **Dolby Vision** is not signalled to the receiver. A film whose
 //!   container declares it (a `dvcC`/`dvvC`, [`libav::DolbyVision`]) goes
-//!   over as the HEVC it is underneath, and the Dolby Vision NAL units in
-//!   its samples (types 62 and 63, the RPU and the enhancement layer, which
-//!   an HEVC decoder ignores) are dropped. That is right for profiles 7 and
-//!   8, whose base layer is HDR10, SDR or HLG; profile 5's base layer is
-//!   only Dolby Vision's own IPT-PQ-c2, which a receiver showing it as HEVC
-//!   shows in the wrong colours, so a base layer with no compatibility
-//!   ([`DolbyVision::compatibility`] 0) is refused with a sentence
-//!   ([`dolby_vision_refusal`]).
+//!   over as the HEVC it is underneath. The Dolby Vision NAL units in its
+//!   samples are dropped: types 62 and 63, the RPU and the enhancement
+//!   layer, which an HEVC decoder ignores. That is right for profiles 7
+//!   and 8, whose base layer is HDR10, SDR or HLG. Profile 5's base layer
+//!   is only Dolby Vision's own IPT-PQ-c2, which a receiver showing it as
+//!   HEVC shows in the wrong colours. So a base layer with no
+//!   compatibility ([`DolbyVision::compatibility`] 0) is refused with a
+//!   sentence ([`dolby_vision_refusal`]).
 //! - **Sync samples** are the container's key flags, as the source's index
 //!   is: Matroska marks HEVC's IRAP pictures (IDR, CRA, BLA) key, and its
 //!   cues index them, so the cut rule's keys and the samples' agree.
-//! - **Seek and restart**: a run starts where the server says (two seconds
-//!   before the cut of the first segment it makes); the demuxer is put on
-//!   the sync point at or before it and the server discards what precedes
+//! - **Seek and restart**: a run starts where the server says, two seconds
+//!   before the cut of the first segment it makes. The demuxer is put on
+//!   the sync point at or before it, and the server discards what precedes
 //!   the cut. A run from the start seeks to the start too, as the first
-//!   run does (below): a slot's bytes must not depend on which run made
-//!   it, and a seek is not a read from the file's first byte -- zond's
-//!   film's audio packet at -21 ms, before the first cluster's key, is not
-//!   returned after a seek to the start, and slot 0 made again by a run
-//!   that did not seek had one audio frame more.
+//!   run does (below). A slot's bytes must not depend on which run made
+//!   it, and a seek is not a read from the file's first byte. In zond's
+//!   film, the audio packet at -21 ms, before the first cluster's key, is
+//!   not returned after a seek to the start, and slot 0 made again by a
+//!   run that did not seek had one audio frame more.
 //! - **The source's index**, for the run that fixes the rendition's byte
 //!   layout (`Job::wants_index`, stream-server `docs/design/renditions.md`
-//!   §2.8): the video's sync samples from libavformat's index -- an MP4's
-//!   sample tables, an AVI's `idx1`, Matroska's cues, which libavformat
-//!   reads only at a first seek, so a run from the start seeks to it --
-//!   each with its byte position, which for Matroska is moved from the
-//!   cluster to the block itself ([`crate::matroska`]). Before the first
-//!   sample.
+//!   §2.8). Before the first sample, the run reports the video's sync
+//!   samples from libavformat's index: an MP4's sample tables, an AVI's
+//!   `idx1`, or Matroska's cues. libavformat reads the cues only at a
+//!   first seek, so a run from the start seeks to it. Each sync sample
+//!   comes with its byte position, which for Matroska is moved from the
+//!   cluster to the block itself ([`crate::matroska`]).
 //! - **Stopping**: the sink answering [`Stopped`] (unpublished, superseded
-//!   by a seek, let go while idle) ends the run where it is; so does the
+//!   by a seek, let go while idle) ends the run where it is. So does the
 //!   server cancelling the reader, which wakes a read parked on a missing
 //!   piece and fails libavformat's read. The demuxer, its I/O context and
 //!   the reader are dropped on this thread as the run returns.
-//! - **The end** is told from a broken source: a source that fails answers
+//! - **The end** is told from a broken source. A source that fails answers
 //!   libavformat `AVERROR(EIO)`, never its end of file, and libavformat
 //!   hands that error back out of `av_read_frame` (measured for Matroska,
 //!   broken at 63 points through a film). Only `AVERROR_EOF` is
-//!   [`SampleSink::end`]; an end would tell the server the film is over at
+//!   [`SampleSink::end`]. An end would tell the server the film is over at
 //!   that segment.
 //!
 //! **No timer anywhere.** A stalled torrent blocks the read, and the run
-//! waits for as long as it does; the viewer is the one who gives up.
+//! waits for as long as it does. The viewer is the one who gives up.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -193,9 +194,9 @@ impl Drop for Live {
     }
 }
 
-/// Whether this process can repackage: a player has loaded libmpv and its
-/// FFmpeg is the one [`crate::libav`] is bound to. What the app's cast
-/// decision asks before it offers a rendition.
+/// Whether this process can repackage: a player has loaded libmpv, and its
+/// FFmpeg is the one [`crate::libav`] is bound to. The app's cast decision
+/// asks this before it offers a rendition.
 pub fn available() -> bool {
     Libav::registered().is_ok()
 }
@@ -365,8 +366,8 @@ impl<S: libav::Source> Packets for Demuxer<S> {
 }
 
 /// **The AAC encoder this device has**: Android's `MediaCodec` on a phone
-/// (whose libmpv has no encoder), FFmpeg's own where the library has it (a
-/// desktop's system FFmpeg); otherwise [`NO_AAC_ENCODER`].
+/// (whose libmpv has no encoder), or FFmpeg's own where the library has it
+/// (a desktop's system FFmpeg). Otherwise [`NO_AAC_ENCODER`].
 fn aac_encoder(libav: &'static Libav, bitrate: u32) -> Result<Box<dyn AacEncoder>, String> {
     #[cfg(target_os = "android")]
     match crate::mediacodec::NdkAac::open(bitrate) {
@@ -381,10 +382,10 @@ fn aac_encoder(libav: &'static Libav, bitrate: u32) -> Result<Box<dyn AacEncoder
     }
 }
 
-/// **The index a rendition's layout mirrors**: the sync samples of
-/// `entries` (one stream's, in its time base `time_base`), on the film's
-/// clock (less `start_us`), each at its block's position in `blocks` when
-/// the container's index put it at its cluster's (Matroska), else where
+/// **The index a rendition's layout mirrors**: the sync samples of `entries`
+/// (one stream's, in its time base `time_base`), on the film's clock (less
+/// `start_us`). Each is at its block's position in `blocks` when the
+/// container's index put it at its cluster's (Matroska), and otherwise where
 /// the index put it.
 pub fn film_index(
     entries: &[libav::IndexEntry],
@@ -458,8 +459,8 @@ pub fn repackage<P: Packets, K: Sink>(
         }
     };
     // AAC in ADTS (a transport stream's) has no AudioSpecificConfig in the
-    // header: it is the first frame's ADTS header, so the run reads up to
-    // that frame first and hands what it read out again after.
+    // header. The configuration is the first frame's ADTS header, so the run
+    // reads up to that frame first and hands what it read out again after.
     let mut pending: VecDeque<Next> = VecDeque::new();
     if chosen.adts {
         loop {
@@ -486,8 +487,8 @@ pub fn repackage<P: Packets, K: Sink>(
         }
     }
     let from_us = i64::try_from(from.as_micros()).unwrap_or(i64::MAX);
-    // The sound to convert, if it is: refused here, before any format, when
-    // this device cannot.
+    // The sound to convert, if it is. When this device cannot convert it,
+    // the run is refused here, before any format.
     let mut converter = match &spec.audio {
         AudioPlan::Copy => None,
         AudioPlan::AacStereo { bitrate } => {
@@ -519,10 +520,10 @@ pub fn repackage<P: Packets, K: Sink>(
             return;
         }
     } else if let Err(error) = packets.seek_us(0) {
-        // A run from the start seeks to it: a Matroska file's cues are read
+        // A run from the start seeks to it. A Matroska file's cues are read
         // at a first seek (the index), and every run from the start must
-        // read what the first one did. One that fails costs the index, not
-        // the run.
+        // read what the first one did. A seek that fails costs the index,
+        // not the run.
         tracing::warn!(%error, "a rendition's source could not be sought to its start");
     }
     if wants_index && sink.index(packets.index(&chosen.video)).is_err() {
@@ -642,10 +643,10 @@ struct Chosen {
 }
 
 impl Chosen {
-    /// The film's video -- the first video stream that is not a cover
-    /// picture -- and the `audio_track`-th audio stream, the video a codec
-    /// a copy can carry and the audio one too unless `audio` converts it;
-    /// or the sentence for why not.
+    /// The film's video (the first video stream that is not a cover picture)
+    /// and the `audio_track`-th audio stream, or the sentence for why not.
+    /// The video must be a codec a copy can carry, and so must the audio
+    /// unless `audio` converts it.
     fn of(
         streams: &[StreamInfo],
         audio_track: u32,
@@ -711,9 +712,9 @@ impl Chosen {
     }
 }
 
-/// The AudioSpecificConfig an ADTS frame's header describes -- the object
-/// type (its profile plus one), the sampling frequency index, the channel
-/// configuration -- or `None` for a frame that is not ADTS.
+/// The AudioSpecificConfig an ADTS frame's header describes, or `None` for a
+/// frame that is not ADTS. It holds the object type (its profile plus one),
+/// the sampling frequency index and the channel configuration.
 pub fn adts_config(frame: &[u8]) -> Option<Bytes> {
     if frame.len() < 7 || frame[0] != 0xff || frame[1] & 0xf0 != 0xf0 {
         return None;
@@ -739,8 +740,8 @@ pub fn strip_adts(frame: Bytes) -> Bytes {
 
 const START_CODE: [u8; 4] = [0, 0, 0, 1];
 
-/// H.264's configuration as the server wants it -- SPS in `csd0`, PPS in
-/// `csd1`, both Annex-B -- and how the container frames its samples.
+/// H.264's configuration as the server wants it (SPS in `csd0`, PPS in
+/// `csd1`, both Annex-B), and how the container frames its samples.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct H264Config {
     pub csd0: Bytes,
@@ -804,8 +805,8 @@ impl H264Config {
     }
 }
 
-/// HEVC's configuration as the server wants it -- `csd0`, the VPS, SPS and
-/// PPS and any SEI messages beside them, Annex-B -- and how the container
+/// HEVC's configuration as the server wants it (`csd0`: the VPS, SPS and PPS
+/// and any SEI messages beside them, in Annex-B), and how the container
 /// frames its samples.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HevcConfig {
@@ -1058,9 +1059,9 @@ mod tests {
     }
 
     /// **An `avcC` becomes Annex-B parameter sets, and a length-prefixed
-    /// sample Annex-B units** -- including one whose four-byte length is
-    /// 256 to 511, which reads as a start code (`00 00 01 xx`) and is why
-    /// the server is never handed length-prefixed samples.
+    /// sample becomes Annex-B units.** That includes one whose four-byte
+    /// length is 256 to 511, which reads as a start code (`00 00 01 xx`) and
+    /// is why the server is never handed length-prefixed samples.
     #[test]
     fn an_avcc_and_its_samples_are_handed_over_in_annex_b() {
         let config = H264Config::of(&avcc(4)).expect("an avcC");
@@ -1295,11 +1296,11 @@ mod tests {
 
     const SLICE: &[u8] = &[0, 0, 0, 2, 0x65, 0x88];
 
-    /// **A run reports both formats, then the two chosen streams' samples
-    /// on the film's clock, and ends**: the cover picture, the subtitle and
-    /// the other audio stream are skipped, the second audio stream is the
-    /// one asked for, times are rebased so the container's start is zero,
-    /// video goes over in Annex-B with the container's key flags, and audio
+    /// **A run reports both formats, then the two chosen streams' samples on
+    /// the film's clock, and ends.** The cover picture, the subtitle and the
+    /// other audio stream are skipped, and the second audio stream is the
+    /// one asked for. Times are rebased so the container's start is zero.
+    /// Video goes over in Annex-B with the container's key flags, and audio
     /// as it is. A run from zero seeks to the start, as the first run does.
     #[test]
     fn a_run_copies_the_chosen_streams_on_the_films_clock() {
@@ -1346,9 +1347,9 @@ mod tests {
         assert_eq!(packets.seeks, vec![0]);
     }
 
-    /// A run from N x T seeks there first -- on the film's clock; the
-    /// demuxer adds the container's start -- and a sample with no time of
-    /// its own (a lace's second frame) takes the last one's end.
+    /// A run from N x T seeks there first, on the film's clock (the demuxer
+    /// adds the container's start). A sample with no time of its own (a
+    /// lace's second frame) takes the last one's end.
     #[test]
     fn a_later_run_seeks_and_an_untimed_sample_follows_the_last() {
         let mut timed = packet(4, 6000, true, b"a");
@@ -1377,10 +1378,10 @@ mod tests {
         assert_eq!(times, vec![6_023_000, 6_044_000]);
     }
 
-    /// **The run that fixes the layout reports the video's index** -- after
-    /// the formats, before the first sample -- having sought to the start,
-    /// which is what makes libavformat read a Matroska file's cues; a run
-    /// not asked for it seeks there the same and does not report.
+    /// **The run that fixes the layout reports the video's index**, after
+    /// the formats and before the first sample. It has sought to the start,
+    /// which is what makes libavformat read a Matroska file's cues. A run
+    /// not asked for the index seeks there the same and does not report it.
     #[test]
     fn a_run_asked_for_the_index_reports_it_before_its_first_sample() {
         let mut packets = film(vec![packet(1, 0, true, SLICE)]);
@@ -1454,9 +1455,9 @@ mod tests {
     }
 
     /// **AAC in ADTS** (a transport stream's, no configuration in its
-    /// header): the configuration is the first frame's header -- AAC-LC,
-    /// 48 kHz, stereo here -- and every frame goes over without its header,
-    /// seven bytes or nine with a CRC.
+    /// header): the configuration is the first frame's header, AAC-LC 48 kHz
+    /// stereo here. Every frame goes over without its header, seven bytes or
+    /// nine with a CRC.
     #[test]
     fn adts_audio_is_configured_from_its_first_frame_and_unwrapped() {
         // LC (profile 1), 48 kHz (index 3), two channels, no CRC.
@@ -1498,9 +1499,8 @@ mod tests {
         );
         drop(wrote);
 
-        // Asked for the index, the run seeks back to the start: what it
-        // read ahead for the configuration is read again, never handed out
-        // twice.
+        // Asked for the index, the run seeks back to the start. What it read
+        // ahead for the configuration is read again, never handed out twice.
         let queue = vec![
             packet(1, 0, true, SLICE),
             packet(4, 0, true, b"\xff\xf1\x4c\x80\x02\x1f\xfcaac"),
@@ -1651,12 +1651,12 @@ mod tests {
         )
     }
 
-    /// **The sound converted, the picture copied**: a Dolby Digital Plus
+    /// **The sound converted, the picture copied.** A Dolby Digital Plus
     /// track asked to be converted reports the AAC-LC 48 kHz stereo every
-    /// conversion makes -- not the source's -- the converter is asked for
-    /// the chosen track at the plan's bitrate from the run's start, and the
-    /// sink is handed the picture as it is and the converter's frames on
-    /// the 1024-sample grid, never a source packet.
+    /// conversion makes, not the source's format. The converter is asked for
+    /// the chosen track at the plan's bitrate from the run's start. The sink
+    /// is handed the picture as it is and the converter's frames on the
+    /// 1024-sample grid, never a source packet.
     #[test]
     fn a_run_converting_the_sound_hands_over_the_converters_frames() {
         let mut queue = vec![packet(1, 0, true, SLICE)];
@@ -1705,8 +1705,8 @@ mod tests {
         assert_eq!(wrote.last(), Some(&Wrote::End));
     }
 
-    /// A track this device cannot convert is refused before any format,
-    /// with the converter's sentence; a track copied is never handed to a
+    /// A track this device cannot convert is refused before any format, with
+    /// the converter's sentence. A track copied is never handed to a
     /// converter.
     #[test]
     fn a_track_that_cannot_be_converted_is_refused_before_anything() {
@@ -1776,10 +1776,10 @@ mod tests {
         )
     }
 
-    /// **An `hvcC` becomes `csd-0` in Annex-B** -- the parameter sets and
-    /// the SEI beside them, in the record's order -- and a sample whose
-    /// first length is 256 to 511, which reads as a start code, becomes
-    /// Annex-B units the server cannot misread.
+    /// **An `hvcC` becomes `csd-0` in Annex-B**: the parameter sets and the
+    /// SEI beside them, in the record's order. A sample whose first length
+    /// is 256 to 511, which reads as a start code, becomes Annex-B units the
+    /// server cannot misread.
     #[test]
     fn an_hvcc_and_its_samples_are_handed_over_in_annex_b() {
         let config = HevcConfig::of(&hdr10_hvcc(4)).expect("an hvcC");
@@ -1885,9 +1885,9 @@ mod tests {
         );
     }
 
-    /// **Dolby Vision: profiles 7 and 8 are copied as their base layer,
-    /// profile 5 is refused** -- it has no base layer any other decoder
-    /// shows right -- with a sentence that says so.
+    /// **Dolby Vision: profiles 7 and 8 are copied as their base layer, and
+    /// profile 5 is refused** with a sentence that says so. Profile 5 has no
+    /// base layer any other decoder shows right.
     #[test]
     fn dolby_vision_without_a_compatible_base_layer_is_refused() {
         let run = |profile: u8, compatibility: u8| -> Vec<Wrote> {

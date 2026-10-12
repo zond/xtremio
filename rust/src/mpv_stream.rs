@@ -5,33 +5,33 @@
 //!
 //! media_kit owns the `mpv_handle`. Dart hands its address and the path of
 //! the libmpv it loaded to [`register`] once per player, after the player
-//! initialised and before the first open; that `dlopen`s the same library
+//! initialised and before the first open. That `dlopen`s the same library
 //! (the loader answers with the instance already mapped), resolves
 //! `mpv_stream_cb_add_ro` and registers [`PROTOCOL`] on the handle. mpv then
 //! calls [`open_cb`] for every `xtremio://` URL it is asked to load, and the
-//! stream's other callbacks after it, **on mpv's own threads**: they are
+//! stream's other callbacks after it, **on mpv's own threads**. They are
 //! plain blocking Rust, with no Dart and no `ServerHandle` in them.
 //!
 //! # Who owns what
 //!
 //! The *cookie* mpv hands back to every callback is a `Box<Cookie>` this
 //! module leaked in [`open_cb`] and takes back in [`close_cb`], which mpv
-//! calls exactly once. It owns the reader, and with it everything the
-//! reader holds; dropping it closes the stream (the server's reader task
-//! drops its source on its own runtime). It holds no `ServerHandle`: an
-//! open is the only callback that reaches the server
-//! ([`crate::media::open_for_player`]), and it lets go of the handle
-//! before it returns.
+//! calls exactly once. It owns the reader, and with it everything the reader
+//! holds. Dropping it closes the stream (the server's reader task drops its
+//! source on its own runtime). It holds no `ServerHandle`. An open is the
+//! only callback that reaches the server
+//! ([`crate::media::open_for_player`]), and it lets go of the handle before
+//! it returns.
 //!
-//! **A cancel never waits on the read it interrupts.** mpv calls
-//! `cancel_fn` from another thread while a read or seek blocks, and it
-//! "should not block". The reader sits behind a mutex that a read holds
-//! for its whole length; the cancel goes through the [`Cancel`] handle
-//! beside it, which does not take that mutex. It is sticky, as mpv's
-//! contract says: every later call answers an error at once.
+//! **A cancel never waits on the read it interrupts.** mpv calls `cancel_fn`
+//! from another thread while a read or seek blocks, and it "should not
+//! block". The reader sits behind a mutex that a read holds for its whole
+//! length. The cancel goes through the [`Cancel`] handle beside it, which
+//! does not take that mutex. It is sticky, as mpv's contract says: every
+//! later call answers an error at once.
 //!
-//! Generic over [`Opener`] and [`StreamReader`] so the unit tests below can
-//! drive every callback with a fake reader and no libmpv; the production
+//! Generic over [`Opener`] and [`StreamReader`], so the unit tests below can
+//! drive every callback with a fake reader and no libmpv. The production
 //! instantiation is [`ServerOpener`] over [`MediaReader`].
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
@@ -144,8 +144,8 @@ impl Opener for ServerOpener {
 }
 
 /// The id in `xtremio://<id>`, or `None` for anything else. An id is the
-/// server's 32 hex characters, so anything past it -- a path, a query, a
-/// fragment -- is not one, rather than something to strip.
+/// server's 32 hex characters, so a URL with anything past it (a path, a
+/// query, a fragment) names no id, rather than something to strip.
 pub fn media_id(uri: &str) -> Option<&str> {
     let (scheme, rest) = uri.split_once("://")?;
     if !scheme.eq_ignore_ascii_case(PROTOCOL) {
@@ -157,9 +157,9 @@ pub fn media_id(uri: &str) -> Option<&str> {
 
 /// One open stream: what mpv's cookie points at.
 struct Cookie<R: StreamReader> {
-    /// Held by a read or a seek for its whole length; mpv makes one call at
-    /// a time on a stream, so it is never contended but by a close, which
-    /// mpv does not make while a call is in flight.
+    /// Held by a read or a seek for its whole length. mpv makes one call at
+    /// a time on a stream, so only a close could contend for it, and mpv
+    /// does not close while a call is in flight.
     reader: Mutex<R>,
     /// Beside the mutex, so a cancel never waits for the read it cancels.
     canceller: R::Canceller,
@@ -235,8 +235,8 @@ unsafe fn cookie<'a, R: StreamReader>(cookie: *mut c_void) -> &'a Cookie<R> {
     unsafe { &*cookie.cast::<Cookie<R>>() }
 }
 
-/// `read_fn`: bytes read, `0` at the end of the file, `-1` on an error --
-/// a cancel's included.
+/// `read_fn`: bytes read, `0` at the end of the file, `-1` on an error, a
+/// cancel included.
 unsafe extern "C" fn read_cb<R: StreamReader>(
     cookie_ptr: *mut c_void,
     buf: *mut c_char,
@@ -312,8 +312,8 @@ trait AddRo {
 }
 
 /// The libmpv media_kit loaded, opened again (the loader hands back the
-/// mapped instance) and kept for the process: a callback mpv holds is a
-/// pointer into this crate, not into it, but the handle's library must not
+/// mapped instance) and kept for the process. A callback mpv holds is a
+/// pointer into this crate, not into it. But the handle's library must not
 /// be unloaded under the `mpv_stream_cb_add_ro` pointer resolved from it.
 struct Libmpv {
     add_ro: AddRoFn,
@@ -368,17 +368,17 @@ pub fn registered_libmpv() -> Option<&'static str> {
 }
 
 /// Registers [`PROTOCOL`] on the mpv handle at `ctx`, with the embedded
-/// server behind it, resolving `mpv_stream_cb_add_ro` from the libmpv at
-/// `libmpv_path` -- the one media_kit loaded (`NativeLibrary.path`).
+/// server behind it. It resolves `mpv_stream_cb_add_ro` from the libmpv at
+/// `libmpv_path`, the one media_kit loaded (`NativeLibrary.path`).
 ///
-/// Once per handle, which the engine keeps (one call per player); a
-/// second call is harmless: mpv refuses a protocol a handle already has
+/// Once per handle, which the engine keeps (one call per player). A second
+/// call is harmless: mpv refuses a protocol a handle already has
 /// (`MPV_ERROR_INVALID_PARAMETER`), and that is answered as
-/// [`Registration::Already`]. Nothing here remembers handles by address --
-/// a destroyed handle's address can be the next player's, and a record of
-/// it would then skip a registration mpv never saw. `ctx` must be an
+/// [`Registration::Already`]. Nothing here remembers handles by address. A
+/// destroyed handle's address can be the next player's, and a record of it
+/// would then skip a registration mpv never saw. `ctx` must be an
 /// initialised handle that stays alive while mpv can open a stream on it
-/// (Dart awaits `waitForPlayerInitialization` first); `0` is refused.
+/// (Dart awaits `waitForPlayerInitialization` first). `0` is refused.
 pub fn register(ctx: i64, libmpv_path: &str) -> anyhow::Result<Registration> {
     let ctx = handle_address(ctx)?;
     let library = libmpv(libmpv_path)?;
@@ -389,9 +389,9 @@ pub fn register(ctx: i64, libmpv_path: &str) -> anyhow::Result<Registration> {
 ///
 /// **Its bits, not its value.** Dart's `int` is signed 64-bit, and on
 /// Android arm64 heap pointers are *tagged*: the top byte carries a tag
-/// (`0xB4…`), so a perfectly good `mpv_handle` arrives negative --
+/// (`0xB4…`). So a perfectly good `mpv_handle` arrives negative:
 /// `-5476376649114951840` on zond's phone, the first device run. A range
-/// check refused every handle there and mpv had no `xtremio://` protocol.
+/// check refused every handle there, and mpv had no `xtremio://` protocol.
 /// On a 32-bit process (the television) the address fits in the low half.
 fn handle_address(ctx: i64) -> anyhow::Result<usize> {
     let bits = u64::from_ne_bytes(ctx.to_ne_bytes());
@@ -411,7 +411,7 @@ fn register_with<O: Opener>(
     let user_data = std::ptr::from_ref(opener).cast_mut().cast::<c_void>();
     match library.add_ro(ctx, open_cb::<O>, user_data) {
         0 => Ok(Registration::Registered),
-        // The protocol is there already, which is all a caller wants: the
+        // The protocol is there already, which is all a caller wants. The
         // name is fixed, so a duplicate is the one way to be refused this.
         MPV_ERROR_INVALID_PARAMETER => Ok(Registration::Already),
         code => anyhow::bail!("mpv refused the {PROTOCOL} protocol (error {code})"),
@@ -591,8 +591,8 @@ mod tests {
     }
 
     /// **The cookie is the reader, from open to close**: reads, seeks and
-    /// the size go to the reader the open made, and the close -- once --
-    /// drops it, which is what closes a server reader.
+    /// the size go to the reader the open made. The close, made once, drops
+    /// it, which is what closes a server reader.
     #[test]
     fn the_cookie_reads_seeks_sizes_and_closes_the_reader_it_opened() {
         let opener = opener(false);
@@ -627,9 +627,9 @@ mod tests {
         assert!(opener.shared.closed.load(Ordering::SeqCst));
     }
 
-    /// **A cancel wakes a read that is blocked, from another thread,
-    /// without waiting for it** -- the reader's lock is the read's, and the
-    /// cancel does not take it -- and it sticks: the next read and seek are
+    /// **A cancel wakes a read that is blocked, from another thread, without
+    /// waiting for it**, because the reader's lock is the read's and the
+    /// cancel does not take it. And it sticks: the next read and seek are
     /// errors at once.
     #[test]
     fn a_cancel_overtakes_a_blocked_read_and_sticks() {

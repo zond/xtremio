@@ -2,22 +2,22 @@
 //! libavformat's index of a Matroska file drops.
 //!
 //! A rendition's byte layout mirrors its source (stream-server
-//! `docs/design/renditions.md` §2.8): each segment's slot is as long as
-//! the source's bytes from one sync sample to the next. libavformat's index
-//! of a Matroska file puts every cue at its **cluster's** position
+//! `docs/design/renditions.md` §2.8): each segment's slot is as long as the
+//! source's bytes from one sync sample to the next. libavformat's index of a
+//! Matroska file puts every cue at its **cluster's** position
 //! (`matroska_add_index_entries` reads `CueClusterPosition` and leaves
-//! `CueRelativePosition` unread, n6.0), and a cluster is not cut at every
-//! sync sample: mkvmerge cuts them every few seconds wherever the blocks
-//! fall, so a sync sample can sit seconds of data into its cluster. A
-//! slot mirrored from the cluster would be wrong by that much. The cue's
-//! `CueRelativePosition` -- the block's offset from the start of the
-//! cluster's data -- says where the block is, and this reads it: the
-//! Segment's `SeekHead` for where the `Cues` are, then the `Cues`.
+//! `CueRelativePosition` unread, n6.0). A cluster is not cut at every sync
+//! sample. mkvmerge cuts them every few seconds wherever the blocks fall, so
+//! a sync sample can sit seconds of data into its cluster. A slot mirrored
+//! from the cluster would be wrong by that much. The cue's
+//! `CueRelativePosition`, the block's offset from the start of the cluster's
+//! data, says where the block is. This reads it: the Segment's `SeekHead`
+//! for where the `Cues` are, then the `Cues`.
 //!
 //! The cluster's own header (its ID and its size, four bytes and one to
-//! eight) is not read -- that would be a read per cue, all over the file --
-//! so a block's position is put [`CLUSTER_HEADER`] past the cluster: up to
-//! seven bytes late, which the slot's headroom absorbs.
+//! eight) is not read, because that would be a read per cue, all over the
+//! file. So a block's position is put [`CLUSTER_HEADER`] past the cluster.
+//! That is up to seven bytes late, which the slot's headroom absorbs.
 
 use std::collections::HashMap;
 use std::io;
@@ -68,11 +68,11 @@ pub struct Cues {
 
 impl Cues {
     /// Where each cue puts its block, by (`time`, the cluster's absolute
-    /// position) -- the key libavformat's index entries carry -- for the
-    /// track whose cues are `keys` (the video's index entries): the track
-    /// most of them are cues of. libavformat does not say which Matroska
-    /// track a stream is (`AVStream.id` is 0), and a cue for the sound at
-    /// the same time and cluster would put the block elsewhere.
+    /// position), the key libavformat's index entries carry. It answers for
+    /// the track whose cues are `keys` (the video's index entries): the
+    /// track most of them are cues of. libavformat does not say which
+    /// Matroska track a stream is (`AVStream.id` is 0), and a cue for the
+    /// sound at the same time and cluster would put the block elsewhere.
     pub fn blocks(&self, keys: &[(u64, u64)]) -> HashMap<(u64, u64), u64> {
         let key = |cue: &Cue| (cue.time, self.segment_start + cue.cluster);
         let wanted: std::collections::HashSet<(u64, u64)> = keys.iter().copied().collect();
@@ -325,9 +325,9 @@ mod tests {
     }
 
     /// A file: the EBML header, a Segment holding a SeekHead that names the
-    /// Cues -- or a second SeekHead, past the first 64 KiB, that does --
-    /// then the Cues. Everything after the first SeekHead is beyond what
-    /// the head read reaches, as a film's Cues are.
+    /// Cues (or a second SeekHead, past the first 64 KiB, that does), then
+    /// the Cues. Everything after the first SeekHead is beyond what the head
+    /// read reaches, as a film's Cues are.
     fn film(cues: &[u8], through_second: bool) -> (Vec<u8>, u64) {
         let ebml = el(EBML, &el(0x4282, b"matroska"));
         let seek = |target: u32, position: u64| {

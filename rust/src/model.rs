@@ -1,12 +1,12 @@
 //! `XtremioModel`: the app model the stremio-core Runtime drives.
 //!
 //! A trimmed `WebModel`: the mandatory `ctx` plus one field per screen the
-//! app renders (or is about to render). `#[derive(Model)]` generates `XtremioModelField` (a
-//! `snake_case` serde enum, one variant per field) and the `update` /
-//! `update_field` dispatch. Every field is serialized to JSON with serde for
-//! the Dart side; there is no per-type mirroring -- with one exception, the
-//! board and the search, whose items go over as the projection a poster
-//! grid draws ([`GridItem`]).
+//! app renders (or is about to render). `#[derive(Model)]` generates
+//! `XtremioModelField` (a `snake_case` serde enum, one variant per field)
+//! and the `update` / `update_field` dispatch. Every field is serialized to
+//! JSON with serde for the Dart side, with no per-type mirroring. The one
+//! exception is the board and the search, whose items go over as the
+//! projection a poster grid draws ([`GridItem`]).
 
 use std::ops::{Deref, DerefMut};
 
@@ -80,16 +80,16 @@ pub struct XtremioModel {
 
 /// A `CatalogsWithExtra` that does not follow the library.
 ///
-/// stremio-core marks the model changed on every `LibraryChanged` -- a
-/// pause, the progress push every 90 s under the player, a title kept --
+/// stremio-core marks the model changed on every `LibraryChanged`: a pause,
+/// the progress push every 90 s under the player, a title kept. It does so
 /// because stremio-web merges each item's library flags into the board it
 /// serializes, so there the board really has changed. Nothing this crate
 /// puts on the wire for a board or a search reads the library
-/// ([`GridItem`]), so here that `NewState` was a re-serialization of every
-/// loaded catalog and a re-decode of the same document on the Dart UI
+/// ([`GridItem`]). So here that `NewState` was a re-serialization of every
+/// loaded catalog, and a re-decode of the same document on the Dart UI
 /// isolate, for a board nobody was looking at. The model itself is left
-/// exactly as stremio-core keeps it: the arm being filtered changes no
-/// state (`Effects::none()`), only the flag.
+/// exactly as stremio-core keeps it. The arm being filtered changes no state
+/// (`Effects::none()`), only the flag.
 #[derive(Default, Clone)]
 pub struct GridCatalogs(pub CatalogsWithExtra);
 
@@ -125,13 +125,13 @@ impl UpdateWithCtx<XtremioEnv> for GridCatalogs {
 /// What a poster grid draws of one catalog item: the tile's id, type, name,
 /// poster and shape, and the release year that sits beside the name.
 ///
-/// A `MetaItemPreview` serializes to about 2 KB, of which `links` --
-/// synthesized from the genres, the cast and the IMDb rating for a details
-/// page this item never reaches -- is three fifths, and the description most
-/// of the rest; a board of eight Cinemeta catalogs was 770 KB per pull,
-/// pulled again as each row landed. The tile reads these six, so these six
-/// cross. A tile's tap opens the details field by id and type, which
-/// carries the whole item.
+/// A `MetaItemPreview` serializes to about 2 KB. Three fifths of that is
+/// `links`, synthesized from the genres, the cast and the IMDb rating for a
+/// details page this item never reaches, and the description is most of the
+/// rest. A board of eight Cinemeta catalogs was 770 KB per pull, pulled
+/// again as each row landed. The tile reads these six, so these six cross. A
+/// tile's tap opens the details field by id and type, which carries the
+/// whole item.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GridItem {
@@ -166,10 +166,10 @@ pub struct CatalogLabel {
 }
 
 /// A `CatalogsWithExtra` on the wire: the model's own `selected` and page
-/// shape (`ResourceLoadable`/`Loadable`, so `content.type` is `Ready`,
-/// `Loading` or `Err` exactly as stremio-core writes it), the items reduced
-/// to [`GridItem`], plus `catalogLabels`. Owned, so it can be taken under
-/// the model's read lock and serialized after it is released.
+/// shape, the items reduced to [`GridItem`], plus `catalogLabels`. The page
+/// shape is `ResourceLoadable`/`Loadable`, so `content.type` is `Ready`,
+/// `Loading` or `Err` exactly as stremio-core writes it. Owned, so it can be
+/// taken under the model's read lock and serialized after it is released.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GridJson {
@@ -182,12 +182,12 @@ pub struct GridJson {
 ///
 /// The model sits behind a `std::sync::RwLock` whose readers queue behind a
 /// waiting writer, and every dispatch and every addon answer is a writer.
-/// Serializing under the read lock therefore parked the whole engine for
-/// the length of the serialization, which for a loaded board was the
-/// longest thing the lock ever saw. What is taken under the lock is now the
-/// cheapest owned form of the field: a projection for the two grid fields,
-/// the JSON itself for the small ones (where cloning the model would cost
-/// more than writing it out).
+/// Serializing under the read lock therefore parked the whole engine for the
+/// length of the serialization, which for a loaded board was the longest
+/// thing the lock ever saw. What is taken under the lock is now the cheapest
+/// owned form of the field. That is a projection for the two grid fields,
+/// and the JSON itself for the small ones, where cloning the model would
+/// cost more than writing it out.
 #[derive(Debug)]
 pub enum FieldSnapshot {
     /// Already serialized; the field is small enough that a clone would
@@ -266,20 +266,20 @@ impl XtremioModel {
     }
 
     /// Serializes one field to JSON: [`Self::snapshot`] and then
-    /// [`FieldSnapshot::into_json`], for a caller that holds nothing else --
-    /// the tests, since `crate::core` takes the snapshot under the model's
-    /// lock and serializes it after.
+    /// [`FieldSnapshot::into_json`]. This is for a caller that holds nothing
+    /// else, which means the tests, since `crate::core` takes the snapshot
+    /// under the model's lock and serializes it after.
     #[cfg(test)]
     pub fn get_state_json(&self, field: &XtremioModelField) -> serde_json::Result<String> {
         self.snapshot(field)?.into_json()
     }
 
     /// Every item of the library bucket as `{"items": [...]}`, most recently
-    /// changed first: the ones `library` filters out too -- removed, and
-    /// temporary (played and never added) -- because the For you row reads
-    /// what was watched whether or not it was added, and leaves out
-    /// anything the library holds in any sense. Each item is the
-    /// `LibraryItem` exactly as stored.
+    /// changed first. That includes the ones `library` filters out: removed,
+    /// and temporary (played and never added). The For you row reads what
+    /// was watched whether or not it was added, and leaves out anything the
+    /// library holds in any sense. Each item is the `LibraryItem` exactly as
+    /// stored.
     pub fn library_items_json(&self) -> serde_json::Result<String> {
         #[derive(Serialize)]
         struct Items<'a> {
@@ -384,9 +384,9 @@ impl XtremioModel {
     /// bitfield is `skip_serializing`, so the watched episode ids are
     /// resolved here (via `WatchedBitField::get_video`) for the UI.
     ///
-    /// Serialized straight to text through [`MetaDetailsJson`], never through
-    /// a `serde_json::Value`: a series' meta runs to megabytes, and this runs
-    /// under the model's read lock on every `MetaDetails` change.
+    /// Serialized straight to text through [`MetaDetailsJson`], never
+    /// through a `serde_json::Value`. A series' meta runs to megabytes, and
+    /// this runs under the model's read lock on every `MetaDetails` change.
     fn meta_details_json(&self) -> serde_json::Result<String> {
         let watched_video_ids = self.meta_details.watched.as_ref().map(|watched| {
             self.meta_details
@@ -498,9 +498,10 @@ mod tests {
         }]
     }
 
-    /// `watchedVideoIds` sits beside the model's own fields, names exactly
-    /// the videos the engine's bitfield marks, and is absent while there is
-    /// no bitfield to answer from; the bitfield itself never goes out.
+    /// `watchedVideoIds` sits beside the model's own fields and names
+    /// exactly the videos the engine's bitfield marks. It is absent while
+    /// there is no bitfield to answer from, and the bitfield itself never
+    /// goes out.
     #[test]
     fn meta_details_names_the_watched_videos_beside_the_model() {
         use stremio_core::types::resource::MetaItem;
@@ -571,8 +572,8 @@ mod tests {
     }
 
     /// A loaded board of `catalogs` Cinemeta-shaped rows with `per_row`
-    /// recorded items each -- eight rows of a hundred is what a full
-    /// default board is once every row has been scrolled into range.
+    /// recorded items each. Eight rows of a hundred is what a full default
+    /// board is once every row has been scrolled into range.
     fn loaded_board(catalogs: usize, per_row: usize) -> CatalogsWithExtra {
         let items = recorded_items();
         assert!(items.len() >= 50, "the fixture holds three Ready pages");
@@ -872,9 +873,9 @@ mod tests {
     }
 
     /// The board's and the search's items go over as what a poster tile
-    /// draws, and every page keeps the shape stremio-core gives it -- the
-    /// Dart side reads `content.type` and the request off each page exactly
-    /// as it did when the whole item crossed.
+    /// draws, and every page keeps the shape stremio-core gives it. The Dart
+    /// side reads `content.type` and the request off each page exactly as it
+    /// did when the whole item crossed.
     #[test]
     fn board_items_are_the_grid_projection_and_pages_keep_their_shape() {
         let items = recorded_items();
@@ -946,10 +947,10 @@ mod tests {
         }
     }
 
-    /// A library change -- a pause, the 90 s progress push, a title kept --
-    /// is not a change to the board or the search: nothing they put on the
-    /// wire reads the library, and the field was re-pulled whole on every
-    /// one. A load still is a change, so the filter is not a gag.
+    /// A library change (a pause, the 90 s progress push, a title kept) is
+    /// not a change to the board or the search. Nothing they put on the wire
+    /// reads the library, and the field was re-pulled whole on every one. A
+    /// load still is a change, so the filter is not a gag.
     #[test]
     fn a_library_change_does_not_touch_the_board_or_the_search() {
         let mut model = default_model();
@@ -979,12 +980,12 @@ mod tests {
         );
     }
 
-    /// The snapshot of a board owns what it needs: it is taken under the
+    /// The snapshot of a board owns what it needs. It is taken under the
     /// model's read lock and serialized after the lock is gone, which is a
-    /// property of the type (this test would not compile against a
-    /// borrowing one) as much as of the bytes. The numbers it prints are
-    /// what the projection buys against the whole document that crossed
-    /// before it, on an eight-by-hundred board -- run with `--nocapture`.
+    /// property of the type (this test would not compile against a borrowing
+    /// one) as much as of the bytes. The numbers it prints are what the
+    /// projection buys against the whole document that crossed before it, on
+    /// an eight-by-hundred board. Run with `--nocapture`.
     #[test]
     fn a_board_snapshot_outlives_the_model_and_is_a_fraction_of_the_document() {
         let mut model = default_model();
@@ -1045,12 +1046,12 @@ mod tests {
     }
 
     /// The properties an addon sends beyond `id`/`url`/`lang` are what tells
-    /// thirty-odd English uploads apart and what says a subtitle was cut for
-    /// 25 fps. They only survive because stremio-core is pinned to a rev that
-    /// keeps them in `Subtitles::other`; upstream drops them in serde. Nothing
-    /// in `get_state_json` has to know about them -- which is exactly why this
-    /// guard is here, so a future pin bump that loses them fails a test
-    /// instead of quietly emptying the subtitle menu's labels.
+    /// thirty-odd English uploads apart, and what says a subtitle was cut
+    /// for 25 fps. They only survive because stremio-core is pinned to a rev
+    /// that keeps them in `Subtitles::other`; upstream drops them in serde.
+    /// Nothing in `get_state_json` has to know about them, which is exactly
+    /// why this guard is here. A future pin bump that loses them fails a
+    /// test instead of quietly emptying the subtitle menu's labels.
     #[test]
     fn addon_specific_subtitle_properties_reach_the_player_json() {
         let ResourceResponse::Subtitles { subtitles } =

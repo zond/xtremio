@@ -1,11 +1,10 @@
 //! What this binary was built from, for the Diagnostics screen.
 //!
-//! A bug report from a phone is worth little without the revisions behind
-//! it, and the two that matter -- the embedded stream-server and
-//! stremio-core -- are git pins rather than versions, so Cargo has no
-//! environment variable for them. The manifest is embedded at compile time
-//! instead and read back here, which cannot drift from what was actually
-//! built.
+//! A bug report from a phone is worth little without the revisions behind it.
+//! The two that matter, the embedded stream-server and stremio-core, are git
+//! pins rather than versions, so Cargo has no environment variable for them.
+//! Instead the manifest is embedded at compile time and read back here, so it
+//! cannot drift from what was actually built.
 
 /// This crate's own `Cargo.toml`, as it was when this binary was compiled.
 const MANIFEST: &str = include_str!("../Cargo.toml");

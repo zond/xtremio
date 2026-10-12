@@ -1,18 +1,19 @@
 //! **Playable things by id**: the app's half of the embedded server's media
 //! API (stream-server `docs/design/media-pipeline.md` §2.3-2.5).
 //!
-//! The app registers what it wants played -- a URL stremio-core built on
-//! the embedded server (a torrent, `/proxy`, an archive member), a linked
-//! Drive file, a file on this device by path or descriptor -- and gets an
-//! opaque id; mpv is handed `xtremio://<id>` and reads it through
-//! [`crate::mpv_stream`], and a cast publishes it ([`publish_in`]). The play
-//! that reader is (the `p=` token and the read-ahead choice the HTTP route
-//! took off the URL) is registered here per id by [`set_play_in`], before the
-//! open, because the open happens on mpv's thread with nobody to ask.
+//! The app registers what it wants played and gets an opaque id: a URL
+//! stremio-core built on the embedded server (a torrent, `/proxy`, an
+//! archive member), a linked Drive file, or a file on this device by path or
+//! descriptor. mpv is handed `xtremio://<id>` and reads it through
+//! [`crate::mpv_stream`], and a cast publishes it ([`publish_in`]).
+//! [`set_play_in`] registers the play that reader is, per id: the `p=` token
+//! and the read-ahead choice the HTTP route took off the URL. It is
+//! registered before the open, because the open happens on mpv's thread with
+//! nobody to ask.
 //!
 //! Every call here goes through the running [`stream_server::ServerHandle`]
-//! and holds it for its own length only ([`crate::server::with_handle_in`]):
-//! a reader never holds it.
+//! and holds it for its own length only ([`crate::server::with_handle_in`]).
+//! A reader never holds it.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -28,15 +29,16 @@ use crate::state::AppState;
 
 /// The plays the app registered, by id: what [`open_for_player`] opens a
 /// reader with. At most [`stream_server::media::MEDIA_ID_CAP`] of them, the
-/// oldest let go first, as the server lets its ids go -- a play outliving
-/// its id would be one nobody can open.
+/// oldest let go first, as the server lets its ids go. A play outliving its
+/// id would be one nobody can open.
 #[derive(Default)]
 pub struct MediaState {
     plays: Mutex<Plays>,
-    /// The Drive file [`open_drive_in`] last opened for a screen, and the
-    /// id it resolved as: handed to the player's own registration of that
-    /// file ([`register_drive_in`]) once, so the file is not opened twice
-    /// for one press. Only the last: a screen opens one file and plays it.
+    /// The Drive file [`open_drive_in`] last opened for a screen, and the id
+    /// it resolved as. It is handed once to the player's own registration of
+    /// that file ([`register_drive_in`]), so the file is not opened twice
+    /// for one press. Only the last is kept: a screen opens one file and
+    /// plays it.
     drive_opened: Mutex<Option<(String, String)>>,
 }
 
@@ -72,36 +74,35 @@ impl Plays {
 }
 
 /// A buffer choice as the app spells it (`BufferAhead.wire`: `normal`,
-/// `large`, `maximum`) -- the words the `buffer=` parameter carried.
+/// `large`, `maximum`): the words the `buffer=` parameter carried.
 pub fn buffer_profile(wire: &str) -> anyhow::Result<BufferProfile> {
     serde_json::from_value(serde_json::Value::String(wire.to_owned()))
         .map_err(|_| anyhow::anyhow!("{wire:?} is not a read-ahead choice"))
 }
 
-/// Registers `streaming_url` -- a URL stremio-core built on the embedded
-/// server -- and answers its id. No I/O: what the URL names is found out by
-/// [`resolve_in`]. Errors when the server is not running or the string is
-/// not a URL.
+/// Registers `streaming_url`, a URL stremio-core built on the embedded
+/// server, and answers its id. No I/O: [`resolve_in`] finds out what the URL
+/// names. Errors when the server is not running or the string is not a URL.
 pub fn register_in(app: &AppState, streaming_url: &str) -> anyhow::Result<String> {
     let url = Url::parse(streaming_url).map_err(|_| anyhow::anyhow!("not a URL"))?;
     register_spec_in(app, MediaSpec::StreamingUrl(url))
 }
 
 /// The stream URL a linked Google Drive file is played by:
-/// `xtremio-drive:<fileId>` ([`crate::downloads::DRIVE_SOURCE_SCHEME`]),
-/// the same string a Drive download's row keeps as its stream. It names
-/// the file and nothing else -- no account, no grant -- and nothing fetches
-/// it: the player registers it ([`register_drive_in`]).
+/// `xtremio-drive:<fileId>` ([`crate::downloads::DRIVE_SOURCE_SCHEME`]). It
+/// is the same string a Drive download's row keeps as its stream. It names
+/// the file and nothing else (no account, no grant), and nothing fetches it:
+/// the player registers it ([`register_drive_in`]).
 pub fn drive_url(file_id: &str) -> String {
     format!("{}:{file_id}", crate::downloads::DRIVE_SOURCE_SCHEME)
 }
 
 /// Registers the linked Google Drive file `file_id` and answers its id. Its
 /// grant is whatever the app holds when the server resolves it
-/// ([`crate::server::ServerState::grant_supplier`]); a finished download of
-/// the file resolves off the disk without one. The id [`open_drive_in`]
-/// just resolved for this file is answered instead, once, so one press
-/// opens the file once. No I/O.
+/// ([`crate::server::ServerState::grant_supplier`]). A finished download of
+/// the file resolves off the disk without one. If [`open_drive_in`] has just
+/// resolved this file, that id is answered instead, once, so one press opens
+/// the file once. No I/O.
 pub fn register_drive_in(
     app: &AppState,
     file_id: &str,
@@ -126,13 +127,13 @@ pub fn register_drive_in(
     )
 }
 
-/// **Opens a linked Drive file for the screen that pressed it**: registers
-/// it and resolves it -- the grant renewed, the file probed, its head read --
-/// the same work the player's resolve would do, done while the screen can
-/// still say why not (a dead pairing above all). `refresh_token` is spent
-/// for this resolve and dropped; later resolves of the id read the app's
-/// grant. The id is kept for the player's registration of the same file
-/// ([`register_drive_in`]).
+/// **Opens a linked Drive file for the screen that pressed it.** It
+/// registers the file and resolves it: the grant renewed, the file probed,
+/// its head read. That is the same work the player's resolve would do, done
+/// while the screen can still say why not (a dead pairing above all).
+/// `refresh_token` is spent for this resolve and dropped; later resolves of
+/// the id read the app's grant. The id is kept for the player's registration
+/// of the same file ([`register_drive_in`]).
 pub fn open_drive_in(
     app: &AppState,
     file_id: &str,
@@ -181,13 +182,13 @@ pub fn register_local_path_in(
     )
 }
 
-/// Registers a file on this device by a descriptor the app hands over --
-/// on Android, `ParcelFileDescriptor.detachFd()` of a `content://`
-/// document -- and answers its id. **The descriptor is this side's from
-/// the call on**, whatever the answer: taken before anything else, so an
-/// error closes it rather than leaking it, and the server closes it when
-/// the id is let go. Errors for a negative descriptor, and on a platform
-/// that has none to hand over.
+/// Registers a file on this device by a descriptor the app hands over, and
+/// answers its id. On Android that is `ParcelFileDescriptor.detachFd()` of a
+/// `content://` document. **The descriptor is this side's from the call
+/// on**, whatever the answer. It is taken before anything else, so an error
+/// closes it rather than leaking it, and the server closes it when the id is
+/// let go. Errors for a negative descriptor, and on a platform that has none
+/// to hand over.
 pub fn register_local_fd_in(
     app: &AppState,
     fd: i64,
@@ -221,10 +222,10 @@ fn register_spec_in(app: &AppState, spec: MediaSpec) -> anyhow::Result<String> {
 
 /// **Publishes `id` for a cast** and answers the token the receiver's URL
 /// ends in (`<lan base>/cast/<token>`), with the play [`set_play_in`]
-/// recorded for the id -- the receiver's reads are the viewer's playback,
-/// as mpv's were. Refused while the LAN listener is not running and for an
-/// id the server does not hold. The token is a URL into this device for as
-/// long as it is published: never logged.
+/// recorded for the id. The receiver's reads are the viewer's playback, as
+/// mpv's were. Refused while the LAN listener is not running, and for an id
+/// the server does not hold. The token is a URL into this device for as long
+/// as it is published, so it is never logged.
 pub fn publish_in(app: &AppState, id: &str) -> anyhow::Result<String> {
     let play = app.media.plays().by_id.get(id).cloned();
     let id = MediaId::from(id.to_owned());
@@ -254,7 +255,7 @@ pub fn publish_rendition_in(app: &AppState, id: &str, spec: &str) -> anyhow::Res
 }
 
 /// Starts preparing the published rendition `token`
-/// (`ServerHandle::prepare_rendition`). Whether it is one.
+/// (`ServerHandle::prepare_rendition`). Answers whether it is one.
 pub fn prepare_rendition_in(app: &AppState, token: &str) -> anyhow::Result<bool> {
     let token = CastToken::from(token.to_owned());
     crate::server::with_handle_in(app, |handle| Ok(handle.prepare_rendition(&token)))
@@ -282,16 +283,16 @@ pub fn cast_numbers_in(app: &AppState, token: &str) -> anyhow::Result<Option<Str
 }
 
 /// Ends a publication: nothing more is served under `token`, and a body
-/// being served under it is cut. Whether it was published. `false` when
-/// the server is not running, which stopped the listener and every token
-/// with it.
+/// being served under it is cut. Answers whether it was published. It is
+/// `false` when the server is not running, because that stopped the listener
+/// and every token with it.
 pub fn unpublish_in(app: &AppState, token: &str) -> bool {
     let token = CastToken::from(token.to_owned());
     crate::server::with_handle_in(app, |handle| Ok(handle.unpublish(&token))).unwrap_or(false)
 }
 
 /// What `id` is, as JSON: the server's `Resolved` (`name`, `contentType`,
-/// `len`, `inProcess`, ...) or its `Refusal` (`{refused, message}`) -- a
+/// `len`, `inProcess`, ...) or its `Refusal` (`{refused, message}`). A
 /// refusal is an answer, not a failure. Blocks while the server resolves,
 /// which for a magnet whose metadata is not here yet is a wait of up to
 /// `enginefs::METADATA_RESOLVE_TIMEOUT`. Errors only when the server is not
@@ -309,16 +310,16 @@ pub fn resolve_in(app: &AppState, id: &str) -> anyhow::Result<String> {
 /// Records the play the reader over `id` is: the player's `token`
 /// (`<viewer>.<screen>`, what `p=` carried) and its read-ahead choice. An
 /// open of `id` without one is an aside, which moves no play session and
-/// shares nothing, so the app sets this before handing mpv the id.
+/// shares nothing. So the app sets this before handing mpv the id.
 pub fn set_play_in(app: &AppState, id: &str, token: String, buffer: &str) -> anyhow::Result<()> {
     let buffer = buffer_profile(buffer)?;
     app.media.plays().insert(id, PlayToken { token, buffer });
     Ok(())
 }
 
-/// The viewer changed the read-ahead for `id`: recorded for the next open,
-/// and handed to the server, which applies it to an open reader at its next
-/// reopen (a seek) -- never by reopening the player. Errors when the
+/// The viewer changed the read-ahead for `id`. It is recorded for the next
+/// open and handed to the server, which applies it to an open reader at its
+/// next reopen (a seek), never by reopening the player. Errors when the
 /// server is not running or refuses (`unknownId`).
 pub fn set_buffer_in(app: &AppState, id: &str, buffer: &str) -> anyhow::Result<()> {
     let buffer = buffer_profile(buffer)?;
@@ -331,9 +332,9 @@ pub fn set_buffer_in(app: &AppState, id: &str, buffer: &str) -> anyhow::Result<(
     })
 }
 
-/// Where the playback of `id` resumes, as the server's [`ResumeHint`]:
-/// `None` for one from the top -- a resume time that is no time past zero
-/// -- and no runtime for one that is not a length.
+/// Where the playback of `id` resumes, as the server's [`ResumeHint`].
+/// `None` for one from the top, a resume time that is no time past zero. No
+/// runtime for one that is not a length.
 pub fn resume_hint(resume_seconds: f64, runtime_seconds: Option<f64>) -> Option<ResumeHint> {
     let millis = |seconds: f64| {
         (seconds.is_finite() && seconds > 0.0).then(|| (seconds * 1000.0).round() as u64)
@@ -345,9 +346,9 @@ pub fn resume_hint(resume_seconds: f64, runtime_seconds: Option<f64>) -> Option<
     })
 }
 
-/// Tells the server where the playback of `id` resumes and how long the
+/// Tells the server where the playback of `id` resumes, and how long the
 /// film is if the app knows (`ServerHandle::set_resume`), before mpv opens
-/// it: a torrent reader then asks the swarm for the resume point at its
+/// it. A torrent reader then asks the swarm for the resume point at its
 /// open, beside the file's head, instead of only when mpv blocks on it.
 /// Errors when the server is not running or holds nothing under `id`.
 pub fn set_resume_in(
@@ -364,9 +365,9 @@ pub fn set_resume_in(
 }
 
 /// The player of `id` is leaving at `position` of the film
-/// (`ServerHandle::note_media_position`): remembered with where its reader
-/// was, so the next playback resuming near there asks for it first. A
-/// no-op for anything not a torrent.
+/// (`ServerHandle::note_media_position`). The position is remembered with
+/// where its reader was, so the next playback resuming near there asks for
+/// it first. A no-op for anything not a torrent.
 pub fn note_position_in(
     app: &AppState,
     id: &str,
@@ -426,9 +427,9 @@ pub fn note_player_stalled_in(app: &AppState, id: &str) -> anyhow::Result<()> {
 
 /// **A reader over `id` for mpv**, with the play [`set_play_in`] recorded
 /// for it, or without one (an aside) when there is none. Called from mpv's
-/// open callback on mpv's thread: the handle is held for the open and let
-/// go before this returns, so the reader mpv keeps holds none. The error is
-/// the refusal's kind and sentence, for the log.
+/// open callback on mpv's thread. The handle is held for the open and let go
+/// before this returns, so the reader mpv keeps holds none. The error is the
+/// refusal's kind and sentence, for the log.
 pub fn open_for_player(id: &str) -> Result<MediaReader, String> {
     let app = crate::state::current().ok_or("the app is not running")?;
     open_for_player_in(&app, id)
@@ -444,8 +445,8 @@ pub fn open_for_player_in(app: &AppState, id: &str) -> Result<MediaReader, Strin
     .map_err(|error| error.to_string())
 }
 
-/// A refusal as an error whose text is its kind -- which is safe in any
-/// log line -- and never its sentence, which for a link can name its host.
+/// A refusal as an error whose text is its kind, which is safe in any log
+/// line. Never its sentence, which for a link can name its host.
 fn refusal_error(refusal: Refusal) -> anyhow::Error {
     anyhow::anyhow!("refused: {}", refusal.kind())
 }
@@ -508,9 +509,9 @@ mod tests {
     }
 
     /// **One press opens a Drive file once**: the id the screen's open
-    /// resolved is the one the player's registration of the same file is
-    /// handed, and only once -- a second registration, or one of another
-    /// file, is a registration of its own.
+    /// resolved is handed to the player's registration of the same file, and
+    /// only once. A second registration, or one of another file, is a
+    /// registration of its own.
     #[test]
     fn the_drive_file_a_screen_opened_is_handed_to_the_player_once() {
         let app = AppState::default();
@@ -555,9 +556,9 @@ mod tests {
     }
 
     /// **A descriptor handed over is this side's at once**: an answer that
-    /// is an error still closes it, rather than leaking one per failed
-    /// play. Shown with a pipe, whose write end fails once the read end is
-    /// closed -- a check that holds whatever number the descriptor had.
+    /// is an error still closes it, rather than leaking one per failed play.
+    /// Shown with a pipe, whose write end fails once the read end is closed.
+    /// That check holds whatever number the descriptor had.
     #[cfg(unix)]
     #[test]
     fn a_descriptor_handed_over_is_closed_when_it_cannot_be_registered() {

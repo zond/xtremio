@@ -1,53 +1,55 @@
 //! **A rendition's sound, converted to stereo AAC** (stream-server
-//! `docs/design/renditions.md`, step F3): the film's audio track -- Dolby
-//! Digital, Dolby Digital Plus, DTS, TrueHD, Opus, FLAC, MP3, PCM, AAC with
-//! more than two channels -- decoded, mixed down to stereo at 48 kHz and
-//! encoded as AAC-LC, while the picture is copied as it is.
+//! `docs/design/renditions.md`, step F3). The film's audio track is decoded,
+//! mixed down to stereo at 48 kHz and encoded as AAC-LC, while the picture
+//! is copied as it is. That covers Dolby Digital, Dolby Digital Plus, DTS,
+//! TrueHD, Opus, FLAC, MP3, PCM, and AAC with more than two channels.
 //!
 //! # The same bytes, whichever run makes them
 //!
 //! A rendition is one file a receiver seeks in by bytes, so a slot's bytes
-//! must be the same whenever it is made: by the run that read on into it,
-//! or by a run started at it after a seek (stream-server §2.8, *The same
-//! bytes every time*). A copy has that for free. A codec does not: what an
-//! encoder makes of a frame depends on everything it was fed before, and a
-//! decoder's first frames depend on where it began.
+//! must be the same whenever it is made. It may be made by the run that read
+//! on into it, or by a run started at it after a seek (stream-server §2.8,
+//! *The same bytes every time*). A copy has that for free. A codec does not:
+//! what an encoder makes of a frame depends on everything it was fed before,
+//! and a decoder's first frames depend on where it began.
 //!
 //! So the sound is made in **chunks on a fixed grid** of the film's clock,
 //! and each chunk from nothing:
 //!
 //! - **The grid.** AAC frames of 1024 samples at 48 kHz, frame `i` covering
-//!   `[i x 1024, (i + 1) x 1024)` samples from the film's zero; its time is
+//!   `[i x 1024, (i + 1) x 1024)` samples from the film's zero. Its time is
 //!   `i x 64000 / 3` microseconds, rounded, which the server's 90 kHz clock
 //!   reads as exactly `i x 1920`. A chunk is [`CHUNK_FRAMES`] frames.
 //! - **A chunk from a fresh decoder**, fed from the first packet at or
-//!   after [`DECODE_PREROLL`] (plus the encoder's) before the chunk: what a
-//!   decoder makes of its first packets (an AC3 frame's overlap with the one
-//!   before, TrueHD's wait for a major sync, Opus's prediction) is in that
-//!   pre-roll, and from the same first packet it makes the same sound. The
-//!   packets it is fed end at a bound that is also a function of the chunk,
-//!   so nothing about the run -- where it began, what it read ahead -- is
-//!   in them.
+//!   after [`DECODE_PREROLL`] (plus the encoder's) before the chunk. What a
+//!   decoder makes of its first packets (an AC3 frame's overlap with the
+//!   one before, TrueHD's wait for a major sync, Opus's prediction) is in
+//!   that pre-roll, and from the same first packet it makes the same
+//!   sound. The packets it is fed end at a bound that is also a function
+//!   of the chunk. So nothing about the run, such as where it began or
+//!   what it read ahead, is in them.
 //! - **The sound placed by its timestamps**: the decoder's first frame at
-//!   its presentation time, the rest after it sample by sample, placed
-//!   anew only where the two disagree by more than [`DRIFT`] (a gap in the
-//!   track); the window the encoder is given is silence where nothing was
-//!   decoded.
+//!   its presentation time, the rest after it sample by sample. A frame is
+//!   placed anew only where the two disagree by more than [`DRIFT`] (a gap
+//!   in the track). The window the encoder is given is silence where
+//!   nothing was decoded.
 //! - **A fresh encoder**, fed from [`ENCODE_PREROLL`] frames before the
-//!   chunk -- so the first kept frame's transform window, and the one
-//!   before it a decoder overlaps it with, saw the real sound -- to two
-//!   frames past it, then flushed. Its output frame `j` is the sound at
-//!   `start + j x 1024 - delay` (the encoder's priming, [`AacEncoder::delay`]:
-//!   1024 for FFmpeg's, 1600 for Android's FDK), so where the input starts
-//!   is chosen to put the kept frames on the grid, and the frames before
-//!   them -- the priming and the pre-roll -- are discarded by count.
-//! - **A chunk is made only when the run read what it needs**: a packet from
-//!   before its decoder pre-roll (or the run began at the film's start,
-//!   where every run sees the same first packet), and one far enough past
-//!   it ([`READY_MARGIN`]) or the film's end. A chunk a run cannot make the
-//!   canonical way is not made at all: the chunks a run started two seconds
-//!   before its first cut (`SEEK_BACK`) needs are always makeable, since a
-//!   chunk and its pre-rolls span [`CHUNK_FRAMES`] frames plus about 0.45 s.
+//!   chunk to two frames past it, then flushed. The early start means the
+//!   first kept frame's transform window, and the one before it a decoder
+//!   overlaps it with, saw the real sound. Its output frame `j` is the
+//!   sound at `start + j x 1024 - delay`, where `delay` is the encoder's
+//!   priming ([`AacEncoder::delay`]: 1024 for FFmpeg's, 1600 for Android's
+//!   FDK). So where the input starts is chosen to put the kept frames on
+//!   the grid, and the frames before them (the priming and the pre-roll)
+//!   are discarded by count.
+//! - **A chunk is made only when the run read what it needs**: a packet
+//!   from before its decoder pre-roll (or the run began at the film's
+//!   start, where every run sees the same first packet), and one far
+//!   enough past it ([`READY_MARGIN`]) or the film's end. A chunk a run
+//!   cannot make the canonical way is not made at all. A run starts two
+//!   seconds before its first cut (`SEEK_BACK`), and the chunks it needs
+//!   are always makeable, since a chunk and its pre-rolls span
+//!   [`CHUNK_FRAMES`] frames plus about 0.45 s.
 //!
 //! Neighbouring chunks come from different encoders. Each saw the sound on
 //! both sides of the seam, so a decoder's overlap of the last frame of one
@@ -58,10 +60,10 @@
 //!
 //! Each chunk decodes its pre-roll again (about 0.45 s per 1.02 s chunk;
 //! decoding Dolby or DTS is cheap) and encodes two frames more than it
-//! keeps. The chunk's sound waits until a packet [`READY_MARGIN`] past it
-//! is read: about 1.5 s of film behind the picture in what the sink is
-//! handed, which the server's cut rule already waits for (a segment is
-//! complete once the sound reaches the next cut).
+//! keeps. The chunk's sound waits until a packet [`READY_MARGIN`] past it is
+//! read. That puts the sound about 1.5 s of film behind the picture in what
+//! the sink is handed, which the server's cut rule already waits for (a
+//! segment is complete once the sound reaches the next cut).
 
 use std::collections::VecDeque;
 
@@ -107,8 +109,8 @@ pub trait AacEncoder: Send {
     /// The encoder's priming, in samples: output frame `j` of a call is the
     /// sound that began `j x 1024 - delay` samples into its input.
     fn delay(&self) -> i64;
-    /// `pcm` -- interleaved stereo, a whole number of frames -- encoded:
-    /// every frame in order, the priming first.
+    /// `pcm` (interleaved stereo, a whole number of frames) encoded: every
+    /// frame in order, the priming first.
     fn encode(&mut self, pcm: &[f32]) -> Result<Vec<Bytes>, String>;
 }
 
@@ -146,10 +148,10 @@ fn at_or_after(us: i64, sample: i64) -> bool {
     i128::from(us) * i128::from(SOUND_RATE) >= i128::from(sample) * 1_000_000
 }
 
-/// **What a chunk is made from**: where the encoder's input begins, how
-/// long it is, which of its output frames are kept, and where the decoder's
-/// packets begin and end -- all a function of the chunk and the encoder's
-/// delay alone.
+/// **What a chunk is made from**: where the encoder's input begins, how long
+/// it is, which of its output frames are kept, and where the decoder's
+/// packets begin and end. All of it is a function of the chunk and the
+/// encoder's delay alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChunkPlan {
     pub chunk: i64,
@@ -194,13 +196,13 @@ impl ChunkPlan {
     }
 }
 
-/// **The decoded sound in the encoder's window**: `blocks` (in decode
-/// order, their `pts` in `time_base`, the container starting at
-/// `start_us`) placed on the film's 48 kHz clock -- the first block at its
-/// time, each after it where the last ended unless its own time disagrees
-/// by more than [`DRIFT`] -- and cut to `len` samples from `from`;
-/// silence where nothing was decoded. Also answers the sample after the
-/// last one decoded, if any was.
+/// **The decoded sound in the encoder's window**: `blocks` placed on the
+/// film's 48 kHz clock and cut to `len` samples from `from`, with silence
+/// where nothing was decoded. `blocks` are in decode order, their `pts` in
+/// `time_base`, the container starting at `start_us`. The first block goes
+/// at its time, and each after it where the last ended, unless its own time
+/// disagrees by more than [`DRIFT`]. Also answers the sample after the last
+/// one decoded, if any was.
 pub fn place(
     blocks: &[Pcm],
     time_base: Rational,
@@ -422,9 +424,10 @@ mod tests {
 
     /// **The priming is discarded by count, and the kept frames are the
     /// chunk's on the grid**, for FFmpeg's encoder (1024) and Android's FDK
-    /// (1600, not a whole frame): the kept frame `first_kept` is the sound
-    /// at the chunk's start, at least two frames of real sound fed before
-    /// it, the input a whole number of frames reaching two past the chunk.
+    /// (1600, not a whole frame). The kept frame `first_kept` is the sound
+    /// at the chunk's start. At least two frames of real sound are fed
+    /// before it, and the input is a whole number of frames reaching two
+    /// past the chunk.
     #[test]
     fn a_chunks_plan_puts_the_kept_frames_on_the_grid() {
         for delay in [0, 1024, 1600, 2048, 2112] {
@@ -479,7 +482,7 @@ mod tests {
     }
 
     /// **The decoded sound is placed by its first timestamp and counted on
-    /// from there**: a millisecond's rounding in a later block's timestamp
+    /// from there.** A millisecond's rounding in a later block's timestamp
     /// moves nothing, a real gap does, and the window is silence where
     /// nothing was decoded.
     #[test]
@@ -632,12 +635,12 @@ mod tests {
             .collect()
     }
 
-    /// **The same frames whichever run makes them**: runs started at the
-    /// film's start and at three later points (each reading from two
-    /// seconds before, as the server's `SEEK_BACK` has it, and from a
-    /// packet boundary that is not a chunk's) hand over the same bytes at
-    /// the same times for every frame both made, and the later runs make
-    /// every frame from 64 ms before their first cut on.
+    /// **The same frames whichever run makes them.** Runs are started at the
+    /// film's start and at three later points. Each later one reads from two
+    /// seconds before, as the server's `SEEK_BACK` has it, and from a packet
+    /// boundary that is not a chunk's. They hand over the same bytes at the
+    /// same times for every frame both made, and the later runs make every
+    /// frame from 64 ms before their first cut on.
     #[test]
     fn a_frames_bytes_do_not_depend_on_where_its_run_began() {
         for delay in [1024, 1600] {
@@ -675,8 +678,8 @@ mod tests {
     }
 
     /// **The priming and the pre-roll never reach the sink**: frame `i`
-    /// holds the sound at `i x 1024` -- the fake encoder's digest names it
-    /// -- for either encoder's delay.
+    /// holds the sound at `i x 1024`, as the fake encoder's digest names it,
+    /// for either encoder's delay.
     #[test]
     fn the_kept_frames_hold_the_sound_at_their_time() {
         for delay in [1024, 1600] {
@@ -692,9 +695,8 @@ mod tests {
     }
 
     /// **A chunk is fed from a fresh decoder, from the first packet of its
-    /// pre-roll to its bound**, the same set whichever run feeds it -- and a
-    /// run that did not read from before a chunk's pre-roll does not make
-    /// it.
+    /// pre-roll to its bound**, the same set whichever run feeds it. A run
+    /// that did not read from before a chunk's pre-roll does not make it.
     #[test]
     fn each_chunk_decodes_the_same_packets_and_only_when_it_can() {
         let film = track(0, 8_000);

@@ -2,15 +2,14 @@
 //! on. Modeled on stremio-core-kotlin's `AndroidEnv` and stremiox's `TvosEnv`.
 //!
 //! - **fetch**: reqwest + rustls with Mozilla's roots compiled in
-//!   ([`http_client_builder`], which says why not the device store); JSON
-//!   bodies in, JSON out (errors name the failing JSON path). A request to
-//!   the embedded server carries its bearer token
-//!   (`crate::server::token_for`); no other host gets it.
-//!   [`fetch_text`] is the same path for a body that is not JSON -- a
-//!   subtitle file -- and shares the client and the token rule rather than
-//!   standing up a second one.
-//! - **storage**: one JSON file per key under a directory Dart chooses;
-//!   writes are temp-then-fsync-then-rename so a crash can never leave a
+//!   ([`http_client_builder`] says why not the device store). JSON bodies
+//!   in, JSON out, and errors name the failing JSON path. A request to the
+//!   embedded server carries its bearer token (`crate::server::token_for`);
+//!   no other host gets it. [`fetch_text`] is the same path for a body that
+//!   is not JSON, a subtitle file. It shares the client and the token rule
+//!   rather than standing up a second one.
+//! - **storage**: one JSON file per key under a directory Dart chooses.
+//!   Writes are temp-then-fsync-then-rename, so a crash can never leave a
 //!   half-written bucket, and a write never lands over a newer one
 //!   ([`StorageOrder`]).
 //! - **executors**: two lib-owned tokio runtimes, `CONCURRENT` for parallel
@@ -18,8 +17,8 @@
 //!   on storage/library persistence effects running in order. What is
 //!   queued on `SEQUENTIAL` is counted, so a shutdown can wait for the
 //!   last writes ([`wait_for_sequential`]).
-//! - **time**: `chrono::Utc::now()`; analytics are stubbed (built without the
-//!   `analytics` feature).
+//! - **time**: `chrono::Utc::now()`. Analytics are stubbed (built without
+//!   the `analytics` feature).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -40,11 +39,11 @@ use stremio_core::models::streaming_server::StreamingServer;
 use stremio_core::runtime::{Env, EnvError, EnvFuture, EnvFutureExt, TryEnvFuture};
 
 // The three statics below stay statics on purpose, and are not part of
-// `crate::state::AppState`: an executor and a connection pool are
+// `crate::state::AppState`, because an executor and a connection pool are
 // process-wide by nature. They are built once, hold no per-session state,
-// cost real OS threads and sockets to create, and outliving a shutdown is
-// the point -- work spawned before it still has somewhere to run, and the
-// next `core_init` reuses the pool instead of standing up new threads.
+// and cost real OS threads and sockets to create. Outliving a shutdown is
+// the point: work spawned before it still has somewhere to run, and the next
+// `core_init` reuses the pool instead of standing up new threads.
 
 /// Effects that may run in parallel (catalog fetches, addon calls, ...), the
 /// runtime-event pump, and async work started by the FRB layer.
@@ -101,12 +100,12 @@ impl Drop for InFlight {
     }
 }
 
-/// Waits, for at most `timeout`, until nothing queued on `SEQUENTIAL` is
-/// still to run; `false` when the time ran out first.
+/// Waits until nothing queued on `SEQUENTIAL` is still to run, for at most
+/// `timeout`. Answers `false` when the time ran out first.
 ///
 /// For a shutdown. The engine persists a bucket by queuing the write here
 /// and returning, so a dispatch that has returned is not a library that is
-/// on disk: an app that exits right after a progress update loses it, and
+/// on disk. An app that exits right after a progress update loses it, and
 /// the exit path says it flushes library progress. What is waited for
 /// includes whatever those futures queue behind themselves, since the count
 /// only reaches zero when nothing is left.
@@ -122,15 +121,15 @@ pub(crate) fn wait_for_sequential(timeout: Duration) -> bool {
 }
 
 /// The order `set_storage` was asked for writes in, which is the order the
-/// engine meant them in: it serializes a bucket, and asks for its write,
-/// inside `Runtime::dispatch` under the model's write lock.
+/// engine meant them in. The engine serializes a bucket, and asks for its
+/// write, inside `Runtime::dispatch` under the model's write lock.
 ///
-/// It then *queues* the write after letting that lock go, and two
-/// dispatchers can queue theirs the other way round: the older library
-/// snapshot runs second and is what stays on disk. So each write carries
-/// its place in the order it was asked for, and one that finds a later
-/// write to the same file already done is dropped -- it has nothing the
-/// file does not already hold a newer copy of.
+/// It then *queues* the write after letting that lock go, so two dispatchers
+/// can queue theirs the other way round. The older library snapshot then
+/// runs second and is what stays on disk. So each write carries its place in
+/// the order it was asked for. A write that finds a later write to the same
+/// file already done is dropped, because the file already holds a newer copy
+/// of everything it has.
 struct StorageOrder {
     next: AtomicU64,
     /// Per file, the place of the last write that landed. Also held across
@@ -145,42 +144,43 @@ static STORAGE_ORDER: LazyLock<StorageOrder> = LazyLock::new(|| StorageOrder {
 });
 
 /// A reqwest builder whose TLS trust is the compiled-in Mozilla root set
-/// (`webpki-root-certs`), verified by rustls itself -- not the device's
-/// certificate store through `rustls-platform-verifier`.
+/// (`webpki-root-certs`), verified by rustls itself. It does not use the
+/// device's certificate store through `rustls-platform-verifier`.
 ///
-/// reqwest 0.13's `rustls` feature constructs `rustls_platform_verifier::
-/// Verifier` for any client that brings no roots (reqwest 0.13.4
-/// `src/async_impl/client.rs`, the `!config.tls_certs_only` arm of the
-/// verifier `match`); `tls_certs_only` is the one builder state that takes
-/// the plain `with_root_certificates` arm instead, which never names the
-/// platform verifier. On Android that verifier runs every handshake through
-/// Java's `CertPathValidator` with revocation set to SOFT_FAIL and no
-/// NO_FALLBACK, so for a leaf without an OCSP URL Android downloads the
-/// issuer's CRL and parses it in Java. Measured on a Chromecast: one
-/// tracker whose CRL has 116k entries cost 15 million Java objects and
-/// 400 MB -- 91% of the app's Java allocation, the GC storm that pushed a
-/// 2 GB box into swap and an ANR.
+/// reqwest 0.13's `rustls` feature constructs
+/// `rustls_platform_verifier::Verifier` for any client that brings no roots
+/// (reqwest 0.13.4 `src/async_impl/client.rs`, the `!config.tls_certs_only`
+/// arm of the verifier `match`). `tls_certs_only` is the one builder state
+/// that takes the plain `with_root_certificates` arm instead, which never
+/// names the platform verifier. On Android that verifier runs every
+/// handshake through Java's `CertPathValidator` with revocation set to
+/// SOFT_FAIL and no NO_FALLBACK. So for a leaf without an OCSP URL, Android
+/// downloads the issuer's CRL and parses it in Java. Measured on a
+/// Chromecast: one tracker whose CRL has 116k entries cost 15 million Java
+/// objects and 400 MB. That was 91% of the app's Java allocation, the GC
+/// storm that pushed a 2 GB box into swap and an ANR.
 ///
 /// Trust policy, stated plainly: the app's own HTTPS (addon manifests,
 /// catalogs, the Stremio API, subtitles) trusts Mozilla's root program as
 /// built into this binary, not the device store. A CA the user installed on
-/// the device -- a corporate TLS-inspecting proxy, a debugging proxy -- is
-/// no longer trusted for that traffic, and a root Mozilla admits after this
-/// build ships is not trusted until the crate is updated. That is the right
-/// trade for this app: it talks to public addon servers and Stremio's API,
-/// never to an intranet, so a user-installed CA on this path is far more
-/// likely an interception than a need; the URLs it sends carry debrid API
-/// keys, so a public root set is the conservative choice for them; and the
-/// alternative was the Java heap above. Every client this crate builds for
-/// its own traffic goes through here so the policy has one home.
+/// the device, such as a corporate TLS-inspecting proxy or a debugging
+/// proxy, is no longer trusted for that traffic. A root Mozilla admits after
+/// this build ships is not trusted until the crate is updated. That is the
+/// right trade for this app, for three reasons. It talks to public addon
+/// servers and Stremio's API, never to an intranet, so a user-installed CA
+/// on this path is far more likely an interception than a need. The URLs it
+/// sends carry debrid API keys, so a public root set is the conservative
+/// choice for them. And the alternative was the Java heap above. Every
+/// client this crate builds for its own traffic goes through here, so the
+/// policy has one home.
 ///
-/// Verified how: reading the reqwest source named above, and on the device
-/// by the disappearance of the `Thread-N` tokio workers attaching to the JVM
-/// (`jni::vm::java_vm: Attached thread xtremio-core` in logcat) and of the
-/// GC bursts that followed each of the app's own handshakes. reqwest
+/// Verified how: by reading the reqwest source named above, and on the
+/// device by the disappearance of the `Thread-N` tokio workers attaching to
+/// the JVM (`jni::vm::java_vm: Attached thread xtremio-core` in logcat) and
+/// of the GC bursts that followed each of the app's own handshakes. reqwest
 /// exposes nothing to inspect a built client's verifier, so
-/// `tests::our_client_builds_where_the_platform_verifier_cannot` (test builds only) proves it
-/// behaviourally where the desktop allows.
+/// `tests::our_client_builds_where_the_platform_verifier_cannot` (test
+/// builds only) proves it behaviourally where the desktop allows.
 #[allow(clippy::disallowed_methods)] // the one door clippy.toml points everyone to
 pub fn http_client_builder() -> reqwest::ClientBuilder {
     Client::builder().tls_certs_only(mozilla_roots())
@@ -208,22 +208,22 @@ static CLIENT: LazyLock<Client> = LazyLock::new(|| {
 
 /// Root for persisted buckets: `<dir>/<key>.json`. Set once from `core_init`.
 ///
-/// This one is a forced global, and the only piece of session state that
-/// did not move into `crate::state::AppState`. `Env` declares `fetch`,
+/// This one is a forced global, and the only piece of session state that did
+/// not move into `crate::state::AppState`. `Env` declares `fetch`,
 /// `get_storage`, `set_storage` and `now` as associated functions with no
-/// `self` (stremio-core `src/runtime/env.rs`, `pub trait Env`), so an
+/// `self` (stremio-core `src/runtime/env.rs`, `pub trait Env`). So an
 /// implementation is a *type* and has no instance to hang a storage
-/// directory on: `XtremioEnv::get_storage(key)` has nothing but statics to
+/// directory on. `XtremioEnv::get_storage(key)` has nothing but statics to
 /// read from.
 ///
 /// If we ever want two independent cores in one process, the way out is a
-/// type-indexed context -- `struct XtremioEnv<C: EnvContext>(PhantomData<C>)`
-/// with the directory behind `C`, which type-checks because `Runtime` only
-/// asks for `E: Env + Send + 'static` and the trait's defaulted methods
-/// only add `Self: Sized + 'static`. A `tokio::task_local!` context was
-/// considered and rejected: a future that escapes the scope reads the
-/// wrong context silently instead of failing loudly, and storage effects
-/// are exactly the futures that get spawned onwards.
+/// type-indexed context: `struct XtremioEnv<C: EnvContext>(PhantomData<C>)`
+/// with the directory behind `C`. That type-checks, because `Runtime` only
+/// asks for `E: Env + Send + 'static` and the trait's defaulted methods only
+/// add `Self: Sized + 'static`. A `tokio::task_local!` context was
+/// considered and rejected. A future that escapes the scope reads the wrong
+/// context silently instead of failing loudly, and storage effects are
+/// exactly the futures that get spawned onwards.
 static STORAGE_DIR: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 /// Points storage at `dir` (created if missing).
@@ -257,13 +257,13 @@ pub(crate) fn storage_path(key: &str) -> Option<PathBuf> {
 /// answers where it went.
 ///
 /// For a file the app can read but not parse. Reading it as empty is the
-/// right answer for the session -- a bad byte must not stop the app -- but
-/// the next write then lands on the only copy of what was there, and for a
-/// stremio-core bucket that is a logged-in profile or a library nothing
-/// else holds. Moved aside, the bytes stay for a later build or a human,
-/// and the fresh file starts beside them. Shared by the buckets
-/// (`crate::core`), the downloads registry and the preferences file, so the
-/// three spell the name one way and a recovery can look for one pattern.
+/// right answer for the session, because a bad byte must not stop the app.
+/// But the next write then lands on the only copy of what was there, and for
+/// a stremio-core bucket that is a logged-in profile or a library nothing
+/// else holds. Moved aside, the bytes stay for a later build or a human, and
+/// the fresh file starts beside them. The buckets (`crate::core`), the
+/// downloads registry and the preferences file share this, so the three
+/// spell the name one way and a recovery can look for one pattern.
 pub(crate) fn move_aside(path: &Path) -> std::io::Result<PathBuf> {
     let name = path
         .file_name()
@@ -312,22 +312,20 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()>
 
 /// Fetches `url` as text, at most `most_bytes` of it.
 ///
-/// [`Env::fetch`] is the crate's one HTTP path and it deserializes JSON,
-/// which a subtitle file is not -- so this is the same path with the
-/// decoding left off: the same [`CLIENT`] (one connection pool, one user
-/// agent, one set of timeouts) and the same rule about the embedded
-/// server's bearer token, and not a second client built somewhere else.
+/// [`Env::fetch`] is the crate's one HTTP path, and it deserializes JSON,
+/// which a subtitle file is not. So this is the same path with the decoding
+/// left off. It uses the same [`CLIENT`] (one connection pool, one user
+/// agent, one set of timeouts) and the same rule about the embedded server's
+/// bearer token. It is not a second client built somewhere else.
 ///
 /// Decoded lossily on purpose. Plenty of subtitle files are Latin-1 or
 /// worse, and the caller reads only the ASCII digits and colons of their
-/// timing lines; refusing a file over an encoding would lose a set of
+/// timing lines. Refusing a file over an encoding would lose a set of
 /// observations that is perfectly readable.
 ///
 /// The cap is a real bound rather than a check afterwards ([`read_capped`],
-/// which [`Env::fetch`] reads through as well) because a URL that answers
-/// with something enormous must not be able to spend the device's memory
-/// on it.
-///
+/// which [`Env::fetch`] reads through as well). A URL that answers with
+/// something enormous must not be able to spend the device's memory on it.
 /// **The URL never reaches the error.** An addon's URL can carry a debrid
 /// API key (`AGENTS.md`, "Never log auth material"), and `reqwest` puts
 /// the URL it was given into its own `Display`, so every error out of it
@@ -355,16 +353,16 @@ pub(crate) async fn fetch_text(url: &url::Url, most_bytes: usize) -> anyhow::Res
     Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
-/// The most a JSON answer may be -- an addon's manifest, catalog page,
-/// meta, streams or subtitles list, or the Stremio API's answer to a login
-/// or a library sync: 32 MiB.
+/// The most a JSON answer may be: 32 MiB. That covers an addon's manifest,
+/// catalog page, meta, streams or subtitles list, and the Stremio API's
+/// answer to a login or a library sync.
 ///
-/// Measured rather than guessed: the largest legitimate answer found is
-/// Cinemeta's meta for a series with about fifteen thousand episodes, at
-/// 3.1 MB, and ten times that rules nothing real out. It also rules out what
-/// an unbounded read let an installed addon do: reqwest inflates gzip
-/// transparently, so a 100 KB body on the wire became 1.7 GB in memory --
-/// on a 2 GB television box, and on every launch, since the board asks
+/// Measured rather than guessed. The largest legitimate answer found is
+/// Cinemeta's meta for a series with about fifteen thousand episodes, at 3.1
+/// MB, and ten times that rules nothing real out. It also rules out what an
+/// unbounded read let an installed addon do. reqwest inflates gzip
+/// transparently, so a 100 KB body on the wire became 1.7 GB in memory. That
+/// was on a 2 GB television box, and on every launch, since the board asks
 /// every addon's catalogs.
 pub(crate) const MOST_JSON_BYTES: usize = 32 * 1024 * 1024;
 
@@ -378,13 +376,13 @@ enum ReadError {
 
 /// Reads `response`'s body, at most `most_bytes` of it.
 ///
-/// The cap is a real bound rather than a check afterwards: the body is
+/// The cap is a real bound rather than a check afterwards. The body is
 /// accumulated chunk by chunk and abandoned the moment it is exceeded. It
-/// has to be, because a `Content-Length` says nothing here -- reqwest drops
-/// it when it inflates a compressed body, and the inflated size is the one
-/// that costs memory -- so only a bound on what arrives after decoding
-/// bounds what the device spends. Both HTTP paths of the crate read through
-/// this, so neither can grow a body of any size again.
+/// has to be, because a `Content-Length` says nothing here. reqwest drops it
+/// when it inflates a compressed body, and the inflated size is the one that
+/// costs memory. So only a bound on what arrives after decoding bounds what
+/// the device spends. Both HTTP paths of the crate read through this, so
+/// neither can grow a body of any size again.
 async fn read_capped(
     mut response: reqwest::Response,
     most_bytes: usize,
@@ -399,9 +397,9 @@ async fn read_capped(
     Ok(body)
 }
 
-/// One request's body, capped, or why there is none: what
-/// [`XtremioEnv::fetch`] asks of the network before it decodes, split out so
-/// that a failure here can still be answered from a download
+/// One request's body, capped, or why there is none. This is what
+/// [`XtremioEnv::fetch`] asks of the network before it decodes. It is split
+/// out so that a failure here can still be answered from a download
 /// (`downloads::kept_meta`).
 async fn fetch_bytes(request: reqwest::Request, host: Option<String>) -> Result<Vec<u8>, EnvError> {
     let response = CLIENT.execute(request).await.map_err(|error| {
@@ -435,21 +433,21 @@ fn decode<OUT: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<OUT, EnvError>
 const LOCAL_ADDON_PATH: &str = "/local-addon/";
 
 /// The answer to a request for the profile's Local Files addon, which is
-/// given here and never sent: None for any other URL.
+/// given here and never sent. None for any other URL.
 ///
 /// **The addon is Stremio's streaming server's, and this app's server has
-/// none.** Its transport URL is `http://127.0.0.1:11470/local-addon/...`
-/// in every profile, and nothing may retarget it -- the addon list syncs
-/// to the Stremio account, which the official apps share. Sent as it is,
-/// the request reaches a port nothing listens on (the embedded server
-/// binds a port the OS picks), and Discover reports the catalog as one
-/// that could not be loaded, on every board. The app finds this device's
-/// videos itself (`lib/features/local/`), so what the addon is asked
-/// here is answered empty: a catalog with nothing in it is a row Discover
-/// leaves out without comment, and no streams is what a local play's
-/// tracking request (`localTrackingManifestUrl`) is meant to find when the
-/// engine asks it for the next episode. Anything else -- its manifest, a
-/// `local:` meta -- is refused as not served, as an addon without it would.
+/// none.** Its transport URL is `http://127.0.0.1:11470/local-addon/...` in
+/// every profile. Nothing may retarget it, because the addon list syncs to
+/// the Stremio account, which the official apps share. Sent as it is, the
+/// request reaches a port nothing listens on (the embedded server binds a
+/// port the OS picks), and Discover reports the catalog as one that could
+/// not be loaded, on every board. The app finds this device's videos itself
+/// (`lib/features/local/`), so what the addon is asked here is answered
+/// empty. A catalog with nothing in it is a row Discover leaves out without
+/// comment. No streams is what a local play's tracking request
+/// (`localTrackingManifestUrl`) is meant to find when the engine asks it for
+/// the next episode. Anything else, such as its manifest or a `local:` meta,
+/// is refused as not served, as an addon without it would.
 fn local_addon_answer(uri: &http::Uri) -> Option<Result<Vec<u8>, EnvError>> {
     let host = uri.host()?;
     let loopback = host.eq_ignore_ascii_case("localhost")
@@ -471,10 +469,10 @@ fn local_addon_answer(uri: &http::Uri) -> Option<Result<Vec<u8>, EnvError>> {
     Some(Ok(body.to_vec()))
 }
 
-/// The addon, type and id of a meta request's URL --
-/// `{base}/meta/{type}/{id}.json`, the shape stremio-core builds from a
-/// `ResourceRequest` -- with the base given back as the manifest URL the
-/// request was built from. None for any other URL.
+/// The addon, type and id of a meta request's URL, with the base given back
+/// as the manifest URL the request was built from. The URL has the shape
+/// `{base}/meta/{type}/{id}.json`, which stremio-core builds from a
+/// `ResourceRequest`. None for any other URL.
 fn meta_request_of(url: &url::Url) -> Option<(url::Url, String, String)> {
     let segments: Vec<&str> = url.path_segments()?.collect();
     let [.., resource, kind, file] = segments.as_slice() else {
@@ -535,14 +533,14 @@ impl Env for XtremioEnv {
             Err(error) => return future::err(EnvError::Serde(error.to_string())).boxed_env(),
         };
         // **The URL never reaches an error out of here**, as with
-        // [`fetch_text`]: a stream request to a Torrentio-style addon
-        // carries the debrid API key in its path, `reqwest` puts the URL it
-        // was given into its own `Display`, and `EnvError::Fetch`'s text is
-        // what the failed-addons line on screen shows verbatim -- so every
+        // [`fetch_text`]. A stream request to a Torrentio-style addon
+        // carries the debrid API key in its path, and `reqwest` puts the URL
+        // it was given into its own `Display`. `EnvError::Fetch`'s text is
+        // what the failed-addons line on screen shows verbatim. So every
         // `reqwest::Error` here goes through `without_url` first. The host
-        // alone is logged, at debug: the readable half the addon health
-        // record keeps too, enough to say which addon failed and nothing
-        // about how it is configured.
+        // alone is logged, at debug. It is the readable half the addon
+        // health record keeps too, enough to say which addon failed and
+        // nothing about how it is configured.
         let mut request = match reqwest::Request::try_from(Request::from_parts(parts, body)) {
             Ok(request) => request,
             Err(error) => {
@@ -575,10 +573,10 @@ impl Env for XtremioEnv {
             let bytes = match fetch_bytes(request, host).await {
                 Ok(bytes) => bytes,
                 Err(error) => {
-                    // Off the worker: the registry's lock is a std mutex,
+                    // Off the worker. The registry's lock is a std mutex,
                     // and it is held across server calls that can queue
-                    // behind a magnet, so waiting on it here would stall
-                    // one of `CONCURRENT`'s few workers with it.
+                    // behind a magnet. Waiting on it here would stall one of
+                    // `CONCURRENT`'s few workers with it.
                     let kept = match meta_request {
                         Some((base, kind, id)) => CONCURRENT
                             .spawn_blocking(move || crate::downloads::kept_meta(&base, &kind, &id))
@@ -609,9 +607,9 @@ impl Env for XtremioEnv {
         future::lazy(move |_| {
             let path = path.ok_or(EnvError::StorageUnavailable)?;
             match std::fs::read(&path) {
-                // Never the error's own text: it quotes the refused value,
-                // and a bucket holds addon URLs with their keys in them.
-                // See [`crate::serde_fault`].
+                // Never the error's own text. It quotes the refused value,
+                // and a bucket holds addon URLs with their keys in them. See
+                // [`crate::serde_fault`].
                 Ok(bytes) => serde_json::from_slice::<T>(&bytes)
                     .map(Some)
                     .map_err(|error| EnvError::Serde(crate::serde_fault::cause(&error))),
@@ -695,15 +693,15 @@ impl Env for XtremioEnv {
 
 /// Points storage at a fresh temporary directory for the length of `f`.
 ///
-/// The last test-only lock in the crate, and it is here for the reason
-/// [`STORAGE_DIR`] is a static at all: an `Env` implementation is a type,
-/// so the storage directory cannot be a field of an `AppState` that a test
-/// could keep to itself. Every test that wants one takes this -- here, and
-/// not in a module's own test mod -- and they queue behind each other
-/// instead of pulling the directory out from under one another. Whatever
-/// can be said about a pure function is said about one instead
-/// (`registry_path_in`, `Progress::only_downloaded_moved_from`), and everything else now
-/// runs against its own `AppState`.
+/// The last test-only lock in the crate. It is here for the reason
+/// [`STORAGE_DIR`] is a static at all: an `Env` implementation is a type, so
+/// the storage directory cannot be a field of an `AppState` that a test
+/// could keep to itself. Every test that wants one takes this lock, here and
+/// not in a module's own test mod. They queue behind each other instead of
+/// pulling the directory out from under one another. Whatever can be said
+/// about a pure function is said about one instead (`registry_path_in`,
+/// `Progress::only_downloaded_moved_from`), and everything else now runs
+/// against its own `AppState`.
 #[cfg(test)]
 static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -735,8 +733,8 @@ mod tests {
     use stremio_core::constants::{SCHEMA_VERSION, SCHEMA_VERSION_STORAGE_KEY};
 
     /// The meta requests stremio-core builds come apart into the addon's
-    /// manifest URL, the type and the id -- escapes decoded, the addon's own
-    /// query kept -- and nothing else does.
+    /// manifest URL, the type and the id, and nothing else does. Escapes are
+    /// decoded and the addon's own query is kept.
     #[test]
     fn meta_request_of_reads_what_stremio_core_builds() {
         let parse = |text: &str| url::Url::parse(text).unwrap();
@@ -772,9 +770,9 @@ mod tests {
 
     use super::*;
 
-    /// Writes land in the order they were asked for, whatever order they
-    /// run in: the engine asks under the model's lock and queues after
-    /// letting it go, so two dispatchers can queue theirs crosswise.
+    /// Writes land in the order they were asked for, whatever order they run
+    /// in. The engine asks under the model's lock and queues after letting
+    /// it go, so two dispatchers can queue theirs crosswise.
     #[test]
     fn an_older_write_queued_last_does_not_land_over_a_newer_one() {
         with_storage_dir(|_| {
@@ -933,12 +931,11 @@ mod tests {
     /// A server that answers one request with `status` and `body`, and the
     /// URL to reach it at.
     ///
-    /// Twenty lines of `TcpStream` rather than the embedded server,
-    /// because what is being tested is the *reading* of a body -- its
-    /// size, its encoding, a status that is not 200 -- and the embedded
-    /// server has no route that would answer any of those on demand. It
-    /// also leaves the one test below the only one holding the process's
-    /// server.
+    /// Twenty lines of `TcpStream` rather than the embedded server. What is
+    /// being tested is the *reading* of a body (its size, its encoding, a
+    /// status that is not 200), and the embedded server has no route that
+    /// would answer any of those on demand. It also leaves the one test
+    /// below as the only one holding the process's server.
     fn one_shot(status: &'static str, body: Vec<u8>) -> url::Url {
         one_shot_with(status, &[], body)
     }
@@ -977,10 +974,10 @@ mod tests {
     }
 
     /// `Env::fetch` is bounded the way `fetch_text` is, and the bound is on
-    /// what arrives *after* decoding: a compressed body a fraction of the
+    /// what arrives *after* decoding. A compressed body a fraction of the
     /// cap on the wire is refused once it inflates past it, before serde
-    /// sees a byte. This is the shape a poisoned addon takes -- a 100 KB
-    /// answer that costs the device a gigabyte -- and the shape a
+    /// sees a byte. This is the shape a poisoned addon takes (a 100 KB
+    /// answer that costs the device a gigabyte), and the shape a
     /// `Content-Length` check would wave through.
     #[test]
     fn fetch_refuses_a_body_that_inflates_past_the_cap() {
@@ -1018,9 +1015,9 @@ mod tests {
             .expect("fetch the file");
         assert_eq!(body, vtt);
 
-        // Latin-1, which plenty of subtitle files really are: the byte
-        // that is not UTF-8 becomes a replacement character and the timing
-        // lines -- the whole of what the caller reads -- survive.
+        // Latin-1, which plenty of subtitle files really are. The byte that
+        // is not UTF-8 becomes a replacement character, and the timing lines
+        // survive, which are the whole of what the caller reads.
         let mut latin1 = b"00:00:01,000 --> 00:00:03,000\nH".to_vec();
         latin1.push(0xe9);
         latin1.push(b'j');
@@ -1069,10 +1066,10 @@ mod tests {
     /// request to a Torrentio-style addon has the debrid API key in its
     /// path, and `EnvError::Fetch`'s text is what the failed-addons line on
     /// screen shows verbatim -- on a television in a shared room.
-    /// **The profile's Local Files addon is answered here, never sent**:
-    /// its catalog and streams come back empty, as the engine's own
-    /// response type reads them, from every loopback spelling of its
-    /// address -- whatever port it names, none of which is this app's
+    /// **The profile's Local Files addon is answered here, never sent.** Its
+    /// catalog and streams come back empty, as the engine's own response
+    /// type reads them, from every loopback spelling of its address. That
+    /// holds whatever port it names, and none of them is this app's
     /// server's.
     #[test]
     fn the_local_files_addon_is_answered_without_a_request() {
@@ -1149,9 +1146,9 @@ mod tests {
         assert!(!message.contains(&address.to_string()), "{message}");
     }
 
-    /// `/device-info`, the smallest of the routes stremio-core calls -- and
-    /// a core-protocol route is the only kind of control route there is
-    /// (the app's own questions go over FFI; the server's README "API").
+    /// `/device-info`, the smallest of the routes stremio-core calls. A
+    /// core-protocol route is the only kind of control route there is (the
+    /// app's own questions go over FFI; the server's README "API").
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct DeviceInfo {
@@ -1159,10 +1156,10 @@ mod tests {
     }
 
     /// The one lib test that starts the *process* state's embedded server,
-    /// and it has to: `fetch` reaches `crate::server::token_for` with no
+    /// and it has to. `fetch` reaches `crate::server::token_for` with no
     /// argument to route it, because `Env` has no `self` (see
     /// `STORAGE_DIR`). Every other test that wants a server builds an
-    /// `AppState` of its own instead; a second one here would have to
+    /// `AppState` of its own instead. A second one here would have to
     /// serialize with this.
     #[test]
     fn fetch_decodes_json_from_the_embedded_server() {
@@ -1238,13 +1235,13 @@ mod tests {
 
     /// reqwest exposes nothing about a built client's verifier, so this
     /// proves it by difference. On Linux the platform verifier loads the
-    /// system store through `rustls-native-certs`, which takes the store
-    /// from `SSL_CERT_FILE` and `SSL_CERT_DIR` when either is set (both are,
-    /// in this process: something in the graph runs `openssl-probe` at
-    /// start-up and points them at `/usr/lib/ssl`). Pointed at an empty
-    /// file and an empty directory it loads nothing, and
-    /// `rustls_platform_verifier::Verifier::new` refuses an empty store
-    /// ("No CA certificates were loaded from the system"), so a builder that
+    /// system store through `rustls-native-certs`. That takes the store from
+    /// `SSL_CERT_FILE` and `SSL_CERT_DIR` when either is set. Both are set
+    /// in this process, because something in the graph runs `openssl-probe`
+    /// at start-up and points them at `/usr/lib/ssl`. Pointed at an empty
+    /// file and an empty directory, it loads nothing, and
+    /// `rustls_platform_verifier::Verifier::new` refuses an empty store ("No
+    /// CA certificates were loaded from the system"). So a builder that
     /// constructs it cannot `build()`. Ours builds regardless, which is only
     /// possible if it never asked the platform for roots. (Racy in theory
     /// with anything else reading those variables at the same moment;

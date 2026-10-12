@@ -3,14 +3,18 @@
 //!
 //! ## Why the pump, and not `Env::fetch`
 //!
-//! The obvious place to watch addons answer is the HTTP layer, and it is
-//! the wrong one. [`XtremioEnv::fetch`](stremio_core::runtime::Env::fetch) is generic over its
-//! output, so it cannot tell "the addon answered with nothing" from "the
-//! addon answered" -- and that difference is the whole point of the record.
-//! It also only has the *resource* URL, which maps back to an addon's
-//! transport URL by guesswork (a legacy `/stremio/v1` transport rewrites
-//! differently, and two addons can share a host), and that URL is the one
-//! carrying a debrid API key.
+//! The obvious place to watch addons answer is the HTTP layer, and it is the
+//! wrong one. [`XtremioEnv::fetch`](stremio_core::runtime::Env::fetch) is
+//! generic over its output, so it cannot tell "the addon answered with
+//! nothing" from "the addon answered". That difference is the whole point of
+//! the record. It also only has the *resource* URL, which maps back to an
+//! addon's transport URL by guesswork (a legacy `/stremio/v1` transport
+//! rewrites differently, and two addons can share a host). And that URL is
+//! the one carrying a debrid API key.
+//!
+//! Doing it per screen in Dart is the other wrong layer. `build` runs many
+//! times, so each screen would need its own edge detection, and only a
+//! screen that is mounted sees anything at all.
 //!
 //! Doing it per screen in Dart is the other wrong layer: `build` runs many
 //! times, so each screen would need its own edge detection, and only a
@@ -23,28 +27,27 @@
 //!
 //! ## One field's load is one sweep
 //!
-//! stremio-core settles addon answers one at a time -- every
-//! `ResourceRequestResult` is its own message and its own `NewState` -- so
-//! "everything that settled in this event" would be a sweep of one, and a
-//! lone failure would then be indistinguishable from a broken connection
-//! and recorded against nobody. Every failure would be thrown away.
+//! stremio-core settles addon answers one at a time: every
+//! `ResourceRequestResult` is its own message and its own `NewState`. So
+//! "everything that settled in this event" would be a sweep of one. A lone
+//! failure would then be indistinguishable from a broken connection and
+//! recorded against nobody, and every failure would be thrown away.
 //!
-//! So a sweep is a *load*, not an event: settled answers accumulate in
+//! So a sweep is a *load*, not an event. Settled answers accumulate in
 //! [`FieldWatch::sweep`] while any of the field's loadables is still
 //! `Loading`, and the sweep is handed to [`commit`] once the field has gone
-//! quiet. That is the batch that went out together,
-//! which is the only batch whose all-failing says something about the
-//! network rather than about an addon.
+//! quiet. That is the batch that went out together, the only batch whose
+//! all-failing says something about the network rather than about an addon.
 //!
-//! What that costs, and it is worth being plain about: a sweep of one is
+//! This has a cost, and it is worth being plain about. A sweep of one is
 //! always either evidence or discarded, never weighed. The board asks for
 //! the rows in its current `LoadRange` and widens that by about a row per
-//! scroll step, so after the first screenful most board sweeps are a
-//! single row -- and a single row that fails is an all-failed sweep and is
-//! thrown away. Board failures below the fold are therefore thin in the
-//! record, while the successes beside them are counted normally. The
-//! details screen, where the stream addons are asked together, is where a
-//! failure is most reliably seen.
+//! scroll step. So after the first screenful most board sweeps are a single
+//! row, and a single row that fails is an all-failed sweep and is thrown
+//! away. Board failures below the fold are therefore thin in the record,
+//! while the successes beside them are counted normally. A failure is seen
+//! most reliably on the details screen, where the stream addons are asked
+//! together.
 //!
 //! ## Only a transition into a settled state counts
 //!
@@ -52,29 +55,29 @@
 //! and the pump reads the model as it is *now*, so the same settled answer
 //! is seen over and over. [`FieldWatch::settled`] is the edge detector:
 //! every settled loadable of the field, by request identity, and how it
-//! settled. An answer is counted only when that map did not already hold
-//! the same outcome for it. `Loading` is never an outcome, and a loadable
-//! with no content at all was never asked -- an unscrolled board row is not
+//! settled. An answer is counted only when that map did not already hold the
+//! same outcome for it. `Loading` is never an outcome. A loadable with no
+//! content at all was never asked, and an unscrolled board row is not
 //! evidence about anything.
 //!
 //! Nor is a loadable the core made up rather than fetched. `MetaDetails`
-//! keeps a `meta_streams` beside the `streams` it requested, and that one
-//! is assembled locally from the meta item that was already counted: it is
-//! always `Ready` and always carries the meta addon's base. Counting it
-//! would give that addon a `stream` success it never earned, and -- since
-//! it can never fail -- would put a guaranteed non-failure into the sweep,
-//! so an outage in which every addon that was really asked failed would
-//! look like evidence and be charged to all of them.
+//! keeps a `meta_streams` beside the `streams` it requested. It is assembled
+//! locally from the meta item that was already counted, so it is always
+//! `Ready` and always carries the meta addon's base. Counting it would give
+//! that addon a `stream` success it never earned. Since it can never fail,
+//! it would also put a guaranteed non-failure into the sweep. An outage in
+//! which every addon that was really asked failed would then look like
+//! evidence and be charged to all of them.
 //!
-//! The map is rebuilt from the model on every walk rather than added to, so
-//! it is bounded by what the model holds and a request that goes away
+//! The map is rebuilt from the model on every walk rather than added to. So
+//! it is bounded by what the model holds, and a request that goes away
 //! (unloading a screen) is forgotten with it. Asking the same addon again
 //! after that is a new answer, because it is.
 //!
-//! Nothing here is written down: the map lives for the life of one
-//! [`crate::state::AppState`], and it holds a [`crate::addon_health::key_for`]
-//! digest and a digest of the resource path rather than the transport URL
-//! or the id of what was being watched.
+//! Nothing here is written down. The map lives for the life of one
+//! [`crate::state::AppState`], and it holds a
+//! [`crate::addon_health::key_for`] digest and a digest of the resource
+//! path, not the transport URL or the id of what was being watched.
 
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard};
@@ -124,10 +127,10 @@ impl Watched {
 
 /// What makes two requests the same request.
 ///
-/// The addon is its [`key_for`] key and the path is a digest, so the map
-/// this is a key of holds neither a transport URL nor the id of whatever
-/// was being watched -- the same rule the stored record follows, applied to
-/// memory that never reaches the disk anyway.
+/// The addon is its [`key_for`] key and the path is a digest. So the map
+/// this is a key of holds neither a transport URL nor the id of whatever was
+/// being watched. That is the same rule the stored record follows, applied
+/// to memory that never reaches the disk anyway.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct RequestId {
     addon: String,
@@ -178,9 +181,9 @@ struct FieldWatch {
 /// watched field.
 ///
 /// It belongs to the state rather than to the process because the pump
-/// outlives a shutdown by design: an event still in flight has to be
-/// edge-detected against the model it came from, and a later `init` starts
-/// from a fresh model and so must start from a fresh memory of it.
+/// outlives a shutdown by design. An event still in flight has to be
+/// edge-detected against the model it came from. A later `init` starts from
+/// a fresh model, and so must start from a fresh memory of it.
 #[derive(Default)]
 pub struct ObserverState {
     watched: Mutex<BTreeMap<Watched, FieldWatch>>,
@@ -200,7 +203,7 @@ impl ObserverState {
 enum Answer {
     /// Asked, still out.
     Pending,
-    /// Planned but never asked -- a board row nobody scrolled to.
+    /// Planned but never asked: a board row nobody scrolled to.
     NotAsked,
     /// Answered, one way or the other.
     Settled(Outcome),
@@ -242,13 +245,13 @@ impl Walk<'_> {
     /// has just settled into something not seen before.
     fn note<T>(&mut self, loadable: &ResourceLoadable<T>) {
         // A resource no record is kept for (`addon_catalog`, or whatever an
-        // addon invents) is not an answer this counts, and does not make
-        // the field busy either -- which is why it is skipped before its
-        // content is looked at at all. Nothing reaches this today, because
-        // none of the watched fields holds such a loadable; the order
-        // matters for the day one does, when a permanently-`Loading`
-        // addon catalog would otherwise hold the field's whole sweep open
-        // and drop every real answer in it.
+        // addon invents) is not an answer this counts. It does not make the
+        // field busy either, which is why it is skipped before its content
+        // is looked at at all. Nothing reaches this today, because none of
+        // the watched fields holds such a loadable. The order matters for
+        // the day one does. A permanently-`Loading` addon catalog would
+        // otherwise hold the field's whole sweep open and drop every real
+        // answer in it.
         let Some(kind) = ResourceKind::from_resource_name(&loadable.request.path.resource) else {
             return;
         };
@@ -273,9 +276,9 @@ impl Walk<'_> {
     }
 }
 
-/// Walks the loadables `field` holds. Every one of them, not only the ones
-/// that just changed: what has settled is what says whether the load is
-/// done, and the edge detector is what keeps it from being counted twice.
+/// Walks the loadables `field` holds. It walks every one of them, not only
+/// the ones that just changed. What has settled says whether the load is
+/// done, and the edge detector keeps it from being counted twice.
 fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
     match field {
         Watched::Board => {
@@ -300,15 +303,15 @@ fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
             for streams in &model.meta_details.streams {
                 walk.note(streams);
             }
-            // Two of this field's loadables are left out because neither
-            // is a question anybody was asked. `meta_streams` is
-            // synthesised: stremio-core builds it out of the meta item
-            // already in hand -- the selected video's inline `streams`, or
-            // `Stream::youtube` -- always `Ready` and always under the
-            // *meta* addon's base, for a request that never leaves the
-            // device. `last_used_stream`'s request is one of the above,
-            // and its content is an `Option`, so an addon that answered
-            // with nothing would read as one that answered.
+            // Two of this field's loadables are left out because neither is
+            // a question anybody was asked. `meta_streams` is synthesised.
+            // stremio-core builds it out of the meta item already in hand
+            // (the selected video's inline `streams`, or `Stream::youtube`),
+            // always `Ready` and always under the *meta* addon's base, for a
+            // request that never leaves the device. `last_used_stream`'s
+            // request is one of the above. Its content is an `Option`, so an
+            // addon that answered with nothing would read as one that
+            // answered.
         }
         Watched::Player => {
             if let Some(item) = &model.player.meta_item {
@@ -328,19 +331,18 @@ fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
 /// `app` what was seen so the same answer is not collected twice.
 ///
 /// Reading and counting are two calls on purpose. The caller in the
-/// runtime-event pump is holding the model's read lock while this one runs,
-/// and [`commit`] is the half that can reach the disk: it writes the record
-/// out, `fsync` and all, up to once a minute. Holding the model across that
-/// would park any `Runtime::dispatch` waiting for the model's *write* lock
-/// for the length of a flush -- and with `std`'s `RwLock` a waiting writer
-/// also stalls the readers behind it, which includes the `core::get_state`
-/// Dart calls on every field render. So the pump lets the model go, and
-/// then counts.
+/// runtime-event pump holds the model's read lock while this one runs.
+/// [`commit`] is the half that can reach the disk: it writes the record out,
+/// `fsync` and all, up to once a minute. Holding the model across that would
+/// park any `Runtime::dispatch` waiting for the model's *write* lock for the
+/// length of a flush. With `std`'s `RwLock` a waiting writer also stalls the
+/// readers behind it, which includes the `core::get_state` Dart calls on
+/// every field render. So the pump lets the model go, and then counts.
 ///
-/// Reading the model from the pump cannot deadlock against a dispatch:
+/// Reading the model from the pump cannot deadlock against a dispatch.
 /// `Runtime::dispatch` and `Runtime::handle_effect_output` both drop the
 /// model's write guard before calling `handle_effects`, which is what emits
-/// into this pump's channel, so no writer is ever waiting on the pump while
+/// into this pump's channel. So no writer is ever waiting on the pump while
 /// holding the lock the pump wants.
 pub fn sweeps(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]) -> Vec<Sweep> {
     let mut watched = app.addon_observer.watched();
@@ -372,20 +374,19 @@ pub fn sweeps(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]
 /// evidence about the addons at all (see
 /// [`crate::addon_health::Sweep::commit_into`]).
 ///
-/// Takes no model, and must be called with none held: this is where the
-/// health table's lock and the preferences file behind it are taken. The
-/// observer's own lock is released by then too -- [`sweeps`] gave it back
-/// with the sweeps -- so the order is only ever observer, then table, then
-/// file.
+/// It takes no model, and must be called with none held, because this is
+/// where the health table's lock and the preferences file behind it are
+/// taken. The observer's own lock is released by then too, since [`sweeps`]
+/// gave it back with the sweeps. So the order is only ever observer, then
+/// table, then file.
 pub fn commit(app: &AppState, sweeps: Vec<Sweep>) -> usize {
     commit_at(app, sweeps, Utc::now())
 }
 
-/// [`commit`] as of `now`. One instant for the whole batch, because the
-/// sweeps came out of one `NewState` and were settled by the time it was
-/// read; and a parameter rather than a read of the clock, so a test about
-/// counting can hold it still (see
-/// [`crate::addon_health::commit_in_at`]).
+/// [`commit`] as of `now`. There is one instant for the whole batch, because
+/// the sweeps came out of one `NewState` and were settled by the time it was
+/// read. It is a parameter rather than a read of the clock, so a test about
+/// counting can hold it still (see [`crate::addon_health::commit_in_at`]).
 pub fn commit_at(app: &AppState, sweeps: Vec<Sweep>, now: DateTime<Utc>) -> usize {
     sweeps.into_iter().fold(0, |recorded, sweep| {
         recorded + usize::from(crate::addon_health::commit_in_at(app, sweep, now))
