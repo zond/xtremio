@@ -314,8 +314,8 @@ void main() {
         room.shortText,
         'The update needs 200 MB free on this device and there is 150 MB. '
         'Streams were stopped and the torrent cache cleared, which freed '
-        '100 MB; what it still holds is the downloads you kept, which Server '
-        'storage shows.',
+        '100 MB. What is left is the downloads you kept. Server storage '
+        'shows them.',
       );
     });
 
@@ -333,7 +333,7 @@ void main() {
       expect(
         room.shortText,
         'The update needs 200 MB free on this device and there is 150 MB. '
-        'The torrent cache could not be cleared; Server storage shows what '
+        'The torrent cache could not be cleared. Server storage shows what '
         'it holds.',
       );
       expect(

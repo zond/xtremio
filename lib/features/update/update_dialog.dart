@@ -64,7 +64,7 @@ class UpdateDialog extends StatefulWidget {
   /// ([AppUpdates.makeRoom]).
   static const String measuringText = 'Checking the space on this device.';
   static const String cleaningText =
-      'Emptying the torrent cache of what it can give back.';
+      'Freeing what the torrent cache can spare.';
   static const String clearingText = 'Stopping streams and clearing the cache…';
 
   /// [measuringText], [cleaningText] or [clearingText] for [step].
@@ -346,8 +346,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
     _Step.downloading => _progress(context),
     _Step.permission => _permission(),
     _Step.installing => const Text(
-      'Confirm the install on Android\'s screen. When it is done Android '
-      'closes xtremio; open it again to use the new version.',
+      'Confirm the install on Android\'s screen. Android then closes '
+      'xtremio. Open it again to use the new version.',
     ),
     _Step.short => Text(_room?.shortText ?? ''),
     _Step.failed => Text(_failure),
@@ -358,8 +358,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final notes = releaseNotesText(_release.notes);
     final note = switch ((_updates.canInstall, _abiAsked, _asset)) {
       (false, _, _) when _updates.installsHere =>
-        'This is a debug build, a separate app from the release, so it '
-            'cannot install the update. Install the release from its page.',
+        'This debug build is a separate app from the release. It cannot '
+            'install the update. Install the release from its page.',
       (true, true, null) =>
         'This release has no build for this device'
             '${_abi == null ? '' : ' ($_abi)'}. Its page lists every file.',
@@ -404,9 +404,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
     false =>
       'This device has no shortcut to the setting. On a phone it is under '
           'Settings > Apps > Special app access > Install unknown apps > '
-          'xtremio; on a television, usually Settings > Apps > Security & '
-          'restrictions > Unknown sources. Or press Install: Android asks '
-          'for the permission itself.',
+          'xtremio. On a television it is usually under Settings > Apps > '
+          'Security & restrictions > Unknown sources. Or press Install, and '
+          'Android asks for the permission itself.',
     true =>
       'Turn on "Allow from this source" for xtremio, come back, and press '
           'Install.',

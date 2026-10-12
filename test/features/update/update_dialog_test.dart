@@ -228,8 +228,8 @@ void main() {
       find.text(
         'The update needs 200 MB free on this device and there is 150 MB. '
         'Streams were stopped and the torrent cache cleared, which freed '
-        '1.2 GB; what it still holds is the downloads you kept, which Server '
-        'storage shows.',
+        '1.2 GB. What is left is the downloads you kept. Server storage '
+        'shows them.',
       ),
       findsOneWidget,
     );
@@ -378,11 +378,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Android refused the update as conflicting with the installed '
-        'xtremio (INSTALL_FAILED_UPDATE_INCOMPATIBLE). That is what an '
-        'install from before v0.1.8 gets: it is signed with a different '
-        'key. Uninstall xtremio first, then install the new version; '
-        'uninstalling removes its login, settings and downloads.',
+        'Android refused the update because it conflicts with the installed '
+        'xtremio (INSTALL_FAILED_UPDATE_INCOMPATIBLE). An install from '
+        'before v0.1.8 does this, since it is signed with a different key. '
+        'Uninstall xtremio first, then install the new version. '
+        'Uninstalling removes its login, settings and downloads.',
       ),
       findsOneWidget,
     );
@@ -479,8 +479,8 @@ void main() {
     );
     expect(
       find.text(
-        'This is a debug build, a separate app from the release, so it '
-        'cannot install the update. Install the release from its page.',
+        'This debug build is a separate app from the release. It cannot '
+        'install the update. Install the release from its page.',
       ),
       findsOneWidget,
     );

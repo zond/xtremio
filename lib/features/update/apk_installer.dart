@@ -135,10 +135,10 @@ String installFailureText(InstallOutcome outcome) {
     InstallResult.success => 'Installed.',
     InstallResult.aborted => 'The update was not installed.',
     InstallResult.conflict =>
-      'Android refused the update as conflicting with the installed '
-          'xtremio$detail. That is what an install from before v0.1.8 gets: '
-          'it is signed with a different key. Uninstall xtremio first, then '
-          'install the new version; uninstalling removes its login, '
+      'Android refused the update because it conflicts with the installed '
+          'xtremio$detail. An install from before v0.1.8 does this, since it '
+          'is signed with a different key. Uninstall xtremio first, then '
+          'install the new version. Uninstalling removes its login, '
           'settings and downloads.',
     InstallResult.incompatible =>
       'Android says this update does not fit this device$detail.',

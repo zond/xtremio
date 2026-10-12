@@ -142,11 +142,11 @@ class UpdateRoom {
     final freed = freedBytes;
     if (!cleared) return numbers;
     if (freed == null) {
-      return '$numbers The torrent cache could not be cleared; Server '
+      return '$numbers The torrent cache could not be cleared. Server '
           'storage shows what it holds.';
     }
     return '$numbers Streams were stopped and the torrent cache cleared, '
-        'which freed ${formatBytes(freed)}; what it still holds is the '
-        'downloads you kept, which Server storage shows.';
+        'which freed ${formatBytes(freed)}. What is left is the downloads '
+        'you kept. Server storage shows them.';
   }
 }
