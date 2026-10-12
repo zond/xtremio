@@ -40,7 +40,7 @@ class AppLinksDeepLinkSource implements DeepLinkSource {
 /// The contract is stremio-addons.net's Install button, and every other
 /// site's: it takes the addon's own manifest URL and swaps the scheme, so
 /// `https://host/manifest.json` arrives as `stremio://host/manifest.json`.
-/// The URL is returned **unmodified** — stremio-core's `AddonDetails` does
+/// The URL is returned **unmodified**. stremio-core's `AddonDetails` does
 /// the `stremio://` → `https://` rewrite itself, on the whole URL string,
 /// so a port, a path segment carrying a configuration and a query all
 /// survive. Rewriting it here would only be a chance to lose one.

@@ -37,22 +37,22 @@ class _Destination {
 /// bar that is not part of the focus order the D-pad walks.
 ///
 /// On a TV the rail and the body are separate [FocusTraversalGroup]s, so
-/// Tab order treats the rail as one unit, and every tab's body sits in its
-/// own [FocusScope] whose directional edge behaviour falls back to the
-/// parent scope: left from the body's first column finds nothing in the
-/// body and lands on the rail; right from the rail finds the body's nearest
-/// tile. Directional traversal is geometric and ignores the groups, so up
-/// and down past the ends of the rail's menu would land on whatever tile
-/// lies above or below; the rail swallows those two keys itself, so the
-/// menu stops at its ends.
+/// Tab order treats the rail as one unit. Every tab's body sits in its own
+/// [FocusScope], whose directional edge behaviour falls back to the parent
+/// scope. Left from the body's first column finds nothing in the body and
+/// lands on the rail; right from the rail finds the body's nearest tile.
+/// Directional traversal is geometric and ignores the groups, so up and
+/// down past the ends of the rail's menu would land on whatever tile lies
+/// above or below. The rail swallows those two keys itself, so the menu
+/// stops at its ends.
 ///
 /// The tab's scope also lets a tile autofocus when its tab is shown while
-/// the rail keeps a focused destination (autofocus only applies inside a
-/// scope with no focused child of its own): each tab has a [FocusMemory],
+/// the rail keeps a focused destination. (Autofocus only applies inside a
+/// scope with no focused child of its own.) Each tab has a [FocusMemory],
 /// so showing a tab puts focus on the tile it was on when the user left
 /// it, or on the tab's first tile the first time.
 ///
-/// A television keeps [TvDensity.overscan] of every edge clear: sets crop
+/// A television keeps [TvDensity.overscan] of every edge clear. Sets crop
 /// or curve away the outermost few percent of the panel, and a rail label
 /// or a poster that falls in that band is simply not there for the viewer.
 /// The band reaches the shell as `MediaQuery` padding (`TvMediaQuery`, so
@@ -63,17 +63,17 @@ class _Destination {
 /// embedded server is using the connection while nothing is playing. It
 /// lives here because this is the one place that can both read the
 /// [SharingScope]'s monitor and tell that nobody could be watching anything
-/// else (this route is the current one, so no player is over it), which is
+/// else: this route is the current one, so no player is over it. That is
 /// where the polling is worth doing. On a television the remote reaches it
-/// from the rail and only from the rail -- see `_lightNode` and `_onRailKey`
-/// on the state below.
+/// from the rail, and only from the rail (see `_lightNode` and `_onRailKey`
+/// on the state below).
 ///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail
 /// skipped, so the shell takes that step itself: it focuses the chosen
 /// destination before switching. Otherwise the leaving tile's node, still
 /// focused while its widget is torn down, is parked in the new tab's scope
-/// and keeps the tab's tile from autofocusing; and when it is disposed
+/// and keeps the tab's tile from autofocusing. When that node is disposed,
 /// focus falls on the bare scope, where nothing shows it.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
@@ -111,35 +111,35 @@ class _RootShellState extends State<RootShell> {
   );
 
   /// The status light's focus node, owned here so the rail can put focus
-  /// on it, and **skipped by traversal**: a light in the top right corner
+  /// on it, and **skipped by traversal**. A light in the top right corner
   /// that directional traversal could land on would sit between an up or a
-  /// right press and the poster it was meant for, which is the one thing an
-  /// overlay on a television must never do. What reaches it instead is
-  /// [_onRailKey], up from the top of the rail.
+  /// right press and the poster it was meant for. That is the one thing an
+  /// overlay on a television must never do. [_onRailKey] reaches it
+  /// instead, up from the top of the rail.
   ///
   /// It is a television's node and nothing else's. Off one, [SharingLight]
   /// draws a plain button that takes no node from the shell, so this one is
-  /// never attached to the tree at all: Tab does reach the light there, but
-  /// through the button's own node rather than this. Which is why the flag
-  /// is set unconditionally and reads as if it were about both -- the
-  /// property is the one thing standing between a D-pad press and the light,
-  /// so it is set where the node is made rather than where the light is
-  /// drawn, and off a television it decides nothing.
+  /// never attached to the tree at all. Tab does reach the light there, but
+  /// through the button's own node. That is why the flag is set
+  /// unconditionally and reads as if it were about both. The property is
+  /// the one thing standing between a D-pad press and the light, so it is
+  /// set where the node is made rather than where the light is drawn. Off a
+  /// television it decides nothing.
   final FocusNode _lightNode = FocusNode(
     debugLabel: 'sharing light',
     skipTraversal: true,
   );
 
   /// Whether the light is drawn *and this node is what the remote would
-  /// land on*: it is in the focus tree exactly then, since [SharingLight]
-  /// builds nothing at all when there is nothing going out, and builds the
-  /// button that ignores this node off a television. So this is false on a
-  /// phone however much is going out, which costs nothing: the only thing
+  /// land on*. The node is in the focus tree exactly then: [SharingLight]
+  /// builds nothing at all when nothing is going out, and off a television
+  /// it builds a button that ignores this node. So this is false on a phone
+  /// however much is going out. That costs nothing, because the only thing
   /// that asks is [_onRailKey], and a rail key is a television's.
   ///
   /// Asking the node rather than the monitor keeps this one question with
-  /// one answer -- and a [FocusNode.requestFocus] on a node with no parent
-  /// is remembered and applied when it *is* next mounted, which would take
+  /// one answer. A [FocusNode.requestFocus] on a node with no parent is
+  /// also remembered and applied when it *is* next mounted. That would take
   /// the remote to a light that appeared ten minutes later.
   bool get _lightIsUp => _lightNode.parent != null;
 
@@ -161,8 +161,8 @@ class _RootShellState extends State<RootShell> {
   /// which one.
   ///
   /// There is nothing narrower to listen to. [NavigationRail] hands out no
-  /// nodes to attach an `onFocusChange` to, and a move from one of its
-  /// destinations to the next changes no node the shell owns -- [_railNode]
+  /// nodes to attach an `onFocusChange` to. A move from one of its
+  /// destinations to the next changes no node the shell owns: [_railNode]
   /// has focus below it throughout, so it is never notified. Off a
   /// television the rail is not under [_railNode] at all, so this settles
   /// on -1 and never calls [setState].
@@ -217,11 +217,11 @@ class _RootShellState extends State<RootShell> {
   /// Up from the first destination and down from the last stay where they
   /// are (TV only); see [RootShell]. Every other key passes.
   ///
-  /// With one exception, which is how a remote reaches the status light:
-  /// up from the first destination moves focus onto it while it is lit.
-  /// That key did nothing before, the rail is reachable from every tab's
-  /// body with one left press, and the light is out of the traversal
-  /// altogether -- so this is the whole of the path to it, and it costs the
+  /// There is one exception, which is how a remote reaches the status
+  /// light: up from the first destination moves focus onto it while it is
+  /// lit. That key did nothing before. The rail is reachable from every
+  /// tab's body with one left press, and the light is out of the traversal
+  /// altogether. So this is the whole of the path to it, and it costs the
   /// walk nothing when the light is not there.
   KeyEventResult _onRailKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
@@ -261,17 +261,17 @@ class _RootShellState extends State<RootShell> {
   /// television.
   ///
   /// The ring cannot be wrapped round a destination the way it is wrapped
-  /// round a tile, because the rail hands out no node to watch -- which is
+  /// round a tile, because the rail hands out no node to watch. That is
   /// the same fact that put [_railNode] above it. So it is drawn where the
   /// shell already knows what is focused: [_railFocus] against [index].
   ///
-  /// The ring, and not the whole indicator. A destination is drawn as two
-  /// pieces, an icon and a label under it, and only the icon has a box to
-  /// go round; dimming that half in [FocusEmphasis.bold] and leaving the
-  /// label bright would say less than dimming nothing does. What bold does
-  /// reach here is the ring's own width, and the theme floor's fill -- the
-  /// rail's ink takes no overlay of its own and so falls through to
-  /// `ThemeData.focusColor` like every other list row.
+  /// Only the ring is drawn, not the whole indicator. A destination is
+  /// drawn as two pieces, an icon and a label under it, and only the icon
+  /// has a box to go round. Dimming that half in [FocusEmphasis.bold] and
+  /// leaving the label bright would say less than dimming nothing does.
+  /// What bold does reach here is the ring's own width and the theme
+  /// floor's fill. The rail's ink takes no overlay of its own, so it falls
+  /// through to `ThemeData.focusColor` like every other list row.
   ///
   /// The box is the Material indicator pill's, so the ring lands on the
   /// pill the rail draws under a selected destination rather than hugging
@@ -288,50 +288,49 @@ class _RootShellState extends State<RootShell> {
 
   /// [content] with the status light over its top right corner.
   ///
-  /// Inside the television's overscan band, since the [SafeArea] that keeps
-  /// that band clear is put on outside this. And a toolbar's height down
-  /// from the top, which is the one thing the shell can decide for every
-  /// screen at once: a screen's own app bar is where it is likeliest to
-  /// have put a button in this corner (the Library's "Sync now"), and off a
-  /// television the light is a button itself -- it takes whatever press
-  /// lands on it -- so a light over that one would be a control nobody can
-  /// press.
+  /// The light sits inside the television's overscan band, since the
+  /// [SafeArea] that keeps that band clear is put on outside this. It sits
+  /// a toolbar's height down from the top, which is the one thing the shell
+  /// can decide for every screen at once. A screen's own app bar is where
+  /// it is likeliest to have put a button in this corner (the Library's
+  /// "Sync now"). Off a television the light is a button itself and takes
+  /// whatever press lands on it, so a light over that button would make it
+  /// a control nobody can press.
   ///
   /// **Below that band it is over the screen's own content, and this is
-  /// what it costs.** The shell cannot know what a screen draws there, and
-  /// the Library draws its filter row immediately under the app bar: the
-  /// light clips the right-hand end of that row's last chip, on a phone
+  /// what it costs.** The shell cannot know what a screen draws there. The
+  /// Library draws its filter row immediately under the app bar, and the
+  /// light clips the right-hand end of that row's last chip on a phone
   /// whose row ends a chip at the edge.
   /// So the claim is not that the corner is empty, which no fixed position
   /// over somebody else's screen can promise. It is that **the light never
   /// takes a press meant for something else**: nothing an app bar draws is
   /// touched at all, and no control lower down has its middle under the
-  /// light, which is where a press is aimed and where `tap` lands. Both are
-  /// measured on all four screens by
-  /// `test/features/sharing_light_placement_test.dart`, at 1280x720 on a
-  /// television and at 360x800 and 320x800 off one -- the width most
-  /// phones have and the narrowest any does.
+  /// light. The middle is where a press is aimed and where `tap` lands.
+  /// `test/features/sharing_light_placement_test.dart` measures both on all
+  /// four screens: at 1280x720 on a television, and at 360x800 and 320x800
+  /// off one (the width most phones have, and the narrowest any does).
   ///
-  /// **Whether a chip ends under the light depends on where the row
-  /// wraps**, not on how narrow the phone is. The Library's filter row is a
-  /// `Wrap`, so at 400 wide its line break leaves a chip ending under the
-  /// light, and at 360 and 320 the break falls elsewhere and no chip does.
-  /// The five-screen sweeps at the two phone widths therefore never meet
-  /// the case the second rule exists for, and that case is measured on its
-  /// own at 400 on the Library alone: the chip the light clips still takes
-  /// its tap. A change to that row's chips or their order moves the break,
-  /// so the 400 case checks first that it still has something to measure.
+  /// **Whether a chip ends under the light depends on where the row wraps**,
+  /// not on how narrow the phone is. The Library's filter row is a `Wrap`. At
+  /// 400 wide its line break leaves a chip ending under the light; at 360 and
+  /// 320 the break falls elsewhere and no chip does. So the five-screen sweeps
+  /// at the two phone widths never meet the case the second rule exists for.
+  /// That case is measured on its own, at 400 on the Library alone: the chip
+  /// the light clips still takes its tap. A change to that row's chips or their
+  /// order moves the break, so the 400 case checks first that it still has
+  /// something to measure.
   ///
-  /// A television has the easier half of that: the light takes no pointer
-  /// there at all -- it is reached from the rail and pressed with select --
-  /// so what it clips is pixels, and a control under it stays where the
-  /// D-pad finds it.
+  /// A television has the easier half of that. The light takes no pointer
+  /// there at all: it is reached from the rail and pressed with select. So
+  /// what it clips is pixels, and a control under it stays where the D-pad
+  /// finds it.
   ///
   /// **A screen with no app bar on a television** (Discover, Search, the
-  /// Library) has a band of its own controls across the top instead, and
-  /// the light sits at that band's right end, centred on it, in the room
-  /// the screen keeps clear there ([TvDensity.lightRoom]): a toolbar's
-  /// height down would be over its first row of posters.
+  /// Library) has a band of its own controls across the top instead. The
+  /// light sits at that band's right end, centred on it, in the room the
+  /// screen keeps clear there ([TvDensity.lightRoom]). A toolbar's height
+  /// down would be over its first row of posters.
   Widget _withLight(
     Widget content, {
     required bool isTv,
@@ -388,8 +387,8 @@ class _RootShellState extends State<RootShell> {
       // of it round the whole row, and the top and bottom on either side of
       // the divider, so that the line between the rail and the screen runs
       // the full height of the panel rather than stopping at the band as a
-      // third edge of a frame. It is a one-pixel rule, not something a set
-      // that crops it loses anything by.
+      // third edge of a frame. It is a one-pixel rule, so a set that crops
+      // it loses nothing.
       Widget clearOfTopAndBottom(Widget side) =>
           isTv ? SafeArea(left: false, right: false, child: side) : side;
       final row = Row(

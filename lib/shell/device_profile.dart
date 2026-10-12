@@ -31,11 +31,11 @@ class DeviceProfile {
   /// A phone or a tablet: something carried around, whose owner expects an
   /// app they have left to stop spending their data and battery.
   ///
-  /// Read off the two answers above rather than asked again, and they
-  /// settle it on every platform [detect] knows: an Android device that is
-  /// not a television and has a touchscreen (phones and tablets alike), and
-  /// every iOS device. A television is not one, and neither is a desktop --
-  /// Linux, macOS and Windows resolve to "no touchscreen" whatever the
+  /// Read off the two answers above rather than asked again. They settle it
+  /// on every platform [detect] knows: an Android device that is not a
+  /// television and has a touchscreen (phones and tablets alike), and every
+  /// iOS device. A television is not one, and neither is a desktop. Linux,
+  /// macOS and Windows resolve to "no touchscreen" whatever the
   /// hardware, and are what a torrent client is left running on. An
   /// Android device with no touchscreen that is not a television (a
   /// Chromebook without one) is taken for the desktop it is used as. The
@@ -51,10 +51,10 @@ class DeviceProfile {
   /// Only Android has anything to say: `MainActivity` answers `profile`
   /// with `isTv` (`UiModeManager` reports television mode, or the leanback
   /// feature is present) and `hasTouch` (`FEATURE_TOUCHSCREEN`). Every
-  /// other platform resolves locally without a channel call — a desktop is
-  /// never a TV and has no touchscreen, iOS is a touch device. A channel
-  /// that is missing or throws yields [fallback]; a TV mistaken for a
-  /// phone is still usable, the reverse is not.
+  /// other platform resolves locally without a channel call: a desktop is
+  /// never a TV and has no touchscreen, and iOS is a touch device. A channel
+  /// that is missing or throws yields [fallback]. A TV mistaken for a phone
+  /// is still usable; the reverse is not.
   static Future<DeviceProfile> detect({
     MethodChannel channel = DeviceProfile.channel,
     TargetPlatform? platform,
@@ -100,7 +100,7 @@ class DeviceProfile {
 }
 
 /// Provides the [DeviceProfile] to the widget tree. `XtremioApp` creates
-/// one from what start-up detected; a widget without a scope above it (a
+/// one from what start-up detected. A widget without a scope above it (a
 /// test harness that does not care) gets [DeviceProfile.fallback], so
 /// wrapping in `DeviceScope(profile: DeviceProfile(isTv: true, ...))` is
 /// how a test puts a screen on a television.

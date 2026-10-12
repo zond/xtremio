@@ -97,7 +97,7 @@ class SpeechFailed extends SpeechEvent {
 /// `SpeechRecognizer`, on-device where Android offers it. The app receives
 /// only the text.
 ///
-/// A press is: listen to [events], then [start]; the stream carries partial
+/// A press is: listen to [events], then [start]. The stream carries partial
 /// transcripts, then one final transcript or an error, after which the
 /// recognizer is gone. [stop], or cancelling the subscription, ends it
 /// early. [TvTextField] is the only caller.

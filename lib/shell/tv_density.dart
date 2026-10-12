@@ -6,33 +6,33 @@ import 'device_profile.dart';
 /// [DeviceProfile.isTv] is true.
 ///
 /// A television is read from a sofa, not from arm's length, and pointed at
-/// with a D-pad rather than a finger, so everything it draws is a little
-/// bigger and a little further apart than the phone/desktop layout: the
-/// theme is one density step roomier than the standard one, every button
-/// keeps a [minTarget] box whatever the icon inside it measures, text is
-/// scaled by [textScale], and the shell holds [overscan] of the panel free
-/// of controls and headings at every edge because a television may not show
-/// it.
+/// with a D-pad rather than a finger. So everything it draws is a little
+/// bigger and a little further apart than the phone/desktop layout. The
+/// theme is one density step roomier than the standard one, and every
+/// button keeps a [minTarget] box whatever the icon inside it measures.
+/// Text is scaled by [textScale]. The shell holds [overscan] of the panel
+/// free of controls and headings at every edge, because a television may
+/// not show it.
 ///
-/// Nothing here reads the device itself; `XtremioApp` applies [theme] and
+/// Nothing here reads the device itself. `XtremioApp` applies [theme] and
 /// [TvMediaQuery] when the [DeviceScope] says television, so every other
 /// screen simply inherits the theme, the text scale and the band.
 abstract final class TvDensity {
   /// One step *roomier* than [VisualDensity.standard], for the ten-foot
   /// distance.
   ///
-  /// Deliberately not `VisualDensity.comfortable`: in Flutter that constant
-  /// is `(-1, -1)`, a step **denser** than standard (`compact` is `(-2,
-  /// -2)`), so it would shrink the very targets a remote has the hardest
+  /// Deliberately not `VisualDensity.comfortable`. In Flutter that constant
+  /// is `(-1, -1)`, a step **denser** than standard (`compact` is
+  /// `(-2, -2)`), so it would shrink the very targets a remote has the hardest
   /// time hitting. Positive values grow them instead.
   static const VisualDensity visualDensity = VisualDensity(
     horizontal: 1,
     vertical: 1,
   );
 
-  /// Every tappable box is at least this tall and wide, the Material
-  /// minimum touch target, which is also about as small as a focus ring may
-  /// get before it stops reading as one across a room.
+  /// Every tappable box is at least this tall and wide. It is the Material
+  /// minimum touch target, and also about as small as a focus ring may get
+  /// before it stops reading as one across a room.
   static const double minTarget = 48;
 
   /// Text is this much larger than the same screen on a phone.
@@ -49,12 +49,12 @@ abstract final class TvDensity {
   /// with the shell's surfaces on the scaffold's own ground.
   ///
   /// The rail and the app bars would otherwise be Material's `surface`, a
-  /// step lighter than the ground, and the overscan band round them is the
-  /// ground: lighter panels inside a darker margin read as a frame drawn
+  /// step lighter than the ground. The overscan band round them is the
+  /// ground, and lighter panels inside a darker margin read as a frame drawn
   /// round the whole app. On one ground the band is just margin, and the
   /// rail's divider is what separates it from the screen beside it. An app
-  /// bar also keeps that ground when a screen scrolls under it -- Material
-  /// 3 tints a scrolled-under bar lighter, which brought the frame back on
+  /// bar also keeps that ground when a screen scrolls under it. Material 3
+  /// tints a scrolled-under bar lighter, which brought the frame back on
   /// every screen that scrolls.
   static ThemeData theme(ThemeData base) => base.copyWith(
     visualDensity: visualDensity,
@@ -72,10 +72,10 @@ abstract final class TvDensity {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
     ),
-    // No scrollbars on a television. Nothing drags one, the remote
-    // scrolls by moving focus -- and a Material scrollbar insets itself
-    // by the `MediaQuery` padding, which here is the overscan band
-    // ([TvMediaQuery]), so a menu's thumb landed a band's width inside the
+    // No scrollbars on a television. Nothing drags one; the remote scrolls
+    // by moving focus. A Material scrollbar also insets itself by the
+    // `MediaQuery` padding, which here is the overscan band
+    // ([TvMediaQuery]). So a menu's thumb landed a band's width inside the
     // panel, over its entries (zond's TV, 2026-10-06). A menu's panel is
     // built in the app's overlay, above anything a screen can wrap, so the
     // theme is the one place that reaches it.
@@ -86,9 +86,9 @@ abstract final class TvDensity {
     ),
   );
 
-  /// [base] — whatever the platform's own accessibility setting scales text
-  /// by — with the television's [textScale] on top, so a viewer who asked
-  /// for larger text still gets it.
+  /// [base], which is whatever the platform's own accessibility setting
+  /// scales text by, with the television's [textScale] on top. A viewer who
+  /// asked for larger text still gets it.
   static TextScaler textScaler(TextScaler base) => _TvTextScaler(base);
 
   /// The size the text scale is probed at: about what a row header and a
@@ -101,19 +101,18 @@ abstract final class TvDensity {
   /// picked for. A television scales it up ([textScale]), and so does a
   /// system-wide accessibility setting anywhere.
   ///
-  /// Probed at [probeFontSize] rather than at some large round number,
-  /// because a [TextScaler] need not be linear: Android 14 and later scale
-  /// fonts through a lookup table that lifts body sizes hard and then
-  /// flattens out, and AOSP's tables are anchored so that 100sp maps to
-  /// 100dp at *every* font setting. A probe at 100 therefore comes back
-  /// 1.0 however large the viewer asked for their text, while a 16sp
-  /// header is being drawn nearly twice the size.
+  /// Probed at [probeFontSize] rather than at some large round number, because
+  /// a [TextScaler] need not be linear. Android 14 and later scale fonts
+  /// through a lookup table that lifts body sizes hard and then flattens out.
+  /// AOSP's tables are anchored so that 100sp maps to 100dp at *every* font
+  /// setting. So a probe at 100 comes back 1.0 however large the viewer asked
+  /// for their text, while a 16sp header is being drawn nearly twice the size.
   static double textFactorOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
 
   /// The band across the top of a screen that has no app bar on a
-  /// television -- Discover's type pills, Search's field -- which is as
-  /// tall as a segmented button is there. The shell centres its status
+  /// television (Discover's type pills, Search's field). It is as tall as
+  /// a segmented button is there. The shell centres its status
   /// light on it, at its right end (`RootShell`).
   static const double topBandHeight = 52;
 
@@ -157,7 +156,7 @@ class _TvTextScaler extends TextScaler {
 ///
 /// `XtremioApp` installs one of these through `MaterialApp.builder`, which
 /// wraps the navigator rather than the shell, so the screens pushed over the
-/// shell -- Details, the player -- get the same band the shell does. The
+/// shell (Details, the player) get the same band the shell does. The
 /// band arrives as [MediaQueryData.padding] rather than as a `Padding`
 /// widget on purpose: a screen decides for itself which parts of it must
 /// stay on the panel (its chrome, through [TvSafeArea] or `SafeArea`) and
