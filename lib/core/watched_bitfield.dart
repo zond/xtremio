@@ -2,14 +2,14 @@
 ///
 /// A `LibraryItem`'s `state.watched` is stremio-core's `WatchedField`
 /// (`stremio-watched-bitfield`, `watched_bitfield.rs`, in the pinned
-/// stremio-core): `{anchorVideoId}:{anchorLength}:{base64(zlib(bits))}`,
-/// one bit per video of the meta in stremio-core's order, least
-/// significant bit first. The bits are positions, not ids, so they are read
-/// against the meta's video list as it is now: the anchor -- the last
-/// watched video when the field was written, at index `anchorLength - 1`
-/// then -- is looked up in the list, and every bit is shifted by how far it
-/// moved. An anchor the list no longer has is nothing watched, as it is in
-/// stremio-core (`construct_with_videos`).
+/// stremio-core): `{anchorVideoId}:{anchorLength}:{base64(zlib(bits))}`, one
+/// bit per video of the meta in stremio-core's order, least significant bit
+/// first. The bits are positions, not ids, so they are read against the meta's
+/// video list as it is now. The anchor is the last watched video when the field
+/// was written, at index `anchorLength - 1` then. It is looked up in the list,
+/// and every bit is shifted by how far it moved. An anchor the list no longer
+/// has means nothing watched, as it does in stremio-core
+/// (`construct_with_videos`).
 ///
 /// A port of those two functions and nothing more; the tests hold it to
 /// fields stremio-core wrote.

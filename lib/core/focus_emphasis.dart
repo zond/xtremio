@@ -1,10 +1,10 @@
 /// How strongly the thing the remote is on is marked, on a television.
 ///
-/// The indicator has to read over poster art on a display the app knows
-/// nothing about: a projector in a room with the curtains open washes the
-/// picture out, and a coloured line over a busy poster is the first thing
-/// to go. [standard] answers that without being asked -- two strokes of
-/// opposite luminance, and a zoom that does not depend on contrast at all.
+/// The indicator has to read over poster art on a display the app knows nothing
+/// about. A projector in a room with the curtains open washes the picture out,
+/// and a coloured line over a busy poster is the first thing to go. [standard]
+/// answers that without being asked: two strokes of opposite luminance, and a
+/// zoom that does not depend on contrast at all.
 ///
 /// [bold] is for the room where that is still not enough. It cannot be the
 /// default: dimming everything the remote is *not* on is the strongest cue
@@ -26,10 +26,10 @@ enum FocusEmphasis {
 
   /// One line on what it does, on the tile rather than in a help page.
   ///
-  /// The setting is a switch labelled for [bold], so [bold]'s line is the
-  /// one the tile draws -- a switch's subtitle says what turning it on
-  /// buys, not which of two states it is in. [standard]'s is the other half
-  /// of the pair and is what the ring does when it is off.
+  /// The setting is a switch labelled for [bold], so [bold]'s line is the one
+  /// the tile draws. A switch's subtitle says what turning it on buys, not
+  /// which of two states it is in. [standard]'s line is the other half of the
+  /// pair: what the ring does when the switch is off.
   String get description => switch (this) {
     FocusEmphasis.standard =>
       'Outlines what is focused in black and white, and zooms it a little.',

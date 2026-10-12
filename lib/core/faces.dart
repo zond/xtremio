@@ -1,10 +1,9 @@
 /// What the viewer has said about titles: liked, disliked, or not interested.
 ///
-/// Two buttons on a details screen -- a happy face and a sad one -- and the
-/// "Not interested" of a For you tile write here. What they say is read by
-/// the For you row: a liked title weighs more as a source, a disliked one
-/// is no source at all and never suggested, a dismissed one is never
-/// suggested again.
+/// Two buttons on a details screen (a happy face and a sad one) and the "Not
+/// interested" of a For you tile write here. The For you row reads what they
+/// say. A liked title weighs more as a source. A disliked one is no source at
+/// all and is never suggested. A dismissed one is never suggested again.
 ///
 /// **Ids and nothing else.** A row is a title's id, which face, and when it
 /// was given. No name, no poster: nothing here is worth redacting, and a
@@ -12,12 +11,12 @@
 /// to (`FacesSync`).
 ///
 /// **Newest wins, per title, and clearing is a value.** Pressing the active
-/// face clears it, and that is written down as a row with no face and the
-/// time it was cleared rather than as an absence -- an absence is what
-/// another device that has not heard yet looks like, and merging would
-/// bring the old face back. [Faces.clearedAt] is the same idea for the whole
-/// set: "Forget my likes" on any device stamps it, and every row older is
-/// dropped wherever it is merged.
+/// face clears it. That is written down as a row with no face and the time it
+/// was cleared, rather than as an absence. An absence is what another device
+/// that has not heard yet looks like, and merging would bring the old face
+/// back. [Faces.clearedAt] is the same idea for the whole set: "Forget my
+/// likes" on any device stamps it, and every older row is dropped wherever it
+/// is merged.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -125,11 +124,10 @@ final class Faces {
     return Map.fromEntries(newest.take(limit));
   }
 
-  /// This set and [other] together: per title the newer mark (this one's on
-  /// a tie), the later [clearedAt] of the two, and every mark at or before
-  /// that dropped. A mark only one side has is kept -- which is what makes
-  /// a first sync add the device's set to the service's rather than
-  /// replace it.
+  /// This set and [other] together. Per title the newer mark wins (this one's
+  /// on a tie), the later [clearedAt] of the two is kept, and every mark at or
+  /// before it is dropped. A mark only one side has is kept, which makes a
+  /// first sync add the device's set to the service's rather than replace it.
   Faces merged(Faces other) {
     final cleared = clearedAt > other.clearedAt ? clearedAt : other.clearedAt;
     final result = <String, FaceMark>{};

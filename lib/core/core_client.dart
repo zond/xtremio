@@ -57,28 +57,26 @@ abstract interface class CoreClient {
 
 /// One fetch and one decode per field per change, shared by every reader.
 ///
-/// Each screen keeps a [CoreFieldNotifier] on the fields it draws, and
-/// several keep one on `ctx` at once -- the app, the details screen under
-/// the player, the player itself, the tab beneath the stack -- so one
-/// `NewState` naming `ctx` cost three or four `core_get_state` round trips
-/// and three or four `jsonDecode`s of the same document on the UI isolate,
-/// once per pause. Here a field is fetched and decoded once per
-/// *generation*: a generation ends when a `NewState` names the field
-/// ([invalidate]), and every [pull] inside one shares the same future and,
-/// once it lands, the same map.
+/// Each screen keeps a [CoreFieldNotifier] on the fields it draws, and several
+/// keep one on `ctx` at once: the app, the details screen under the player, the
+/// player itself, the tab beneath the stack. So one `NewState` naming `ctx`
+/// cost three or four `core_get_state` round trips, and three or four
+/// `jsonDecode`s of the same document on the UI isolate, once per pause. Here a
+/// field is fetched and decoded once per *generation*. A generation ends when a
+/// `NewState` names the field ([invalidate]). Every [pull] inside one shares
+/// the same future and, once it lands, the same map.
 ///
-/// It is right whichever order the bridge delivers things in, because a
-/// pull is stamped with the generation it was issued in and only ever
-/// answers that one. If the engine's write landed before the pull was
-/// serialized, the map already shows it and the `NewState` that follows
-/// costs one extra fetch, not a stale screen. If the `NewState` lands while
-/// the pull is in flight, the map still goes to whoever waited for it --
-/// it is what they asked for -- and the pull the notifier makes for the new
-/// generation fetches afresh.
+/// It is right whichever order the bridge delivers things in, because a pull is
+/// stamped with the generation it was issued in and only ever answers that one.
+/// If the engine's write landed before the pull was serialized, the map already
+/// shows it, and the `NewState` that follows costs one extra fetch, not a stale
+/// screen. If the `NewState` lands while the pull is in flight, the map still
+/// goes to whoever waited for it, since it is what they asked for. The pull the
+/// notifier makes for the new generation fetches afresh.
 ///
-/// The map is held weakly. A screen that goes away takes its copy with it,
-/// and a screen that arrives after the last one has gone pulls again: what
-/// is shared is the work, not the memory of a board nobody is looking at.
+/// The map is held weakly. A screen that goes away takes its copy with it, and
+/// a screen that arrives after the last one has gone pulls again. What is
+/// shared is the work, not the memory of a board nobody is looking at.
 final class FieldPulls {
   FieldPulls(this._fetch);
 
@@ -192,13 +190,12 @@ final class RustCoreClient implements CoreClient {
   ///
   /// `core_dispatch` refuses an action serde cannot deserialize, and the
   /// Runtime never sees it: no event, no state change, nothing on screen.
-  /// Almost every caller drops the future, so without this line the only
-  /// trace is the unhandled-error hook's anonymous
-  /// `dart: AnyhowException(...)`, which names neither the action nor the
-  /// screen. The throw itself is kept: a caller that does await still
-  /// hears about it.
+  /// Almost every caller drops the future. Without this line, the only trace is
+  /// the unhandled-error hook's anonymous `dart: AnyhowException(...)`, which
+  /// names neither the action nor the screen. The throw itself is kept, so a
+  /// caller that does await still hears about it.
   ///
-  /// [CoreAction.name] and nothing else -- action args carry credentials.
+  /// [CoreAction.name] and nothing else, since action args carry credentials.
   @override
   Future<void> dispatch(CoreAction action) async {
     try {

@@ -1,47 +1,45 @@
 /// How far ahead playback buffers.
 ///
 /// The streaming server reads ahead of the play head by a window sized for a
-/// healthy connection and a patient player. A spotty link — or a receiver
-/// whose own buffer is shallower than mpv's — wants more of the file fetched
-/// before it is needed; a fast link on mobile data wants less. The server
-/// takes that choice as `?buffer=` on the stream URL (and as its own
-/// `bufferProfile` setting, which this app does not use: the choice is the
-/// viewer's, per playback, not the server's).
+/// healthy connection and a patient player. A spotty link, or a receiver whose
+/// own buffer is shallower than mpv's, wants more of the file fetched before it
+/// is needed. A fast link on mobile data wants less. The server takes that
+/// choice as `?buffer=` on the stream URL. It also has its own `bufferProfile`
+/// setting, which this app does not use: the choice is the viewer's, per
+/// playback, not the server's.
 ///
-/// **The first three are measured in seconds of the film, not in bytes.**
-/// The server measures the rate bytes are really going out at and buys that
-/// many seconds of buffer, so the same choice means the same thing on a
-/// 2 Mbps documentary and a 4K feature -- sizing by a fraction of the cache
-/// instead would grow with a viewer's storage, not their bitrate, and
-/// silently inflate their mobile-data bill.
+/// **The first three are measured in seconds of the film, not in bytes.** The
+/// server measures the rate bytes are really going out at and buys that many
+/// seconds of buffer. So the same choice means the same thing on a 2 Mbps
+/// documentary and a 4K feature. Sizing by a fraction of the cache instead
+/// would grow with a viewer's storage, not their bitrate, and silently inflate
+/// their mobile-data bill.
 ///
-/// [maximum] is the exception only in degree: it asks for a day of film,
-/// which no film reaches, so where the cache has room it keeps the whole
-/// film while you are watching it, and the cache budget is all that bounds
-/// it.
+/// [maximum] is the exception only in degree. It asks for a day of film, which
+/// no film reaches, so where the cache has room it keeps the whole film while
+/// you are watching it. The cache budget is all that bounds it.
 ///
 /// The last option is not a window at all. Past a point a bigger buffer stops
-/// being an answer, and the honest one is to keep the file: [wholeFile] pins
-/// the stream as an offline download — the same mechanism the Downloads
-/// screen lists and deletes — while it plays. **That is the difference
-/// between it and [maximum]**: maximum's bytes are cache, taken back as soon
-/// as you watch something else or the disk needs the room; a pin survives
-/// closing the app.
+/// being an answer, and the honest one is to keep the file. [wholeFile] pins
+/// the stream as an offline download while it plays, the same mechanism the
+/// Downloads screen lists and deletes. **That is the difference between it and
+/// [maximum].** Maximum's bytes are cache, taken back as soon as you watch
+/// something else or the disk needs the room; a pin survives closing the app.
 library;
 
 enum BufferAhead {
-  /// About a minute and a half of the film in hand: 90 s of it, at the
-  /// film's bitrate, read ahead and kept. The server's own default, and
-  /// this app's.
+  /// About a minute and a half of the film in hand: 90 s of it, at the film's
+  /// bitrate, read ahead and kept. It is the server's own default, and this
+  /// app's.
   normal,
 
   /// About four minutes of the film in hand: 240 s of it, at the film's
   /// bitrate.
   large,
 
-  /// No time cap a film can reach -- the server asks for a day of it -- so
-  /// as much of the film as the cache budget will hold, which is the whole
-  /// of it where there is room.
+  /// No time cap a film can reach, since the server asks for a day of it. So it
+  /// holds as much of the film as the cache budget will, which is the whole of
+  /// it where there is room.
   ///
   /// Cache, not a download — see [wholeFile] for the difference.
   maximum,
@@ -68,8 +66,8 @@ enum BufferAhead {
     BufferAhead.wholeFile => 'Download the whole file',
   };
 
-  /// One line on what it costs — every option here trades data and storage
-  /// for smoothness, and the viewer is the one paying.
+  /// One line on what it costs. Every option here trades data and storage for
+  /// smoothness, and the viewer is the one paying.
   String get description => switch (this) {
     BufferAhead.normal => 'Keeps about 90 seconds ahead. Least data used.',
     BufferAhead.large => 'Keeps about 4 minutes ahead. Uses more data.',

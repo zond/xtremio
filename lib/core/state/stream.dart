@@ -4,11 +4,11 @@ import '../well_formed_text.dart';
 /// name/description/behaviorHints). The raw map is kept because it is what
 /// `Load Player` takes back.
 ///
-/// The three free-text fields come back through [wellFormedText]: an addon
-/// that sends half a surrogate pair (a title cut in the middle of a `👤`
-/// somewhere upstream) sends a string Flutter's text layout throws on, and
-/// the row it throws in is the one the viewer wanted to read. [json] itself
-/// is untouched, so what goes back to the engine is what the addon said.
+/// The three free-text fields come back through [wellFormedText]. An addon that
+/// sends half a surrogate pair (a title cut in the middle of a `👤` somewhere
+/// upstream) sends a string Flutter's text layout throws on. The row it throws
+/// in is the one the viewer wanted to read. [json] itself is untouched, so what
+/// goes back to the engine is what the addon said.
 final class StreamInfo {
   const StreamInfo(this.json);
 
@@ -27,11 +27,10 @@ final class StreamInfo {
   String? get ytId => json['ytId'] as String?;
 
   /// The YouTube video this stream is, as the address the YouTube app (and
-  /// failing that, a browser) opens; null for any other kind. A YouTube
-  /// stream is not played here: stremio-core would send the player to the
-  /// streaming server's YouTube resolver, which this app's server does not
-  /// have, and resolving YouTube is a moving target best left to YouTube's
-  /// own app.
+  /// failing that, a browser) opens. Null for any other kind. A YouTube stream
+  /// is not played here. stremio-core would send the player to the streaming
+  /// server's YouTube resolver, which this app's server does not have, and
+  /// resolving YouTube is a moving target best left to YouTube's own app.
   Uri? get youtubeUrl {
     final ytId = this.ytId;
     if (ytId == null || ytId.isEmpty) return null;
@@ -69,14 +68,14 @@ final class StreamInfo {
   }
 
   /// [isSameSource] as a value that can be put in a map: the same
-  /// discriminating keys, joined. Null when the source has none of them
-  /// (an unknown variant), which is what [isSameSource] answers false for
-  /// -- so a stream with no key is never folded into another one.
+  /// discriminating keys, joined. Null when the source has none of them (an
+  /// unknown variant), which is what [isSameSource] answers false for. So a
+  /// stream with no key is never folded into another one.
   ///
-  /// The info hash is lower-cased: stremio-core serializes it from the 20
-  /// bytes it parsed, so it already is, but a hand-written stream (a
-  /// developer fixture, an offline entry) need not be, and two spellings
-  /// of one hash are one torrent.
+  /// The info hash is lower-cased. stremio-core serializes it from the 20 bytes
+  /// it parsed, so it already is, but a hand-written stream (a developer
+  /// fixture, an offline entry) need not be. Two spellings of one hash are one
+  /// torrent.
   String? get sourceKey {
     final infoHash = this.infoHash;
     if (infoHash != null) {
@@ -105,10 +104,10 @@ final class StreamInfo {
     return const [];
   }
 
-  /// [this] with [trackers] as the trackers it carries, for a torrent that
-  /// several addons listed with different `announce` sets: the union is
-  /// what the server should be given, since every entry is a place the
-  /// swarm may answer from.
+  /// [this] with [trackers] as the trackers it carries. It is for a torrent
+  /// that several addons listed with different `announce` sets. The union is
+  /// what the server should be given, since every entry is a place the swarm
+  /// may answer from.
   ///
   /// Returns [this] unchanged when there is nothing to add, and for a
   /// source that has no trackers at all (only a torrent does).
@@ -126,9 +125,9 @@ final class StreamInfo {
       if (same) return this;
     }
     final merged = {...json, 'announce': trackers};
-    // `sources` says the same thing under the protocol's name, and
-    // stremio-core reads it as an alias of `announce` -- both keys at once
-    // is a duplicate field to it. The merged list replaces the pair.
+    // `sources` says the same thing under the protocol's name, and stremio-core
+    // reads it as an alias of `announce`, so both keys at once is a duplicate
+    // field to it. The merged list replaces the pair.
     merged.remove('sources');
     return StreamInfo(merged);
   }
@@ -145,21 +144,20 @@ final class StreamInfo {
       return StreamKind.external;
     }
     if (json['playerFrameUrl'] != null) return StreamKind.playerFrame;
-    // `nzbUrl` is deliberately not here. Stremio's protocol has it -- a
-    // Usenet post the streaming server was to fetch over NNTP -- but this
-    // server no longer serves it, so a stream that names one has nothing to
-    // resolve it and is not playable. Calling it an archive would hand it to
-    // the server for a 404 dressed as a player error.
+    // `nzbUrl` is deliberately not here. Stremio's protocol has it (a Usenet
+    // post the streaming server was to fetch over NNTP), but this server no
+    // longer serves it. So a stream that names one has nothing to resolve it
+    // and is not playable. Calling it an archive would hand it to the server
+    // for a 404 dressed as a player error.
     if (json.keys.any((key) => key.endsWith('Urls'))) {
       return StreamKind.archive;
     }
     return StreamKind.unknown;
   }
 
-  /// Whether a press on this stream does something: libmpv plays direct
-  /// URLs and everything the streaming server resolves, and a YouTube
-  /// stream opens in the YouTube app ([youtubeUrl]) rather than the
-  /// player.
+  /// Whether a press on this stream does something. libmpv plays direct URLs
+  /// and everything the streaming server resolves, and a YouTube stream opens
+  /// in the YouTube app ([youtubeUrl]) rather than the player.
   bool get isPlayable => switch (kind) {
     StreamKind.url ||
     StreamKind.torrent ||

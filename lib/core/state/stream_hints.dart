@@ -60,22 +60,22 @@ final class StreamHints {
     if (seeders != null) '$seeders seeders',
   ];
 
-  /// [text] with the size and seeder hints and their emoji markers removed
-  /// (resolutions stay: they are usually part of a filename), or null when
-  /// nothing readable is left, so a `💾 1.51 GB` description does not
-  /// repeat the size chip.
+  /// [text] with the size and seeder hints and their emoji markers removed, so
+  /// a `💾 1.51 GB` description does not repeat the size chip. Resolutions stay,
+  /// since they are usually part of a filename. Null when nothing readable is
+  /// left.
   ///
-  /// The marker class is `unicode: true` and has to be. Without it a Dart
-  /// character class matches UTF-16 *code units*, so `[💾👤📺🎬⚙️]` is not
-  /// five emoji but the set of their halves -- and every other astral
-  /// emoji in the line that begins with one of those halves (`🎥`, `🔥`,
-  /// every flag, whose halves are `\uD83C`) loses its head, leaving an
-  /// orphan the text engine refuses to lay out. That was the release name
-  /// that rendered as a replacement character on a phone.
+  /// The marker class is `unicode: true`, and has to be. Without it a Dart
+  /// character class matches UTF-16 *code units*, so `[💾👤📺🎬⚙️]` is not five
+  /// emoji but the set of their halves. Every other astral emoji in the line
+  /// that begins with one of those halves (`🎥`, `🔥`, every flag, whose halves
+  /// are `\uD83C`) then loses its head, leaving an orphan the text engine
+  /// refuses to lay out. That was the release name that rendered as a
+  /// replacement character on a phone.
   ///
-  /// [wellFormedText] over the result is the belt to that braces: what
-  /// arrives here has already been through it ([StreamInfo.description]),
-  /// so it is this method that could break it again.
+  /// [wellFormedText] over the result is the belt to those braces. What arrives
+  /// here has already been through it ([StreamInfo.description]), so it is this
+  /// method that could break it again.
   String? strip(String? text) {
     if (text == null) return null;
     final stripped = text

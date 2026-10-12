@@ -52,12 +52,12 @@ final class MetaItem extends MetaItemPreview {
   /// The addon's IMDb entry: the rating as its name, the title's page on
   /// IMDb as its url.
   ///
-  /// One accessor for the pair because they have to come from the same
-  /// link. A rating shown with some other entry's address is worse than a
-  /// rating with no address at all, and nothing here builds that address
-  /// out of an id: `tt`-shaped ids are Cinemeta's habit, not a rule, and an
-  /// addon that numbers its titles some other way would send the viewer to
-  /// a stranger's page.
+  /// One accessor for the pair, because they have to come from the same link. A
+  /// rating shown with some other entry's address is worse than a rating with
+  /// no address at all. Nothing here builds that address out of an id:
+  /// `tt`-shaped ids are Cinemeta's habit, not a rule, and an addon that
+  /// numbers its titles some other way would send the viewer to a stranger's
+  /// page.
   MetaLink? get imdbLink {
     for (final link in links) {
       if (link.category == imdbCategory) return link;
@@ -75,9 +75,9 @@ final class MetaItem extends MetaItemPreview {
   /// Sorted by (season, episode) with season 0 (specials) last, as the
   /// engine serializes them.
   ///
-  /// Built once per item JSON ([_videos]) and unmodifiable: a series page
-  /// reads it through [seasons], [videosOfSeason] and [videoById] several
-  /// times a build, and a view is made afresh on every read of its field.
+  /// Built once per item JSON ([_videos]) and unmodifiable. A series page reads
+  /// it through [seasons], [videosOfSeason] and [videoById] several times a
+  /// build, and a view is made afresh on every read of its field.
   List<VideoInfo> get videos => _videos[json] ??= List.unmodifiable([
     for (final video in (json['videos'] as List<dynamic>? ?? const []))
       VideoInfo(video as Map<String, dynamic>),

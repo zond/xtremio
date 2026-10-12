@@ -2,25 +2,25 @@
 /// the web one.
 ///
 /// **Why there are two pickers at all.** The web Google Picker cannot select
-/// more than one file on a phone: it gates selection on a Ctrl/Cmd key, so a
+/// more than one file on a phone. It gates selection on a Ctrl/Cmd key, so a
 /// device with no keyboard holds exactly one
-/// (issuetracker.google.com/issues/334994030, reported April 2024, still
-/// open). The native Android picker can, measured at seven files in one go.
-/// So a phone with this app installed picks here, and a phone without it
-/// still gets the web page — which is why that page stays exactly as it is.
+/// (issuetracker.google.com/issues/334994030, reported April 2024, still open).
+/// The native Android picker can: seven files in one go, measured. So a phone
+/// with this app installed picks here, and a phone without it still gets the
+/// web page, which is why that page stays exactly as it is.
 ///
 /// The parameter that turns an authorization into a picker is spelled
-/// `trigger_onepick` on the wire, which is the *same* parameter the web flow
-/// is refused for. That is not a contradiction and it is worth writing down:
-/// what refuses it there is Google's legacy consent page, which a web client
-/// is routed to. The native path never goes near that page.
+/// `trigger_onepick` on the wire. That is the *same* parameter the web flow is
+/// refused for. It is not a contradiction, and it is worth writing down: what
+/// refuses it there is Google's legacy consent page, which a web client is
+/// routed to. The native path never goes near that page.
 ///
 /// **The code that comes back is for the web client, on purpose.** A
 /// `drive.file` grant is recorded against a user *and a client*, and the
-/// television reads with a token minted from the web client's secret — so a
-/// pick recorded against this app's own Android client would grant the
-/// television nothing at all. Asking for offline access while naming the web
-/// client is what puts the grant where it can be used.
+/// television reads with a token minted from the web client's secret. So a pick
+/// recorded against this app's own Android client would grant the television
+/// nothing at all. Asking for offline access while naming the web client puts
+/// the grant where it can be used.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -47,11 +47,10 @@ final class DriveNativePicked extends DriveNativePickResult {
 
   final String serverAuthCode;
 
-  /// Drive's ids for what was chosen, in the order the picker gave them.
-  /// Ids only: the names are read by the service with the credential it
-  /// mints, because a name is drawn on a television and matched against a
-  /// catalogue, and is not a thing a client should invent about somebody
-  /// else's Drive.
+  /// Drive's ids for what was chosen, in the order the picker gave them. Ids
+  /// only: the service reads the names with the credential it mints. A name is
+  /// drawn on a television and matched against a catalogue, and a client should
+  /// not be able to invent one about somebody else's Drive.
   final List<String> fileIds;
 
   /// Names nothing that is a secret. The code's *length* is as much as is
@@ -69,9 +68,9 @@ final class DriveNativePickCancelled extends DriveNativePickResult {
   const DriveNativePickCancelled();
 }
 
-/// This device cannot pick natively — not Android, or no Play services, or
-/// a Play services too old to know the picker. The caller's answer to this
-/// is the web page, which is where every other phone already goes.
+/// This device cannot pick natively: not Android, no Play services, or a Play
+/// services too old to know the picker. The caller's answer to this is the web
+/// page, where every other phone already goes.
 @immutable
 final class DriveNativePickUnavailable extends DriveNativePickResult {
   const DriveNativePickUnavailable();
@@ -135,10 +134,10 @@ class MethodChannelDriveNativePicker implements DriveNativePicker {
         for (final id in (answer['fileIds'] as List<Object?>? ?? const []))
           if (id is String && id.isNotEmpty) id,
       ];
-      // Both halves or neither. A pick with files and no code is a pairing
-      // the television could never open, and a code with no files is a
-      // credential minted for nothing — either alone is a worse outcome than
-      // saying it did not work.
+      // Both halves or neither. A pick with files and no code is a pairing the
+      // television could never open. A code with no files is a credential
+      // minted for nothing. Either alone is a worse outcome than saying it did
+      // not work.
       if (code is! String || code.isEmpty || ids.isEmpty) {
         return const DriveNativePickCancelled();
       }
@@ -147,9 +146,9 @@ class MethodChannelDriveNativePicker implements DriveNativePicker {
       return switch (error.code) {
         'cancelled' => const DriveNativePickCancelled(),
         'unavailable' => const DriveNativePickUnavailable(),
-        // `error.message` is Google's, and Google's messages here name
-        // statuses and not secrets. The code is never in it: this side
-        // never sends one and the Android side never puts one in a message.
+        // `error.message` is Google's, and Google's messages here name statuses
+        // and not secrets. The code is never in it: this side never sends one,
+        // and the Android side never puts one in a message.
         _ => DriveNativePickFailed(error.message ?? error.code),
       };
     } on MissingPluginException {

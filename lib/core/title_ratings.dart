@@ -2,11 +2,10 @@
 /// and where this device keeps them.
 ///
 /// The scores come from the xtremio-xervice server's `/ratings`
-/// (`xtremio-xervice/functions/ratings.js`), which asks MDBList once a week
-/// per title for everybody. This is the device's copy: written down under
-/// the title in the preferences file, so a title opened again shows its
-/// scores at once and is asked about again only once [TitleRatingsMemory.freshFor]
-/// has passed.
+/// (`xtremio-xervice/functions/ratings.js`), which asks MDBList once a week per
+/// title for everybody. This is the device's copy, written down under the title
+/// in the preferences file. So a title opened again shows its scores at once,
+/// and is asked about again only once [TitleRatingsMemory.freshFor] has passed.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -25,9 +24,9 @@ final class TitleScore {
 
   Map<String, Object> toJson() => {'score': score, 'votes': ?votes};
 
-  /// One source in the server's answer, or null for anything that is not
-  /// a positive number -- `null` included, which is how the server says
-  /// the source has no score for the title.
+  /// One source in the server's answer. Null for anything that is not a
+  /// positive number, `null` included, which is how the server says the source
+  /// has no score for the title.
   static TitleScore? fromJson(Object? json) {
     if (json is! Map) return null;
     final score = json['score'];
@@ -122,9 +121,9 @@ final class TitleRatingsMemory {
   /// falls off the end costs one request the next time it is opened.
   static const int limit = 256;
 
-  /// How long a remembered answer is shown without asking again. The
-  /// server keeps an answer a week and the edge a day, so asking sooner
-  /// than a day would be answered with the same bytes.
+  /// How long a remembered answer is shown without asking again. The server
+  /// keeps an answer a week and the edge a day, so asking sooner than a day
+  /// would get the same bytes back.
   static const Duration freshFor = Duration(days: 1);
 
   /// What was told about [id] of [type], or null.

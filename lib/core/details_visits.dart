@@ -3,22 +3,20 @@
 /// episode, the page scrolled as far, and on a television the remote on
 /// the same stop.
 ///
-/// One row per title: the season the episode list showed, the episode
-/// whose sources were up, how far the page was scrolled and where the
-/// remote stood ([DetailsRemote]). The details screen writes it as the
-/// viewer moves and whenever they leave -- a pop, the player pushed over
-/// it, the app paused -- and reads it once, when it opens
-/// (`MetaDetailsScreen`). **A title with a row has been visited**, which
-/// is what decides whether its screen opens at the top or where it was
-/// left.
+/// One row per title: the season the episode list showed, the episode whose
+/// sources were up, how far the page was scrolled and where the remote stood
+/// ([DetailsRemote]). The details screen writes it as the viewer moves and
+/// whenever they leave (a pop, the player pushed over it, the app paused). It
+/// reads it once, when it opens (`MetaDetailsScreen`). **A title with a row has
+/// been visited**, and that decides whether its screen opens at the top or
+/// where it was left.
 ///
-/// **The library can be newer.** A visit is where the viewer *looked*; the
-/// library's `video_id` is what they last *watched*, and the player moves
-/// that on by itself -- the next episode plays, and the next. So a visit
-/// carries the time it was made, and a screen that finds the library's
-/// `lastWatched` later than it opens on the library's episode instead. A
-/// title never visited here opens on the library's episode as it always
-/// did.
+/// **The library can be newer.** A visit is where the viewer *looked*. The
+/// library's `video_id` is what they last *watched*, and the player moves that
+/// on by itself as the next episode plays, and the next. So a visit carries the
+/// time it was made. A screen that finds the library's `lastWatched` later than
+/// the visit opens on the library's episode instead. A title never visited here
+/// opens on the library's episode as it always did.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -113,10 +111,10 @@ final class DetailsVisit {
   /// without choosing an episode from it.
   final String? videoId;
 
-  /// When the season or episode was chosen, in UTC -- what is compared
-  /// with the library's `lastWatched`. Not when the screen was left: the
-  /// screen writes the visit again on every leaving, and an episode chosen
-  /// before a binge must not look newer than the library for it.
+  /// When the season or episode was chosen, in UTC; it is compared with the
+  /// library's `lastWatched`. It is not when the screen was left. The screen
+  /// writes the visit again on every leaving, and an episode chosen before a
+  /// binge must not look newer than the library for it.
   final DateTime at;
 
   /// How far down the page was scrolled, in logical pixels; null for the
@@ -192,8 +190,8 @@ final class DetailsVisitMemory {
   final List<DetailsVisit> visits;
 
   /// How many titles are remembered. What falls off is the title visited
-  /// longest ago, which opens at the top again as if never visited -- and
-  /// a title in the library still on its last watched episode.
+  /// longest ago. That title opens at the top again, as if never visited; a
+  /// title in the library still opens on its last watched episode.
   static const int limit = 200;
 
   /// [meta]'s last visit, or null when it has none.

@@ -6,7 +6,7 @@ import 'faces_sync.dart';
 import 'prefs_client.dart';
 
 /// Hands down what keeps the device's copies in step with the account on
-/// xtremio-xervice. One per app, built in `XtremioApp`; a widget test that
+/// xtremio-xervice. One per app, built in `XtremioApp`. A widget test that
 /// mounts none gets faces that stay on the device, which is exactly what a
 /// signed-out viewer gets too.
 class XerviceScope extends InheritedWidget {

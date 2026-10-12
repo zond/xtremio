@@ -8,11 +8,10 @@ import 'dart:io';
 
 /// Sends one request and never follows a redirect.
 ///
-/// Every route asked through this answers directly, and a followed
-/// redirect is how an `Authorization` header ends up at a host nobody
-/// meant to send it to. A redirect is handed back as it came, for the
-/// caller to read as the non-`200` it is -- or, for the archive routes,
-/// as the member's `Location`.
+/// Every route asked through this answers directly, and a followed redirect is
+/// how an `Authorization` header ends up at a host nobody meant to send it to.
+/// A redirect is handed back as it came. The caller reads it as the non-`200`
+/// it is, or, for the archive routes, as the member's `Location`.
 Future<HttpClientResponse> sendWithoutRedirects(
   HttpClient client,
   String method,

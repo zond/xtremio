@@ -1,26 +1,25 @@
 /// Videos on this device: what they are, which film or episode each one
 /// turned out to be, and the one object that keeps that record up to date.
 ///
-/// The shape is the linked Drive files' ([LinkedDriveFile]) on purpose: a
-/// file with a name and nothing else to go on, matched to a Cinemeta title
-/// by that name ([matchDriveFile]) and shown the same ways -- under its
-/// title in the Library and as a source on its details page when it
-/// matched, and in the Library's **Local** list either way.
+/// The shape is the linked Drive files' ([LinkedDriveFile]) on purpose. It is a
+/// file with a name and nothing else to go on, matched to a Cinemeta title by
+/// that name ([matchDriveFile]). It is shown the same ways: under its title in
+/// the Library and as a source on its details page when it matched, and in the
+/// Library's **Local** list either way.
 ///
-/// **Where the files come from is a [LocalMediaSource]**: Android's media
-/// index (MediaStore) on a phone or a television, and the folders the
-/// viewer chose in Settings on a desktop. Neither is a scan of the whole
-/// disk. What a source answers is an address the player opens as it is --
-/// `content://` on Android, which media_kit turns into a file descriptor
-/// for libmpv, and `file://` on a desktop -- so nothing here reads a byte
-/// of the video.
+/// **Where the files come from is a [LocalMediaSource]**: Android's media index
+/// (MediaStore) on a phone or a television, and the folders the viewer chose in
+/// Settings on a desktop. Neither is a scan of the whole disk. A source answers
+/// with an address the player opens as it is: `content://` on Android, which
+/// media_kit turns into a file descriptor for libmpv, and `file://` on a
+/// desktop. So nothing here reads a byte of the video.
 ///
-/// **What is kept is the record, not the files.** The list with each
-/// file's match lives in the preferences ([AppPrefs.localMediaKey]),
-/// because matching asks Cinemeta once per file and a phone holds
-/// hundreds: a file already asked about -- matched or not -- is not asked
-/// about again until its name changes. A scan replaces the list with what
-/// the source answers now, carrying each surviving file's answer over.
+/// **What is kept is the record, not the files.** The list with each file's
+/// match lives in the preferences ([AppPrefs.localMediaKey]). Matching asks
+/// Cinemeta once per file and a phone holds hundreds, so a file already asked
+/// about, matched or not, is not asked about again until its name changes. A
+/// scan replaces the list with what the source answers now, carrying each
+/// surviving file's answer over.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -65,10 +64,10 @@ final class LocalMediaFile {
   /// The Cinemeta title this file is, or null.
   final LinkedDriveMatch? match;
 
-  /// Whether Cinemeta has been asked about this file under this [name].
-  /// True with no [match] is an answer -- nothing matched -- and is not
-  /// asked again; false is a file nobody has asked about yet, or one whose
-  /// asking failed and will be tried again.
+  /// Whether Cinemeta has been asked about this file under this [name]. True
+  /// with no [match] is an answer (nothing matched) and is not asked again.
+  /// False is a file nobody has asked about yet, or one whose asking failed and
+  /// will be tried again.
   final bool checked;
 
   /// Taken out of the Local list by the viewer (a clip nothing matched,
@@ -79,8 +78,8 @@ final class LocalMediaFile {
   bool isFor(String cinemetaId, {String? videoId}) =>
       match?.isFor(cinemetaId, videoId: videoId) ?? false;
 
-  /// This file as [facts] describe it now, keeping its answer while the
-  /// name holds: a file renamed is a file the old answer was not about.
+  /// This file as [facts] describe it now. It keeps its answer while the name
+  /// holds, since a file renamed is a file the old answer was not about.
   LocalMediaFile reconciledWith(LocalMediaFacts facts) {
     final renamed = facts.name != name;
     return LocalMediaFile(

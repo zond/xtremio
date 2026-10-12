@@ -28,8 +28,8 @@ final class ProfileState {
   List<AddonDescriptor> get addons =>
       AddonDescriptor.listFromJson(json['addons']);
 
-  /// Raised when the API addon collection could not be fetched after login:
-  /// the official addons are in use as a stand-in and every install /
+  /// Raised when the API addon collection could not be fetched after login. The
+  /// official addons are then in use as a stand-in, and every install /
   /// uninstall / upgrade fails (`Other` code 7) until `PullAddonsFromAPI`
   /// succeeds.
   bool get addonsLocked => json['addonsLocked'] as bool? ?? false;
@@ -40,9 +40,9 @@ final class ProfileState {
   AddonDescriptor? installedAddon(String transportUrl) =>
       addons.where((addon) => addon.transportUrl == transportUrl).firstOrNull;
 
-  /// Whether any installed addon offers [resource] for [type] -- what
-  /// decides whether an empty streams list means "install an addon" or
-  /// "none of them had one this time" ([NoStreamsNotice]).
+  /// Whether any installed addon offers [resource] for [type]. That decides
+  /// whether an empty streams list means "install an addon" or "none of them
+  /// had one this time" ([NoStreamsNotice]).
   bool hasAddonFor(String resource, String type) => addons.any(
     (addon) => addon.manifest.offersResourceForType(resource, type),
   );

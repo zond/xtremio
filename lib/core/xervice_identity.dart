@@ -1,24 +1,23 @@
 /// Proving to xtremio-xervice which Stremio account this device is signed
 /// in as, and the one way the app asks it anything about that account.
 ///
-/// The service keeps two things per account -- the likes and dislikes
-/// (`faces`), and the Drive grants -- and both are behind a token of its own
-/// that `POST /identity` hands out for the Stremio session key
-/// (`xtremio-xervice/functions/account.js`). **The session key crosses to
-/// the service once per token, to prove who this is, and is not kept
-/// there**: the service asks Stremio whose key it is, keeps the account's
-/// user id in the token, and forgets the key.
+/// The service keeps two things per account: the likes and dislikes (`faces`),
+/// and the Drive grants. Both are behind a token of its own that
+/// `POST /identity` hands out for the Stremio session key
+/// (`xtremio-xervice/functions/account.js`). **The session key crosses to the
+/// service once per token, to prove who this is, and is not kept there.** The
+/// service asks Stremio whose key it is, keeps the account's user id in the
+/// token, and forgets the key.
 ///
-/// **Quiet by design.** Everything that goes through here is a background
-/// copy of something the device already has: signed out, offline, or a
-/// service that will not answer is "nothing to sync this time", never a
-/// dialog. [XerviceIdentity.send] answers null for all of them and logs
-/// which it was, by kind and never by text.
+/// **Quiet by design.** Everything that goes through here is a background copy
+/// of something the device already has. Signed out, offline, or a service that
+/// will not answer is "nothing to sync this time", never a dialog.
+/// [XerviceIdentity.send] answers null for all of them and logs which it was,
+/// by kind and never by text.
 ///
 /// **Never logged**: the session key ([stremioAuthKeyOf]) and the token.
-/// Neither is written into a line by anything here, a failure is logged by
-/// its type, and `redactSecrets` knows both names (`authKey`, `token`) as
-/// the second lock.
+/// Nothing here writes either into a line, a failure is logged by its type, and
+/// `redactSecrets` knows both names (`authKey`, `token`) as the second lock.
 library;
 
 import 'dart:async';
@@ -31,10 +30,10 @@ import 'json_exchange.dart';
 /// The Stremio session key of the signed-in account in a `ctx` state, or
 /// null when nobody is signed in.
 ///
-/// `ctx.profile.auth.key`. Read here and nowhere else in the app:
+/// `ctx.profile.auth.key`. It is read here and nowhere else in the app.
 /// `ProfileState` deliberately has no getter for it, because nothing on a
-/// screen needs it, and this is the one place that sends it anywhere other
-/// than Stremio. **Never log what this returns.**
+/// screen needs it, and this is the one place that sends it anywhere other than
+/// Stremio. **Never log what this returns.**
 String? stremioAuthKeyOf(Map<String, dynamic>? ctx) {
   final profile = ctx?['profile'];
   final auth = profile is Map ? profile['auth'] : null;
@@ -125,9 +124,9 @@ final class XerviceHttpClient implements XerviceHttp {
 /// has expired or the service refuses it, and sends the requests that need
 /// it.
 ///
-/// The token is bound to the session key it was made for: a sign-out or a
-/// sign-in as somebody else is a key this did not see, and the token goes
-/// with it, so a request is never sent as the previous account.
+/// The token is bound to the session key it was made for. A sign-out, or a
+/// sign-in as somebody else, is a key this did not see, and the token goes with
+/// it. So a request is never sent as the previous account.
 class XerviceIdentity {
   XerviceIdentity({
     required this.http,
@@ -220,10 +219,9 @@ class XerviceIdentity {
   /// [method] on [path] as the signed-in account: the answer, or null when
   /// there is no account to send as or the service could not be asked.
   ///
-  /// A 401 is a token the service no longer takes -- expired early, or
-  /// signed with a key that has since been rotated -- so the token is
-  /// renewed and the request sent once more; a second 401 is answered as
-  /// it is.
+  /// A 401 is a token the service no longer takes: expired early, or signed
+  /// with a key that has since been rotated. So the token is renewed and the
+  /// request sent once more. A second 401 is answered as it is.
   Future<XerviceAnswer?> send(
     String method,
     String path, {

@@ -3,14 +3,13 @@
 /// the app is the only thing that asks).
 ///
 /// The DHT is a peer *source*, not a requirement: a torrent with working
-/// trackers downloads fine without one. A network that drops the UDP the
-/// DHT needs -- carrier-grade NAT, a firewalled mobile APN, a captive
-/// portal -- simply never finishes bootstrapping, for the whole session,
-/// with nothing actually wrong: trackers alone have carried a torrent at
-/// 30+ MB/s while the DHT never came up once. That is why this is
-/// information, never an error: nothing here is worth a toast, and nothing
-/// should poll it expecting a quick flip -- read it when a screen opens,
-/// or piggyback it on a poll that is already running.
+/// trackers downloads fine without one. A network that drops the UDP the DHT
+/// needs (carrier-grade NAT, a firewalled mobile APN, a captive portal) simply
+/// never finishes bootstrapping, for the whole session, with nothing actually
+/// wrong. Trackers alone have carried a torrent at 30+ MB/s while the DHT never
+/// came up once. That is why this is information, never an error. Nothing here
+/// is worth a toast, and nothing should poll it expecting a quick flip. Read it
+/// when a screen opens, or piggyback it on a poll that is already running.
 class DhtStatus {
   const DhtStatus({
     required this.enabled,
@@ -26,9 +25,9 @@ class DhtStatus {
     everBootstrapped: json['everBootstrapped'] as bool? ?? false,
   );
 
-  /// Whether a DHT is running at all (false when the server's backend was
-  /// built with none, or when the server is not running -- both answer "no
-  /// DHT to ask" the same way).
+  /// Whether a DHT is running at all. False when the server's backend was built
+  /// with none, or when the server is not running; both answer "no DHT to ask"
+  /// the same way.
   final bool enabled;
 
   /// Nodes in the IPv4 routing table right now.
@@ -43,33 +42,31 @@ class DhtStatus {
   /// difference between "the DHT is idle" and "the DHT never worked here".
   final bool everBootstrapped;
 
-  /// A DHT that is running but has never found a single node this session
-  /// -- the one state worth telling a curious person about. Never an
-  /// error: trackers alone regularly outrun a DHT swarm, and a bootstrapped
-  /// or disabled DHT says nothing here at all.
+  /// A DHT that is running but has never found a single node this session: the
+  /// one state worth telling a curious person about. Never an error, since
+  /// trackers alone regularly outrun a DHT swarm. A bootstrapped or disabled
+  /// DHT says nothing here at all.
   bool get unavailable => enabled && !everBootstrapped;
 
   /// The line to show wherever [unavailable] is worth saying.
   static const String unavailableMessage =
       'DHT unavailable — using trackers only';
 
-  /// The line Settings shows beside the embedded server's own status:
-  /// health, not just failure, since the node count *is* the health
-  /// measure a bootstrapped DHT reports. `Disabled` covers both a DHT the
-  /// user turned off and a server that is not running -- [enabled] cannot
-  /// tell those apart, and neither is worth explaining differently.
-  /// Diagnostics and the player only ever care about [unavailable], so
-  /// they read [unavailableMessage] directly rather than this -- but that
-  /// is the same constant this composes with, so the wording never
-  /// drifts between the two screens.
+  /// The line Settings shows beside the embedded server's own status. It shows
+  /// health, not just failure, since the node count *is* the health measure a
+  /// bootstrapped DHT reports. `Disabled` covers both a DHT the user turned off
+  /// and a server that is not running: [enabled] cannot tell those apart, and
+  /// neither is worth explaining differently. Diagnostics and the player only
+  /// ever care about [unavailable], so they read [unavailableMessage] directly
+  /// rather than this. That is the same constant this composes with, so the
+  /// wording never drifts between the two screens.
   String get healthLine {
     if (!enabled) return 'Disabled';
     return everBootstrapped ? 'Connected, $nodes nodes' : unavailableMessage;
   }
 
   /// `0 nodes (0 v6)`: the raw counts, for a details view a curious person
-  /// opens on purpose -- never shown alongside [unavailableMessage] by
-  /// default.
+  /// opens on purpose. Never shown alongside [unavailableMessage] by default.
   String get nodeCounts => '$nodes nodes ($nodesV6 v6)';
 
   @override

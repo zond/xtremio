@@ -1,27 +1,27 @@
 /// The Drive grant shared between the account's devices, through
 /// xtremio-xervice's vault.
 ///
-/// Pairing a device with Drive is a phone, a QR code and a Google sign-in,
+/// Pairing a device with Drive takes a phone, a QR code and a Google sign-in,
 /// and the grant it ends with reaches every file that Google account ever
-/// picked through this OAuth client. So the grant is put in the account's
-/// vault (`PUT /vault/drive`, sealed at rest with the service's `GRANT_KEY`,
-/// `xtremio-xervice/functions/account.js`) after a pairing, and a device of
-/// the same Stremio account with no grant of its own takes it from there
-/// (`GET`) at start and at a sign-in, through [DriveAccount.adoptSharedGrant]
-/// -- the same store, the same `grantSink` to Rust, as a pairing.
+/// picked through this OAuth client. So after a pairing the grant is put in the
+/// account's vault (`PUT /vault/drive`, sealed at rest with the service's
+/// `GRANT_KEY`, `xtremio-xervice/functions/account.js`). A device of the same
+/// Stremio account with no grant of its own takes it from there (`GET`) at
+/// start and at a sign-in, through [DriveAccount.adoptSharedGrant]. It goes
+/// through the same store, and the same `grantSink` to Rust, as a pairing.
 ///
-/// **The device's own grant wins.** A device that holds one never takes
-/// the vault's, which may be older or another Google account's. The
-/// device's secure store stays the primary copy and the vault a copy of
-/// the latest pairing -- only a pairing writes it, so a grant forgotten
-/// everywhere is not put back by a device that still holds one.
+/// **The device's own grant wins.** A device that holds one never takes the
+/// vault's, which may be older or another Google account's. The device's secure
+/// store stays the primary copy, and the vault holds a copy of the latest
+/// pairing. Only a pairing writes it, so a device that still holds a grant does
+/// not put back one forgotten everywhere.
 ///
-/// **The files come with it.** A grant taken from the vault reaches every
-/// file the Google account picked through this client, so the device lists
-/// them ([adopted]) rather than starting with an empty list.
+/// **The files come with it.** A grant taken from the vault reaches every file
+/// the Google account picked through this client, so the device lists them
+/// ([adopted]) rather than starting with an empty list.
 ///
-/// **Never logged.** The token rides one request body or one answer and
-/// nothing here writes a line with it; a failure is logged by status.
+/// **Never logged.** The token rides one request body or one answer, and
+/// nothing here writes a line with it. A failure is logged by status.
 library;
 
 import 'diagnostics_log.dart';
@@ -34,9 +34,9 @@ class DriveVault {
   final XerviceIdentity identity;
   final DriveAccount account;
 
-  /// Run once a grant from the vault is installed: what fills the device's
-  /// list with the files the grant reaches, and matches them
-  /// (`fillSharedDrive`). Null installs the grant and nothing else.
+  /// Run once a grant from the vault is installed. It fills the device's list
+  /// with the files the grant reaches, and matches them (`fillSharedDrive`).
+  /// Null installs the grant and nothing else.
   final Future<void> Function()? adopted;
 
   /// Puts [refreshToken] -- a pairing's -- in the account's vault.
