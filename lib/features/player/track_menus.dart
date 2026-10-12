@@ -12,9 +12,9 @@ import 'subtitle_timing.dart';
 /// The subtitle picker.
 ///
 /// Three things, in the order they are worth having: **Off**, the tracks
-/// already **in this file** (no download, always in sync with the release),
-/// and the files the subtitle addons (or the stream itself) offer -- those
-/// last **one row per language**, not one row per upload.
+/// already **in this file** (no download, always in sync with the release), and
+/// the files the subtitle addons (or the stream itself) offer. Those last come
+/// **one row per language**, not one row per upload.
 ///
 /// A language with more than one file names the one it would apply and
 /// offers the rest behind a row of its own ("18 other Spanish files"),
@@ -53,29 +53,26 @@ class SubtitleMenu extends StatefulWidget {
   final ValueChanged<TrackInfo> onEmbedded;
   final ValueChanged<SubtitleInfo> onExternal;
 
-  /// How often this viewer has picked each language, or null where
-  /// nothing keeps count -- a player mounted with no preferences above
-  /// it.
+  /// How often this viewer has picked each language, or null where nothing
+  /// keeps count (a player mounted with no preferences above it).
   ///
-  /// **The counts, not a ranking.** Which languages win is decided here,
-  /// over the languages of [groups] and [embedded] together, because
-  /// [pinnedNote] claims a comparison among the languages *on offer
-  /// here* and the widget drawing the sheet is the only thing that knows
-  /// what is on offer. A caller handing down a finished ranking could
-  /// rank less than the sheet -- rank the addons' rows alone, and the
-  /// note calls one of them the commonest on offer with a language
-  /// picked three times as often drawn a few rows above it -- and
-  /// nothing here could tell, because the counts that would show it up
-  /// stayed with the caller. So there is no such parameter, and the
-  /// comparison the note reports is the one that was really made.
+  /// **The counts, not a ranking.** Which languages win is decided here, over
+  /// the languages of [groups] and [embedded] together. [pinnedNote] claims a
+  /// comparison among the languages *on offer here*, and the widget drawing the
+  /// sheet is the only thing that knows what is on offer. A caller handing down
+  /// a finished ranking could rank less than the sheet. Say it ranked the
+  /// addons' rows alone: the note would call one of them the commonest on
+  /// offer, with a language picked three times as often drawn a few rows above
+  /// it. Nothing here could tell, because the counts that would show it up
+  /// stayed with the caller. So there is no such parameter, and the comparison
+  /// the note reports is the one that was really made.
   ///
-  /// A language of [groups] that wins is **lifted, not copied** -- it
-  /// appears once, above, and not again in the alphabet below, because
-  /// two rows that apply the same file are exactly what `_disambiguated`
-  /// exists to prevent. A winner this sheet offers only as a track in
-  /// [embedded] is not lifted at all: its row is drawn above this
-  /// section already, so there is nothing here to move, and [pinnedNote]
-  /// is what says where it went.
+  /// A language of [groups] that wins is **lifted, not copied**. It appears
+  /// once, above, and not again in the alphabet below, because two rows that
+  /// apply the same file are exactly what `_disambiguated` exists to prevent. A
+  /// winner this sheet offers only as a track in [embedded] is not lifted at
+  /// all: its row is drawn above this section already, so there is nothing here
+  /// to move, and [pinnedNote] is what says where it went.
   ///
   /// A language the sheet does not offer at all cannot win: a pin moves a
   /// row that exists, and this menu never invents one for a language
@@ -97,36 +94,34 @@ class SubtitleMenu extends StatefulWidget {
   /// What that heading's note says, over the shapes it is really asked
   /// for.
   ///
-  /// The note is drawn only where a row was lifted, so [shown] is one or
-  /// two. There are at most `SubtitlePickMemory.pinCount` winners, which
-  /// is two, so [inFile] -- the winners with no row down here to lift --
-  /// is none or one, and where it is one the single other slot is the
-  /// row that was lifted. A viewer with one second language sees the
-  /// singular; a winner the file itself carries is the only thing that
-  /// splits the sentence in two. There is no third slot, so the note is
-  /// never asked to speak of "the rest".
+  /// The note is drawn only where a row was lifted, so [shown] is one or two.
+  /// There are at most `SubtitlePickMemory.pinCount` winners, which is two. So
+  /// [inFile], the winners with no row down here to lift, is none or one, and
+  /// where it is one the single other slot is the row that was lifted. A viewer
+  /// with one second language sees the singular. A winner the file itself
+  /// carries is the only thing that splits the sentence in two. There is no
+  /// third slot, so the note is never asked to speak of "the rest".
   ///
-  /// **"on offer here" is the whole of what makes it true, and "here" is
-  /// the whole sheet.** A pin is only ever a language this episode
-  /// actually offers, so the language this viewer really picks most often
-  /// can be missing from the answer altogether -- and then a note calling
-  /// the row above it their commonest asserts the opposite of what the
-  /// counts say. The comparison [SubtitlePickMemory.pinned] makes is
-  /// among the languages on offer, and that is the comparison this
-  /// sentence reports.
+  /// **"on offer here" is the whole of what makes it true, and "here" is the
+  /// whole sheet.** A pin is only ever a language this episode actually offers,
+  /// so the language this viewer really picks most often can be missing from
+  /// the answer altogether. Then a note calling the row above it their
+  /// commonest asserts the opposite of what the counts say. The comparison
+  /// [SubtitlePickMemory.pinned] makes is among the languages on offer, and
+  /// that is the comparison this sentence reports.
   ///
-  /// The languages in the file are on offer here too, three rows up, so
-  /// they are in that comparison ([picks]) -- and one of them can win a
-  /// place without there being a row down here to lift. [shown] is the
-  /// rows lifted and [inFile] the winners already drawn as tracks in the
-  /// video: the count in the first sentence is both, which is what the
-  /// ranking really compared, and the second sentence is what stops that
-  /// count promising a row it did not move.
+  /// The languages in the file are on offer here too, three rows up, so they
+  /// are in that comparison ([picks]). One of them can win a place without
+  /// there being a row down here to lift. [shown] is the rows lifted and
+  /// [inFile] the winners already drawn as tracks in the video. The count in
+  /// the first sentence is both, which is what the ranking really compared, and
+  /// the second sentence is what stops that count promising a row it did not
+  /// move.
   ///
-  /// What makes the first sentence true is that this menu ranked the
-  /// sheet itself, both sections of it, and drew the note from that same
-  /// ranking -- which is why [picks] is the counts and not a ranking a
-  /// caller could have taken over less than the sheet.
+  /// What makes the first sentence true is that this menu ranked the sheet
+  /// itself, both sections of it, and drew the note from that same ranking.
+  /// That is why [picks] is the counts and not a ranking a caller could have
+  /// taken over less than the sheet.
   static String pinnedNote(int shown, {int inFile = 0}) {
     final total = shown + inFile;
     final head = total == 1
@@ -150,12 +145,11 @@ class SubtitleMenu extends StatefulWidget {
   /// The two words a file cut for the video that is playing earns on its
   /// row.
   ///
-  /// Such a file is at the head of its language, and a row that is first
-  /// for a reason should say the reason: a viewer scrolling past sixty
-  /// uploads has no other way to tell the one the addon says was made
-  /// for this exact release. It is a fact about the *upload*, not a
-  /// verdict about its timing and not a number to reason about -- the
-  /// declared rate is still shown nowhere.
+  /// Such a file is at the head of its language, and a row that is first for a
+  /// reason should say the reason. A viewer scrolling past sixty uploads has no
+  /// other way to tell the one the addon says was made for this exact release.
+  /// It is a fact about the *upload*, not a verdict about its timing and not a
+  /// number to reason about. The declared rate is still shown nowhere.
   static const String releaseNote = 'same release';
 
   /// The second line under one of a language's files: the addon that
@@ -189,19 +183,18 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// offers*, most picked first: [SubtitleMenu.picks] asked about the
   /// addons' rows and the video's own tracks together.
   ///
-  /// The union is built here, out of the two lists this widget draws,
-  /// and that is the whole of what makes [SubtitleMenu.pinnedNote]'s "on
-  /// offer here" true: nothing outside the menu gets to decide what was
-  /// compared. A language the file and an addon both offer is named
-  /// twice and counted once, because it is one language to the viewer
-  /// and one to the counts (`subtitleLanguageLabel` is what both are
-  /// stored under, and `SubtitlePickMemory.pinned` keeps the first
-  /// mention). The addons' rows are named first, so a tie between one of
-  /// them and a track in the file is spent on the row a viewer would
-  /// otherwise have to find. A tie between two addon rows comes out in
-  /// whatever order [SubtitleMenu.groups] arrived in, and that order is
-  /// the caller's: this widget takes the list as given and promises
-  /// nothing about it, so nothing here claims such a tie is settled
+  /// The union is built here, out of the two lists this widget draws, and that
+  /// is the whole of what makes [SubtitleMenu.pinnedNote]'s "on offer here"
+  /// true: nothing outside the menu gets to decide what was compared. A
+  /// language the file and an addon both offer is named twice and counted once,
+  /// because it is one language to the viewer and one to the counts
+  /// (`subtitleLanguageLabel` is what both are stored under, and
+  /// `SubtitlePickMemory.pinned` keeps the first mention). The addons' rows are
+  /// named first, so a tie between one of them and a track in the file is spent
+  /// on the row a viewer would otherwise have to find. A tie between two addon
+  /// rows comes out in whatever order [SubtitleMenu.groups] arrived in, and
+  /// that order is the caller's. This widget takes the list as given and
+  /// promises nothing about it, so nothing here claims such a tie is settled
   /// alphabetically.
   List<String> get _pinnedLanguages =>
       widget.picks?.pinned([
@@ -213,22 +206,21 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       const [];
 
   /// The pinned groups, in the order [_pinnedLanguages] puts them, and
-  /// everything else in the order it arrived -- which, from the player,
-  /// is the alphabet [subtitlesByRelease] left it in.
+  /// everything else in the order it arrived. From the player, that is the
+  /// alphabet [subtitlesByRelease] left it in.
   ///
-  /// Two things leave the section off the sheet rather than heading an
-  /// empty one. Lifting every language there is moves no row nearer the
-  /// top and costs a heading and a note for it. And a winner can have no
-  /// row down here at all, because the file carries it and its row is
-  /// two sections up: when both winners are like that nothing is lifted,
-  /// and the freed slots are deliberately *not* handed to the next
-  /// language down -- the heading says these are the ones picked most
-  /// often, the third most picked is not that, and the two that are sit
-  /// at the top of this sheet already. That is code not written, so the
-  /// thing that holds it is a test:
-  /// `test/features/player/subtitle_pins_test.dart`, "both winners
-  /// inside the file lift nothing, and the next language down is not
-  /// promoted into their place".
+  /// Two things leave the section off the sheet rather than heading an empty
+  /// one. Lifting every language there is moves no row nearer the top, and
+  /// costs a heading and a note for it. And a winner can have no row down here
+  /// at all, because the file carries it and its row is two sections up. When
+  /// both winners are like that nothing is lifted, and the freed slots are
+  /// deliberately *not* handed to the next language down. The heading says
+  /// these are the ones picked most often, the third most picked is not that,
+  /// and the two that are sit at the top of this sheet already. That is code
+  /// not written, so the thing that holds it is a test:
+  /// `test/features/player/subtitle_pins_test.dart`, "both winners inside the
+  /// file lift nothing, and the next language down is not promoted into their
+  /// place".
   (List<SubtitleLanguageGroup>, List<SubtitleLanguageGroup>) _split(
     List<String> languages,
   ) {
@@ -258,8 +250,8 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       shrinkWrap: true,
       children: [
         const _MenuHeader('Subtitles'),
-        // The remote starts here, at the top, every time the sheet opens:
-        // one place to start from, whatever was picked last or wherever
+        // The remote starts here, at the top, every time the sheet opens. That
+        // gives one place to start from, whatever was picked last or wherever
         // the sheet was scrolled, and the row below it is the timing.
         _MenuTile(
           title: 'Off',
@@ -267,10 +259,10 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
           onTap: widget.onOff,
           autofocus: true,
         ),
-        // Above the list rather than below it: a language answers with
-        // sixty-nine files often enough that the bottom of this sheet is
-        // a scroll away, and what a viewer reaches for after picking a
-        // file that drifts is this.
+        // Above the list rather than below it. A language answers with
+        // sixty-nine files often enough that the bottom of this sheet is a
+        // scroll away, and this is what a viewer reaches for after picking a
+        // file that drifts.
         if (activeId != null)
           ListTile(
             leading: const Icon(Icons.av_timer),
@@ -328,8 +320,8 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
     );
   }
 
-  /// One language: the row that applies its best-known file, and -- where
-  /// it has more than one -- the row that opens the rest under it.
+  /// One language: the row that applies its best-known file and, where it has
+  /// more than one, the row that opens the rest under it.
   ///
   /// One list of rows for both sections, because a pinned language is the
   /// same row moved and not a different kind of row: the file it applies,
@@ -379,19 +371,17 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
 
 /// Which file to measure the playing subtitle against.
 ///
-/// Opened from the timing panel's [SubtitleTimingOverlay.matchLabel], and
-/// offering every *other* file on offer -- the one playing is what is
-/// being measured, so it is not among them. The ordering is the menu's
-/// own, so a file the addon says was cut for this release is at the head
-/// of its language here too: it is the likeliest to be in sync, and being
-/// in sync is the whole of what makes a good reference. **One row per
-/// language**, for the same reason the subtitle menu has one, with the
-/// rest of a language behind a row of their own.
+/// Opened from the timing panel's [SubtitleTimingOverlay.matchLabel], it offers
+/// every *other* file on offer. The one playing is what is being measured, so
+/// it is not among them. The ordering is the menu's own, so a file the addon
+/// says was cut for this release is at the head of its language here too. It is
+/// the likeliest to be in sync, and being in sync is the whole of what makes a
+/// good reference. **One row per language**, for the same reason the subtitle
+/// menu has one, with the rest of a language behind a row of their own.
 ///
-/// **The viewer picks, and nothing guesses.** The measurement is only as
-/// good as the reference's own sync with the video, which no metadata
-/// knows and no addon claims -- the viewer, having tried a file or two,
-/// does.
+/// **The viewer picks, and nothing guesses.** The measurement is only as good
+/// as the reference's own sync with the video. No metadata knows that and no
+/// addon claims it, but the viewer, having tried a file or two, does.
 class SubtitleReferenceMenu extends StatefulWidget {
   const SubtitleReferenceMenu({
     super.key,
@@ -455,14 +445,13 @@ class _SubtitleReferenceMenuState extends State<SubtitleReferenceMenu> {
   /// One language: the file it would offer first, and the rest behind a
   /// row of their own.
   ///
-  /// The same shape as [SubtitleMenu], and for the same reason. A
-  /// language answers with sixty-nine files often enough that listing
-  /// every candidate of every language puts the second language sixty-odd
-  /// presses down a remote's D-pad -- and reaching for a *second*
-  /// language is exactly what this sheet is for, since the reason to
-  /// match at all is that the file in one language is out of sync. The
-  /// head of a language is the likeliest reference anyway: the ordering
-  /// puts the file the addon says was cut for this release first.
+  /// The same shape as [SubtitleMenu], and for the same reason. A language
+  /// answers with sixty-nine files often enough that listing every candidate of
+  /// every language puts the second language sixty-odd presses down a remote's
+  /// D-pad. Reaching for a *second* language is exactly what this sheet is for,
+  /// since the reason to match at all is that the file in one language is out
+  /// of sync. The head of a language is the likeliest reference anyway: the
+  /// ordering puts the file the addon says was cut for this release first.
   List<Widget> _language(SubtitleLanguageGroup group) {
     final candidates = group.options
         .where((option) => option.id != widget.playingId)
@@ -577,12 +566,11 @@ class AudioMenu extends StatelessWidget {
   }
 }
 
-/// What the player's settings sheet shows about the buffer: the choice in
-/// force for the playback on screen, whether the whole-file download it
-/// asked for is still being taken, and what to say about it (the device had
-/// no room; the file is being kept). Carried as one value so the sheet can
-/// listen to it while it is open -- the pin is answered after the sheet is
-/// already up.
+/// What the player's settings sheet shows about the buffer: the choice in force
+/// for the playback on screen, whether the whole-file download it asked for is
+/// still being taken, and what to say about it (the device had no room; the
+/// file is being kept). Carried as one value so the sheet can listen to it
+/// while it is open, since the pin is answered after the sheet is already up.
 final class BufferAheadStatus {
   const BufferAheadStatus(this.choice, {this.busy = false, this.note});
 
@@ -631,9 +619,9 @@ class PlayerSettingsSheet extends StatelessWidget {
   /// partial map would be rejected by the engine.
   final void Function(String key, Object? value)? onSetting;
 
-  /// Opens the Downloads screen. This is the player's only menu, so it is
-  /// where the list has to be reachable from while something is playing;
-  /// null when there is no downloads client above the player.
+  /// Opens the Downloads screen. This is the player's only menu, so the list
+  /// has to be reachable from here while something is playing. Null when there
+  /// is no downloads client above the player.
   final VoidCallback? onDownloads;
 
   /// The chip for one buffer choice, so a test (and the remote) can find it.
@@ -652,10 +640,10 @@ class PlayerSettingsSheet extends StatelessWidget {
     return ListView(
       shrinkWrap: true,
       // A `ListView` with no padding of its own takes the safe area out of
-      // `MediaQuery` -- which is how the subtitle and audio menus stay off
-      // a television's overscan band. Setting a padding opts out of that,
-      // so the band has to be added back by hand or the last setting ends
-      // up under the cropped edge of the panel.
+      // `MediaQuery`, which is how the subtitle and audio menus stay off a
+      // television's overscan band. Setting a padding opts out of that, so the
+      // band has to be added back by hand, or the last setting ends up under
+      // the cropped edge of the panel.
       padding: EdgeInsets.only(
         bottom: 16 + MediaQuery.paddingOf(context).bottom,
       ),
@@ -832,14 +820,14 @@ class _SectionNote extends StatelessWidget {
 
 /// One row of a picker.
 ///
-/// A plain [ListTile], and deliberately not wrapped in a [FocusMarked] the
-/// way the chips two sections up are. These menus are a modal bottom sheet
-/// -- the app's own surface, in the app's own near-black, with a known
-/// contrast against a near-white fill -- and not something drawn over the
-/// video, which is the case the double ring exists for. So the theme
-/// floor's fill is the whole of the indicator here, and a row that lifted
-/// and cast a shadow as focus walked sixty uploads would only make the
-/// list harder to read. See `FocusTheme`.
+/// A plain [ListTile], and deliberately not wrapped in a [FocusMarked] the way
+/// the chips two sections up are. These menus are a modal bottom sheet, not
+/// something drawn over the video, which is the case the double ring exists
+/// for. The sheet is the app's own surface, in the app's own near-black, with a
+/// known contrast against a near-white fill. So the theme floor's fill is the
+/// whole of the indicator here. A row that lifted and cast a shadow as focus
+/// walked sixty uploads would only make the list harder to read. See
+/// `FocusTheme`.
 class _MenuTile extends StatelessWidget {
   const _MenuTile({
     required this.title,
@@ -869,10 +857,10 @@ class _MenuTile extends StatelessWidget {
     leading: Icon(
       selected ? Icons.radio_button_checked : Icons.radio_button_off,
     ),
-    // A row is a thing to choose between, not a paragraph to read. Both
-    // lines are addon text -- a release name runs to a hundred and twenty
-    // characters, which is six lines of one row on a phone -- and
-    // `ListTile` grows to fit whatever it is given, so the cap is here.
+    // A row is a thing to choose between, not a paragraph to read. Both lines
+    // are addon text: a release name runs to a hundred and twenty characters,
+    // which is six lines of one row on a phone. `ListTile` grows to fit
+    // whatever it is given, so the cap is here.
     title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
     subtitle: subtitle == null
         ? null

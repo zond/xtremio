@@ -113,19 +113,19 @@ final class CastBuffering {
 typedef CastSample = ({DateTime at, CastNumbers numbers});
 
 /// **The stats panel while a receiver has the film**: drawn on the phone's
-/// casting view, never sent to the receiver. The look of
-/// [PlaybackStatsOverlay] -- its text, its box, a row only where there is a
-/// reading -- with what a cast is judged by: the receiver and what it says
-/// it shows, what it is sent, how often it stopped, how often it asked
-/// this device for the film and how fast it is taking it, and for a
-/// rendition how far ahead of it the film is made.
+/// casting view, never sent to the receiver. It has the look of
+/// [PlaybackStatsOverlay] (its text, its box, a row only where there is a
+/// reading) with what a cast is judged by: the receiver and what it says it
+/// shows, what it is sent, how often it stopped, how often it asked this device
+/// for the film and how fast it is taking it, and for a rendition how far ahead
+/// of it the film is made.
 ///
 /// **Polls [numbers] while it is mounted and the app is in front**, every
-/// [interval], and at no other time: the player mounts it only while a cast
-/// is live and the panel is on, and it listens for the app being hidden
-/// itself -- a hidden app draws no frames, so no rebuild would come to tell
-/// it. Every rate is two answers over the time between them by [now],
-/// which a test winds; the server keeps no clock for them.
+/// [interval], and at no other time. The player mounts it only while a cast is
+/// live and the panel is on. It listens for the app being hidden itself, since
+/// a hidden app draws no frames, so no rebuild would come to tell it. Every
+/// rate is two answers over the time between them by [now], which a test winds;
+/// the server keeps no clock for them.
 class CastStatsOverlay extends StatefulWidget {
   const CastStatsOverlay({
     super.key,
@@ -238,10 +238,10 @@ class CastStatsOverlay extends StatefulWidget {
     CastPlayerState.idle => 'idle',
   };
 
-  /// How the film goes to the receiver: from its source, as it is, or as
-  /// the server's rendition -- and what of the picture and the sound is
-  /// copied or converted, from the server's answer where it has one and
-  /// from what was decided at the hand-over where it does not.
+  /// How the film goes to the receiver: from its source, as it is, or as the
+  /// server's rendition. It also says what of the picture and the sound is
+  /// copied or converted, from the server's answer where it has one and from
+  /// what was decided at the hand-over where it does not.
   static String _sending(CastFacts facts, CastNumbers? numbers) {
     if (facts.direct) return 'from its source, not through this device';
     final made = numbers?.made;
@@ -287,8 +287,8 @@ class CastStatsOverlay extends StatefulWidget {
     _ => '$channels ch',
   };
 
-  /// The requests in the last [requestWindow] -- or in as much of it as
-  /// the panel has watched, said as such. Null before two answers.
+  /// The requests in the last [requestWindow], or in as much of it as the panel
+  /// has watched, said as such. Null before two answers.
   static String? _reRequests(List<CastSample> samples) {
     if (samples.length < 2) return null;
     final latest = samples.last;

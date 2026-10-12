@@ -60,18 +60,17 @@ part 'player_screen_leaving.dart';
 /// 0 plays at once), `pauseOnMinimize`, whether Esc leaves fullscreen
 /// (`escExitFullscreen`), and the subtitle style.
 ///
-/// On a TV ([DeviceScope.isTv]) the remote drives it in two modes. With the
-/// OSD down there is nothing to aim at: the centre key is play/pause and
-/// leaves the remote on play/pause with the bar up, so a second press
-/// restarts the film; up and down bring the bar up onto the top bar and the
-/// seek bar; left and right scan. With the OSD up the ordinary focus rules
-/// apply: the centre key presses what is focused (play/pause on the seek bar
-/// and the video), up walks the bar, and down goes to the seek bar and then
-/// play/pause, so home is never more than two presses away. The D-pad stays
-/// inside the bar, and Back puts away the up-next card, then the controls,
-/// then leaves. The controls fade whether or not a control holds focus,
-/// taking the remote back to the video, but not while paused. The media
-/// keys work in both modes and off a TV.
+/// On a TV ([DeviceScope.isTv]) the remote drives it in two modes. With the OSD
+/// down there is nothing to aim at. The centre key is play/pause, and it leaves
+/// the remote on play/pause with the bar up, so a second press restarts the
+/// film. Up and down bring the bar up onto the top bar and the seek bar. Left
+/// and right scan. With the OSD up the ordinary focus rules apply. The centre
+/// key presses what is focused (play/pause on the seek bar and the video), up
+/// walks the bar, and down goes to the seek bar and then play/pause, so home is
+/// never more than two presses away. The D-pad stays inside the bar, and Back
+/// puts away the up-next card, then the controls, then leaves. The controls
+/// fade whether or not a control holds focus, taking the remote back to the
+/// video, but not while paused. The media keys work in both modes and off a TV.
 ///
 /// The State is split by concern across the `player_screen_*.dart` parts.
 class PlayerScreen extends StatefulWidget {
@@ -170,17 +169,17 @@ class PlayerScreen extends StatefulWidget {
   static const Duration endTolerance = Duration(seconds: 30);
   static const double endFraction = 0.98;
 
-  /// The wait before the first retry of an `open` that failed while the
-  /// torrent was still starting up (and before the second re-open of a
-  /// stream that ended early); each further attempt waits one more multiple
-  /// of it, up to [openRetryBackoffCap].
+  /// The wait before the first retry of an `open` that failed while the torrent
+  /// was still starting up, and before the second re-open of a stream that
+  /// ended early. Each further attempt waits one more multiple of it, up to
+  /// [openRetryBackoffCap].
   ///
-  /// **There is no count.** A torrent whose bytes have not come -- a dead
-  /// swarm, a magnet whose metadata nobody has -- is waited for under the
-  /// start-up and stall cards for as long as the viewer stays; the viewer
-  /// is the one who gives up. Only an answer that the stream cannot be
-  /// played (a file that is not there, a torrent that is ready and still
-  /// will not open) is a failure.
+  /// **There is no count.** The screen waits for a torrent whose bytes have not
+  /// come (a dead swarm, a magnet whose metadata nobody has) under the start-up
+  /// and stall cards, for as long as the viewer stays. The viewer is the one
+  /// who gives up. Only an answer that the stream cannot be played is a
+  /// failure: a file that is not there, or a torrent that is ready and still
+  /// will not open.
   static const Duration torrentOpenRetryBackoff = Duration(milliseconds: 700);
 
   /// The longest wait between two of those attempts: patient without
@@ -198,10 +197,10 @@ class PlayerScreen extends StatefulWidget {
   /// only has to keep a few numbers honest.
   static const Duration torrentStallStatsInterval = Duration(seconds: 2);
 
-  /// How often it is polled when nothing is waiting for the torrent but
-  /// the stats OSD is up: playback is fine, and the panel was opened on
-  /// purpose to watch the swarm, so the numbers must move -- slowly, since
-  /// no frame depends on them.
+  /// How often it is polled when nothing is waiting for the torrent but the
+  /// stats OSD is up. Playback is fine, but the panel was opened on purpose to
+  /// watch the swarm, so the numbers must move. They move slowly, since no
+  /// frame depends on them.
   static const Duration torrentStatsOverlayInterval = Duration(seconds: 5);
 
   /// How often the server is asked what it holds of the stream on screen
@@ -213,11 +212,11 @@ class PlayerScreen extends StatefulWidget {
   /// How long after a seek the position is checked to see whether the seek
   /// happened, and how far from the target it may land and still count.
   ///
-  /// mpv seeks to a keyframe unless asked for an exact position, so a couple
-  /// of seconds either way is an ordinary seek; what is watched for is a seek
-  /// of minutes that leaves the position where it started. Short enough that
-  /// the viewer's next press replaces the check rather than queueing behind
-  /// it.
+  /// mpv seeks to a keyframe unless asked for an exact position, so a couple of
+  /// seconds either way is an ordinary seek. What this watches for is a seek of
+  /// minutes that leaves the position where it started. The delay is short
+  /// enough that the viewer's next press replaces the check rather than
+  /// queueing behind it.
   static const Duration seekCheckDelay = Duration(seconds: 2);
   static const Duration seekTolerance = Duration(seconds: 5);
 
@@ -230,13 +229,12 @@ class PlayerScreen extends StatefulWidget {
   /// nobody is left watching a splash screen wondering.
   static const Duration castFetchTimeout = Duration(seconds: 20);
 
-  /// How far a receiver's position moves while it says it is playing, and
-  /// has never reported a picture, before the cast is called sound over a
-  /// black screen. A receiver decoding the picture reports it from
-  /// buffering on, before it plays at all (measured on a Chromecast with
-  /// Google TV 4K, 2026-10-05), so this is not a wait for a slow start: it
-  /// is a check on a state the receiver reported, and a cast that is
-  /// buffering is never ended by it.
+  /// How far a receiver's position moves while it says it is playing, and has
+  /// never reported a picture, before the cast is called sound over a black
+  /// screen. A receiver decoding the picture reports it from buffering on,
+  /// before it plays at all (measured on a Chromecast with Google TV 4K,
+  /// 2026-10-05). So this is not a wait for a slow start but a check on a state
+  /// the receiver reported, and it never ends a cast that is buffering.
   static const Duration castNoPictureAfter = Duration(seconds: 3);
 
   /// How often a rendition being prepared for a receiver is asked how far
@@ -348,34 +346,35 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// torrent's URL is on it already and is registered as it is
   /// ([_register]).
   ///
-  /// Null only in a build that started no embedded server (nothing the app
-  /// ships: a server that will not start fails the boot); the stream then
-  /// plays direct.
+  /// Null only in a build that started no embedded server, and the stream then
+  /// plays direct. The app ships no such build: a server that will not start
+  /// fails the boot.
   Uri? _serverBase;
 
-  /// This player screen's token, `<viewer>.<screen>`: the install's viewer
-  /// id ([AppPrefs.viewerId]) and this screen's number. The play every id
-  /// this screen registers carries ([MediaIds.setPlay]), and a cast of it
-  /// too, and written into the `/proxy` URL of a link (`p=`, the only thing
-  /// that says which of the server's live HTTP streams are this screen's,
-  /// [_closeProxiedStreams]) -- and what tells the server a read is the
-  /// viewer's playback: the viewer's play session follows the newest screen
-  /// of the viewer, so the next episode's screen moves it, and a request
-  /// from an older screen (its player still reconnecting as this one takes
-  /// over) moves nothing.
+  /// This player screen's token, `<viewer>.<screen>`: the install's viewer id
+  /// ([AppPrefs.viewerId]) and this screen's number.
+  ///
+  /// Every id this screen registers carries it as its play
+  /// ([MediaIds.setPlay]), and so does a cast of it. It is also written into
+  /// the `/proxy` URL of a link as `p=`, the only thing that says which of the
+  /// server's live HTTP streams are this screen's ([_closeProxiedStreams]). It
+  /// is what tells the server that a read is the viewer's playback. The
+  /// viewer's play session follows the newest screen of the viewer, so the next
+  /// episode's screen moves it, and a request from an older screen (its player
+  /// still reconnecting as this one takes over) moves nothing.
   ///
   /// A name, not a credential: it is acted on only through the server's
   /// bearer-protected loopback control API, and the server strips it before
-  /// asking the origin for anything. Unique per screen, whole, is what a
-  /// proxy close retires for good.
+  /// asking the origin for anything. It is unique per screen, and the whole
+  /// token is what a proxy close retires for good.
   late final String _proxyToken =
       '${(_prefs ?? (_ownPrefs ??= AppPrefs.inMemory())).viewerId}.${++_proxyTokenSeq}';
 
-  /// The last screen number handed out. Seeded from the clock, not zero, so
-  /// it never goes backwards across a restart of the app. The server is the
-  /// app's own -- embedded, it dies with the process, and no other device's
-  /// player ever uses it -- so nothing on it remembers a screen across a
-  /// restart today; a number that only grows keeps that from mattering.
+  /// The last screen number handed out. Seeded from the clock, not zero, so it
+  /// never goes backwards across a restart of the app. The server is the app's
+  /// own: embedded, it dies with the process, and no other device's player ever
+  /// uses it. So nothing on it remembers a screen across a restart today, and a
+  /// number that only grows keeps that from mattering.
   static int _proxyTokenSeq = DateTime.now().millisecondsSinceEpoch;
 
   /// How this screen ends those streams on the way out, from
@@ -552,13 +551,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Duration _stillFrom = Duration.zero;
   bool _positionStuck = false;
 
-  /// **Whether the viewer is waiting on a read the server knows is
-  /// parked**: mpv's reader of the playing media id has been blocked for
-  /// [PlayerScreen.readWaitShown] and the picture has not moved since the
-  /// last ask. The truth that [_positionStuck] guessed at: mpv blocked in a
-  /// read -- at the start, in the index, at the resume point -- reports no
-  /// stall and no cache to wait for. Asked every
-  /// [PlayerScreen.readWaitInterval] ([_pollReadWait]).
+  /// **Whether the viewer is waiting on a read the server knows is parked**:
+  /// mpv's reader of the playing media id has been blocked for
+  /// [PlayerScreen.readWaitShown] and the picture has not moved since the last
+  /// ask. This is the truth that [_positionStuck] guessed at. mpv blocked in a
+  /// read (at the start, in the index, at the resume point) reports no stall
+  /// and no cache to wait for. Asked every [PlayerScreen.readWaitInterval]
+  /// ([_pollReadWait]).
   bool _readStalled = false;
   Timer? _readWaitTimer;
   bool _readWaitFetching = false;
@@ -570,11 +569,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// Whether the player has reported a position at all yet.
   ///
-  /// A position cannot have *stopped* moving before it has moved: until the
+  /// A position cannot have *stopped* moving before it has moved. Until the
   /// first report there is nothing to compare against, and a player that is
-  /// still opening is not one that is stuck. It is also what keeps a
-  /// backend that reports no positions at all -- which is every fake -- from
-  /// looking stuck forever.
+  /// still opening is not one that is stuck. This also keeps a backend that
+  /// reports no positions at all, which is every fake, from looking stuck
+  /// forever.
   bool _positionSeen = false;
 
   /// Where the server is told how long the film is, which is what its
@@ -586,11 +585,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([PlaybackScope.mediaIdsOf]).
   MediaIds? _mediaIds;
 
-  /// The media id the stream [_mediaIdSource] was registered as
-  /// ([_register]), which mpv is handed as `xtremio://<id>`. Kept across
-  /// re-opens of the same stream -- a retry, a false end -- so the server's
-  /// answer about it is found again rather than asked again; a different
-  /// stream registers anew.
+  /// The media id the stream [_mediaIdSource] was registered as ([_register]),
+  /// which mpv is handed as `xtremio://<id>`. It is kept across re-opens of the
+  /// same stream (a retry, a false end), so the server's answer about it is
+  /// found again rather than asked again. A different stream registers anew.
   String? _mediaId;
   Uri? _mediaIdSource;
 
@@ -599,9 +597,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// cast is judged by. Null until the first resolve of a stream answers.
   MediaResolution? _mediaResolution;
 
-  /// Which call to [_open] is the current one. An answer that comes back
-  /// for an earlier one -- a resolve outlived by a re-open, a stream the
-  /// core replaced -- opens nothing.
+  /// Which call to [_open] is the current one. An answer that comes back for an
+  /// earlier one opens nothing: a resolve outlived by a re-open, or a stream
+  /// the core replaced.
   int _openAttempt = 0;
 
   /// The media id a player was last reported opened on
@@ -630,25 +628,25 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// nothing to say.
   String? _bufferNote;
 
-  /// The three above as one value the open settings sheet listens to. The
-  /// sheet is a route of its own, so the screen's `setState` does not reach
-  /// it -- and the pin it starts is answered while it is still up.
+  /// The three above as one value the open settings sheet listens to. The sheet
+  /// is a route of its own, so the screen's `setState` does not reach it, and
+  /// the pin it starts is answered while the sheet is still up.
   final ValueNotifier<BufferAheadStatus> _bufferStatus = ValueNotifier(
     const BufferAheadStatus(BufferAhead.normal),
   );
 
-  /// Set once moving on to the next episode has begun. Looking the episode
-  /// up on the disk stands between the decision and the hand-over, and
-  /// nothing on screen stops answering meanwhile, so without this a second
-  /// Next -- or the countdown running out under one -- would advance the
-  /// core's player twice and replace this route twice over.
+  /// Set once moving on to the next episode has begun. Looking the episode up
+  /// on the disk stands between the decision and the hand-over, and nothing on
+  /// screen stops answering meanwhile. Without this, a second Next (or the
+  /// countdown running out under one) would advance the core's player twice and
+  /// replace this route twice over.
   bool _advancing = false;
 
-  /// Whether the auto-pick is settled for this media (once per `open`):
-  /// what is on screen is the best it can be, or every subtitle addon has
-  /// answered and nothing better came. Until then each answer that lands
-  /// asks again, and a better file replaces the one on screen. And
-  /// whether an attempt is in flight.
+  /// Whether the auto-pick is settled for this media, once per `open`: what is
+  /// on screen is the best it can be, or every subtitle addon has answered and
+  /// nothing better came. Until then each answer that lands asks again, and a
+  /// better file replaces the one on screen. The second flag says whether an
+  /// attempt is in flight.
   bool _autoPickedSubtitles = false;
   bool _autoPickingSubtitles = false;
 
@@ -673,13 +671,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// again would only fetch it again.
   final Set<String> _deadSubtitles = {};
 
-  /// What the last addon file put on screen replaced, for as long as it
-  /// might yet turn out not to load: its URL, the tracks as they were,
-  /// the file whose timing was in force, whether the auto-pick made the
-  /// choice (and so should make another), and how good what it replaced
-  /// was ([_autoPickRank], put back with it). `sub-add` does not answer
-  /// a failure (see [externalSubtitleFailure]); the error that says so
-  /// arrives on its own, and this is what it is undone from.
+  /// What the last addon file put on screen replaced, for as long as it might
+  /// yet turn out not to load: its URL, the tracks as they were, the file whose
+  /// timing was in force, whether the auto-pick made the choice (and so should
+  /// make another), and how good what it replaced was ([_autoPickRank], put
+  /// back with it). `sub-add` does not answer a failure (see
+  /// [externalSubtitleFailure]). The error that says so arrives on its own, and
+  /// this is what it is undone from.
   ({
     String url,
     PlaybackTracks before,
@@ -704,14 +702,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// a position past zero. Reset by every `open` ([_open]), re-opens and
   /// retries included, which is where it differs from [_mediaLoaded].
   ///
-  /// media_kit's `open` stops the player first, and the stop announces
-  /// itself (`position: 0`, then `duration: 0`) before a byte of the new
-  /// file is read; it also reports `playing: true` as soon as the `loadfile`
-  /// is issued. So a zero before this is that announcement, not the viewer
-  /// at the start of the film, and neither is believed ([_onPosition],
-  /// [_onDuration]): believed, it would report the viewer at the start to the
-  /// core, and a re-open issued meanwhile would resume from it
-  /// ([_reopenAt] at the position).
+  /// media_kit's `open` stops the player first, and the stop announces itself
+  /// (`position: 0`, then `duration: 0`) before a byte of the new file is read.
+  /// It also reports `playing: true` as soon as the `loadfile` is issued. So a
+  /// zero before this is that announcement, not the viewer at the start of the
+  /// film, and neither zero is believed ([_onPosition], [_onDuration]).
+  /// Believed, it would report the viewer at the start to the core, and a
+  /// re-open issued meanwhile would resume from it ([_reopenAt] at the
+  /// position).
   ///
   /// It is also where an engine error stops being fatal ([_onEngineError]).
   bool _mediaIn = false;
@@ -725,9 +723,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// does.
   SubtitleTiming _timing = const SubtitleTiming();
 
-  /// The marks made against the subtitle on screen, and what the last of
-  /// them did. Working state, not remembered: a mark belongs to one file, so
-  /// [_resetSubtitleTiming] drops them with the rest of it; only what they
+  /// The marks made against the subtitle on screen, and what the last of them
+  /// did. Working state, not remembered. A mark belongs to one file, so
+  /// [_resetSubtitleTiming] drops them with the rest of it. Only what they
   /// derive (the multiplier and offset in [_timing]) is kept.
   SubtitleCalibration _calibration = SubtitleCalibration.none;
   String? _markNote;
@@ -745,13 +743,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// The write of what the viewer has adjusted that has not been made yet,
   /// and null when there is nothing to write.
   ///
-  /// A press does not write: the shift repeats eight times a second under a
-  /// held key, and overlapping `prefsSet` calls land on FRB's worker pool in
-  /// no particular order, so the file could end up holding a number the
-  /// panel is not showing. The write is made when the adjusting is over --
-  /// the panel closing, something changing what is on screen, or the player
-  /// going away -- and it is a closure so it remembers the file the press
-  /// was made on.
+  /// A press does not write. The shift repeats eight times a second under a
+  /// held key, and overlapping `prefsSet` calls land on FRB's worker pool in no
+  /// particular order, so the file could end up holding a number the panel is
+  /// not showing. The write is made when the adjusting is over: the panel
+  /// closing, something changing what is on screen, or the player going away.
+  /// It is a closure so it remembers the file the press was made on.
   VoidCallback? _pendingSync;
 
   /// What "Match to another subtitle" asks for a ratio and an offset,
@@ -761,10 +758,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// Whether a measurement is running, and what the last one against the
   /// file on screen said.
   ///
-  /// The note is the count either way -- it is the evidence for applying
-  /// a transform and the evidence for refusing one -- and it belongs to
-  /// the file it was measured for, so [_resetSubtitleTiming] drops it
-  /// with everything else that file's.
+  /// The note is the count either way: it is the evidence for applying a
+  /// transform and the evidence for refusing one. It belongs to the file it was
+  /// measured for, so [_resetSubtitleTiming] drops it with everything else of
+  /// that file's.
   bool _matchingSubtitle = false;
   String? _subtitleMatchNote;
 
@@ -777,12 +774,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// until the server answers for this torrent).
   ///
   /// [_torrentStatsRequest] is set while the player is on a torrent **this
-  /// device's server is serving**; the timer says whether anything wants the
-  /// numbers: [PlayerScreen.torrentStatsInterval] until the media loads,
-  /// then a stall ([PlayerScreen.torrentStallStatsInterval]) or the stats
-  /// OSD ([PlayerScreen.torrentStatsOverlayInterval]); [_syncTorrentStats]
-  /// owns the cadence. An engine error and dispose end both. When the server
-  /// has no answer for the stream's file, a poll asks for the torrent-level
+  /// device's server is serving**. The timer says whether anything wants the
+  /// numbers: [PlayerScreen.torrentStatsInterval] until the media loads, then a
+  /// stall ([PlayerScreen.torrentStallStatsInterval]) or the stats OSD
+  /// ([PlayerScreen.torrentStatsOverlayInterval]). [_syncTorrentStats] owns the
+  /// cadence. An engine error and dispose end both. When the server has no
+  /// answer for the stream's file, a poll asks for the torrent-level
   /// [_torrentStatsFallback].
   ///
   /// Null means: not a torrent, or no embedded server. Read it as "there is
@@ -826,9 +823,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// awaited.
   DhtStatus Function()? _dhtStatusProvider;
 
-  /// The DHT's status, read once when this torrent's polling started --
-  /// never on a timer of its own, and never re-read for the rest of this
-  /// stream: it explains a start-up that has not found peers, and that
+  /// The DHT's status, read once when this torrent's polling started. It is
+  /// never read on a timer of its own, and never re-read for the rest of this
+  /// stream. It explains a start-up that has not found peers, and that
   /// explanation does not need to track a bootstrap that happens later.
   DhtStatus? _dhtStatus;
 
@@ -853,9 +850,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// or a seek, which the server sizes for itself.
   ///
   /// **A tick of playback in total, not one advancing report**: a scrub back
-  /// decodes a few frames between rewinds, and if those re-armed this each
+  /// decodes a few frames between rewinds, and if those re-armed this, each
   /// next rewind would be reported as a stall. [_playedSinceSeek] sums the
-  /// forward steps; a seek resets it.
+  /// forward steps, and a seek resets it.
   bool _playingNormally = false;
 
   /// Forward playback since the current `open` or the last seek, summed
@@ -896,10 +893,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   CastClient? _cast;
   LanMediaControl? _lanMedia;
 
-  /// The receivers discovery has found, as a notifier because the device
-  /// sheet is a route of its own: this screen's `setState` does not reach
-  /// it, and a list frozen at the moment it opened is the list a viewer
-  /// waiting for their television to appear watches not change.
+  /// The receivers discovery has found, as a notifier because the device sheet
+  /// is a route of its own. This screen's `setState` does not reach it, and a
+  /// viewer waiting for their television to appear would watch a list frozen at
+  /// the moment the sheet opened.
   final ValueNotifier<List<CastDevice>> _castDeviceList = ValueNotifier(
     const [],
   );
@@ -913,12 +910,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// no listener at all, and must not leave one running.
   bool _lanMediaOn = false;
 
-  /// Runs [PlayerScreen.castFetchTimeout] after a load served off this
-  /// device and asks whether the receiver ever reached us
-  /// ([_castFetchCheck]), and again every as long while it has reached us
-  /// and been sent nothing. Nothing the receiver says cancels it (the
-  /// receiver this exists to catch reports a healthy session); only the
-  /// ways out of a session do, picking another receiver among them.
+  /// Runs [PlayerScreen.castFetchTimeout] after a load served off this device
+  /// and asks whether the receiver ever reached us ([_castFetchCheck]). It runs
+  /// again after as long each time while the receiver has reached us and been
+  /// sent nothing. Nothing the receiver says cancels it, since the receiver
+  /// this exists to catch reports a healthy session. Only the ways out of a
+  /// session do, picking another receiver among them.
   Timer? _castFetchTimer;
 
   /// The token the stream on the receiver is published under
@@ -966,12 +963,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// Where the receiver was told to start, and whether it has yet reported a
   /// position of its own. The Cast SDK reports status and position on two
-  /// streams, and the client folds them together with the last position it
-  /// saw, which before the receiver's first tick is a zero it never
-  /// reported. Taken at its word, that zero reaches the core as
-  /// `TimeChanged{0}` and is where local playback resumes if the session
-  /// ends, so until then the handed-over position stands in
-  /// ([_trustedCastStatus]).
+  /// streams. The client folds them together with the last position it saw,
+  /// which before the receiver's first tick is a zero it never reported. Taken
+  /// at its word, that zero reaches the core as `TimeChanged{0}` and is where
+  /// local playback resumes if the session ends. So until the first tick the
+  /// handed-over position stands in ([_trustedCastStatus]).
   Duration _castHandedAt = Duration.zero;
   bool _castReported = false;
 
@@ -987,9 +983,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// What the cast panel is told about the cast on the receiver
   /// ([CastStatsOverlay]): what was known at the hand-over, how often the
-  /// receiver has stopped to buffer since, and when the cast began --
-  /// null when no cast is live, which is also what says its ending has
-  /// been logged ([_PlayerCasting._logCastEnd]).
+  /// receiver has stopped to buffer since, and when the cast began. Null when
+  /// no cast is live, which is also what says its ending has been logged
+  /// ([_PlayerCasting._logCastEnd]).
   CastFacts? _castFacts;
   CastBuffering _castBuffering = const CastBuffering();
   DateTime? _castBeganAt;
@@ -1015,10 +1011,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   })?
   _castDirectRetry;
 
-  /// The stream ([_opened]) a receiver refused to fetch from its source:
-  /// it is relayed from then on, to that receiver and any other, since a
-  /// link bound to this device's address is refused by all of them alike.
-  /// Another stream is asked about afresh.
+  /// The stream ([_opened]) a receiver refused to fetch from its source. It is
+  /// relayed from then on, to that receiver and any other, since all of them
+  /// alike refuse a link bound to this device's address. Another stream is
+  /// asked about afresh.
   Uri? _castDirectRefused;
 
   /// How many [_startCast]s are between asking for a session and handing the
@@ -1074,28 +1070,27 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// last one of a run of presses is the one the viewer is waiting on.
   Timer? _seekCheck;
 
-  /// Where the position was when that run of seeks began, and when. A
-  /// press during a run keeps them: with each press moving the position
-  /// optimistically, the press's own idea of where it came from is the
-  /// last target rather than anywhere playback has been.
+  /// Where the position was when that run of seeks began, and when. A press
+  /// during a run keeps them. Each press moves the position optimistically, so
+  /// the press's own idea of where it came from is the last target rather than
+  /// anywhere playback has been.
   Duration? _seekFrom;
   DateTime? _seekFromAt;
 
-  /// The last position the engine reported, as against the one the seek
-  /// bar shows -- [_seekTo] moves that one itself so the bar does not sit
+  /// The last position the engine reported, as against the one the seek bar
+  /// shows. [_seekTo] moves the bar's position itself so the bar does not sit
   /// still under the press. Only this one is evidence about where playback
-  /// really is (see [_watchSeek]). Null until the engine has said, and
-  /// again from every `open` until the file it asked for has: which is
-  /// what says a seek has to be held ([_seekEngineTo]).
+  /// really is (see [_watchSeek]). Null until the engine has said, and again
+  /// from every `open` until the file it asked for has. That null is what says
+  /// a seek has to be held ([_seekEngineTo]).
   Duration? _reportedPosition;
 
-  /// A seek the viewer made that the engine may not have taken: one made
-  /// before the file was in, which mpv refuses -- and then applies the
-  /// open's `start`, the resume point, over it. Made again at the first
-  /// position the file reports ([_takeHeldSeek]), and until the engine
-  /// reports a position at it, every position it reports is from before
-  /// the viewer's seek and is not shown or told to the core. Null when
-  /// there is none.
+  /// A seek the viewer made that the engine may not have taken: one made before
+  /// the file was in. mpv refuses it, and then applies the open's `start`, the
+  /// resume point, over it. The seek is made again at the first position the
+  /// file reports ([_takeHeldSeek]). Until the engine reports a position at it,
+  /// every position it reports is from before the viewer's seek, and is neither
+  /// shown nor told to the core. Null when there is none.
   Duration? _heldSeek;
 
   /// Whether [_heldSeek] has been made again since the file came in, and
@@ -1134,9 +1129,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _isTv = DeviceScope.isTv(context);
-    // Reading the scope here is what subscribes to it, so a default changed
-    // in Settings while this player is on the stack is what the next
-    // playback opens with. Above the early return: the scope can change
+    // Reading the scope here is what subscribes to it, so the next playback
+    // opens with a default changed in Settings while this player is on the
+    // stack. This sits above the early return because the scope can change
     // without the core client changing.
     final prefs =
         PrefsScope.maybeOf(context) ?? (_ownPrefs ??= AppPrefs.inMemory());
@@ -1171,10 +1166,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
-    // A television has no window to be one part of: the video fills the
-    // screen from the moment the player opens, with the system bars out of
-    // the way, until the player is left ([dispose] leaves fullscreen,
-    // unless this screen is handing over to the next episode's).
+    // A television has no window to be one part of. The video fills the screen
+    // from the moment the player opens, with the system bars out of the way,
+    // until the player is left. [dispose] leaves fullscreen, unless this screen
+    // is handing over to the next episode's.
     if (_isTv) {
       _fullscreenOn = true;
       _fullscreen?.enter().ignore();
@@ -1227,8 +1222,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     return json == null ? null : ProfileState.fromCtx(json);
   }
 
-  /// The profile settings; empty (every accessor at its default) until the
-  /// `ctx` field has been pulled, the last map sent while a write is in
+  /// The profile settings: empty (every accessor at its default) until the
+  /// `ctx` field has been pulled, and the last map sent while a write is in
   /// flight.
   ProfileSettings get _settings {
     final pending = _pendingSettings;
@@ -1329,10 +1324,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _autoPickRank = null;
     _subtitlesChosenByHand = false;
     _mediaLoaded = false;
-    // A different video: the adjustment the last subtitle was played
-    // with says nothing about it, and neither does the rate the last
-    // container declared -- this one reports its own, and until it does
-    // there is nothing to ask again for.
+    // A different video. The adjustment the last subtitle was played with says
+    // nothing about it, and neither does the rate the last container declared.
+    // This one reports its own, and until it does there is nothing to ask again
+    // for.
     _containerFrameRate = null;
     _resetSubtitleTiming();
     _dismissUpNext();
@@ -1357,10 +1352,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       url,
       reason: 'initial (${state.selectedStream?.kind.name ?? 'stream'})',
     );
-    // After `open` is on its way: the stream request creates the torrent's
-    // engine with everything the URL carries (its `f=` filters included);
-    // a stats request that got there first would create it from the bare
-    // hash and trackers, and the stream request would then reuse that.
+    // After `open` is on its way, because the stream request creates the
+    // torrent's engine with everything the URL carries, its `f=` filters
+    // included. A stats request that got there first would create it from the
+    // bare hash and trackers, and the stream request would then reuse that.
     _startTorrentStats(state);
     _startStreamNumbers();
     setState(() => _engineError = null);
@@ -1369,8 +1364,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// The default changed in Settings while this player is up. It does not
   /// disturb a playback that has an override of its own, and it does not
-  /// re-open one that has not: what the sheet shows is what the next
-  /// playback starts with.
+  /// re-open one that has not. What the sheet shows is what the next playback
+  /// starts with.
   void _onPrefsChanged() {
     if (!mounted) return;
     setState(_publishBuffer);
@@ -1408,9 +1403,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       if ((position - _stillFrom).abs() >= PlayerScreen.stuckTwitch) {
         _stillTicks = 0;
         _stillFrom = position;
-        // Film is moving: whatever read the server says is waiting, the
-        // viewer is not waiting on it ([_readStalled]); the next ask
-        // measures again from here.
+        // Film is moving, so the viewer is not waiting on whatever read the
+        // server says is waiting ([_readStalled]). The next ask measures again
+        // from here.
         if (_readStalled) {
           DiagnosticsLog.info(
             'player',
@@ -1429,9 +1424,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
           setState(() => _positionStuck = false);
           _stuckSample?.cancel();
           _stuckSample = null;
-          // The card going leaves the stall cadence behind otherwise: the
-          // stats poll picks its interval only when asked to, as
-          // [_onBuffering] asks.
+          // Otherwise the card going leaves the stall cadence behind: the stats
+          // poll picks its interval only when asked to, as [_onBuffering] asks.
           _syncStatsPolls();
         }
       }
@@ -1446,12 +1440,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// receiver, so continue-watching is kept the same way either way.
   ///
   /// **A position behind the one the core holds is said as a `Seek`.**
-  /// stremio-core takes a `TimeChanged` only when it is later than the
-  /// offset it has (`models/player.rs`: a seek back is the app's to say),
-  /// so a seek back it heard only as positions -- one made before the
-  /// duration was known, which no `Seek` can carry, or the remote's rewind
-  /// key, which reaches mpv without [_seekTo] -- left continue-watching on
-  /// the old timeline.
+  /// stremio-core takes a `TimeChanged` only when it is later than the offset
+  /// it has (`models/player.rs`: a seek back is the app's to say). Some seeks
+  /// back reach it only as positions: one made before the duration was known,
+  /// which no `Seek` can carry, or the remote's rewind key, which reaches mpv
+  /// without [_seekTo]. Those left continue-watching on the old timeline.
   void _reportTime(Duration position) {
     if (_opened == null || _duration == Duration.zero) return;
     final last = _lastReported;
@@ -1494,9 +1487,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (duration > Duration.zero) {
       _mediaIn = true;
       // **The one number the server cannot work out for itself.** Length and
-      // size give the bitrate that sizes every stream's lookahead; the reads
-      // cannot, since a player that is behind asks for more the instant it
-      // is answered. Stated once; a cast reports it from [_onCastStatus].
+      // size give the bitrate that sizes every stream's lookahead. The reads
+      // cannot give it, since a player that is behind asks for more the instant
+      // it is answered. Stated once; a cast reports it from [_onCastStatus].
       unawaited(_reportDuration(duration));
       _onMediaLoaded();
     }
@@ -1619,10 +1612,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// `open` asked for has not shown up ([_mediaIn]).
   ///
   /// media_kit makes these out of mpv's error-level log lines
-  /// ([PlaybackEngine.errors]), so after the film is in one is a log line,
+  /// ([PlaybackEngine.errors]). So once the film is in, an error is a log line,
   /// not the end of playback: a dead subtitle link, a damaged frame, a read
   /// that was retried. A playback that has really stopped says so on its own
-  /// terms -- an early end of file ([_onFalseEnd]) or a position that stands
+  /// terms: an early end of file ([_onFalseEnd]) or a position that stands
   /// still ([_checkStuck]).
   void _onEngineError(String error) {
     final subtitle = externalSubtitleFailure(error);
@@ -1643,10 +1636,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool get _startupOverlayShown =>
       _torrentStatsRequest != null && !_mediaLoaded;
 
-  /// Every way of waiting: mpv's own stall, a read the server says is
-  /// parked ([_readStalled]), and -- only where the server cannot be asked,
-  /// a stream with no media id -- a position standing still
-  /// ([_positionStuck]), which is a guess the readout replaced.
+  /// Every way of waiting: mpv's own stall, a read the server says is parked
+  /// ([_readStalled]), and a position standing still ([_positionStuck]). The
+  /// last is a guess the readout replaced, used only where the server cannot be
+  /// asked: a stream with no media id.
   bool get _waiting =>
       _buffering || _readStalled || (_positionStuck && !_readWaitAsked);
 
@@ -1772,20 +1765,19 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   }
 
   /// An end of file that is not the end of the film: the stream stopped
-  /// producing data. Nothing is reported to the core -- no `Ended`, no
-  /// up-next -- and the position is kept, because it is still where the
-  /// viewer is.
+  /// producing data. Nothing is reported to the core (no `Ended`, no up-next),
+  /// and the position is kept, because it is still where the viewer is.
   ///
-  /// mpv sits at the end of the file with `keep-open=yes` and will not go
-  /// on by itself, so the stream is re-opened where playback stopped, which
-  /// is what recovers it, for as long as it takes (dead-swarm rule: the
-  /// viewer gives up, nothing here does).
+  /// mpv sits at the end of the file with `keep-open=yes` and will not go on by
+  /// itself. So the stream is re-opened where playback stopped, which is what
+  /// recovers it, for as long as it takes. That is the dead-swarm rule: the
+  /// viewer gives up, nothing here does.
   void _onFalseEnd(Duration position) {
     _falseEnds++;
     final ends = _falseEnds;
-    // The first at once; after that one more multiple of the backoff each,
-    // to its cap, so a stream that ends at once every time is waited on
-    // rather than spun on -- and never given up on: the viewer leaves.
+    // The first at once, and after that one more multiple of the backoff each,
+    // up to its cap. So a stream that ends at once every time is waited on
+    // rather than spun on, and never given up on: the viewer leaves.
     final wait = ends == 1 ? Duration.zero : PlayerScreen.retryWait(ends - 1);
     DiagnosticsLog.warn(
       'player',
@@ -1832,26 +1824,25 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// it is. A television only: a phone's panel is not the film's to switch,
   /// and a desktop has no such API.
   ///
-  /// Not once per file: on Android 12+ the ask is a vote on the surface
-  /// Flutter draws into, which is rebuilt when the app returns from the
-  /// background, and every path that releases the rate leaves the file
-  /// playable (rewinding after the end). Repeating the ask is free when the
-  /// panel is already on the rate.
+  /// Not once per file. On Android 12+ the ask is a vote on the surface Flutter
+  /// draws into, which is rebuilt when the app returns from the background.
+  /// Every path that releases the rate leaves the file playable (rewinding
+  /// after the end). Repeating the ask is free when the panel is already on the
+  /// rate.
   void _askDisplayFrameRate() {
     final fps = _containerFrameRate;
     if (!_isTv || fps == null || _engineError != null) return;
     _frameRateAsked = true;
     _displayFrameRate?.request(fps).ignore();
-    // The display may already be on the rate being asked for, in which
-    // case nothing changes and nothing is reported: what it last said is
-    // then the whole of what will ever be said, and this is where it
-    // reaches mpv.
+    // The display may already be on the rate being asked for. Then nothing
+    // changes and nothing is reported, so what it last said is the whole of
+    // what will ever be said, and this is where it reaches mpv.
     _applyDisplaySync();
   }
 
-  /// The display has reported what it is really refreshing at -- at
-  /// subscription, and again whenever it changes, which is how the rate
-  /// that a mode switch settled on arrives.
+  /// The display has reported what it is really refreshing at. It reports at
+  /// subscription and again whenever it changes, which is how the rate a mode
+  /// switch settled on arrives.
   void _onDisplayRefreshRate(double hz) {
     _displayRefreshRate = hz;
     // Only while this player is holding a rate on the display. The first
@@ -1951,15 +1942,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
   }
 
-  /// A mouse click on the video: play/pause at once, and the second click
-  /// of a double-click also toggles fullscreen -- what a desktop player is
+  /// A mouse click on the video: play/pause at once, and the second click of a
+  /// double-click also toggles fullscreen. That is what a desktop player is
   /// expected to do with a click. Both clicks of a double-click toggle
-  /// playback, so it ends where it was, rather than every single click
-  /// waiting out the double-click interval before it answers.
+  /// playback, so it ends where it was. That way no single click has to wait
+  /// out the double-click interval before it answers.
   ///
-  /// With the up-next countdown running a click calls the hand-off off
-  /// instead, as the remote's centre key does: the card is what the click
-  /// lands in front of. Touch keeps [_onVideoTap].
+  /// With the up-next countdown running, a click calls the hand-off off
+  /// instead, as the remote's centre key does: the card is what the click lands
+  /// in front of. Touch keeps [_onVideoTap].
   void _onVideoClick(Offset at) {
     final first = _clickAt;
     final doubled =
@@ -1998,12 +1989,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// Reads the control bar's real height off the frame that laid it out.
   ///
-  /// The bar is built once per frame whether or not it is visible (it fades
-  /// with an opacity, it is not taken out of the tree), so this measures the
-  /// same thing at rest as it does with the OSD up, and the lift is ready
-  /// before the OSD is. Only a change is written back, so the post-frame
-  /// callback this schedules on every build does not rebuild anything by
-  /// itself.
+  /// The bar is built once per frame whether or not it is visible: it fades
+  /// with an opacity and is not taken out of the tree. So this measures the
+  /// same thing at rest as with the OSD up, and the lift is ready before the
+  /// OSD is. Only a change is written back, so the post-frame callback this
+  /// schedules on every build does not rebuild anything by itself.
   void _measureControlBarAfterFrame() {
     if (_barMeasureScheduled) return;
     _barMeasureScheduled = true;
@@ -2073,11 +2063,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// Puts the playback at [target] and tells everything that watches where
   /// it went.
   ///
-  /// [scanning] is the distance a *step* asked for: a step is a scan that
-  /// lands on a keyframe at once ([PlaybackEngine.scanBy]), where a position
-  /// the viewer named (a tap on the bar) is seeked to exactly. The target is
-  /// still computed here for the bar, the core and the seek check. A step
-  /// that would land outside the file is the exception; see the body.
+  /// [scanning] is the distance a *step* asked for. A step is a scan that lands
+  /// on a keyframe at once ([PlaybackEngine.scanBy]), where a position the
+  /// viewer named (a tap on the bar) is seeked to exactly. The target is still
+  /// computed here for the bar, the core and the seek check. A step that would
+  /// land outside the file is the exception; see the body.
   void _seekTo(Duration target, {Duration? scanning}) {
     final from = _position.value;
     final upper = _duration > Duration.zero ? _duration : target;
@@ -2125,9 +2115,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         ),
       );
     }
-    // The next TimeChanged must go through even if it is within the
-    // throttle window: the core only moves time forward on TimeChanged and
-    // relies on Seek/TimeChanged agreeing.
+    // The next TimeChanged must go through even if it is within the throttle
+    // window. The core only moves time forward on TimeChanged, and relies on
+    // Seek and TimeChanged agreeing.
     _lastReported = null;
     _dismissUpNext();
     _showControls();
@@ -2138,15 +2128,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// seek is still held.
   bool get _seekMustBeHeld => _reportedPosition == null || _heldSeek != null;
 
-  /// Seeks the local engine to [target], **which supersedes the resume
-  /// point** -- the viewer's, a cast handing the film back, anything that
-  /// is not the open's own start.
+  /// Seeks the local engine to [target], **which supersedes the resume point**:
+  /// the viewer's own seek, a cast handing the film back, anything that is not
+  /// the open's own start.
   ///
-  /// The open's `start` is the only position mpv applies on its own, once
-  /// the file is open, and a `seek` before that is refused and dropped
-  /// (media_kit discards the answer). So until the file has reported a
-  /// position the seek is held ([_heldSeek]) and made again when it does,
-  /// and any later `open` -- a retry -- starts at it ([_openStart]).
+  /// The open's `start` is the only position mpv applies on its own, once the
+  /// file is open. A `seek` before that is refused and dropped (media_kit
+  /// discards the answer). So until the file has reported a position, the seek
+  /// is held ([_heldSeek]) and made again when it does, and any later `open` (a
+  /// retry) starts at it ([_openStart]).
   void _seekEngineTo(Duration target) {
     if (_seekMustBeHeld) {
       _openStart = target;
@@ -2163,11 +2153,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// The engine reported [position] while a seek is held: whether to drop
   /// it, as a position from before the viewer's seek.
   ///
-  /// The first such report is the file coming in -- at the resume point,
-  /// where mpv's `start` put it -- so the held seek is made again there.
-  /// A position at the target (within [PlayerScreen.seekTolerance]) is
-  /// the seek landing and lets it go; so does the repeat going unanswered
-  /// for [PlayerScreen.seekCheckDelay].
+  /// The first such report is the file coming in, at the resume point where
+  /// mpv's `start` put it, so the held seek is made again there. A position at
+  /// the target (within [PlayerScreen.seekTolerance]) is the seek landing and
+  /// lets it go. So does the repeat going unanswered for
+  /// [PlayerScreen.seekCheckDelay].
   bool _takeHeldSeek(Duration position) {
     final held = _heldSeek;
     if (held == null) return false;
@@ -2205,11 +2195,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// not happen.
   ///
   /// mpv refuses a seek the demuxer calls unseekable (for instance when a
-  /// Matroska index has not arrived) and restores the position, which from
-  /// the sofa looks like the film jumping back. The stats OSD shows mpv's
-  /// own answer (`PlaybackStats.seekable`); this asks it of the playback, so
-  /// a report taken without the panel still shows it. One info line per
-  /// seek; a burst of presses is one check.
+  /// Matroska index has not arrived) and restores the position. From the sofa
+  /// that looks like the film jumping back. The stats OSD shows mpv's own
+  /// answer (`PlaybackStats.seekable`). This asks it of the playback, so a
+  /// report taken without the panel still shows it. One info line per seek; a
+  /// burst of presses is one check.
   void _watchSeek({required Duration from, required Duration to}) {
     _seekCheck?.cancel();
     final start = _seekFrom ?? from;
@@ -2227,11 +2217,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       final now = _reportedPosition;
       if (now == null) return;
       if ((now - to).abs() <= PlayerScreen.seekTolerance) return;
-      // Playback goes on while the check waits, so "back where it
-      // started" is the starting position plus however long the run of
-      // presses and the wait after it took. Anywhere else and something
-      // other than a refusal moved the position -- a re-open, the film
-      // ending -- and this line would name the wrong cause.
+      // Playback goes on while the check waits, so "back where it started" is
+      // the starting position plus however long the run of presses and the wait
+      // after it took. If the position is anywhere else, something other than a
+      // refusal moved it (a re-open, the film ending), and this line would name
+      // the wrong cause.
       final elapsed = DateTime.now().difference(startedAt);
       final drift = now - start;
       if (drift < -PlayerScreen.seekTolerance ||
@@ -2298,9 +2288,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   // --- Menus ---------------------------------------------------------------
 
-  /// Shows a bottom sheet over the player. The up-next countdown does not
-  /// run while one is open (the hand-off would replace the sheet's route,
-  /// not this one); it resumes when the sheet closes.
+  /// Shows a bottom sheet over the player. The up-next countdown does not run
+  /// while one is open, because the hand-off would replace the sheet's route,
+  /// not this one. It resumes when the sheet closes.
   Future<void> _showSheet(WidgetBuilder builder) async {
     _controlsTimer?.cancel();
     _pauseUpNext();
@@ -2328,10 +2318,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         opener.ancestors.contains(_controlsScope)) {
       opener.requestFocus();
     } else if (_timingShown && _isTv) {
-      // A sheet opened from the timing panel goes back to the panel: the
-      // video is not a legitimate place for the ring while something
-      // visible is on screen, and a direction key there seeks instead of
-      // walking the panel's row.
+      // A sheet opened from the timing panel goes back to the panel. The video
+      // is not a legitimate place for the ring while something visible is on
+      // screen, and a direction key there seeks instead of walking the panel's
+      // row.
       _timingFocus.requestFocus();
     } else {
       _focusNode.requestFocus();
@@ -2394,10 +2384,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   );
 
   /// Everything kept on this device, from the menu of the player that is
-  /// running. Nothing there opens a player of its own: a second
-  /// [PlayerScreen] would load the same shared `player` field and start an
-  /// engine beside the one still playing, so the list is the one that only
-  /// shows and removes ([DownloadsScreen.canPlay]).
+  /// running. Nothing there opens a player of its own. A second [PlayerScreen]
+  /// would load the same shared `player` field and start an engine beside the
+  /// one still playing, so the list only shows and removes
+  /// ([DownloadsScreen.canPlay]).
   void _openDownloads() {
     Navigator.of(context).push(DownloadsScreen.route(canPlay: false));
   }
@@ -2410,10 +2400,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // screen that went without a leave (a hand-over's `pushReplacement`, a
     // route dismantled from above).
     _detach();
-    // Discovery is the process's, not this screen's, and a hand-over's
-    // successor has started it again by now: `pushReplacement` builds the
-    // new player before this one goes, so a stop from here would end the
-    // search the next episode's cast button is waiting on.
+    // Discovery belongs to the process, not this screen, and a hand-over's
+    // successor has started it again by now. `pushReplacement` builds the new
+    // player before this one goes, so a stop from here would end the search the
+    // next episode's cast button is waiting on.
     if (!_handedOver) _cast?.stopDiscovery().ignore();
     // Nothing of ours is left on the LAN: the session ends and the listener
     // with it.
@@ -2491,11 +2481,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
-    // Never poppable by the framework, so that every way out of the
-    // player runs the teardown before the screen goes: Back and Escape
-    // both arrive here rather than taking the route out from under a
-    // player that is still reading. The ladder comes first -- Back is one
-    // key for every layer -- and [_leave] is its last rung.
+    // Never poppable by the framework, so that every way out of the player runs
+    // the teardown before the screen goes. Back and Escape both arrive here
+    // rather than taking the route out from under a player that is still
+    // reading. The ladder comes first, since Back is one key for every layer,
+    // and [_leave] is its last rung.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

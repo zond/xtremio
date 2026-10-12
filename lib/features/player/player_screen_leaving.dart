@@ -16,15 +16,15 @@ extension _PlayerLeaving on _PlayerScreenState {
   /// Cuts this screen off from everything that could still act on the
   /// player, before anything about the leaving is awaited.
   ///
-  /// The screen stays up, holding an engine that is being released, for as
-  /// long as the teardown takes, and every subscription and timer it still
-  /// owns is a way for the session's last seconds to reach that player: an
-  /// `open` (the false-end recovery), a `pause` (the app going to the
-  /// background), a `seek` and `play` (a cast ending elsewhere), and a
-  /// `TimeChanged` of zero from media_kit's `stop`, which would reset
-  /// continue-watching. **So it is one act rather than a guard per
-  /// handler**: a screen with no subscriptions and no timers cannot be
-  /// reached by anything, including handlers not written yet.
+  /// The screen stays up, holding an engine that is being released, for as long
+  /// as the teardown takes. Every subscription and timer it still owns is a way
+  /// for the session's last seconds to reach that player: an `open` (the
+  /// false-end recovery), a `pause` (the app going to the background), a `seek`
+  /// and `play` (a cast ending elsewhere), and a `TimeChanged` of zero from
+  /// media_kit's `stop`, which would reset continue-watching. **So it is one
+  /// act rather than a guard per handler**: a screen with no subscriptions and
+  /// no timers cannot be reached by anything, including handlers not written
+  /// yet.
   ///
   /// An `await` already in flight is not cancelled here; that half is
   /// [_stillOurs].
@@ -32,8 +32,8 @@ extension _PlayerLeaving on _PlayerScreenState {
   /// [dispose] calls this too, for a screen that goes without a leave (the
   /// hand-over's `pushReplacement`, a route dismantled from above); it runs
   /// once. The core field listeners go (`player` opens a stream, `ctx` writes
-  /// the subtitle style); the preferences listener stays, since it only
-  /// calls `setState`.
+  /// the subtitle style). The preferences listener stays, since it only calls
+  /// `setState`.
   void _detach() {
     if (_detached) return;
     _detached = true;
@@ -72,37 +72,38 @@ extension _PlayerLeaving on _PlayerScreenState {
 
   /// Stops the player, waits for it, and only then leaves the screen.
   ///
-  /// The order is the rule (docs/ARCHITECTURE.md, "Leaving the player"):
-  /// [_detach], then the `quit` -- the kill, which also makes the `stop`
-  /// inside the teardown return promptly instead of waiting out a five-minute
-  /// `network-timeout` -- then the teardown, awaited *with the video still in
-  /// the tree and the audio device open*, since media_kit releases both from
-  /// inside it, after the stop. Only then does the screen go.
+  /// The order is the rule (docs/ARCHITECTURE.md, "Leaving the player"). First
+  /// [_detach]. Then the `quit`, the kill, which also makes the `stop` inside
+  /// the teardown return promptly instead of waiting out a five-minute
+  /// `network-timeout`. Then the teardown, awaited *with the video still in the
+  /// tree and the audio device open*, since media_kit releases both from inside
+  /// it, after the stop. Only then does the screen go.
   ///
-  /// **The wait yields; it never blocks.** An `await` leaves Flutter
-  /// producing frames, which keeps the video sink drained; a blocking join
-  /// here could deadlock with mpv waiting on the sink. It happens here
-  /// rather than in [dispose] because a screen that has gone draws nothing.
+  /// **The wait yields; it never blocks.** An `await` leaves Flutter producing
+  /// frames, which keeps the video sink drained. A blocking join here could
+  /// deadlock with mpv waiting on the sink. It happens here rather than in
+  /// [dispose] because a screen that has gone draws nothing.
   ///
-  /// The wait is bounded by [PlayerScreen.teardownBound] and the pop does not
-  /// depend on it: a player that will not stop finishes, or does not, in the
+  /// The wait is bounded by [PlayerScreen.teardownBound], and the pop does not
+  /// depend on it. A player that will not stop finishes, or does not, in the
   /// background, and the teardown logs which.
   Future<void> _leave([PlayerScreenResult? result]) async {
     if (_leaving) return;
     setState(() => _leaving = true);
-    // Reports are a second apart; the viewer's last second is not lost to
-    // the throttle, and the stop that follows reports nothing ([_detach]).
+    // Reports are a second apart, and this keeps the viewer's last second from
+    // being lost to the throttle. The stop that follows reports nothing
+    // ([_detach]).
     _flushTime();
     // And to the server, which remembers where its reader was with it.
     _reportLeavingPosition();
-    // Nothing may act on the player from here on, and this is the line
-    // that says so: it comes before the first `await` below, because what
-    // it stops is precisely what would otherwise get a turn during one.
+    // Nothing may act on the player from here on, and this is the line that
+    // says so. It comes before the first `await` below, because what it stops
+    // is precisely what would otherwise get a turn during one.
     _detach();
-    // The control bar leaves the frame with this ([build]), so nothing may
-    // be left focused on it: hiding the bar and handing the remote back to
-    // the video are one act, and a leave is no exception. The timer that
-    // would have done it has gone with [_detach].
+    // The control bar leaves the frame with this ([build]), so nothing may be
+    // left focused on it. Hiding the bar and handing the remote back to the
+    // video are one act, and a leave is no exception. The timer that would have
+    // done it has gone with [_detach].
     if (_controlFocused) _focusNode.requestFocus();
     // From the press, not from the pop: the display is not presenting a
     // film any more the moment the viewer says so.
@@ -112,8 +113,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     // itself, because it outlives this wait and because a hand-over runs
     // it with no screen waiting on it at all.
     await _endPlayback().timeout(PlayerScreen.teardownBound, onTimeout: () {});
-    // Gone under us while we waited -- a hand-over, or the route
-    // dismantled from above. There is no screen of ours left to leave.
+    // Gone under us while we waited (a hand-over, or the route dismantled from
+    // above). There is no screen of ours left to leave.
     if (!mounted) return;
     if (navigator.canPop()) navigator.pop(result);
   }
@@ -162,13 +163,13 @@ extension _PlayerLeaving on _PlayerScreenState {
     }
   }
 
-  /// Tells the server this screen is gone, so the torrent it held is let
-  /// go ([ProxyStreamControl.releasePlayer]). The server keeps a screen's
-  /// torrent running from its first read until this -- paused, stalled or
-  /// with nothing open -- because the app knows when it stops using it and
-  /// the server should not guess. Every screen, torrent or not (a screen
-  /// that held nothing releases nothing). Like [_closeProxiedStreams],
-  /// nothing it does may escape the teardown.
+  /// Tells the server this screen is gone, so the torrent it held is let go
+  /// ([ProxyStreamControl.releasePlayer]). The server keeps a screen's torrent
+  /// running from its first read until this (paused, stalled or with nothing
+  /// open), because the app knows when it stops using it and the server should
+  /// not guess. Every screen calls it, torrent or not (a screen that held
+  /// nothing releases nothing). Like [_closeProxiedStreams], nothing it does
+  /// may escape the teardown.
   void _releaseTorrent() {
     try {
       _proxyStreams?.releasePlayer(_proxyToken);
@@ -181,18 +182,17 @@ extension _PlayerLeaving on _PlayerScreenState {
   }
 
   /// Ends this player: the `quit`, then the streams it was reading, then the
-  /// release -- and logs how long the whole of it took.
+  /// release. It logs how long the whole of it took.
   ///
   /// Run once per screen and shared: [_leave] awaits it with the video on
   /// screen, and [dispose] falls back to it unawaited for screens that never
   /// had a leave. Both can happen to one screen, and disposing a released
   /// media_kit `Player` twice is an `AssertionError`, so the future is kept.
   ///
-  /// **The quit is dispatched before anything is awaited** (an enqueue on
-  /// mpv's dispatch queue and nothing else). Neither half may throw out of
-  /// here: a refused quit and a failed release are each worth a line, and
-  /// the streams are closed before the release so a failed release skips
-  /// nothing.
+  /// **The quit is dispatched before anything is awaited** (an enqueue on mpv's
+  /// dispatch queue and nothing else). Neither half may throw out of here: a
+  /// refused quit and a failed release are each worth a line. The streams are
+  /// closed before the release, so a failed release skips nothing.
   Future<void> _endPlayback() => _teardown ??= _runTeardown();
 
   /// The body of [_endPlayback], separate only so that the memo above it
@@ -201,8 +201,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     final engine = _engine;
     final started = DateTime.now();
     // The only instrument: nothing is escalated to when it fires (the quit
-    // below is the kill); it logs that a player that should have stopped in
-    // a fraction of a second has not. Armed here rather than by the waiting
+    // below is the kill). It logs that a player that should have stopped in a
+    // fraction of a second has not. It is armed here rather than by the waiting
     // screen so it covers the hand-over too.
     var overdue = false;
     final bound = Timer(PlayerScreen.teardownBound, () {

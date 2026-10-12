@@ -158,12 +158,12 @@ class PlaybackStats {
   /// with `override-display-fps` when one is set).
   ///
   /// **Here to keep the drop counts above honest.** On Android mpv cannot
-  /// measure the display at all -- its VO answers `VO_NOTIMPL` -- so the
-  /// app hands it the rate (`MediaKitEngine.displayRateProperties`), and
-  /// this is the only reading back. A number here that is not the rate the
-  /// display was measured at is a set that went nowhere, and a rate that
-  /// matches beside a vo count that has stopped climbing is what a single
-  /// screencap of this panel has to be able to say from the sofa.
+  /// measure the display at all (its VO answers `VO_NOTIMPL`), so the app hands
+  /// it the rate (`MediaKitEngine.displayRateProperties`), and this is the only
+  /// reading back. A number here that is not the rate the display was measured
+  /// at is a set that went nowhere. A rate that matches, beside a vo count that
+  /// has stopped climbing, is what a single screencap of this panel has to be
+  /// able to say from the sofa.
   ///
   /// Null on any backend without the property, which is what keeps the row
   /// off the panel entirely rather than drawing a dash that reads as a
@@ -180,31 +180,29 @@ class PlaybackStats {
   /// is, 10-bit or 4:2:2, is [pixelFormat]'s to say.
   final String? videoCodec;
 
-  /// `audio-codec-name`: the bare codec, e.g. `aac`, `eac3`, `dts`. Not
-  /// shown anywhere -- with [fileFormat] and [videoCodec] it is all the
-  /// cast compatibility check believes about a file.
+  /// `audio-codec-name`: the bare codec, e.g. `aac`, `eac3`, `dts`. Not shown
+  /// anywhere. With [fileFormat] and [videoCodec] it is all the cast
+  /// compatibility check believes about a file.
   final String? audioCodec;
 
-  /// `file-format`: the reader that opened the file, which names a family
-  /// of containers and not one -- `mkv` (mpv's own Matroska reader, WebM
-  /// included), `matroska,webm` or `mov,mp4,m4a,3gp,3g2,mj2` (libavformat's).
-  /// Not shown anywhere: with the two codecs it is all the cast
-  /// compatibility check believes about a file.
+  /// `file-format`: the reader that opened the file, which names a family of
+  /// containers and not one: `mkv` (mpv's own Matroska reader, WebM included),
+  /// `matroska,webm` or `mov,mp4,m4a,3gp,3g2,mj2` (libavformat's). Not shown
+  /// anywhere: with the two codecs it is all the cast compatibility check
+  /// believes about a file.
   final String? fileFormat;
 
-  /// `current-tracks/audio/demux-channel-count`: how many channels the
-  /// playing sound track has in the file, as its container declares them
-  /// -- not `audio-params/channel-count`, which is what mpv's decoder
-  /// hands on and may already be mixed down for this device's output. Not
-  /// shown anywhere: the cast check copies AAC to a receiver only when it
-  /// is one or two channels.
+  /// `current-tracks/audio/demux-channel-count`: how many channels the playing
+  /// sound track has in the file, as its container declares them. Not
+  /// `audio-params/channel-count`, which is what mpv's decoder hands on and may
+  /// already be mixed down for this device's output. Not shown anywhere: the
+  /// cast check copies AAC to a receiver only when it is one or two channels.
   final int? audioChannels;
 
   /// `current-tracks/video/codec`: the codec of the video track mpv has
-  /// selected, as the demuxer names it (`h264`), before any decoder has
-  /// opened -- so a file whose reader mpv has named ([fileFormat]) and
-  /// which has none is a file of sound alone, not a picture still to come.
-  /// Not shown anywhere.
+  /// selected, as the demuxer names it (`h264`), before any decoder has opened.
+  /// So a file whose reader mpv has named ([fileFormat]) and which has none is
+  /// a file of sound alone, not a picture still to come. Not shown anywhere.
   final String? videoTrack;
 
   /// Decoded picture size (`video-params/w`, `video-params/h`).
@@ -212,12 +210,11 @@ class PlaybackStats {
   final int? height;
 
   /// The decoded picture's pixel format as mpv names it
-  /// (`video-params/pixelformat`): `yuv420p` for 8-bit 4:2:0, `yuv420p10`
-  /// for 10-bit, `yuv422p`, `yuv444p`, ... -- or, out of a hardware
-  /// decoder, the surface's name (`mediacodec`), with what it holds in
-  /// [hwPixelFormat] when mpv knows it. Mpv's word on what the film's
-  /// picture is, which the cast check holds against what receivers decode;
-  /// not shown anywhere.
+  /// (`video-params/pixelformat`): `yuv420p` for 8-bit 4:2:0, `yuv420p10` for
+  /// 10-bit, `yuv422p`, `yuv444p`, and so on. Out of a hardware decoder it is
+  /// the surface's name (`mediacodec`), with what it holds in [hwPixelFormat]
+  /// when mpv knows it. It is mpv's word on what the film's picture is, which
+  /// the cast check holds against what receivers decode. Not shown anywhere.
   final String? pixelFormat;
 
   /// `video-params/hw-pixelformat`: what a hardware surface holds (`nv12`,
@@ -243,20 +240,19 @@ class PlaybackStats {
   /// (`partially-seekable`), and whether we are the reason it says yes
   /// (`force-seekable`, `MediaKitEngine.forcesSeekable`).
   ///
-  /// `seekable` is what mpv refuses a seek on: a no there does not wait
-  /// for the seek, it restores the position, and from the sofa that looks
-  /// exactly like the film jumping back. But for a stream the embedded
-  /// server is serving we force it true, because the server answers any
-  /// byte range and the demuxer cannot know that -- so on our own stream
-  /// `seekable` is our answer and not a reading, which is what
-  /// [seekableForced] is on the panel to say.
+  /// `seekable` is what mpv refuses a seek on. A no there does not wait for the
+  /// seek; it restores the position, and from the sofa that looks exactly like
+  /// the film jumping back. But for a stream the embedded server is serving we
+  /// force it true, because the server answers any byte range and the demuxer
+  /// cannot know that. So on our own stream `seekable` is our answer and not a
+  /// reading, which is what [seekableForced] is on the panel to say.
   ///
   /// **`partially-seekable` is then the row that carries the demuxer's own
-  /// conclusion**: mpv sets it alongside the forced `seekable`, so a yes
-  /// there on a forced stream is the demuxer having said it could not seek
-  /// (a Matroska file whose index sits at the end and had not arrived when
-  /// it opened) and our claim overruling it. A stream nothing was forced
-  /// on reads both rows straight.
+  /// conclusion.** mpv sets it alongside the forced `seekable`, so a yes there
+  /// on a forced stream is the demuxer having said it could not seek and our
+  /// claim overruling it. That happens for a Matroska file whose index sits at
+  /// the end and had not arrived when it opened. A stream nothing was forced on
+  /// reads both rows straight.
   final bool? seekable;
   final bool? partiallySeekable;
   final bool? seekableForced;
@@ -266,10 +262,10 @@ class PlaybackStats {
   /// answer at all; empty when it answered with no ranges, which is not
   /// the same thing.
   ///
-  /// Not what decides whether a seek is refused -- [seekable] is that --
-  /// and a range is recorded only once a whole keyframe range is queued,
-  /// so an empty list is what every file reads for its first seconds
-  /// while every seek works normally.
+  /// Not what decides whether a seek is refused; [seekable] is that. A range is
+  /// recorded only once a whole keyframe range is queued, so an empty list is
+  /// what every file reads for its first seconds while every seek works
+  /// normally.
   final List<SeekableRange>? seekableRanges;
 
   /// The seekable ranges out of `demuxer-cache-state`, which mpv answers

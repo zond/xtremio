@@ -6,19 +6,18 @@ import 'torrent_stats.dart';
 /// Shown over the video when playback stalls after it has started: mpv has
 /// run out of buffered data and is waiting for the torrent.
 ///
-/// Presents the start-up card's information in the present tense, more
-/// sparing with percentages: the server's only measured target is the
-/// *head* of the file (the initial priority window) plus a hash check, so
-/// once playback is past the head there is nothing whose completion can be
-/// drawn. The bar goes indeterminate and the numbers -- speed and the
-/// swarm, zeros included, which during a stall is exactly the answer --
-/// carry the news.
+/// Presents the start-up card's information in the present tense, more sparing
+/// with percentages. The server's only measured target is the *head* of the
+/// file (the initial priority window) plus a hash check, so once playback is
+/// past the head there is nothing whose completion can be drawn. The bar goes
+/// indeterminate, and the numbers carry the news: speed and the swarm, zeros
+/// included, which during a stall is exactly the answer.
 class TorrentStallOverlay extends StatelessWidget {
   const TorrentStallOverlay({super.key, required this.stats});
 
-  /// The latest `stats.json`, or null while the stall polling has not
-  /// answered yet (it starts over at every stall, the last answer being
-  /// minutes old by then).
+  /// The latest `stats.json`, or null while the stall polling has not answered
+  /// yet. It starts over at every stall, since the last answer is minutes old
+  /// by then.
   final TorrentStats? stats;
 
   @override
@@ -89,13 +88,12 @@ class TorrentStallOverlay extends StatelessWidget {
     }
   }
 
-  /// What the swarm is doing right now, in
-  /// [TorrentProgressCard.formatSwarm]'s words -- this has no variant of
-  /// its own. Unlike start-up it always says, zeros and all:
-  /// `0 B/s · connected 0` is the whole diagnosis of a stall that has
-  /// nobody to talk to, and when a scrape did answer, whether the swarm
-  /// holds a seed at all is the difference between a slow swarm and one
-  /// that cannot finish the file.
+  /// What the swarm is doing right now, in [TorrentProgressCard.formatSwarm]'s
+  /// words; this has no variant of its own. Unlike start-up it always says,
+  /// zeros and all. `0 B/s · connected 0` is the whole diagnosis of a stall
+  /// that has nobody to talk to. When a scrape did answer, whether the swarm
+  /// holds a seed at all is the difference between a slow swarm and one that
+  /// cannot finish the file.
   static String _detail(TorrentStats stats) => [
     TorrentProgressCard.formatSpeed(stats.downloadSpeed),
     TorrentProgressCard.formatSwarm(stats),

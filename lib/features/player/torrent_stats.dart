@@ -79,15 +79,15 @@ final class PeerDiscovery {
 /// (`inFlightPiece`): the finer view of the one piece that decides when
 /// playback can go on.
 ///
-/// A piece is the unit that becomes readable -- none of a 16 MiB piece can
-/// be served until all 16 MiB of it verifies -- so the have-bitfield the
-/// window is measured against is too coarse to show a waiting player
-/// anything but 0 or 100. This is the number that moves in between.
+/// A piece is the unit that becomes readable: none of a 16 MiB piece can be
+/// served until all 16 MiB of it verifies. So the have-bitfield the window is
+/// measured against is too coarse to show a waiting player anything but
+/// 0 or 100. This is the number that moves in between.
 ///
-/// The whole object is null when the server does not know: no reader open
-/// on that file, no metadata yet, or a torrent with no chunk map. Null is
-/// "we do not know", never "nothing downloaded" -- the server sends null
-/// rather than a zeroed object precisely so the two stay apart.
+/// The whole object is null when the server does not know: no reader open on
+/// that file, no metadata yet, or a torrent with no chunk map. Null is "we do
+/// not know", never "nothing downloaded". The server sends null rather than a
+/// zeroed object precisely so the two stay apart.
 final class InFlightPiece {
   const InFlightPiece({
     required this.index,
@@ -99,10 +99,10 @@ final class InFlightPiece {
   /// The piece's index **in the torrent**, not in the file.
   final int index;
 
-  /// Bytes of it written to disk. **This can go backwards**: a chunk
-  /// counts the moment it is written, the hash is only checked once every
-  /// chunk is in, and a piece that fails the check is discarded and drops
-  /// back to zero. See [verified].
+  /// Bytes of it written to disk. **This can go backwards**: a chunk counts the
+  /// moment it is written, but the hash is only checked once every chunk is in.
+  /// A piece that fails the check is discarded and drops back to zero. See
+  /// [verified].
   final int downloadedBytes;
 
   /// The piece's own length: [TorrentStats.pieceLength] for every piece
@@ -115,14 +115,14 @@ final class InFlightPiece {
   /// hashed"; this is the only field that means ready.
   final bool verified;
 
-  /// The server's own measure, `0..1`. It is bytes on disk, not bytes that
-  /// can be served -- what shows it has to hold short of full until
-  /// [verified] (see `PieceProgressBar`).
+  /// The server's own measure, `0..1`. It is bytes on disk, not bytes that can
+  /// be served, so what shows it has to hold short of full until [verified]
+  /// (see `PieceProgressBar`).
   double get progress => (downloadedBytes / totalBytes).clamp(0, 1).toDouble();
 
-  /// The object for an `inFlightPiece` value, or null for the null the
-  /// server sends when it does not know -- and for anything malformed,
-  /// which is the same not-knowing.
+  /// The object for an `inFlightPiece` value, or null for the null the server
+  /// sends when it does not know. Anything malformed is null too, since it is
+  /// the same not-knowing.
   static InFlightPiece? fromJson(Object? value) {
     if (value is! Map) return null;
     final index = _intOrNull(value['index']);
@@ -181,17 +181,16 @@ final class TorrentStats {
 
   final TorrentPhase phase;
 
-  /// The name of the file the server is actually streaming (`streamName`):
-  /// the file the request named, or -- when the stream carried no
-  /// `fileIdx` -- the one the server guessed. Null until it knows, which is
-  /// what an empty `streamName` means: `EngineStats` initialises the field
-  /// to `""` and only fills it once the torrent's metadata lists files.
+  /// The name of the file the server is actually streaming (`streamName`): the
+  /// file the request named or, when the stream carried no `fileIdx`, the one
+  /// the server guessed. Null until it knows, which is what an empty
+  /// `streamName` means: `EngineStats` initialises the field to `""` and only
+  /// fills it once the torrent's metadata lists files.
   ///
-  /// It is the one answer about *this file* that does not come from an
-  /// addon, which is why the player's best name for the file
-  /// (`castFilename`, the subtitle memory's release key) reads it before
-  /// `behaviorHints.filename`: the addon says what it believes it linked
-  /// to, this is what was opened.
+  /// It is the one answer about *this file* that does not come from an addon.
+  /// That is why the player's best name for the file (`castFilename`, the
+  /// subtitle memory's release key) reads it before `behaviorHints.filename`:
+  /// the addon says what it believes it linked to, and this is what was opened.
   final String? streamName;
 
   /// Hash-check progress; non-null only while [TorrentPhase.checking].
@@ -212,17 +211,17 @@ final class TorrentStats {
   /// resolves.
   ///
   /// A piece is the unit that becomes readable: librqbit credits verified
-  /// pieces and nothing in between, so a window one piece wide can only
-  /// ever read 0 or all of it. On a multi-gigabyte torrent a piece is
-  /// 8-16 MiB: without accounting for this, a percentage sits at 0% for
-  /// tens of seconds while the download runs perfectly. What shows a wait
-  /// has to say it in pieces when there is only one of them; see
-  /// [windowPieces] and [initialWindowProgress].
+  /// pieces and nothing in between, so a window one piece wide can only ever
+  /// read 0 or all of it. On a multi-gigabyte torrent a piece is 8-16 MiB.
+  /// Without accounting for this, a percentage sits at 0% for tens of seconds
+  /// while the download runs perfectly. What shows a wait has to say it in
+  /// pieces when there is only one of them; see [windowPieces] and
+  /// [initialWindowProgress].
   final int? pieceLength;
 
-  /// How far the one piece the reader is sitting on has come
-  /// (`inFlightPiece`), or null when the server does not know -- which is
-  /// not the same as zero; see [InFlightPiece].
+  /// How far the one piece the reader is sitting on has come (`inFlightPiece`),
+  /// or null when the server does not know. Null is not the same as zero; see
+  /// [InFlightPiece].
   ///
   /// This is what turns "waiting for the first piece (16 MiB)" into
   /// "waiting for piece 137, 6.3 of 16.0 MiB" and gives the bar something
@@ -239,17 +238,17 @@ final class TorrentStats {
 
   /// How many of [peers] hold the whole torrent, i.e. can serve any piece
   /// (`connectedSeeders`). Never more than [peers]: it counts our own
-  /// connections, not the swarm -- for the swarm read [swarmSeeders].
+  /// connections, not the swarm. For the swarm, read [swarmSeeders].
   final int connectedSeeders;
 
   /// Seeders in the whole swarm as the torrent's trackers report them
   /// (`swarmSeeders`), or null when we could not ask: a torrent with no
   /// trackers, a private one, or trackers that have not answered.
   ///
-  /// Null is not zero. The server never sends 0 for "unknown" precisely
-  /// because a swarm with nobody seeding is a real and different state, so
-  /// nothing here may turn a null into a 0 either, and what shows it must
-  /// keep the two apart.
+  /// Null is not zero. The server never sends 0 for "unknown", precisely
+  /// because a swarm with nobody seeding is a real and different state. So
+  /// nothing here may turn a null into a 0 either, and what shows it must keep
+  /// the two apart.
   final int? swarmSeeders;
 
   /// Leechers in the whole swarm (`swarmLeechers`); null under the same
@@ -321,10 +320,10 @@ final class TorrentStats {
   /// is unknown, where a percentage is the best that can be said.
   bool get waitsForOnePiece => windowPieces == 1;
 
-  /// `0..1` of the window the reader waits for -- null when there is
-  /// nothing honest to show, including a window one piece wide: it can
-  /// only ever be 0 or 1, and a bar that jumps between the two is a worse
-  /// answer than a sentence.
+  /// `0..1` of the window the reader waits for, or null when there is nothing
+  /// honest to show. That includes a window one piece wide: it can only ever be
+  /// 0 or 1, and a bar that jumps between the two is a worse answer than a
+  /// sentence.
   double? get initialWindowProgress => waitsForOnePiece
       ? null
       : _ratio(initialWindowReadyBytes, initialWindowBytes);
@@ -333,11 +332,10 @@ final class TorrentStats {
   /// download speed, when both are known and moving. An estimate, and
   /// named as one wherever it is shown.
   ///
-  /// When the wait is one piece and the server says how far *into* that
-  /// piece it is, the remainder is the piece's -- which shrinks between
-  /// polls. The window's own bytes only move when a whole piece verifies,
-  /// so on their own they would hold the same estimate for the entire
-  /// wait.
+  /// When the wait is one piece and the server says how far *into* that piece
+  /// it is, the remainder is the piece's, which shrinks between polls. The
+  /// window's own bytes only move when a whole piece verifies, so on their own
+  /// they would hold the same estimate for the entire wait.
   Duration? get windowEta {
     if (downloadSpeed <= 0) return null;
     final piece = inFlightPiece;

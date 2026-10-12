@@ -21,8 +21,8 @@ class TorrentStartupOverlay extends StatelessWidget {
   /// for this torrent yet.
   final TorrentStats? stats;
 
-  /// Whether the stream being played has an `announce` list. False only
-  /// for a magnet with none -- see [describe]'s one actionable case.
+  /// Whether the stream being played has an `announce` list. False only for a
+  /// magnet with none; see [describe]'s one actionable case.
   final bool hasTrackers;
 
   /// The DHT's status, read once when polling started; null when it was
@@ -37,12 +37,12 @@ class TorrentStartupOverlay extends StatelessWidget {
   /// What to say for [stats]. Null stats means the server has not answered
   /// for this torrent yet (unreachable, or a 404 before the engine exists).
   ///
-  /// [hasTrackers] and [dht] feed exactly one case: a magnet with no
-  /// `announce` list on a network where the DHT never bootstrapped
-  /// genuinely may not find any peers, and while nothing is found yet that
-  /// is worth saying once, as an explanation rather than an error --
-  /// trackers alone regularly outrun a DHT swarm, so this is never shown
-  /// as a warning and never once a peer turns up.
+  /// [hasTrackers] and [dht] feed exactly one case: a magnet with no `announce`
+  /// list on a network where the DHT never bootstrapped. That genuinely may not
+  /// find any peers, and while nothing is found yet it is worth saying once, as
+  /// an explanation rather than an error. Trackers alone regularly outrun a DHT
+  /// swarm, so this is never shown as a warning, and never once a peer turns
+  /// up.
   static TorrentProgressStatus describe(
     TorrentStats? stats, {
     bool hasTrackers = true,
@@ -141,9 +141,9 @@ class TorrentStartupOverlay extends StatelessWidget {
     }
   }
 
-  /// Speed and the swarm, whichever are there; null when neither is. The
-  /// swarm line only appears once something is connected -- before that
-  /// the "Finding peers…" branch above is saying it better.
+  /// Speed and the swarm, whichever are there; null when neither is. The swarm
+  /// line only appears once something is connected. Before that, the "Finding
+  /// peers…" branch above is saying it better.
   static String? _detail(TorrentStats stats) {
     final parts = <String>[
       if (stats.downloadSpeed > 0)

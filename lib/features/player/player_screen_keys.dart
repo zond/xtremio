@@ -10,13 +10,12 @@ extension _PlayerKeys on _PlayerScreenState {
   /// After every rebuild on a television: takes the remote back onto the
   /// video when the control it was on has left the tree.
   ///
-  /// The top bar builds Next, Subtitles and Audio only when there is
-  /// something behind them, so the focused button can vanish mid-playback.
-  /// Focus is then on a detached node, the controls' scope is not told, and
-  /// the video's spent `autofocus` never takes it back: [_onKeyEvent] would
-  /// stop running for good. [_focusNode] wraps the whole screen, so "nothing
-  /// here has focus" is `!_focusNode.hasFocus`; a sheet this screen opened
-  /// keeps the remote.
+  /// The top bar builds Next, Subtitles and Audio only when there is something
+  /// behind them, so the focused button can vanish mid-playback. Focus is then
+  /// on a detached node, the controls' scope is not told, and the video's spent
+  /// `autofocus` never takes it back, so [_onKeyEvent] would stop running for
+  /// good. [_focusNode] wraps the whole screen, so "nothing here has focus" is
+  /// `!_focusNode.hasFocus`. A sheet this screen opened keeps the remote.
   void _scheduleFocusCheck() {
     if (_focusCheckScheduled) return;
     _focusCheckScheduled = true;
@@ -47,9 +46,9 @@ extension _PlayerKeys on _PlayerScreenState {
     return true;
   }
 
-  /// The player's home stop: play/pause, wherever this layout put it --
-  /// the bottom bar's transport, or the cast panel's while a receiver has
-  /// the stream.
+  /// The player's home stop: play/pause, wherever this layout put it. That is
+  /// the bottom bar's transport, or the cast panel's while a receiver has the
+  /// stream.
   bool _focusPlayPause() => _focusStop(_playPauseFocus);
 
   /// Moves focus up onto the shown controls: the top bar, which is built
@@ -81,9 +80,9 @@ extension _PlayerKeys on _PlayerScreenState {
     _focusUp();
   }
 
-  /// Up with a control focused: the next stop above inside the bar -- or
-  /// either direction inside the timing panel, confined to its own scope --
-  /// and nothing at its edges. Down on the bar has named stops instead
+  /// Up with a control focused: the next stop above inside the bar, and nothing
+  /// at its edges. Inside the timing panel either direction moves, confined to
+  /// the panel's own scope. Down on the bar has named stops instead
   /// ([_focusDown]).
   ///
   /// Neither wraps round nor steps out onto the video, which draws no focus
@@ -97,11 +96,11 @@ extension _PlayerKeys on _PlayerScreenState {
   /// the timing panel first, then the up-next card, then a control bar that
   /// is up and free to go.
   ///
-  /// The timing panel is a rung off a television too: it does not fade, so
-  /// on a phone Back is the only way out and on a desktop Escape comes down
-  /// the same ladder. The other two are television-only; elsewhere Back and
-  /// Escape leave the player. A bar that cannot fade (paused, buffering, a
-  /// menu open) is not a rung: Back could do nothing about it, so it leaves.
+  /// The timing panel is a rung off a television too. It does not fade, so on a
+  /// phone Back is the only way out, and on a desktop Escape comes down the
+  /// same ladder. The other two are television-only; elsewhere Back and Escape
+  /// leave the player. A bar that cannot fade (paused, buffering, a menu open)
+  /// is not a rung: Back could do nothing about it, so it leaves.
   bool get _backDismisses =>
       _timingShown ||
       (_isTv &&
@@ -126,17 +125,17 @@ extension _PlayerKeys on _PlayerScreenState {
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
-    // The screen is only still here to hold the picture up while the
-    // player stops. Nothing it offers is aimed at anything any more, and
-    // media_kit throws on a player it has released, so a late press is
-    // swallowed rather than passed on -- Back included, since leaving is
-    // what is already happening.
+    // The screen is only still here to hold the picture up while the player
+    // stops. Nothing it offers is aimed at anything any more, and media_kit
+    // throws on a player it has released. So a late press is swallowed rather
+    // than passed on, Back included, since leaving is what is already
+    // happening.
     if (_leaving) return KeyEventResult.handled;
-    // Back belongs to the route, not to this handler: Android delivers it
-    // as a key first and pops only if nothing took it, and [PopScope] is
-    // what answers. Above `_showControls` below, because the OSD flashing
-    // up on the way out of the player would be the opposite of what the
-    // press asked for.
+    // Back belongs to the route, not to this handler. Android delivers it as a
+    // key first and pops only if nothing took it, and [PopScope] is what
+    // answers. This sits above `_showControls` below, because the OSD flashing
+    // up on the way out of the player would be the opposite of what the press
+    // asked for.
     if (event.logicalKey == LogicalKeyboardKey.goBack) {
       return KeyEventResult.ignored;
     }
@@ -149,14 +148,13 @@ extension _PlayerKeys on _PlayerScreenState {
     final key = event.logicalKey;
     final shift = keyboard.isShiftPressed;
 
-    // The timing panel is a layer of its own with focus of its own: the
-    // direction keys walk its buttons, select presses one (its own
-    // handler has already had the key by the time this runs), Escape
-    // closes it and Back comes down the ladder below. None of them are
-    // the player's while it is up, and none of them bring the OSD back
-    // either -- adjusting means watching the picture between presses,
-    // and a bar flashing up on every one of them is the opposite of
-    // that. Everything else still means what it always did.
+    // The timing panel is a layer of its own with focus of its own. The
+    // direction keys walk its buttons, select presses one (its own handler has
+    // already had the key by the time this runs), Escape closes it and Back
+    // comes down the ladder below. None of them are the player's while it is
+    // up, and none of them bring the OSD back either. Adjusting means watching
+    // the picture between presses, and a bar flashing up on every one of them
+    // is the opposite of that. Everything else still means what it always did.
     if (_timingScope.hasFocus) {
       if (key == LogicalKeyboardKey.escape) {
         if (event is KeyDownEvent) _hideSubtitleTiming();
@@ -218,13 +216,12 @@ extension _PlayerKeys on _PlayerScreenState {
       if (!_isTv) return KeyEventResult.ignored;
       if (event is KeyDownEvent) {
         if (!shownBefore) {
-          // With nothing drawn the press cannot be aiming: it is the one
-          // button a hidden player has, play/pause. The bar only fades while
-          // playing ([_canAutoHide]), so this stops the film and leaves the
-          // remote on play/pause, making the second press of the same key
-          // the one that restarts it. The stopped playback then keeps the
-          // bar up; until the engine reports the pause, the ordinary
-          // [PlayerScreen.controlsTimeout] runs.
+          // With nothing drawn the press cannot be aiming: it is the one button
+          // a hidden player has, play/pause. The bar only fades while playing
+          // ([_canAutoHide]), so this stops the film and leaves the remote on
+          // play/pause. The second press of the same key then restarts it. The
+          // stopped playback keeps the bar up; until the engine reports the
+          // pause, the ordinary [PlayerScreen.controlsTimeout] runs.
           _togglePlay();
           _focusPlayPause();
         } else if (_upNextSecondsLeft != null) {
@@ -239,11 +236,11 @@ extension _PlayerKeys on _PlayerScreenState {
       return KeyEventResult.handled;
     }
 
-    // Up and down on a TV reach the controls (the television has its own
-    // volume keys). Both stops are named ([_focusDown], [_focusUp]), so a
-    // press on a hidden OSD brings the bar up with the remote already on
-    // the seek bar or the top bar; nothing invisible is ever walked. Left
-    // and right scan whether the bar is up or not (the switch below).
+    // Up and down on a TV reach the controls (the television has its own volume
+    // keys). Both stops are named ([_focusDown], [_focusUp]), so a press on a
+    // hidden OSD brings the bar up with the remote already on the seek bar or
+    // the top bar. Nothing invisible is ever walked. Left and right scan
+    // whether the bar is up or not (the switch below).
     if (_isTv &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {
@@ -289,9 +286,9 @@ extension _PlayerKeys on _PlayerScreenState {
       case LogicalKeyboardKey.mediaPause:
         if (event is KeyDownEvent) _pause();
       case LogicalKeyboardKey.mediaStop:
-        // Stop ends the session: leave the player (unloading pauses and
-        // reports the position). Unlike Back it has no ladder to come down
-        // first -- there is nothing transient about a stop.
+        // Stop ends the session: leave the player (unloading pauses and reports
+        // the position). Unlike Back it has no ladder to come down first, since
+        // there is nothing transient about a stop.
         if (event is KeyDownEvent) _leavePlayer();
       case LogicalKeyboardKey.arrowLeft:
       case LogicalKeyboardKey.keyJ:
@@ -351,9 +348,9 @@ extension _PlayerKeys on _PlayerScreenState {
   // --- Stats hover ---------------------------------------------------------
 
   void _onPointerMoved() {
-    // A hover still arrives while the player is stopping (the `MouseRegion`
-    // is above the `IgnorePointer`) and is aimed at nothing, like a key
-    // press ([_onKeyEvent]); the timer below would also outlive [_detach].
+    // A hover still arrives while the player is stopping (the `MouseRegion` is
+    // above the `IgnorePointer`), and it is aimed at nothing, like a key press
+    // ([_onKeyEvent]). The timer below would also outlive [_detach].
     if (_leaving) return;
     _showControls();
     _statsHoverTimer?.cancel();

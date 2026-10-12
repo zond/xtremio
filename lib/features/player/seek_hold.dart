@@ -3,24 +3,23 @@ import 'package:flutter/services.dart';
 /// The acceleration of a held seek key: a tap moves the viewer's own
 /// step, and holding the key moves further with every repeat.
 ///
-/// The step is `seekTimeDuration`, a stremio-core profile setting the
-/// settings screen offers and the viewer's account syncs, so nothing
-/// here replaces it -- every stride is a whole number of steps, and the
-/// number the viewer chose still decides how far a press goes. What was
-/// wanted is "about twice as fast" and what is wanted after that is to
-/// reach the other end of a film; a larger constant cannot be both, and
-/// it would take the small step away from the person who set it.
+/// The step is `seekTimeDuration`, a stremio-core profile setting the settings
+/// screen offers and the viewer's account syncs, so nothing here replaces it.
+/// Every stride is a whole number of steps, and the number the viewer chose
+/// still decides how far a press goes. What was wanted is "about twice as
+/// fast", and after that, to reach the other end of a film. A larger constant
+/// cannot be both, and it would take the small step away from the person who
+/// set it.
 ///
 /// This is the shape the subtitle shift already has
-/// (`SubtitleTimingOverlay.shiftStrideAt`): a stride that grows with how
-/// many times *this* hold has fired, so a tap is always the first stride
-/// however large the one before it was. The one difference is where the
-/// repeat comes from. The panel's stepper runs a timer of its own
-/// because it is a button and has to answer a finger, a mouse and the
-/// remote's select key at one rate; a seek key has no such press behind
-/// it -- the key's own repeat *is* the hold -- so the count is taken
-/// from the events, and there is no timer that could be left running
-/// after the key came up.
+/// (`SubtitleTimingOverlay.shiftStrideAt`): a stride that grows with how many
+/// times *this* hold has fired, so a tap is always the first stride however
+/// large the one before it was. The one difference is where the repeat comes
+/// from. The panel's stepper runs a timer of its own because it is a button,
+/// and has to answer a finger, a mouse and the remote's select key at one rate.
+/// A seek key has no such press behind it, since the key's own repeat *is* the
+/// hold. So the count is taken from the events, and there is no timer that
+/// could be left running after the key came up.
 final class SeekHold {
   /// The key this hold belongs to, so that turning round mid-hold starts
   /// again: left and right are different keys, and the press that
@@ -33,17 +32,16 @@ final class SeekHold {
   /// How many presses of a held key move one step before it moves two,
   /// and how many move two before it moves five.
   ///
-  /// Android starts repeating a held key after 400 ms and then repeats
-  /// it every 50 ms (AOSP `ViewConfiguration`: `KEY_REPEAT_DELAY = 50`,
-  /// and `getKeyRepeatTimeout` is the long-press timeout, 400), so at
-  /// the default ten-second step these are the distances a viewer covers
-  /// by holding the key: the first ten presses are the tap and half a
-  /// second of holding, and they cover a hundred seconds -- a scene.
-  /// Fifteen more at two steps take three quarters of a second and cover
-  /// five minutes. Everything after that moves fifty seconds a press,
-  /// which is a thousand seconds of film for every second the key is
-  /// held, and puts the far end of a two-hour film about seven seconds
-  /// away.
+  /// Android starts repeating a held key after 400 ms and then repeats it every
+  /// 50 ms (AOSP `ViewConfiguration`: `KEY_REPEAT_DELAY = 50`, and
+  /// `getKeyRepeatTimeout` is the long-press timeout, 400). At the default
+  /// ten-second step these are the distances a viewer covers by holding the
+  /// key. The first ten presses are the tap and half a second of holding, and
+  /// they cover a hundred seconds: a scene. Fifteen more at two steps take
+  /// three quarters of a second and cover five minutes. Everything after that
+  /// moves fifty seconds a press, which is a thousand seconds of film for every
+  /// second the key is held, and puts the far end of a two-hour film about
+  /// seven seconds away.
   static const int singleStepFires = 10;
   static const int doubleStepFires = 15;
 

@@ -22,11 +22,10 @@ final class TorrentProgressStatus {
   /// `0..1`, or null when nothing measurable is going on yet.
   final double? progress;
 
-  /// The single piece the reader is sitting on, when the server knows it.
-  /// It replaces [progress] as what the bar draws, because it is a
-  /// measurement of the very bytes the wait is for -- and it is drawn by
-  /// [PieceProgressBar], which owes it three honesty rules a plain
-  /// percentage does not.
+  /// The single piece the reader is sitting on, when the server knows it. It
+  /// replaces [progress] as what the bar draws, because it is a measurement of
+  /// the very bytes the wait is for. It is drawn by [PieceProgressBar], which
+  /// owes it three honesty rules a plain percentage does not.
   ///
   /// Null is "we do not know", not "nothing downloaded", so a null piece
   /// falls back to [progress] rather than to a bar sitting at zero.
@@ -89,11 +88,10 @@ class TorrentProgressCard extends StatelessWidget {
               ),
               if (!status.failed) ...[
                 const SizedBox(height: 12),
-                // The piece the reader waits on when the server knows it;
-                // otherwise determinate when there is a percentage, and the
-                // indeterminate sweep -- which says "something is happening
-                // that cannot be measured", never "zero" -- when there is
-                // not.
+                // The piece the reader waits on when the server knows it.
+                // Otherwise determinate when there is a percentage, and the
+                // indeterminate sweep when there is not: it says "something is
+                // happening that cannot be measured", never "zero".
                 if (status.piece case final piece?)
                   PieceProgressBar(piece: piece)
                 else
@@ -115,18 +113,18 @@ class TorrentProgressCard extends StatelessWidget {
       progress == null ? label : '$label ${(progress * 100).round()}%';
 
   /// Who is on the other end, in the three numbers this is judged by:
-  /// `connected 5 · seeds 137 · swarm 539`. Live connections of any kind,
-  /// then the swarm's own seeder count from the trackers, then the whole
-  /// swarm -- seeders and leechers together. The first is what we have,
-  /// the other two are what there is to have.
+  /// `connected 5 · seeds 137 · swarm 539`. First live connections of any kind,
+  /// then the swarm's own seeder count from the trackers, then the whole swarm,
+  /// seeders and leechers together. The first is what we have; the other two
+  /// are what there is to have.
   ///
-  /// **A figure nobody could ask about is left out, never printed.** Only
-  /// the connection count is ours to count; the swarm figures come from a
-  /// tracker scrape, and a torrent with no trackers, a private one or a
-  /// scrape that has not answered yet leaves them null -- so the line is
-  /// then just `connected 5`. A 0, a dash or a "?" would each read as an
-  /// answer about the swarm, and there is none. `swarm` needs both halves
-  /// of the scrape, so seeders without leechers stops after `seeds`.
+  /// **A figure nobody could ask about is left out, never printed.** Only the
+  /// connection count is ours to count. The swarm figures come from a tracker
+  /// scrape, and a torrent with no trackers, a private one or a scrape that has
+  /// not answered yet leaves them null, so the line is then just `connected 5`.
+  /// A 0, a dash or a "?" would each read as an answer about the swarm, and
+  /// there is none. `swarm` needs both halves of the scrape, so seeders without
+  /// leechers stops after `seeds`.
   ///
   /// This is the one swarm formatter: the progress card, the stall overlay
   /// and the start-up overlay all render this string, so they cannot say
@@ -149,13 +147,12 @@ class TorrentProgressCard extends StatelessWidget {
   /// What the wait is when the window the reader wants is one piece wide:
   /// `Waiting for the first piece (16 MiB)…`.
   ///
-  /// A piece is the unit that becomes readable -- librqbit credits
-  /// verified pieces and nothing in between -- so a one-piece window can
-  /// only ever read 0% or 100%. Saying which piece and how big it is
-  /// describes the wait honestly; a percentage stuck at 0 while the
-  /// download runs at 2 MB/s does not. [first] is the start-up wait, where
-  /// nothing has played yet; a stall mid-file is waiting for the *next*
-  /// one.
+  /// A piece is the unit that becomes readable (librqbit credits verified
+  /// pieces and nothing in between), so a one-piece window can only ever read
+  /// 0% or 100%. Saying which piece and how big it is describes the wait
+  /// honestly; a percentage stuck at 0 while the download runs at 2 MB/s does
+  /// not. [first] is the start-up wait, where nothing has played yet. A stall
+  /// mid-file is waiting for the *next* one.
   static String pieceWait(TorrentStats stats, {required bool first}) {
     final size = stats.initialWindowBytes;
     final which = first ? 'first' : 'next';
@@ -167,9 +164,9 @@ class TorrentProgressCard extends StatelessWidget {
   /// The same wait once the server says how far into that piece it is:
   /// `Waiting for piece 137, 6.3 of 16.0 MiB…`.
   ///
-  /// Which piece it is comes from the server, so it is the piece's index
-  /// in the torrent rather than a number this counted itself; the bytes
-  /// are the piece's own, which is why a short last piece reads honestly.
+  /// Which piece it is comes from the server, so it is the piece's index in the
+  /// torrent rather than a number this counted itself. The bytes are the
+  /// piece's own, which is why a short last piece reads honestly.
   static String piecePosition(InFlightPiece piece) =>
       'Waiting for piece ${piece.index}, '
       '${formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}…';
@@ -229,9 +226,9 @@ class TorrentProgressCard extends StatelessWidget {
   }
 }
 
-/// The bar for the one piece the reader is waiting on, which is the only
-/// thing on this card measuring bytes that are still moving -- and the only
-/// one that has to be careful about it.
+/// The bar for the one piece the reader is waiting on. It is the only thing
+/// on this card measuring bytes that are still moving, and the only one that
+/// has to be careful about it.
 ///
 /// Three rules, all of them the server's own (`stream-server`'s
 /// `docs/stats.md`, "The in-flight piece"), and none of them what a plain
@@ -240,14 +237,14 @@ class TorrentProgressCard extends StatelessWidget {
 /// * **Full is not finished.** `downloadedBytes` counts chunks the moment
 ///   they are written to disk; the hash is only checked once the last one
 ///   is in. So a full count means "complete enough to be hashed", and the
-///   bar holds at [unverifiedCap] until `verified` -- which is then what
+///   bar holds at [unverifiedCap] until `verified`, which is then what
 ///   fills it.
 /// * **It never runs backwards.** A decrease is a piece that failed its
 ///   hash check and was discarded, not progress being undone: the bar
 ///   stays where it got to rather than animating down.
 /// * **A different piece is a different wait**, so it starts where that
-///   piece is, at once and with no transition -- the reader moved (a seek,
-///   a re-open), and nothing about the old piece's fill is news about the
+///   piece is, at once and with no transition. The reader moved (a seek, a
+///   re-open), and nothing about the old piece's fill is news about the
 ///   new one.
 ///
 /// Nothing here animates: the value is drawn as it is, so "no transition"
@@ -281,7 +278,7 @@ class _PieceProgressBarState extends State<PieceProgressBar> {
     final piece = widget.piece;
     final target = PieceProgressBar.target(piece);
     // No `setState`: a build follows this call anyway, and there is no
-    // animation to start -- which is the point.
+    // animation to start, which is the point.
     if (piece.index != _index) {
       _index = piece.index;
       _value = target;

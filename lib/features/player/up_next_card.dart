@@ -5,12 +5,12 @@ import '../../shell/device_profile.dart';
 /// Offered when an episode ends and the engine knows the next one: counts
 /// down to playing it, with a way out.
 ///
-/// Both buttons are focusable, so a remote can take the hand-off early or
-/// call it off once the player has moved focus onto the card. They wear
-/// the theme floor's stroke and nothing more: the card is an opaque
-/// surface of the app's own drawn over the video, so a light stroke has a
-/// known background under it, and two buttons side by side in a card that
-/// is itself a hand-over prompt are not things to lift off it.
+/// Both buttons are focusable, so a remote can take the hand-off early or call
+/// it off once the player has moved focus onto the card. They wear the theme
+/// floor's stroke and nothing more. The card is an opaque surface of the app's
+/// own drawn over the video, so a light stroke has a known background under it.
+/// And two buttons side by side in a card that is itself a hand-over prompt are
+/// not things to lift off it.
 class UpNextCard extends StatelessWidget {
   const UpNextCard({
     super.key,
@@ -73,20 +73,18 @@ class UpNextCard extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
-              // [Wrap], not [Row], with the countdown on its own line
-              // above: three things across the card overflow on a
-              // television at a larger text scale. The width constraint
-              // above keeps the two buttons side by side for the remote
-              // to walk; wrapping is what happens instead of an overflow
-              // when the text is larger still.
+              // [Wrap], not [Row], with the countdown on its own line above:
+              // three things across the card overflow on a television at a
+              // larger text scale. The width constraint above keeps the two
+              // buttons side by side for the remote to walk. Wrapping is what
+              // happens instead of an overflow when the text is larger still.
               //
-              // [Align] puts the wrap at the end of the card. A [Wrap] on
-              // a [Column]'s cross axis gets loose constraints and sizes
-              // to its own children, so `WrapAlignment.end` has no room
-              // to distribute and the buttons sit flush left under the
-              // label without it; [Align] gives the wrap the width to
-              // align inside, including on a last line broken apart by
-              // large text.
+              // [Align] puts the wrap at the end of the card. A [Wrap] on a
+              // [Column]'s cross axis gets loose constraints and sizes to its
+              // own children. So `WrapAlignment.end` has no room to distribute,
+              // and without [Align] the buttons sit flush left under the label.
+              // [Align] gives the wrap the width to align inside, including on
+              // a last line broken apart by large text.
               Align(
                 alignment: Alignment.centerRight,
                 child: Wrap(

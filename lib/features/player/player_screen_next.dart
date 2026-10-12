@@ -56,14 +56,13 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   /// and either a new player takes this one's place, or we return to the
   /// details screen pointing at the episode so its streams can be picked.
   ///
-  /// The new player gets, in order: a finished download of that episode
-  /// (the better source, and the only one offline), a video on this device
-  /// matched to it (as good, and needing nothing opened), its linked Drive
-  /// file
-  /// (the engine cannot find one: a Drive play's request names a service
-  /// that answers no addon query, [driveStreamRequest]), or the stream the
-  /// engine found (same addon, same binge group). [_advancing] holds a
-  /// second press while the registry answers.
+  /// The new player gets, in order: a finished download of that episode (the
+  /// better source, and the only one offline), a video on this device matched
+  /// to it (as good, and needing nothing opened), its linked Drive file, or the
+  /// stream the engine found (same addon, same binge group). The engine cannot
+  /// find the Drive file itself: a Drive play's request names a service that
+  /// answers no addon query ([driveStreamRequest]). [_advancing] holds a second
+  /// press while the registry answers.
   void _playNext() {
     final state = _state;
     final next = state?.nextVideo;
@@ -119,10 +118,10 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     final metaId = metaRequest.path.id;
     if (downloads != null) {
       final playback = await offlinePlaybackOf(downloads, metaId, next.id);
-      // Gone, or leaving, while the registry was answering: there is no
-      // route left to replace, and a screen waiting for its own teardown
-      // must not put a second player over itself -- a second engine and a
-      // fresh open, from a press that asked to stop watching.
+      // Gone, or leaving, while the registry was answering: there is no route
+      // left to replace. A screen waiting for its own teardown must not put a
+      // second player over itself, with a second engine and a fresh open, from
+      // a press that asked to stop watching.
       if (!_stillOurs) return;
       if (playback != null) {
         _handOver(navigator, state, next, playback);
@@ -172,9 +171,9 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     _handOver(navigator, state, next, state.nextStream?.json);
   }
 
-  /// Puts a player for [next] in this screen's place, or -- with no
-  /// [stream] anywhere for it -- goes back to the caller pointing at the
-  /// episode so its streams can be picked.
+  /// Puts a player for [next] in this screen's place. With no [stream] anywhere
+  /// for it, it goes back to the caller pointing at the episode so its streams
+  /// can be picked.
   ///
   /// The new player's stream request is this one's with the id moved on,
   /// unless [streamRequest] names the one [stream] really came from: a
@@ -197,12 +196,12 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     }
     _handedOver = true;
     DiagnosticsLog.info('player', 'handing over to the next episode');
-    // Before the push, not in [dispose]. `pushReplacement` keeps this
-    // screen alive until the transition finishes, and the new player can
-    // read its file's rate and ask for it inside that -- an already
-    // downloaded episode opens at once -- whereupon this screen's dispose
-    // would clear the ask the successor had just made. Nothing is left
-    // holding a rate either way, because the release comes first.
+    // Before the push, not in [dispose]. `pushReplacement` keeps this screen
+    // alive until the transition finishes, and the new player can read its
+    // file's rate and ask for it inside that (an already downloaded episode
+    // opens at once). This screen's dispose would then clear the ask the
+    // successor had just made. Nothing is left holding a rate either way,
+    // because the release comes first.
     _releaseDisplayFrameRate();
     final current = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;

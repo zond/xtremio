@@ -6,12 +6,11 @@ import 'subtitle_timing.dart';
 /// pressed, and where in the video they judged it to belong.
 ///
 /// **A mark is a correspondence, not a shift.** It says "this line of the
-/// subtitle file belongs at this moment of the video", which stays true
-/// when the transform changes -- and it must, because the second mark is
-/// made after the first has already moved the speed and the offset.
-/// Storing "the shift that was in force" instead would need unwinding
-/// every time, and would go wrong the moment anything else touched the
-/// timing.
+/// subtitle file belongs at this moment of the video", which stays true when
+/// the transform changes. It must, because the second mark is made after the
+/// first has already moved the speed and the offset. Storing "the shift that
+/// was in force" instead would need unwinding every time, and would go wrong
+/// the moment anything else touched the timing.
 @immutable
 final class SubtitleMark {
   const SubtitleMark({required this.cueStart, required this.videoPosition});
@@ -23,11 +22,11 @@ final class SubtitleMark {
 
   /// The video position, in seconds, that cue belongs at.
   ///
-  /// Where the cue is *drawn*, under a transform the viewer has looked
-  /// at and approved -- never the instant a button was pressed. A cue is
-  /// on screen for seconds and a press can land anywhere in them, so the
-  /// press instant carries a reaction time into a number that is
-  /// otherwise exact (`PlayerScreen._markSubtitleTiming`).
+  /// Where the cue is *drawn*, under a transform the viewer has looked at and
+  /// approved, and never the instant a button was pressed. A cue is on screen
+  /// for seconds and a press can land anywhere in them. So the press instant
+  /// carries a reaction time into a number that is otherwise exact
+  /// (`PlayerScreen._markSubtitleTiming`).
   final double videoPosition;
 
   @override
@@ -43,19 +42,18 @@ final class SubtitleMark {
   String toString() => 'SubtitleMark($cueStart -> $videoPosition)';
 }
 
-/// Which of the two things a mark did, which is what the viewer has to
-/// be told: one point on its own keeps the moment in front of them, a
-/// pair of them fixes the rest of the episode as well.
+/// Which of the two things a mark did, which is what the viewer has to be told.
+/// One point on its own keeps the moment in front of them; a pair of them fixes
+/// the rest of the episode as well.
 enum SubtitleCalibrationOutcome {
   /// One point, so the line through the marks is the one already in
   /// force: the offset stays where the viewer put it and the speed is
   /// untouched.
   ///
-  /// The press is not wasted and the panel must not let it look like a
-  /// press that did nothing, because the mark it recorded is half of the
-  /// pair that fixes the drift -- so the note asks for the other half,
-  /// which is a mark made further on after the picture has been shifted
-  /// into place again out there.
+  /// The press is not wasted, and the panel must not let it look like a press
+  /// that did nothing. The mark it recorded is half of the pair that fixes the
+  /// drift. So the note asks for the other half: a mark made further on, after
+  /// the picture has been shifted into place again out there.
   offset('Marked. Mark again further on to fix drift'),
 
   /// Both moved: two marks far enough apart to trust a rate, and the
@@ -64,19 +62,19 @@ enum SubtitleCalibrationOutcome {
 
   const SubtitleCalibrationOutcome(this.note);
 
-  /// The line the panel says it with. Which of the two happened is not
-  /// visible in the picture -- both look like the subtitle landing where
-  /// it belongs, and only one of them holds for another ten minutes.
+  /// The line the panel says it with. Which of the two happened is not visible
+  /// in the picture: both look like the subtitle landing where it belongs, and
+  /// only one of them holds for another ten minutes.
   final String note;
 }
 
 /// What a mark says when there was nothing on screen to make it out of.
 ///
-/// A press is aimed at a line the viewer can see, but the gaps between
-/// cues are most of a film and the button cannot come and go with them
-/// (`SubtitleTimingOverlay.onMark`), so a press between two lines has to
-/// be answered rather than ignored: nothing moved, and a panel that said
-/// nothing would look like one that had silently agreed.
+/// A press is aimed at a line the viewer can see, but the gaps between cues are
+/// most of a film, and the button cannot come and go with them
+/// (`SubtitleTimingOverlay.onMark`). So a press between two lines has to be
+/// answered rather than ignored. Nothing moved, and a panel that said nothing
+/// would look like one that had silently agreed.
 const String subtitleNoCueNote = 'No subtitle on screen to mark';
 
 /// A calibration and the timing it resolved to: what
@@ -103,9 +101,9 @@ final class SubtitleCalibrationResult {
 /// The marks made against the subtitle on screen, and the arithmetic
 /// that turns them into a [SubtitleTiming].
 ///
-/// The marks belong to one subtitle file: a point measured against one
-/// file says nothing about another, so what is on screen changing throws
-/// them away. Only the *derived* speed and shift are worth remembering.
+/// The marks belong to one subtitle file. A point measured against one file
+/// says nothing about another, so a change of what is on screen throws them
+/// away. Only the *derived* speed and shift are worth remembering.
 ///
 /// ## The arithmetic, and what it assumes
 ///
@@ -113,10 +111,10 @@ final class SubtitleCalibrationResult {
 ///
 ///     p = speed * t + delay
 ///
-/// -- `sub-speed` multiplies the subtitle's timestamps and `sub-delay`
-/// is added to the product, in that order. A mark is a `(t, p)` the
-/// viewer has declared true, so marks are points on that line and
-/// calibrating is fitting it.
+/// That is, `sub-speed` multiplies the subtitle's timestamps and `sub-delay` is
+/// added to the product, in that order. A mark is a `(t, p)` the viewer has
+/// declared true, so marks are points on that line, and calibrating is fitting
+/// it.
 ///
 /// **One mark** leaves the slope alone and moves the line onto the
 /// point: `delay = p - speed * t`, with `speed` whatever is in force.
@@ -140,19 +138,18 @@ final class SubtitleCalibrationResult {
 ///     speed' = speed + k
 ///     delay' = delay + c1 - k * t1
 ///
-/// so the slope adds to the speed exactly -- and the pivot of that
-/// change is `t = 0`, the start of the subtitle file rather than the
-/// first mark, which is what the `- k * t1` in the offset pays for.
-/// Fold the slope in and leave the offset alone and the first mark
-/// moves by `k * t1`: at five minutes in and a PAL-sized rate that is
-/// thirteen seconds, in the one place the viewer is certain it was
-/// right.
+/// so the slope adds to the speed exactly. The pivot of that change is `t = 0`,
+/// the start of the subtitle file rather than the first mark, which is what the
+/// `- k * t1` in the offset pays for. Fold the slope in and leave the offset
+/// alone, and the first mark moves by `k * t1`: at five minutes in and a
+/// PAL-sized rate that is thirteen seconds, in the one place the viewer is
+/// certain it was right.
 ///
-/// Against the **video clock** instead -- the tempting axis, because it
-/// is the number on the screen -- the slope is `kp = (c2 - c1) / (p2 -
-/// p1)`, and since `p2 - p1 = speed * (t2 - t1) + (c2 - c1)` the honest
-/// fold is `speed' = speed / (1 - kp)` rather than `speed * (1 + kp)`.
-/// The two differ by `kp` squared: on a PAL-sized 4.3 % drift, 0.18 % --
+/// Against the **video clock** instead (the tempting axis, because it is the
+/// number on the screen) the slope is `kp = (c2 - c1) / (p2 - p1)`.
+/// Since `p2 - p1 = speed * (t2 - t1) + (c2 - c1)`, the honest fold is
+/// `speed' = speed / (1 - kp)` rather than `speed * (1 + kp)`. The two
+/// differ by `kp` squared: on a PAL-sized 4.3 % drift, 0.18 %. That is
 /// larger than the 0.12 % residual this whole feature exists to catch.
 ///
 /// Solving the two-point line directly, which is what [marking] does,
@@ -172,11 +169,11 @@ final class SubtitleCalibration {
   /// How far apart two marks have to be, on the subtitle's own timeline,
   /// before their difference is allowed to set a rate.
   ///
-  /// A rate read off two observations carries their error divided by the
-  /// span between them; at this span that error is 0.083 %, under the
-  /// 0.12 % drift the marks are there to find. Well inside the flow this
-  /// is for: mark it right at the start, notice the drift five minutes
-  /// later, mark it right again.
+  /// A rate read off two observations carries their error divided by the span
+  /// between them; at this span that error is 0.083 %, under the 0.12 % drift
+  /// the marks are there to find. That is well inside the flow this is for:
+  /// mark it right at the start, notice the drift five minutes later, mark it
+  /// right again.
   static const double rateSpan = 120;
 
   /// How close a new mark has to be to an existing one to be treated as
@@ -191,12 +188,11 @@ final class SubtitleCalibration {
   /// The window a derived rate has to land in to be believed, either
   /// side of the file's own timing.
   ///
-  /// Every real mismatch is inside it -- PAL against film, the largest
-  /// there is, is 4.3 % -- so a ratio outside says the two marks
-  /// disagree about something a rate cannot explain: a mis-press, or a
-  /// cue read off the wrong file. The offset is then the honest answer,
-  /// and it keeps `sub-speed` inside the `<0.1-10.0>` mpv would
-  /// otherwise refuse in silence.
+  /// Every real mismatch is inside it (PAL against film, the largest there is,
+  /// is 4.3 %). So a ratio outside says the two marks disagree about something
+  /// a rate cannot explain: a mis-press, or a cue read off the wrong file. The
+  /// offset is then the honest answer, and it keeps `sub-speed` inside the
+  /// `<0.1-10.0>` that mpv would otherwise refuse in silence.
   static const double lowestRate = 0.9;
   static const double highestRate = 1.1;
 
@@ -233,11 +229,10 @@ final class SubtitleCalibration {
         );
       }
     }
-    // The speed stays exactly what it was -- whatever an earlier
-    // calibration or a match measured -- because one point says nothing
-    // about a rate. The presses fold into the offset, which is now the
-    // whole of it: the mark already accounts for the shift that was in
-    // force.
+    // The speed stays exactly what it was (whatever an earlier calibration or a
+    // match measured), because one point says nothing about a rate. The presses
+    // fold into the offset, which is now the whole of it: the mark already
+    // accounts for the shift that was in force.
     return SubtitleCalibrationResult(
       calibration: next,
       timing: SubtitleTiming(
@@ -251,11 +246,11 @@ final class SubtitleCalibration {
   /// The two marks furthest apart on the subtitle's timeline, or null
   /// when there are not two of them or they are closer than [rateSpan].
   ///
-  /// The widest pair rather than a least-squares fit over all of them:
-  /// the widest has the longest lever arm, where a fit would be dragged
-  /// around by whatever stretch of the episode the viewer happened to
-  /// fuss over. A third mark refines the answer by widening the span or
-  /// replacing an end of it, and never by out-voting one.
+  /// The widest pair rather than a least-squares fit over all of them. The
+  /// widest has the longest lever arm, where a fit would be dragged around by
+  /// whatever stretch of the episode the viewer happened to fuss over. A third
+  /// mark refines the answer by widening the span or replacing an end of it,
+  /// and never by out-voting one.
   (SubtitleMark, SubtitleMark)? _widestPair() {
     if (marks.length < 2) return null;
     var first = marks.first;
