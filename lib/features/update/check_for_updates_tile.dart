@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/explained.dart';
 import 'app_updates.dart';
 import 'update_dialog.dart';
 
@@ -13,6 +14,10 @@ class CheckForUpdatesTile extends StatefulWidget {
   final AppUpdates updates;
 
   static const String title = 'Check for updates';
+
+  /// What the row is for. The version under the title is state and stays.
+  static const String explanation =
+      'Looks for a newer Xtremio. The line under it is the version you have.';
 
   /// What a check that found nothing newer says.
   static String upToDate(String version) => 'xtremio $version is up to date.';
@@ -61,18 +66,22 @@ class _CheckForUpdatesTileState extends State<CheckForUpdatesTile> {
   @override
   Widget build(BuildContext context) {
     final current = widget.updates.identity.parsed;
-    return ListTile(
-      key: const ValueKey('setting-check-updates'),
-      leading: const Icon(Icons.system_update_outlined),
-      title: const Text(CheckForUpdatesTile.title),
-      subtitle: Text(
-        _checking
-            ? 'Checking…'
-            : current == null
-            ? 'This build carries no version'
-            : 'This is xtremio $current',
+    return Explained(
+      title: CheckForUpdatesTile.title,
+      explanation: CheckForUpdatesTile.explanation,
+      child: ListTile(
+        key: const ValueKey('setting-check-updates'),
+        leading: const ExplainIcon(Icon(Icons.system_update_outlined)),
+        title: const Text(CheckForUpdatesTile.title),
+        subtitle: Text(
+          _checking
+              ? 'Checking…'
+              : current == null
+              ? 'This build carries no version'
+              : 'This is xtremio $current',
+        ),
+        onTap: _check,
       ),
-      onTap: _check,
     );
   }
 }

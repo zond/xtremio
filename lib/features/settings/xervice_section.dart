@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/external_link.dart';
+import '../../widgets/explained.dart';
 
 /// What xtremio-xervice keeps for the signed-in account, and the ways to
 /// take it back: under Account in Settings, signed in only, and only in a
@@ -18,16 +19,14 @@ class XerviceSection extends StatefulWidget {
   final ValueListenable<Map<String, dynamic>?> ctx;
 
   static const String forgetLikesTitle = 'Forget my likes everywhere';
-  static const String forgetLikesSubtitle =
-      'Your likes, dislikes and "Not interested" titles, on this device and '
-      'on every device signed in to this account.';
+  static const String forgetLikesExplanation =
+      'Your likes and dislikes are saved with your account.';
   static const String forgetLikesQuestion =
       'Forget every like, dislike and "Not interested" on every device '
       'signed in to this account? This cannot be undone.';
   static const String forgetDriveTitle = 'Forget my Drive access everywhere';
-  static const String forgetDriveSubtitle =
-      'The Google Drive access saved with this account. A device that has '
-      'none of its own picks it up when it starts.';
+  static const String forgetDriveExplanation =
+      'Your Drive link is saved with your account.';
   static const String forgetDriveQuestion =
       'Forget the Google Drive access saved with this account? Devices that '
       'already have it keep it. No other device gets it until you link '
@@ -129,25 +128,33 @@ class _XerviceSectionState extends State<XerviceSection> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.sentiment_neutral_outlined),
-              title: const Text(XerviceSection.forgetLikesTitle),
-              subtitle: const Text(XerviceSection.forgetLikesSubtitle),
-              enabled: !_busy,
-              onTap: () => _confirmThen(
-                XerviceSection.forgetLikesQuestion,
-                scope.faces.forgetEverywhere,
+            Explained(
+              title: XerviceSection.forgetLikesTitle,
+              explanation: XerviceSection.forgetLikesExplanation,
+              child: ListTile(
+                leading: const ExplainIcon(
+                  Icon(Icons.sentiment_neutral_outlined),
+                ),
+                title: const Text(XerviceSection.forgetLikesTitle),
+                enabled: !_busy,
+                onTap: () => _confirmThen(
+                  XerviceSection.forgetLikesQuestion,
+                  scope.faces.forgetEverywhere,
+                ),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.add_to_drive_outlined),
-              title: const Text(XerviceSection.forgetDriveTitle),
-              subtitle: const Text(XerviceSection.forgetDriveSubtitle),
-              enabled: !_busy,
-              onTap: () => _confirmThen(
-                XerviceSection.forgetDriveQuestion,
-                scope.driveVault.forgetEverywhere,
-                after: _pointAtGoogle,
+            Explained(
+              title: XerviceSection.forgetDriveTitle,
+              explanation: XerviceSection.forgetDriveExplanation,
+              child: ListTile(
+                leading: const ExplainIcon(Icon(Icons.add_to_drive_outlined)),
+                title: const Text(XerviceSection.forgetDriveTitle),
+                enabled: !_busy,
+                onTap: () => _confirmThen(
+                  XerviceSection.forgetDriveQuestion,
+                  scope.driveVault.forgetEverywhere,
+                  after: _pointAtGoogle,
+                ),
               ),
             ),
           ],

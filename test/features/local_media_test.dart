@@ -11,6 +11,7 @@ import 'package:xtremio/features/local/folder_access.dart';
 import 'package:xtremio/features/local/local_folders_section.dart';
 import 'package:xtremio/features/local/local_media.dart';
 
+import '../support/explained.dart';
 import '../support/fake_local_media_source.dart';
 import '../support/fake_prefs_client.dart';
 
@@ -365,10 +366,17 @@ void main() {
           ),
         ),
       );
+      // With no folder there is no state to say: the row is its title.
+      expect(find.text(LocalFoldersSection.addExplanation), findsNothing);
+      await openExplanation(tester, LocalFoldersSection.addLabel);
       expect(
-        find.text('Where your videos are, for the Library\'s Local list'),
+        inExplanation(
+          "Adds a folder to look for videos in. What is found there shows "
+          "in the Library's Local list.",
+        ),
         findsOneWidget,
       );
+      await closeExplanation(tester);
 
       await tester.tap(find.text(LocalFoldersSection.addLabel));
       await tester.pumpAndSettle();
@@ -376,6 +384,13 @@ void main() {
       expect(source.scans, 1);
       expect(find.text('/home/me/Films'), findsOneWidget);
       expect(find.text('1 video found'), findsOneWidget);
+      await openExplanation(tester, '/home/me/Films');
+      expect(
+        inExplanation(LocalFoldersSection.folderExplanation),
+        findsOneWidget,
+      );
+      await closeExplanation(tester);
+      expect(p.localFolders, ['/home/me/Films'], reason: 'the icon kept it');
 
       // The same folder again, and a dialog closed: nothing changes.
       await tester.tap(find.text(LocalFoldersSection.addLabel));

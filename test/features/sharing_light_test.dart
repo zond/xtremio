@@ -11,6 +11,7 @@ import 'package:xtremio/features/sharing/sharing_light.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_sharing.dart';
@@ -827,13 +828,17 @@ void main() {
           'a download is on its way. The light in the corner shows when it is '
           'sharing. Xtremio shares in the background only while it is '
           'downloading or casting.';
-      expect(find.text(said), findsOneWidget);
+      await openExplanation(tester, IdleSharing.title);
+      expect(inExplanation(said), findsOneWidget);
+      await closeExplanation(tester);
 
       // Away and back: the tile says what the device does, never where the
       // app is, and the switch stays where the viewer put it.
       policy.appHidden();
       await tester.pump();
-      expect(find.text(said), findsOneWidget);
+      await openExplanation(tester, IdleSharing.title);
+      expect(inExplanation(said), findsOneWidget);
+      await closeExplanation(tester);
       expect(
         tester
             .widget<SwitchListTile>(
@@ -850,8 +855,10 @@ void main() {
       final policy = startedPolicy(prefs);
       await pumpTile(tester, policy: policy, prefs: prefs);
 
-      expect(find.text(IdleSharing.description), findsOneWidget);
+      await openExplanation(tester, IdleSharing.title);
+      expect(inExplanation(IdleSharing.description), findsOneWidget);
       expect(find.textContaining(IdleSharing.backgroundNote), findsNothing);
+      await closeExplanation(tester);
     });
 
     testWidgets('says so while a "Not now" is holding the sharing off', (

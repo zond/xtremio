@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/core.dart';
+import '../../widgets/explained.dart';
+import '../../widgets/readout.dart';
 import '../../widgets/tv_text_field.dart';
 import 'clear_cache.dart';
 
@@ -73,6 +75,17 @@ class ServerStorageScreen extends StatefulWidget {
   /// ... and what a root the server refused says.
   static const String refusedMessage =
       'That folder cannot be used for torrent data.';
+
+  /// What the torrent cache row means. Its lines are state and stay.
+  static const String cacheExplanation =
+      'How much room what Xtremio fetched for playing takes, and the most '
+      'it may take. A download you kept is never freed. Nor is the title '
+      'you played last, around where you were.';
+
+  /// What the row in its place says while the numbers are not known.
+  static const String unavailableExplanation =
+      'Xtremio has not been told how much room it uses yet. Refresh asks '
+      'again.';
 
   @override
   State<ServerStorageScreen> createState() => _ServerStorageScreenState();
@@ -247,15 +260,22 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           if (usage == null)
-            ListTile(
-              leading: const Icon(Icons.help_outline),
-              title: const Text('Storage unavailable'),
-              subtitle: Text(_error ?? 'Reading…'),
+            Explained(
+              title: 'Storage unavailable',
+              explanation: ServerStorageScreen.unavailableExplanation,
+              child: Readout(
+                child: ListTile(
+                  leading: const ExplainIcon(Icon(Icons.help_outline)),
+                  title: const Text('Storage unavailable'),
+                  subtitle: Text(_error ?? 'Reading…'),
+                ),
+              ),
             )
           else
             _Row(
               icon: Icons.folder_outlined,
               title: 'Torrent cache',
+              explanation: ServerStorageScreen.cacheExplanation,
               value: usage.label,
               detail: usage.protectedFiles > 0
                   ? '${formatBytes(usage.protectedBytes)} in '
@@ -412,11 +432,17 @@ class _DataRoot extends StatelessWidget {
   }
 }
 
-/// One number with what it means under it.
+/// One number with what it is made of under it. All of that is state, so it
+/// stays on the row. What the number means is the [explanation].
+///
+/// A [Readout], like the value rows in Settings: on a television the row
+/// has to be a stop for a held OK to open the explanation, and the number
+/// is worth standing on anyway.
 class _Row extends StatelessWidget {
   const _Row({
     required this.icon,
     required this.title,
+    required this.explanation,
     required this.value,
     required this.detail,
     this.warning,
@@ -424,6 +450,7 @@ class _Row extends StatelessWidget {
 
   final IconData icon;
   final String title;
+  final String explanation;
   final String value;
   final String detail;
   final String? warning;
@@ -432,22 +459,28 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final warning = this.warning;
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: theme.textTheme.bodyLarge),
-          Text(detail, style: theme.textTheme.bodySmall),
-          if (warning != null)
-            Text(
-              warning,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-        ],
+    return Explained(
+      title: title,
+      explanation: explanation,
+      child: Readout(
+        child: ListTile(
+          leading: ExplainIcon(Icon(icon)),
+          title: Text(title),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: theme.textTheme.bodyLarge),
+              Text(detail, style: theme.textTheme.bodySmall),
+              if (warning != null)
+                Text(
+                  warning,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

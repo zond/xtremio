@@ -117,10 +117,17 @@ class ExplainIcon extends StatelessWidget {
           ? icon
           : IconButton(
               tooltip: Explained.tooltip,
-              visualDensity: VisualDensity.compact,
-              // A picture is as large as it is drawn. The padding is for
-              // an icon, which is smaller than the button round it.
-              padding: icon is Icon ? null : EdgeInsets.zero,
+              // As wide as the icon and as tall as a touch target. A wider
+              // button would push the title right, and on a 320 dp phone
+              // the longer titles would lose a word to the next line.
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 24,
+                minHeight: kMinInteractiveDimension,
+              ),
+              style: const ButtonStyle(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               icon: icon,
               onPressed: open,
             ),

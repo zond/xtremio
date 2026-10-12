@@ -9,7 +9,9 @@ import 'package:xtremio/features/local/desktop_local_media_source.dart';
 import 'package:xtremio/features/local/local_folders_section.dart';
 import 'package:xtremio/features/local/local_media.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
+import 'package:xtremio/widgets/explained.dart';
 
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_local_media_source.dart';
@@ -51,7 +53,15 @@ void main() {
         findsOneWidget,
       );
       // Clearly test content, not something that looks like a real title.
-      expect(find.textContaining('Big Buck Bunny (torrent)'), findsOneWidget);
+      await openExplanation(tester, 'Play test torrent');
+      expect(
+        find.descendant(
+          of: find.byType(ExplanationDialog),
+          matching: find.textContaining('Big Buck Bunny, a free test film'),
+        ),
+        findsOneWidget,
+      );
+      await closeExplanation(tester);
 
       await tester.tap(find.widgetWithText(ListTile, 'Diagnostics'));
       await tester.pumpAndSettle();
@@ -120,7 +130,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     // The Downloads screen says nothing about where; Server storage does.
-    expect(find.text('Titles kept on this device'), findsOneWidget);
+    await openExplanation(tester, 'Downloads');
+    expect(
+      inExplanation(
+        'The titles you keep on this device, to watch without a connection.',
+      ),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
 
     await tester.tap(find.widgetWithText(ListTile, 'Downloads'));
     await tester.pumpAndSettle();
@@ -311,7 +328,10 @@ void main() {
         // Information, not a warning: same icon as every other state, no
         // warning/error glyph, and the default (non-error) text color.
         final tile = peerDiscoveryTile(tester);
-        expect((tile.leading! as Icon).icon, Icons.hub_outlined);
+        expect(
+          ((tile.leading! as ExplainIcon).icon as Icon).icon,
+          Icons.hub_outlined,
+        );
         expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
         expect(find.byIcon(Icons.error_outline), findsNothing);
         final subtitleFinder = find.text(DhtStatus.unavailableMessage);

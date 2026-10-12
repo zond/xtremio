@@ -6,7 +6,9 @@ import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/explained.dart';
 
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fixtures.dart';
@@ -279,7 +281,14 @@ void main() {
         // switch that stops it is named on the tile instead.
         expect(find.text('None (play at once)'), findsOneWidget);
         expect(find.text('Disabled'), findsNothing);
-        expect(find.textContaining('Turn off Binge watching'), findsOneWidget);
+        await openExplanation(tester, 'Up-next countdown');
+        expect(
+          find.descendant(
+            of: find.byType(ExplanationDialog),
+            matching: find.textContaining('Turn off Binge watching'),
+          ),
+          findsOneWidget,
+        );
       },
     );
     testWidgets('a synonym code outside the list is labelled with the code', (
@@ -348,8 +357,19 @@ void main() {
             .value,
         BufferAhead.wholeFile,
       );
-      // The trade-off is on the tile, not buried in a help page.
-      expect(find.text(BufferAhead.wholeFile.description), findsOneWidget);
+      // The trade-off is a press away on the tile, not buried in a help
+      // page, and it is the cost of the choice in force.
+      await openExplanation(tester, 'Buffer ahead');
+      expect(
+        find.descendant(
+          of: find.byType(ExplanationDialog),
+          matching: find.textContaining(
+            '${BufferAhead.wholeFile.label}: '
+            '${BufferAhead.wholeFile.description}',
+          ),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('is offered before the settings have arrived', (tester) async {
@@ -379,7 +399,15 @@ void main() {
 
       // And what turning it on does is on the tile itself: "Share while
       // idle" alone leaves the viewer to guess what "idle" covers.
-      expect(find.text(IdleSharing.description), findsOneWidget);
+      await openExplanation(tester, IdleSharing.title);
+      expect(
+        find.descendant(
+          of: find.byType(ExplanationDialog),
+          matching: find.textContaining(IdleSharing.description),
+        ),
+        findsOneWidget,
+      );
+      await closeExplanation(tester);
     });
 
     testWidgets('writes the choice to the preferences, not the core', (
@@ -436,8 +464,12 @@ void main() {
 
       expect(prefs.focusEmphasis, FocusEmphasis.standard);
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
-      // What turning it on buys is on the tile, not in a help page.
-      expect(find.text(FocusEmphasis.bold.description), findsOneWidget);
+      // What turning it on buys is on the tile, not in a help page: a held
+      // OK on the row away.
+      await holdOkOn(tester, 'Bold focus');
+      expect(inExplanation(FocusEmphasis.bold.description), findsOneWidget);
+      await systemBack(tester);
+      expect(find.byType(ExplanationDialog), findsNothing);
 
       // A single press turns it on, with nothing to open or pick from.
       await tester.tap(theSwitch());
@@ -580,7 +612,9 @@ void main() {
     ) async {
       await pumpSettings(tester, prefs: AppPrefs.inMemory());
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
-      expect(find.text(DiagnosticsTraceSync.description), findsOneWidget);
+      await openExplanation(tester, DiagnosticsTraceSync.title);
+      expect(inExplanation(DiagnosticsTraceSync.description), findsOneWidget);
+      await closeExplanation(tester);
       // Nothing is redacted while it is on, and the tile says what that
       // means in the word a viewer would look for.
       expect(DiagnosticsTraceSync.description, contains('credentials'));

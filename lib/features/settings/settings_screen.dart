@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/core.dart';
+import '../../widgets/explained.dart';
 import '../../widgets/internet_status_tile.dart';
 import '../../widgets/readout.dart';
 import '../addons/addons_screen.dart';
@@ -47,6 +48,11 @@ import 'core_settings.dart';
 /// does nothing. The section headers are not: a header is a label on the row
 /// below it, and that row is a stop whose own reveal brings the header on
 /// screen with it.
+///
+/// Every row is its title. What it means opens from its icon, or from a held
+/// OK on a television ([Explained]). A row whose second line is state (the
+/// server's status, the DHT's health, a version) keeps that line, because a
+/// value is not an explanation.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -66,6 +72,11 @@ class SettingsScreen extends StatefulWidget {
 
   /// What "Clear the cache" asks; a widget test hands over a fake.
   final ServerCacheControl cache;
+
+  /// What Open source licences says the app is under.
+  static const String licencesExplanation =
+      'The code is MIT. The app you install is GPL-3.0-or-later. Open this '
+      'to read every licence.';
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -223,25 +234,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
           AccountSection(ctx: _ctx!),
           XerviceSection(ctx: _ctx!),
           const _SectionHeader('Addons'),
-          ListTile(
-            leading: const Icon(Icons.extension_outlined),
-            title: const Text('Addons'),
-            subtitle: const Text('Installed and community addons'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
+          Explained(
+            title: 'Addons',
+            explanation:
+                'The addons you have installed, and more you can add. '
+                'Addons find what there is to watch and where to stream it.',
+            child: ListTile(
+              leading: const ExplainIcon(Icon(Icons.extension_outlined)),
+              title: const Text('Addons'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
+              ),
             ),
           ),
           const _SectionHeader('Downloads'),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('Downloads'),
+          Explained(
+            title: 'Downloads',
             // Not "and where": a download has no place of its own, and the
             // one root every torrent byte is under is named and moved in
             // Server storage below.
-            subtitle: const Text('Titles kept on this device'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
+            explanation:
+                'The titles you keep on this device, to watch without a '
+                'connection.',
+            child: ListTile(
+              leading: const ExplainIcon(Icon(Icons.download_outlined)),
+              title: const Text('Downloads'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
+            ),
           ),
           // On a desktop only: Android finds this device's videos in its
           // media index, with nothing to choose.
@@ -298,15 +319,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _ => 'Unknown',
                     };
               final url = state?['baseUrl'] as String?;
-              return Readout(
-                child: ListTile(
-                  leading: Icon(
-                    settings?['type'] == 'Ready'
-                        ? Icons.check_circle_outline
-                        : Icons.hourglass_empty,
+              // The line under the title is the server's state, not an
+              // explanation, so it stays.
+              return Explained(
+                title: 'Status',
+                explanation:
+                    'Xtremio plays through a streaming server of its own. '
+                    'This says whether it is running, and its address.',
+                child: Readout(
+                  child: ListTile(
+                    leading: ExplainIcon(
+                      Icon(
+                        settings?['type'] == 'Ready'
+                            ? Icons.check_circle_outline
+                            : Icons.hourglass_empty,
+                      ),
+                    ),
+                    title: const Text('Status'),
+                    subtitle: Text(url == null ? status : '$status · $url'),
                   ),
-                  title: const Text('Status'),
-                  subtitle: Text(url == null ? status : '$status · $url'),
                 ),
               );
             },
@@ -315,16 +346,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // back: one root and one screen for all of it. It sits here rather
           // than with the developer tools, because moving it is an ordinary
           // thing to want, not a debug task.
-          ListTile(
-            leading: const Icon(Icons.sd_storage_outlined),
-            title: const Text('Server storage'),
-            subtitle: const Text(
-              'Where torrent data is kept, and how to free space',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ServerStorageScreen(client: widget.cache),
+          Explained(
+            title: 'Server storage',
+            explanation:
+                'Where Xtremio keeps what it fetches to play, and how much '
+                'room that takes. You can move it and free space there.',
+            child: ListTile(
+              leading: const ExplainIcon(Icon(Icons.sd_storage_outlined)),
+              title: const Text('Server storage'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ServerStorageScreen(client: widget.cache),
+                ),
               ),
             ),
           ),
@@ -340,48 +374,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // `DhtStatus.healthLine` is the one place the wording lives.
           // Diagnostics reads the same `unavailableMessage` constant it
           // composes with.
-          Readout(
-            child: ListTile(
-              leading: const Icon(Icons.hub_outlined),
-              title: const Text('Peer discovery'),
-              subtitle: Text(_dht?.healthLine ?? 'Unknown'),
+          Explained(
+            title: 'Peer discovery',
+            explanation:
+                'How Xtremio finds more people to download a torrent from. '
+                'Trackers find people too, so a torrent can play without '
+                'it.',
+            child: Readout(
+              child: ListTile(
+                leading: const ExplainIcon(Icon(Icons.hub_outlined)),
+                title: const Text('Peer discovery'),
+                subtitle: Text(_dht?.healthLine ?? 'Unknown'),
+              ),
             ),
           ),
           // Last in the section: not the server's own state but whether the
           // app reaches the internet, and from which address and country.
           const InternetStatusTile(),
           const _SectionHeader('Core'),
-          Readout(
-            child: ListTile(
-              leading: const Icon(Icons.memory_outlined),
-              title: const Text('stremio-core storage schema'),
-              subtitle: Text(
-                initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
+          Explained(
+            title: 'stremio-core storage schema',
+            explanation:
+                'The version of the format your data is stored in. It '
+                'helps in a bug report.',
+            child: Readout(
+              child: ListTile(
+                leading: const ExplainIcon(Icon(Icons.memory_outlined)),
+                title: const Text('stremio-core storage schema'),
+                subtitle: Text(
+                  initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
+                ),
               ),
             ),
           ),
           const _SectionHeader('About'),
           if (AppUpdatesScope.maybeOf(context) case final updates?)
             CheckForUpdatesTile(updates: updates),
-          ListTile(
-            key: const ValueKey('setting-licences'),
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('Open source licences'),
+          Explained(
+            title: 'Open source licences',
             // What a compiled Xtremio is under, and why: the embedded
             // server links unrar-rs (GPL-3.0-or-later) so a RAR archive in
             // a torrent can be played, and unrar-rs asks that a binary
             // reproduce its licence. See lib/core/bundled_licenses.dart.
-            subtitle: const Text(
-              'The code is MIT. The app you install is GPL-3.0-or-later.',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'Xtremio',
-              applicationLegalese:
-                  'The code is MIT. The app you install is '
-                  'GPL-3.0-or-later, because its streaming server '
-                  'includes unrar-rs.',
+            explanation: SettingsScreen.licencesExplanation,
+            child: ListTile(
+              key: const ValueKey('setting-licences'),
+              leading: const ExplainIcon(Icon(Icons.description_outlined)),
+              title: const Text('Open source licences'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: 'Xtremio',
+                applicationLegalese:
+                    'The code is MIT. The app you install is '
+                    'GPL-3.0-or-later, because its streaming server '
+                    'includes unrar-rs.',
+              ),
             ),
           ),
           const _SectionHeader('Developer'),
@@ -389,25 +437,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // "Share while idle": what it feeds is the embedded server's
           // `diagnosticsTrace` and the next player's log level.
           VerboseDiagnosticsSection(prefs: _prefs),
-          ListTile(
-            leading: const Icon(Icons.bug_report_outlined),
-            title: const Text('Diagnostics'),
-            subtitle: const Text('Recent logs, ready to copy'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const DiagnosticsScreen(),
+          Explained(
+            title: 'Diagnostics',
+            explanation:
+                'Shows what Xtremio has logged lately. You can copy it into '
+                'a bug report.',
+            child: ListTile(
+              leading: const ExplainIcon(Icon(Icons.bug_report_outlined)),
+              title: const Text('Diagnostics'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DiagnosticsScreen(),
+                ),
               ),
             ),
           ),
           const _DevPlayTile(
             icon: Icons.cloud_download_outlined,
             title: 'Play test torrent',
+            explanation:
+                'Plays Big Buck Bunny, a free test film, from a torrent. It '
+                'shows whether playback works without any addon.',
             stream: DevStreams.bigBuckBunnyTorrent,
           ),
           const _DevPlayTile(
             icon: Icons.link,
             title: 'Play test HTTP stream',
+            explanation:
+                'Plays Big Buck Bunny, a free test film, straight from a web '
+                'address. It shows whether playback works without any addon.',
             stream: DevStreams.bigBuckBunnyHttp,
           ),
           const _DevDownloadTile(),
@@ -421,28 +480,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
 /// stream takes, so playback can be proven without any addon. Ships in
 /// release builds: it is how the owner reproduces a playback failure on the
 /// device it happened on. The content is public-domain test footage and the
-/// tile says so.
+/// explanation says so.
 class _DevPlayTile extends StatelessWidget {
   const _DevPlayTile({
     required this.icon,
     required this.title,
+    required this.explanation,
     required this.stream,
   });
 
   final IconData icon;
   final String title;
+  final String explanation;
   final Map<String, dynamic> stream;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon),
-    title: Text(title),
-    subtitle: Text('${stream['name']} · ${stream['description']}'),
-    trailing: const Icon(Icons.play_arrow),
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: PlayerScreen.routeName),
-        builder: (_) => PlayerScreen(stream: stream),
+  Widget build(BuildContext context) => Explained(
+    title: title,
+    explanation: explanation,
+    child: ListTile(
+      leading: ExplainIcon(Icon(icon)),
+      title: Text(title),
+      trailing: const Icon(Icons.play_arrow),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: PlayerScreen.routeName),
+          builder: (_) => PlayerScreen(stream: stream),
+        ),
       ),
     ),
   );
@@ -464,12 +528,17 @@ class _DevDownloadTile extends StatelessWidget {
   static const String title = 'Download test torrent';
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: const Icon(Icons.download_outlined),
-    title: const Text(title),
-    subtitle: const Text('Keeps the public torrent on this device'),
-    trailing: const Icon(Icons.download),
-    onTap: () => _start(context),
+  Widget build(BuildContext context) => Explained(
+    title: title,
+    explanation:
+        'Downloads Big Buck Bunny, a free test film, to this device. It '
+        'shows whether downloads work without any addon.',
+    child: ListTile(
+      leading: const ExplainIcon(Icon(Icons.download_outlined)),
+      title: const Text(title),
+      trailing: const Icon(Icons.download),
+      onTap: () => _start(context),
+    ),
   );
 
   /// The same call the download button makes, with the little the dev

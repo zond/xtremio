@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
+import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/explained.dart';
 
+import '../support/explained.dart';
 import '../support/fake_server_cache.dart';
+import '../support/tv.dart';
 
 void main() {
   group('the report the server writes', () {
@@ -54,6 +58,32 @@ void main() {
       reason: 'a cache the server cannot bring under is the thing to notice',
     );
     expect(client.cleans, 0, reason: 'nothing was asked of the server yet');
+  });
+
+  testWidgets('the cache row keeps its numbers, and says what they mean '
+      'from its icon', (tester) async {
+    final client = FakeServerCache(usage: overLimitEvictable);
+    await tester.pumpWidget(
+      MaterialApp(home: ServerStorageScreen(client: client)),
+    );
+    await tester.pumpAndSettle();
+
+    // The value, what it is made of and the warning are state: they stay.
+    expect(find.text('17.0 GB of 10.0 GB limit'), findsOneWidget);
+    expect(find.textContaining('Over its limit'), findsOneWidget);
+    expect(find.text(ServerStorageScreen.cacheExplanation), findsNothing);
+
+    await openExplanation(tester, 'Torrent cache');
+    expect(
+      inExplanation(
+        'How much room what Xtremio fetched for playing takes, and the most '
+        'it may take. A download you kept is never freed. Nor is the title '
+        'you played last, around where you were.',
+      ),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
+    expect(client.cleans, 0);
   });
 
   testWidgets('says what is kept the way the server keeps it', (tester) async {
@@ -162,6 +192,35 @@ void main() {
       isNull,
     );
     expect(client.cleans, 0);
+    // Why the numbers are missing is state, and stays under the title.
+    expect(find.textContaining('not running'), findsOneWidget);
+    await openExplanation(tester, 'Storage unavailable');
+    expect(
+      inExplanation(ServerStorageScreen.unavailableExplanation),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
+  });
+
+  testWidgets('on a television the cache row is a stop, and a held OK on it '
+      'opens what it means', (tester) async {
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      DeviceScope(
+        profile: tv,
+        child: MaterialApp(
+          home: ServerStorageScreen(
+            client: FakeServerCache(usage: overLimitEvictable),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await holdOkOn(tester, 'Torrent cache');
+    expect(inExplanation(ServerStorageScreen.cacheExplanation), findsOneWidget);
+    await systemBack(tester);
+    expect(find.byType(ExplanationDialog), findsNothing);
+    expect(focusedLabel(tester), 'Torrent cache');
   });
 
   testWidgets('a clean call that fails degrades to a message, not a crash', (

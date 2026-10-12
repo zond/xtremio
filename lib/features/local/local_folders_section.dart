@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/explained.dart';
 import 'folder_access.dart';
 import 'local_media.dart';
 
@@ -39,7 +40,16 @@ class LocalFoldersSection extends StatelessWidget {
   static const String addLabel = 'Add a folder';
   static const String removeTooltip = 'Stop looking here';
 
-  /// What the add row says under its title: the scan's state.
+  static const String addExplanation =
+      "Adds a folder to look for videos in. What is found there shows in "
+      "the Library's Local list.";
+  static const String folderExplanation =
+      "Xtremio looks for videos in this folder, for the Library's Local "
+      'list. The cross stops it looking here.';
+
+  /// What the add row says under its title once there is a folder: the
+  /// scan's state. With no folder there is no state to say, and the row is
+  /// its title.
   static String statusLine({required bool scanning, required int found}) =>
       scanning
       ? 'Looking for videos…'
@@ -75,29 +85,37 @@ class LocalFoldersSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final folder in prefs.localFolders)
-          ListTile(
-            key: ValueKey('local-folder:$folder'),
-            leading: const Icon(Icons.folder_outlined),
-            title: Text(folder),
-            trailing: IconButton(
-              tooltip: removeTooltip,
-              icon: const Icon(Icons.close),
-              onPressed: () => _remove(folder),
+          Explained(
+            title: folder,
+            explanation: folderExplanation,
+            child: ListTile(
+              key: ValueKey('local-folder:$folder'),
+              leading: const ExplainIcon(Icon(Icons.folder_outlined)),
+              title: Text(folder),
+              trailing: IconButton(
+                tooltip: removeTooltip,
+                icon: const Icon(Icons.close),
+                onPressed: () => _remove(folder),
+              ),
             ),
           ),
-        ListTile(
-          key: const ValueKey('local-folder-add'),
-          leading: const Icon(Icons.create_new_folder_outlined),
-          title: const Text(addLabel),
-          subtitle: Text(
-            prefs.localFolders.isEmpty
-                ? 'Where your videos are, for the Library\'s Local list'
-                : statusLine(
-                    scanning: media.scanning,
-                    found: media.files.entries.length,
+        Explained(
+          title: addLabel,
+          explanation: addExplanation,
+          child: ListTile(
+            key: const ValueKey('local-folder-add'),
+            leading: const ExplainIcon(Icon(Icons.create_new_folder_outlined)),
+            title: const Text(addLabel),
+            subtitle: prefs.localFolders.isEmpty
+                ? null
+                : Text(
+                    statusLine(
+                      scanning: media.scanning,
+                      found: media.files.entries.length,
+                    ),
                   ),
+            onTap: _add,
           ),
-          onTap: _add,
         ),
       ],
     ),

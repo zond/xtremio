@@ -7,6 +7,7 @@ import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_server_cache.dart';
 import '../support/fixtures.dart';
@@ -54,19 +55,21 @@ void main() {
     await _row(tester);
 
     expect(find.text(ClearCacheTile.title), findsOneWidget);
-    expect(
-      find.text(
-        'Stops what is streaming and deletes everything cached except your '
-        'downloads',
-      ),
-      findsOneWidget,
-    );
     expect(find.bySemanticsLabel(RegExp('^Clear the cache')), findsOneWidget);
     // In the Streaming server section, below Server storage.
     expect(
       tester.getTopLeft(find.text(ClearCacheTile.title)).dy,
       greaterThan(tester.getTopLeft(find.text('Server storage')).dy),
     );
+    await openExplanation(tester, ClearCacheTile.title);
+    expect(
+      inExplanation(
+        'Deletes everything Xtremio keeps for playing. Your downloads stay. '
+        'Anything playing stops. It asks first.',
+      ),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
     semantics.dispose();
   });
 

@@ -34,7 +34,8 @@ enum FocusEmphasis {
     FocusEmphasis.standard =>
       'Outlines what is focused in black and white, and zooms it a little.',
     FocusEmphasis.bold =>
-      'Thickens that outline and dims everything else. For a bright room.',
+      'Draws a thicker outline round what the remote is on, and dims '
+          'everything else. For a bright room.',
   };
 
   /// The stored spelling back to a choice; null for anything else,

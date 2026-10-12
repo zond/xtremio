@@ -5,6 +5,7 @@ import 'package:xtremio/core/bundled_licenses.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
 
@@ -59,10 +60,15 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await openExplanation(tester, 'Open source licences');
     expect(
-      find.text('The code is MIT. The app you install is GPL-3.0-or-later.'),
+      inExplanation(
+        'The code is MIT. The app you install is GPL-3.0-or-later. Open this '
+        'to read every licence.',
+      ),
       findsOneWidget,
     );
+    await closeExplanation(tester);
 
     await tester.tap(tile);
     // Pumped, not settled: the page spins an indicator while it reads the

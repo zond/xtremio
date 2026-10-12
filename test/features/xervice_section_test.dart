@@ -4,6 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/xervice_section.dart';
 import 'package:xtremio/shell/external_link.dart';
 
+import '../support/explained.dart';
 import '../support/fake_link_opener.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_xervice.dart';
@@ -95,6 +96,28 @@ void main() {
     expect(find.text(XerviceSection.forgotten), findsOneWidget);
     expect(prefs.faces.marks, isEmpty);
     expect(store.byUser['user-a']!.marks, isEmpty);
+  });
+
+  testWidgets('each row is its title, and says what is kept in the words '
+      'settled for it', (tester) async {
+    await mount(tester);
+    expect(find.textContaining('saved with your account'), findsNothing);
+
+    await openExplanation(tester, XerviceSection.forgetLikesTitle);
+    expect(
+      inExplanation('Your likes and dislikes are saved with your account.'),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
+
+    await openExplanation(tester, XerviceSection.forgetDriveTitle);
+    expect(
+      inExplanation('Your Drive link is saved with your account.'),
+      findsOneWidget,
+    );
+    await closeExplanation(tester);
+    expect(service.requests.where((r) => r.method == 'DELETE'), isEmpty);
+    expect(vault.byUser, isNotEmpty, reason: 'the icon forgot nothing');
   });
 
   testWidgets('offline, it says nothing was forgotten', (tester) async {

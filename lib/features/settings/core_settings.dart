@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../widgets/explained.dart';
 import '../../widgets/readout.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
@@ -78,22 +79,25 @@ class PlayerSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SwitchListTile(
-          key: settingKey(ProfileSettings.bingeWatchingKey),
-          secondary: const Icon(Icons.skip_next_outlined),
-          title: const Text('Binge watching'),
-          subtitle: const Text('Move on to the next episode when one ends'),
-          value: settings.bingeWatching,
-          onChanged: (value) =>
-              onSetting(ProfileSettings.bingeWatchingKey, value),
+        Explained(
+          title: 'Binge watching',
+          explanation: 'When an episode ends, the next one starts.',
+          child: SwitchListTile(
+            key: settingKey(ProfileSettings.bingeWatchingKey),
+            secondary: const ExplainIcon(Icon(Icons.skip_next_outlined)),
+            title: const Text('Binge watching'),
+            value: settings.bingeWatching,
+            onChanged: (value) =>
+                onSetting(ProfileSettings.bingeWatchingKey, value),
+          ),
         ),
         ChoiceTile<int>(
           setting: ProfileSettings.nextVideoNotificationDurationKey,
           icon: Icons.timer_outlined,
           title: 'Up-next countdown',
-          subtitle:
-              'How long the up-next card counts down before the next '
-              'episode starts. Turn off Binge watching to stop it.',
+          explanation:
+              'How long the card before the next episode counts down. '
+              'Turn off Binge watching to stop the next episode.',
           value: settings.nextVideoNotificationDuration,
           options: nextVideoDurations,
           label: upNextLabel,
@@ -103,7 +107,7 @@ class PlayerSettingsSection extends StatelessWidget {
           setting: ProfileSettings.seekTimeDurationKey,
           icon: Icons.forward_10,
           title: 'Seek step',
-          subtitle: 'Arrow keys and the seek buttons',
+          explanation: 'How far the arrow keys and the seek buttons jump.',
           value: settings.seekTimeDuration,
           options: seekDurations,
           label: secondsLabel,
@@ -113,34 +117,45 @@ class PlayerSettingsSection extends StatelessWidget {
           setting: ProfileSettings.seekShortTimeDurationKey,
           icon: Icons.forward_5,
           title: 'Short seek step',
-          subtitle: 'Shift + arrow keys',
+          explanation: 'How far Shift and an arrow key jump.',
           value: settings.seekShortTimeDuration,
           options: seekDurations,
           label: secondsLabel,
           onSetting: onSetting,
         ),
-        SwitchListTile(
-          key: settingKey(ProfileSettings.pauseOnMinimizeKey),
-          secondary: const Icon(Icons.pause_circle_outline),
-          title: const Text('Pause when minimised'),
-          subtitle: const Text('Pause playback when the app is hidden'),
-          value: settings.pauseOnMinimize,
-          onChanged: (value) =>
-              onSetting(ProfileSettings.pauseOnMinimizeKey, value),
+        Explained(
+          title: 'Pause when minimised',
+          explanation: 'Playback pauses when you leave the app.',
+          child: SwitchListTile(
+            key: settingKey(ProfileSettings.pauseOnMinimizeKey),
+            secondary: const ExplainIcon(Icon(Icons.pause_circle_outline)),
+            title: const Text('Pause when minimised'),
+            value: settings.pauseOnMinimize,
+            onChanged: (value) =>
+                onSetting(ProfileSettings.pauseOnMinimizeKey, value),
+          ),
         ),
-        SwitchListTile(
-          key: settingKey(ProfileSettings.hardwareDecodingKey),
-          secondary: const Icon(Icons.memory),
-          title: const Text('Hardware decoding'),
-          subtitle: const Text('Applies to the next video that opens'),
-          value: settings.hardwareDecoding,
-          onChanged: (value) =>
-              onSetting(ProfileSettings.hardwareDecodingKey, value),
+        Explained(
+          title: 'Hardware decoding',
+          explanation:
+              "Lets the device's own video chip draw the picture, which "
+              'uses less power. A change applies to the next video you open.',
+          child: SwitchListTile(
+            key: settingKey(ProfileSettings.hardwareDecodingKey),
+            secondary: const ExplainIcon(Icon(Icons.memory)),
+            title: const Text('Hardware decoding'),
+            value: settings.hardwareDecoding,
+            onChanged: (value) =>
+                onSetting(ProfileSettings.hardwareDecodingKey, value),
+          ),
         ),
         LanguageTile(
           setting: ProfileSettings.audioLanguageKey,
           icon: Icons.audiotrack_outlined,
           title: 'Preferred audio language',
+          explanation:
+              'The language a video plays its sound in, when it has more '
+              'than one.',
           value: settings.audioLanguage,
           onSetting: onSetting,
         ),
@@ -148,6 +163,9 @@ class PlayerSettingsSection extends StatelessWidget {
           setting: ProfileSettings.subtitlesLanguageKey,
           icon: Icons.subtitles_outlined,
           title: 'Preferred subtitles language',
+          explanation:
+              'The subtitles a video starts with, when there are some in '
+              'this language.',
           value: settings.subtitlesLanguage,
           onSetting: onSetting,
         ),
@@ -172,10 +190,16 @@ class BufferAheadSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final choice = prefs.bufferAhead;
     return SettingTile(
       icon: Icons.hourglass_bottom_outlined,
       title: 'Buffer ahead',
-      subtitle: prefs.bufferAhead.description,
+      // The cost of the choice in force, which is what the viewer is
+      // weighing when they open it.
+      explanation:
+          'How far ahead of you Xtremio fetches the film. More plays '
+          'smoother and uses more data and space. '
+          '${choice.label}: ${choice.description}',
       menu: SettingMenu<BufferAhead>(
         // The same key shape a `profile.settings` control gets, so a test
         // finds this one the same way.
@@ -218,19 +242,21 @@ class FocusEmphasisSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!DeviceScope.isTv(context)) return const SizedBox.shrink();
-    return SwitchListTile(
-      // The same key shape a `profile.settings` control gets, so a test
-      // finds this one the same way.
-      key: settingKey(AppPrefs.focusEmphasisKey),
-      secondary: const Icon(Icons.highlight_alt_outlined),
-      title: const Text('Bold focus'),
-      // What it does is on the tile rather than in a help page, and it is
-      // the description of the value being turned on -- the subtitle says
+    return Explained(
+      title: 'Bold focus',
+      // The description of the value being turned on: the explanation says
       // what the switch buys, not what the setting currently is.
-      subtitle: Text(FocusEmphasis.bold.description),
-      value: prefs.focusEmphasis == FocusEmphasis.bold,
-      onChanged: (on) => prefs.setFocusEmphasis(
-        on ? FocusEmphasis.bold : FocusEmphasis.standard,
+      explanation: FocusEmphasis.bold.description,
+      child: SwitchListTile(
+        // The same key shape a `profile.settings` control gets, so a test
+        // finds this one the same way.
+        key: settingKey(AppPrefs.focusEmphasisKey),
+        secondary: const ExplainIcon(Icon(Icons.highlight_alt_outlined)),
+        title: const Text('Bold focus'),
+        value: prefs.focusEmphasis == FocusEmphasis.bold,
+        onChanged: (on) => prefs.setFocusEmphasis(
+          on ? FocusEmphasis.bold : FocusEmphasis.standard,
+        ),
       ),
     );
   }
@@ -298,24 +324,25 @@ class IdleSharingSection extends StatelessWidget {
   /// which the tile says in [IdleSharing.backgroundNote]. It is the device
   /// and never the app's state: the tile reads the same with the app away
   /// as with it in front.
-  Widget _tile({required bool paused, required bool background}) =>
-      SwitchListTile(
-        // The same key shape a `profile.settings` control gets, so a test
-        // finds this one the same way.
-        key: settingKey(AppPrefs.shareWhileIdleKey),
-        secondary: const Icon(Icons.upload_outlined),
-        title: const Text(IdleSharing.title),
-        subtitle: Text(
-          [
-            background
-                ? '${IdleSharing.description} ${IdleSharing.backgroundNote}'
-                : IdleSharing.description,
-            if (paused) IdleSharing.pausedNote,
-          ].join('\n'),
-        ),
-        value: prefs.shareWhileIdle,
-        onChanged: (on) => prefs.setShareWhileIdle(on),
-      );
+  ///
+  /// The pause is state, so it is the one line left under the title. What the
+  /// switch does, and the background note, are the explanation.
+  Widget _tile({required bool paused, required bool background}) => Explained(
+    title: IdleSharing.title,
+    explanation: background
+        ? '${IdleSharing.description} ${IdleSharing.backgroundNote}'
+        : IdleSharing.description,
+    child: SwitchListTile(
+      // The same key shape a `profile.settings` control gets, so a test
+      // finds this one the same way.
+      key: settingKey(AppPrefs.shareWhileIdleKey),
+      secondary: const ExplainIcon(Icon(Icons.upload_outlined)),
+      title: const Text(IdleSharing.title),
+      subtitle: paused ? const Text(IdleSharing.pausedNote) : null,
+      value: prefs.shareWhileIdle,
+      onChanged: (on) => prefs.setShareWhileIdle(on),
+    ),
+  );
 }
 
 /// Settings → Developer → "Verbose diagnostics": whether the Diagnostics
@@ -333,15 +360,18 @@ class VerboseDiagnosticsSection extends StatelessWidget {
   final AppPrefs prefs;
 
   @override
-  Widget build(BuildContext context) => SwitchListTile(
-    // The same key shape a `profile.settings` control gets, so a test
-    // finds this one the same way.
-    key: settingKey(AppPrefs.verboseDiagnosticsKey),
-    secondary: const Icon(Icons.manage_search_outlined),
-    title: const Text(DiagnosticsTraceSync.title),
-    subtitle: const Text(DiagnosticsTraceSync.description),
-    value: prefs.verboseDiagnostics,
-    onChanged: (on) => prefs.setVerboseDiagnostics(on),
+  Widget build(BuildContext context) => Explained(
+    title: DiagnosticsTraceSync.title,
+    explanation: DiagnosticsTraceSync.description,
+    child: SwitchListTile(
+      // The same key shape a `profile.settings` control gets, so a test
+      // finds this one the same way.
+      key: settingKey(AppPrefs.verboseDiagnosticsKey),
+      secondary: const ExplainIcon(Icon(Icons.manage_search_outlined)),
+      title: const Text(DiagnosticsTraceSync.title),
+      value: prefs.verboseDiagnostics,
+      onChanged: (on) => prefs.setVerboseDiagnostics(on),
+    ),
   );
 }
 
@@ -369,38 +399,50 @@ class SubtitlesSettingsSection extends StatelessWidget {
           setting: ProfileSettings.subtitlesSizeKey,
           icon: Icons.format_size,
           title: 'Size',
+          explanation: 'How large subtitles are drawn.',
           value: settings.subtitlesSize,
           options: SubtitleStyle.sizes,
           label: sizeLabel,
           onSetting: onSetting,
         ),
-        ListTile(
-          key: settingKey(ProfileSettings.subtitlesTextColorKey),
-          leading: const Icon(Icons.format_color_text),
-          title: const Text('Text colour'),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: SubtitleColorChips(
-              colors: SubtitleStyle.textColors,
-              selected: settings.subtitlesTextColor,
-              padding: EdgeInsets.zero,
-              onSelected: (hex) =>
-                  onSetting(ProfileSettings.subtitlesTextColorKey, hex),
+        Explained(
+          title: 'Text colour',
+          explanation:
+              'The colour of subtitle text. The preview below shows it.',
+          child: ListTile(
+            key: settingKey(ProfileSettings.subtitlesTextColorKey),
+            leading: const ExplainIcon(Icon(Icons.format_color_text)),
+            title: const Text('Text colour'),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SubtitleColorChips(
+                colors: SubtitleStyle.textColors,
+                selected: settings.subtitlesTextColor,
+                padding: EdgeInsets.zero,
+                onSelected: (hex) =>
+                    onSetting(ProfileSettings.subtitlesTextColorKey, hex),
+              ),
             ),
           ),
         ),
-        ListTile(
-          key: settingKey(ProfileSettings.subtitlesBackgroundColorKey),
-          leading: const Icon(Icons.format_color_fill),
-          title: const Text('Background'),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: SubtitleColorChips(
-              colors: SubtitleStyle.backgroundColors,
-              selected: settings.subtitlesBackgroundColor,
-              padding: EdgeInsets.zero,
-              onSelected: (hex) =>
-                  onSetting(ProfileSettings.subtitlesBackgroundColorKey, hex),
+        Explained(
+          title: 'Background',
+          explanation:
+              'The box behind subtitle text, or none. The preview below '
+              'shows it.',
+          child: ListTile(
+            key: settingKey(ProfileSettings.subtitlesBackgroundColorKey),
+            leading: const ExplainIcon(Icon(Icons.format_color_fill)),
+            title: const Text('Background'),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SubtitleColorChips(
+                colors: SubtitleStyle.backgroundColors,
+                selected: settings.subtitlesBackgroundColor,
+                padding: EdgeInsets.zero,
+                onSelected: (hex) =>
+                    onSetting(ProfileSettings.subtitlesBackgroundColorKey, hex),
+              ),
             ),
           ),
         ),
@@ -459,35 +501,42 @@ class InterfaceSettingsSection extends StatelessWidget {
     return Column(
       children: [
         if (isDesktop)
-          SwitchListTile(
-            key: settingKey(ProfileSettings.quitOnCloseKey),
-            secondary: const Icon(Icons.close),
-            title: const Text('Quit when the window closes'),
-            subtitle: const Text(
-              'Not used yet. Closing the window always quits.',
+          Explained(
+            title: 'Quit when the window closes',
+            explanation: 'Not used yet. Closing the window always quits.',
+            child: SwitchListTile(
+              key: settingKey(ProfileSettings.quitOnCloseKey),
+              secondary: const ExplainIcon(Icon(Icons.close)),
+              title: const Text('Quit when the window closes'),
+              value: settings.quitOnClose,
+              onChanged: (value) =>
+                  onSetting(ProfileSettings.quitOnCloseKey, value),
             ),
-            value: settings.quitOnClose,
+          ),
+        Explained(
+          title: 'Esc leaves fullscreen',
+          explanation: 'Esc takes a fullscreen video back to its window.',
+          child: SwitchListTile(
+            key: settingKey(ProfileSettings.escExitFullscreenKey),
+            secondary: const ExplainIcon(Icon(Icons.fullscreen_exit)),
+            title: const Text('Esc leaves fullscreen'),
+            value: settings.escExitFullscreen,
             onChanged: (value) =>
-                onSetting(ProfileSettings.quitOnCloseKey, value),
+                onSetting(ProfileSettings.escExitFullscreenKey, value),
           ),
-        SwitchListTile(
-          key: settingKey(ProfileSettings.escExitFullscreenKey),
-          secondary: const Icon(Icons.fullscreen_exit),
-          title: const Text('Esc leaves fullscreen'),
-          value: settings.escExitFullscreen,
-          onChanged: (value) =>
-              onSetting(ProfileSettings.escExitFullscreenKey, value),
         ),
-        SwitchListTile(
-          key: settingKey(ProfileSettings.hideSpoilersKey),
-          secondary: const Icon(Icons.visibility_off_outlined),
-          title: const Text('Hide spoilers'),
-          subtitle: const Text(
-            'Not used yet. Episode thumbnails and summaries still show.',
+        Explained(
+          title: 'Hide spoilers',
+          explanation:
+              'Not used yet. Episode thumbnails and summaries still show.',
+          child: SwitchListTile(
+            key: settingKey(ProfileSettings.hideSpoilersKey),
+            secondary: const ExplainIcon(Icon(Icons.visibility_off_outlined)),
+            title: const Text('Hide spoilers'),
+            value: settings.hideSpoilers,
+            onChanged: (value) =>
+                onSetting(ProfileSettings.hideSpoilersKey, value),
           ),
-          value: settings.hideSpoilers,
-          onChanged: (value) =>
-              onSetting(ProfileSettings.hideSpoilersKey, value),
         ),
       ],
     );
@@ -503,7 +552,7 @@ class ChoiceTile<T> extends StatelessWidget {
     required this.setting,
     required this.icon,
     required this.title,
-    this.subtitle,
+    required this.explanation,
     required this.value,
     required this.options,
     required this.label,
@@ -514,7 +563,7 @@ class ChoiceTile<T> extends StatelessWidget {
   final String setting;
   final IconData icon;
   final String title;
-  final String? subtitle;
+  final String explanation;
   final T value;
   final List<T> options;
   final String Function(T value) label;
@@ -525,7 +574,7 @@ class ChoiceTile<T> extends StatelessWidget {
     return SettingTile(
       icon: icon,
       title: title,
-      subtitle: subtitle,
+      explanation: explanation,
       menu: SettingMenu<T>(
         setting: setting,
         value: value,
@@ -538,8 +587,8 @@ class ChoiceTile<T> extends StatelessWidget {
 }
 
 /// A settings tile whose value is picked from a menu: the icon and the
-/// title, what the setting costs under them, and the menu itself on a line
-/// of its own below both.
+/// title, and the menu itself on a line of its own below both. What the
+/// setting means and costs is its [explanation] ([Explained]).
 ///
 /// **The menu is not the tile's `trailing`,** which is where it started and
 /// where it does not fit. A [DropdownButton] measures itself against its
@@ -564,33 +613,30 @@ class SettingTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    this.subtitle,
+    required this.explanation,
     required this.menu,
   });
 
   final IconData icon;
   final String title;
-  final String? subtitle;
+  final String explanation;
 
   /// The control, which carries the [settingKey] a test finds it by.
   final Widget menu;
 
   @override
-  Widget build(BuildContext context) {
-    final subtitle = this.subtitle;
-    return ListTile(
-      leading: Icon(icon),
+  Widget build(BuildContext context) => Explained(
+    title: title,
+    explanation: explanation,
+    child: ListTile(
+      leading: ExplainIcon(Icon(icon)),
       title: Text(title),
-      // Both under the title, so the menu starts where the text does and
-      // the tile grows to hold them; the colour chips below sit in the
-      // subtitle for the same reason.
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [if (subtitle != null) Text(subtitle), menu],
-      ),
-    );
-  }
+      // Under the title, so the menu starts where the text does and the
+      // tile grows to hold it; the colour chips sit in the subtitle for the
+      // same reason.
+      subtitle: menu,
+    ),
+  );
 }
 
 /// The menu on a [SettingTile]: the current value, the [options] to pick from,
@@ -653,6 +699,7 @@ class LanguageTile extends StatelessWidget {
     required this.setting,
     required this.icon,
     required this.title,
+    required this.explanation,
     required this.value,
     required this.onSetting,
   });
@@ -661,6 +708,7 @@ class LanguageTile extends StatelessWidget {
   final String setting;
   final IconData icon;
   final String title;
+  final String explanation;
   final String? value;
   final SettingWriter onSetting;
 
@@ -673,6 +721,7 @@ class LanguageTile extends StatelessWidget {
       setting: setting,
       icon: icon,
       title: title,
+      explanation: explanation,
       value: value,
       options: codes,
       label: (code) {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_text_entry.dart';
+import '../../widgets/explained.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/readout.dart';
 import '../../widgets/tv_text_field.dart';
@@ -46,6 +47,11 @@ class AccountSection extends StatefulWidget {
 
   static const String libraryNote =
       "Signing in replaces the library on this device with your account's.";
+
+  /// What the signed-in row means. Its "Signed in" line is state and stays.
+  static const String accountExplanation =
+      'The Stremio account you are signed in with. Your library and addons '
+      'are saved with it.';
 
   static const Key emailFieldKey = ValueKey('account-email');
   static const Key passwordFieldKey = ValueKey('account-password');
@@ -445,18 +451,24 @@ class _AccountSectionState extends State<AccountSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Readout(
-          child: ListTile(
-            leading: CircleAvatar(
-              radius: AccountSection.avatarRadius,
-              foregroundImage: avatar == null
-                  ? null
-                  : DiskCachedImage.bounded(avatar, cacheWidth: pixels),
-              onForegroundImageError: avatar == null ? null : (_, _) {},
-              child: const Icon(Icons.person_outline),
+        Explained(
+          title: user.email,
+          explanation: AccountSection.accountExplanation,
+          child: Readout(
+            child: ListTile(
+              leading: ExplainIcon(
+                CircleAvatar(
+                  radius: AccountSection.avatarRadius,
+                  foregroundImage: avatar == null
+                      ? null
+                      : DiskCachedImage.bounded(avatar, cacheWidth: pixels),
+                  onForegroundImageError: avatar == null ? null : (_, _) {},
+                  child: const Icon(Icons.person_outline),
+                ),
+              ),
+              title: Text(user.email),
+              subtitle: const Text('Signed in'),
             ),
-            title: Text(user.email),
-            subtitle: const Text('Signed in'),
           ),
         ),
         if (profile.addonsLocked)

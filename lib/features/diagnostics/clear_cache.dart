@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../widgets/explained.dart';
 
 /// Confirms a full clear of the server's cache, wherever it was asked for:
 /// Settings' "Clear the cache" and the Server storage screen. One dialog,
@@ -89,8 +90,8 @@ Future<CacheClearReport?> confirmAndClearCache(
 
 /// Settings' "Clear the cache" row, in the Streaming server section: a
 /// plain [ListTile] like its neighbours, so a remote lands on it and the
-/// theme floor marks it, and its title and subtitle are what a screen
-/// reader -- and the driver -- read.
+/// theme floor marks it, and its title is what a screen reader -- and the
+/// driver -- read. What it does is its [explanation] ([Explained]).
 class ClearCacheTile extends StatelessWidget {
   const ClearCacheTile({super.key, this.client = const ServerClient()});
 
@@ -98,16 +99,19 @@ class ClearCacheTile extends StatelessWidget {
   final ServerCacheControl client;
 
   static const String title = 'Clear the cache';
-  static const String subtitle =
-      'Stops what is streaming and deletes everything cached except your '
-      'downloads';
+  static const String explanation =
+      'Deletes everything Xtremio keeps for playing. Your downloads stay. '
+      'Anything playing stops. It asks first.';
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    key: const ValueKey('setting-clear-cache'),
-    leading: const Icon(Icons.delete_sweep_outlined),
-    title: const Text(title),
-    subtitle: const Text(subtitle),
-    onTap: () => confirmAndClearCache(context, client),
+  Widget build(BuildContext context) => Explained(
+    title: title,
+    explanation: explanation,
+    child: ListTile(
+      key: const ValueKey('setting-clear-cache'),
+      leading: const ExplainIcon(Icon(Icons.delete_sweep_outlined)),
+      title: const Text(title),
+      onTap: () => confirmAndClearCache(context, client),
+    ),
   );
 }

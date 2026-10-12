@@ -26,9 +26,11 @@ import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
+import 'package:xtremio/widgets/explained.dart';
 import 'package:xtremio/widgets/readout.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
+import '../../support/explained.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_diagnostics_client.dart';
 import '../../support/fake_downloads_client.dart';
@@ -899,6 +901,20 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(ClearCacheDialog), findsOneWidget);
       await walkEveryStop(tester, stops: 6);
+    }),
+    // A settings row's explanation, which a held OK opens over the screen.
+    // Close is its one stop.
+    walk('settings_screen.dart', "a settings row's explanation", (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
+      );
+      await tester.pumpAndSettle();
+      await holdOkOn(tester, 'Addons');
+      expect(find.byType(ExplanationDialog), findsOneWidget);
+      await walkEveryStop(tester, stops: 4);
     }),
     walk('discover_screen.dart', 'the Uninstall dialog on a failed catalog', (
       tester,
