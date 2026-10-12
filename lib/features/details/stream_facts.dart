@@ -13,15 +13,14 @@ import '../../core/core.dart';
 ///   `behaviorHints.videoSize` (bytes), `behaviorHints.filename`,
 ///   `behaviorHints.bingeGroup` (a release tag such as `pdm-1080p`), and
 ///   the source variant ([StreamInfo.kind]).
-/// - **Text, but reliable**: the resolution and the source tags addons
-///   write into the name and the filename (`1080p`, `WEB-DL`, `x265`), and
-///   the size from the `💾 1.51 GB` convention when `videoSize` is absent
-///   — that exact convention is in our own recorded fixture.
-/// - **A guess, by convention only**: seeders, [languages], [audioTracks]
-///   and [tracker]. No addon protocol carries any of them; torrent addons
-///   write `👤 42 💾 35.09 GB ⚙️ RARBG` on one description line and the
-///   flags on another. A parse that finds nothing is null (or empty),
-///   never zero.
+/// - **Text, but reliable**: the resolution and the source tags addons write
+///   into the name and the filename (`1080p`, `WEB-DL`, `x265`), and the size
+///   from the `💾 1.51 GB` convention when `videoSize` is absent. That exact
+///   convention is in our own recorded fixture.
+/// - **A guess, by convention only**: seeders, [languages], [audioTracks] and
+///   [tracker]. No addon protocol carries any of them. Torrent addons write
+///   `👤 42 💾 35.09 GB ⚙️ RARBG` on one description line and the flags on
+///   another. A parse that finds nothing is null (or empty), never zero.
 ///
 /// **`description` is where every addon writes, and none of them sets it.**
 /// Not one row of `rust/tests/fixtures/addon_streams_recorded.json` has a
@@ -55,8 +54,8 @@ final class StreamFacts {
   final StreamResolution? resolution;
 
   /// The file's size in bytes: `behaviorHints.videoSize` when the addon set
-  /// it, else the `1.51 GB` written into the text. Never zero — an addon
-  /// that says `videoSize: 0` is saying nothing.
+  /// it, else the `1.51 GB` written into the text. Never zero: an addon that
+  /// says `videoSize: 0` is saying nothing.
   final int? sizeBytes;
 
   /// Seeders, when the description carried the convention. Null is
@@ -68,10 +67,10 @@ final class StreamFacts {
   /// same release always reads the same way.
   final List<String> tags;
 
-  /// The flags an addon writes on a line of its own — `🇬🇧 / 🇷🇺 / 🇮🇹`
-  /// (fixture row 2) — in the order it wrote them, and as it wrote them: a
-  /// flag is what a pill draws, and the country it names is the only thing
-  /// the addon actually said.
+  /// The flags an addon writes on a line of its own (`🇬🇧 / 🇷🇺 / 🇮🇹`, fixture
+  /// row 2), in the order it wrote them, and as it wrote them. A flag is what
+  /// a pill draws, and the country it names is the only thing the addon
+  /// actually said.
   ///
   /// Empty is "the addon said nothing about language", which is not
   /// "English" and not "one track". Eleven of the thirty-one recorded rows
@@ -89,20 +88,20 @@ final class StreamFacts {
   final String? audioTracks;
 
   /// The site the torrent was indexed on, from the `⚙️ RARBG` field of the
-  /// stats line (rows 1, 2, 3 — `RARBG`, `ThePirateBay`, `1337x`,
-  /// `Rutracker`, `Torrent9`).
+  /// stats line (rows 1, 2, 3: `RARBG`, `ThePirateBay`, `1337x`, `Rutracker`,
+  /// `Torrent9`).
   ///
   /// **Not a BitTorrent tracker**, however it is spelled. The announce URLs
   /// are [StreamInfo.trackers], off the stream's own `announce` / `sources`
-  /// array (row 13 carries twenty-six of them, row 25 an empty one, and
-  /// most rows none at all). This is a search index's name, with nothing to
-  /// announce to; it is worth showing because it is the only thing a
-  /// listing says about where it came from, and worth never handing to the
-  /// streaming server.
+  /// array (row 13 carries twenty-six of them, row 25 an empty one, and most
+  /// rows none at all). This is a search index's name, with nothing to
+  /// announce to. It is worth showing, because it is the only thing a listing
+  /// says about where it came from, and worth never handing to the streaming
+  /// server.
   final String? tracker;
 
-  /// The `StreamSource` variant, or null for [StreamKind.unknown] — the
-  /// engine could not tell either.
+  /// The `StreamSource` variant, or null for [StreamKind.unknown]: the engine
+  /// could not tell either.
   final StreamKind? sourceKind;
 
   /// The addon that answered with this stream, as the row should name it.
@@ -116,19 +115,18 @@ final class StreamFacts {
   /// `behaviorHints.filename`, when the addon set it.
   final String? filename;
 
-  /// Reads [stream]. [addonName] is the label the list should show, which
-  /// the stream itself never carries — it comes from the profile, or from
-  /// the host of the manifest URL it was asked at.
+  /// Reads [stream]. [addonName] is the label the list should show, which the
+  /// stream itself never carries. It comes from the profile, or from the host
+  /// of the manifest URL it was asked at.
   ///
   /// [measuredHeight] is the video's height in pixels as something that
   /// **opened the file** reports it, rather than as its name claims. Only a
   /// linked Google Drive file has one (Drive measures an upload once it has
-  /// processed it), and when it is there it **decides** the resolution: a
+  /// processed it). It **decides** the resolution whenever it is there: a
   /// measurement beats a name, because a name is a claim and a file called
-  /// `1080p` is frequently a 720p upscale. That includes deciding there is
-  /// no rung at all — a file measured shorter than the bottom rung (240)
-  /// belongs under "Unknown resolution" and not under whatever its name
-  /// boasts.
+  /// `1080p` is frequently a 720p upscale. That includes deciding there is no
+  /// rung at all. A file measured shorter than the bottom rung (240) belongs
+  /// under "Unknown resolution", not under whatever its name boasts.
   ///
   /// It is already normalised where it is read (`drive_listing.dart` stores
   /// a height Drive gave as zero or less as *no* height), so there is one
@@ -170,21 +168,21 @@ final class StreamFacts {
   /// entirely rather than shown as a placeholder.
   ///
   /// **These are the parse, drawn beside the text it was read out of.** A
-  /// card carries the addon's own lines whole ([StreamPresentation]), so a
-  /// `💾 4.98 GB` in that text and a `4.98 GB` pill next to it say the same
-  /// thing twice on purpose: the repetition is how a viewer sees the
-  /// reading agree with what was written -- or catch it not agreeing. The
-  /// values a sort and a section are built out of are in this list, so
-  /// "why is this row here" is answered on the row.
+  /// card carries the addon's own lines whole ([StreamPresentation]), so a `💾
+  /// 4.98 GB` in that text and a `4.98 GB` pill next to it say the same thing
+  /// twice on purpose. The repetition is how a viewer sees the reading agree
+  /// with what was written, or catches it not agreeing. The values a sort and
+  /// a section are built out of are in this list, so "why is this row here"
+  /// is answered on the row.
   ///
-  /// [languages] is **one** pill holding every flag, not a pill each. A
-  /// pill each was drawn and measured first: recorded row 2 carries
-  /// seventeen flags, which is seventeen boxes wrapping to six rows on a
-  /// 260 dp television card -- 130 dp of pills over two lines of text, and
-  /// the flags are the one thing on the card that is already legible as a
-  /// run. [audioTracks] is deliberately not here: `Multi Audio` is a claim
-  /// about a file rather than a value anything sorts by, and it is already
-  /// on the card in the line it was read from.
+  /// [languages] is **one** pill holding every flag, not a pill each. A pill
+  /// each was drawn and measured first. Recorded row 2 carries seventeen
+  /// flags, which is seventeen boxes wrapping to six rows on a 260 dp
+  /// television card: 130 dp of pills over two lines of text. And the flags
+  /// are the one thing on the card that is already legible as a run.
+  /// [audioTracks] is deliberately not here: `Multi Audio` is a claim about a
+  /// file rather than a value anything sorts by, and it is already on the
+  /// card in the line it was read from.
   List<String> get pills => [
     ?resolutionLabel,
     ?sizeLabel,
@@ -382,11 +380,10 @@ final class StreamFacts {
   /// A flag: two regional indicator symbols, which is how every addon in
   /// the recorded fixture writes a language.
   ///
-  /// `unicode: true` for the reason [StreamHints.strip] spells out at
-  /// length: these are astral code points, and without the flag a Dart
-  /// character class matches UTF-16 *code units* — the halves of a flag,
-  /// not the flag — which is how an emoji ends up cut in two and drawn as
-  /// a replacement character.
+  /// `unicode: true` for the reason [StreamHints.strip] spells out at length:
+  /// these are astral code points. Without the flag, a Dart character class
+  /// matches UTF-16 *code units* (the halves of a flag, not the flag), which
+  /// is how an emoji ends up cut in two and drawn as a replacement character.
   static final RegExp _flagPattern = RegExp(
     r'[\u{1F1E6}-\u{1F1FF}]{2}',
     unicode: true,
@@ -400,8 +397,8 @@ final class StreamFacts {
   );
 
   /// `⚙️ RARBG`, to the end of its line. The variation selector is optional
-  /// because it is a presentation hint an addon may or may not have sent;
-  /// the gear itself is the field marker.
+  /// because it is a presentation hint an addon may or may not have sent. The
+  /// gear itself is the field marker.
   static final RegExp _trackerPattern = RegExp('⚙️?[ \t]*([^\n]+)');
 
   /// Canonical label to what spells it. Iteration order is the display
@@ -464,14 +461,14 @@ enum StreamResolution {
 /// themselves are (see [sectionsByResolution]), so a comparison here is
 /// always between two streams of the same picture.
 ///
-/// The rule every one of the three shares is what it does with an unknown.
-/// A stream whose size, or whose peer count, was nowhere to be read cannot
-/// be ranked by an order that needs it, and the honest place for it is
-/// *after* everything that could be ranked — never as a zero (which would
-/// pin it to the bottom of the ranking as if it were measured and found
-/// empty) and never as a best guess (which would put it on top of streams
-/// that are actually known to be good). Two unranked streams compare equal,
-/// so they keep the order the addons gave them.
+/// The rule every one of the three shares is what it does with an unknown. A
+/// stream whose size, or whose peer count, was nowhere to be read cannot be
+/// ranked by an order that needs it. The honest place for it is *after*
+/// everything that could be ranked. It is never a zero, which would pin it to
+/// the bottom of the ranking as if it were measured and found empty. It is
+/// never a best guess, which would put it on top of streams that are actually
+/// known to be good. Two unranked streams compare equal, so they keep the
+/// order the addons gave them.
 ///
 /// Ties fall through the same way: two streams the order cannot tell apart
 /// stay as they came in, which is the addon's own ranking (see
@@ -483,7 +480,7 @@ int compareStreamOrder(StreamFacts a, StreamFacts b, StreamOrder order) =>
       StreamOrder.mostPeers => _byKnown(a.seeders, b.seeders),
     };
 
-/// Ascending size ÷ peers — the most peers per megabyte first — for the
+/// Ascending size ÷ peers, so the most peers per megabyte come first, for the
 /// reasoning in [StreamOrder].
 ///
 /// The ratio is taken in doubles rather than by cross-multiplying, because
@@ -542,8 +539,8 @@ List<T> sortedByStreamOrder<T>(
 }
 
 /// One resolution's worth of the sources list: the rows themselves, and the
-/// two things a *collapsed* header still has to be able to say — how many
-/// streams are folded away in it, and the best swarm among them, so an
+/// two things a *collapsed* header still has to be able to say. Those are how
+/// many streams are folded away in it, and the best swarm among them, so an
 /// empty-looking 2160p is told apart from a healthy one without opening it.
 final class StreamSection<T> {
   const StreamSection({
@@ -577,8 +574,8 @@ final class StreamSection<T> {
   ].join(' · ');
 }
 
-/// [rows] split into one section per resolution, **highest first**, with
-/// the streams nothing could be read a resolution from last as a section of
+/// [rows] split into one section per resolution, **highest first**. The
+/// streams nothing could be read a resolution from come last, as a section of
 /// their own.
 ///
 /// The order *within* a section is the order [rows] came in, so a list
@@ -620,21 +617,20 @@ List<StreamSection<T>> sectionsByResolution<T>(
 /// what the addon said under it.
 ///
 /// It is a pair and not one string because addons answer in two registers
-/// too. Torrentio's `title` is a little document — a release, sometimes a
-/// file under it, a stats line, sometimes a line of flags — and picking one
-/// line out of it throws the rest of the document away.
+/// too. Torrentio's `title` is a little document: a release, sometimes a file
+/// under it, a stats line, sometimes a line of flags. Picking one line out of
+/// it throws the rest of the document away.
 ///
 /// **One tokenisation, and every word given one place to be.** The answer's
-/// strings are read into words exactly once ([_Words]); the lead is chosen
-/// out of them; and then every word of every line is sent either to the
-/// lead — which has already said it, so the line does not — or to the line
-/// it was written on. There is no pass afterwards that takes a finished
-/// lead back out of finished lines -- a second pass like that is what let
-/// a card say one release twice.
+/// strings are read into words exactly once ([_Words]), and the lead is
+/// chosen out of them. Then every word of every line is sent either to the
+/// lead (which has already said it, so the line does not) or to the line it
+/// was written on. There is no pass afterwards that takes a finished lead
+/// back out of finished lines. A second pass like that is what let a card say
+/// one release twice.
 ///
-/// **This is values, not layout.** Where the two go on a card, how many
-/// lines each gets, whether the rest is folded away — none of that is
-/// settled here.
+/// **This is values, not layout.** None of this settles where the two go on a
+/// card, how many lines each gets, or whether the rest is folded away.
 final class StreamPresentation {
   const StreamPresentation({required this.lead, required this.rest});
 
@@ -642,19 +638,19 @@ final class StreamPresentation {
   final String lead;
 
   /// The addon's own text, line by line, in the order it wrote it, holding
-  /// only the words [lead] did not take — and nothing else taken out. Empty
+  /// only the words [lead] did not take, with nothing else taken out. Empty
   /// when the addon said nothing beyond the lead.
   ///
   /// Three things can become of a line, and [_beyondTheLead] is where they
   /// are decided:
   ///
   /// - **It is the lead, and goes.** Fixture row 1's second line is the
-  ///   lead's file with `.mkv` on it and row 12's is that file with a
-  ///   directory in front of it; neither is a string match for the lead and
+  ///   lead's file with `.mkv` on it, and row 12's is that file with a
+  ///   directory in front of it. Neither is a string match for the lead, and
   ///   both are the lead.
   /// - **It is about the lead's release, and keeps what it adds.** Row 1
-  ///   sends the release twice — `…UHD.BluRay.X265-IAMABLE` and
-  ///   `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` — and what the
+  ///   sends the release twice, `…UHD.BluRay.X265-IAMABLE` and
+  ///   `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE`, and what the
   ///   second one is for is `10bit.HDR.TrueHD.7.1.Atmos`. This is the case
   ///   the pack lines are in: the whole point of row 26's line is `S02`,
   ///   stripped here of the thirty-five characters of lead text that would
@@ -681,8 +677,8 @@ final class StreamPresentation {
   }
 }
 
-/// The one line a card leads with — `Avalon.2001.1080p.BluRay.x264-CiNEFiLE`
-/// — chosen by **which fields this stream actually has**.
+/// The one line a card leads with (`Avalon.2001.1080p.BluRay.x264-CiNEFiLE`),
+/// chosen by **which fields this stream actually has**.
 ///
 /// The engine models a stream as a source plus a `name`, a `description`
 /// and `behaviorHints`, and *none* of them is "the release". So the branch
@@ -696,7 +692,7 @@ final class StreamPresentation {
 ///    This is the branch the packs need. Row 4 leads its text with
 ///    `[PACK] The Matrix 4K UHD Collection (1999-2003) …` and puts
 ///    `The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv`
-///    on the line below it — so line one names a **collection** and only
+///    on the line below it. So line one names a **collection**, and only
 ///    the filename names the film. Nine of the sixteen recorded Torrentio
 ///    rows are that shape: a pack (4), a trilogy (9), a season (10, 11, 12,
 ///    13, 16), a complete series, and an `Imdb top 263 movies hindi english
@@ -711,14 +707,14 @@ final class StreamPresentation {
 ///    Row 3 is the only recorded stream in this branch: no
 ///    `behaviorHints.filename` at all, and `The Matrix 1999 UHD Blu-ray
 ///    2160p HDR Remux Multi Atmos 7.1-DTOne` on line one. "Looks like a
-///    release" ([_looksLikeARelease]) is what keeps prose out — see 3.
+///    release" ([_looksLikeARelease]) is what keeps prose out (see 3).
 ///
 /// 3. **Otherwise `name`**, on one line.
 ///
 ///    This is every WatchHub row (17, 18, 20–24) and both Public Domain
-///    Movies rows (19, 25). WatchHub's text is an availability phrase —
-///    `Subscription`, `Rent, Buy`, `ADS`, `Subscription, Rent, Buy` — never
-///    a release and never a closed set, and its `name` is the service:
+///    Movies rows (19, 25). WatchHub's text is an availability phrase
+///    (`Subscription`, `Rent, Buy`, `ADS`, `Subscription, Rent, Buy`), never
+///    a release and never a closed set. Its `name` is the service:
 ///    `Amazon Prime Video`, `Plex`, `MUBI`. Public Domain Movies writes
 ///    `💾 1.51 GB`, which strips to nothing at all, and names the stream
 ///    `1080p`. Leading with the text would head those cards `Subscription`
@@ -759,8 +755,8 @@ _Words _leadWordsOf(StreamInfo stream, {String? addonName}) {
 }
 
 /// [leadLineOf] under the name the screens have always called it. Kept
-/// because four call sites read it and a card's headline *is* the release
-/// wherever an addon named one; [leadLineOf] is the honest name for what it
+/// because four call sites read it, and a card's headline *is* the release
+/// wherever an addon named one. [leadLineOf] is the honest name for what it
 /// returns on the rows where no addon did.
 String releaseNameOf(StreamInfo stream, {String? addonName}) =>
     leadLineOf(stream, addonName: addonName);
@@ -769,23 +765,23 @@ String releaseNameOf(StreamInfo stream, {String? addonName}) =>
 /// title, the year, and the season and episode where it names one.
 ///
 /// The same tokenisation as everything else in this file ([_Words]), and
-/// deliberately so -- addons and Drive folders separate with `.`, `_`, `-`
-/// and spaces interchangeably and bracket a year as the mood takes them, and
-/// a second parser written beside this one would disagree with it on the
-/// day one of them was fixed. What this adds is only where the title stops.
+/// deliberately so. Addons and Drive folders separate with `.`, `_`, `-` and
+/// spaces interchangeably and bracket a year as the mood takes them. A second
+/// parser written beside this one would disagree with it on the day one of
+/// them was fixed. What this adds is only where the title stops.
 ///
 /// **The title stops at the first word that is about how the file looks**
-/// ([_aboutHowItLooks]): a year, a season or episode marker, a resolution,
-/// or a source or codec tag this file already knows how to spell
+/// ([_aboutHowItLooks]): a year, a season or episode marker, a resolution, or
+/// a source or codec tag this file already knows how to spell
 /// ([StreamFacts._resolutionTokens], [StreamFacts._tagPatterns]). Nothing is
-/// added to those tables for this, which has a consequence worth stating: a
-/// name whose first non-title word is something they do not list --
-/// `Some.Film.WEB-DL.mkv`, where `WEB` and `DL` are two words and neither
-/// matches `web-?dl` alone -- keeps that word in the title, and a title with
-/// a stray word in it matches no catalogue entry. That is a miss, and a miss
-/// is the safe direction: the reader of this is
-/// `drive_match.dart`, where a wrong title is a wrong poster on somebody's
-/// film and no title at all is a generic icon.
+/// added to those tables for this, which has a consequence worth stating. A
+/// name whose first non-title word is something they do not list keeps that
+/// word in the title. `Some.Film.WEB-DL.mkv` is one: `WEB` and `DL` are two
+/// words, and neither matches `web-?dl` alone. A title with a stray word in
+/// it matches no catalogue entry. That is a miss, and a miss is the safe
+/// direction. The reader of this is `drive_match.dart`, where a wrong title
+/// is a wrong poster on somebody's film and no title at all is a generic
+/// icon.
 final class ReleaseIdentity {
   const ReleaseIdentity({
     required this.title,
@@ -794,8 +790,8 @@ final class ReleaseIdentity {
     this.episode,
   });
 
-  /// The leading words, in the name's own case, single-spaced -- whatever
-  /// the name separated them with, since the separator is the one thing two
+  /// The leading words, in the name's own case, single-spaced whatever the
+  /// name separated them with, since the separator is the one thing two
   /// spellings of a release never agree on. Empty when the name opens with a
   /// word about how it looks, which is a name with no title in it.
   final String title;
@@ -814,7 +810,7 @@ final class ReleaseIdentity {
   /// There is no title to look anything up by.
   bool get hasNoTitle => title.isEmpty;
 
-  /// Reads [name] -- a filename, a release, either.
+  /// Reads [name]: a filename, a release, either.
   ///
   /// A directory in front of it and a container extension on the end are
   /// dropped by [_Words.file], which already has a recorded row behind each
@@ -891,10 +887,10 @@ final class _Words {
   /// The words of [text]: its runs of letters and digits.
   ///
   /// Everything else is a separator, because everything else is one
-  /// somewhere — the same release arrives as `The.Matrix.1999` from one
-  /// addon, `The Matrix (1999)` from the next and `The_Matrix_1999` from a
-  /// third, and a comparison that can be told apart by that is a comparison
-  /// of punctuation. Letters are taken by Unicode class and not by `[a-z]`:
+  /// somewhere. The same release arrives as `The.Matrix.1999` from one addon,
+  /// `The Matrix (1999)` from the next and `The_Matrix_1999` from a third,
+  /// and a comparison that can be told apart by that is a comparison of
+  /// punctuation. Letters are taken by Unicode class and not by `[a-z]`:
   /// recorded row 13's text line is Russian, and a tokeniser that dropped it
   /// would have that line agreeing with anything.
   final List<_Token> tokens;
@@ -941,22 +937,22 @@ List<_Token> _fileWords(_Words words) {
 /// about the lead's release, and the line itself when it is about something
 /// else.
 ///
-/// **Why a line is reduced and not just dropped.** Torrentio routinely
-/// sends the release twice, in two spellings, and the fuller of the two is
-/// not the one the lead comes from: recorded row 1 leads with
+/// **Why a line is reduced and not just dropped.** Torrentio routinely sends
+/// the release twice, in two spellings, and the fuller of the two is not the
+/// one the lead comes from. Recorded row 1 leads with
 /// `The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE` (the filename) and
 /// writes `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` on the line
-/// under it. Eighty per cent of that line is the line above it; the fifth
-/// that is not — `10bit HDR TrueHD 7.1 Atmos` — is the audio and the bit
-/// depth, which are on the card nowhere else.
+/// under it. Eighty per cent of that line is the line above it. The fifth
+/// that is not, `10bit HDR TrueHD 7.1 Atmos`, is the audio and the bit depth,
+/// which are on the card nowhere else.
 ///
 /// **And the pack lines are reduced too.** The same holds, harder, for the
 /// line that names the pack a file came out of: row 26 sends
 /// `30.Rock.S02E11.1080p.BluRay.x265-KONTRAST` and, under it,
-/// `30.Rock.S02.1080p.BluRay.x265-KONTRAST`. Thirty-seven characters, of
-/// which three are the news, and keeping the line whole to protect the
-/// `S02` would bury it in the other thirty-four; the `S02` is what this
-/// keeps instead.
+/// `30.Rock.S02.1080p.BluRay.x265-KONTRAST`. That is thirty-seven characters,
+/// of which three are the news. Keeping the line whole to protect the `S02`
+/// would bury it in the other thirty-four, so the `S02` is what this keeps
+/// instead.
 ///
 /// **What makes a line about the lead: it opens the way the lead opens**
 /// ([_opensAsTheLeadDoes]). Two spellings of one release start with the
@@ -967,13 +963,13 @@ List<_Token> _fileWords(_Words words) {
 /// together, which would refuse exactly the pack lines it is supposed to
 /// read.
 ///
-/// What is taken is words, not characters, because addons separate with
-/// `.`, `_`, `-` and spaces interchangeably and bracket a year as the mood
-/// takes them. A word the line has twice and the lead has once is taken
-/// *once*: the lead said it once, and the second one is the line saying
-/// something more. What comes back is the addon's own text — its own
-/// spelling, its own separators — with the lead's words lifted out of it,
-/// never a normalised rewrite.
+/// What is taken is words, not characters, because addons separate with `.`,
+/// `_`, `-` and spaces interchangeably and bracket a year as the mood takes
+/// them. A word the line has twice and the lead has once is taken *once*: the
+/// lead said it once, and the second one is the line saying something more.
+/// What comes back is the addon's own text, in its own spelling and its own
+/// separators, with the lead's words lifted out of it. It is never a
+/// normalised rewrite.
 String? _beyondTheLead(_Words line, _Words lead) {
   final file = line.file;
   // No words at all is a line of flags, and there is nothing in it that
@@ -1044,12 +1040,12 @@ List<bool> _unspokenBy(List<_Token> file, List<_Token> said, String text) {
 /// number the lead already said stays where it is hyphenated to a number
 /// that is staying.
 ///
-/// `(1999-2003)` on recorded rows 4 and 9 is what this is for: the lead
-/// says `1999`, so the budget would pay for the first half of the range and
-/// leave `-2003`, which reads as a pack that began nowhere. Both halves
-/// have to be countable — a year, a plain number, or `S01` — so
-/// `Atmos-IAMABLE` and `MP4-BEN` are untouched by it and the group tag on
-/// the end of row 1's line still goes.
+/// `(1999-2003)` on recorded rows 4 and 9 is what this is for. The lead says
+/// `1999`, so the budget would pay for the first half of the range and leave
+/// `-2003`, which reads as a pack that began nowhere. Both halves have to be
+/// countable (a year, a plain number, or `S01`), so `Atmos-IAMABLE` and
+/// `MP4-BEN` are untouched by it and the group tag on the end of row 1's line
+/// still goes.
 void _keepRangesWhole(List<_Token> file, List<bool> kept, String text) {
   for (var again = true; again;) {
     again = false;
@@ -1075,12 +1071,11 @@ bool _countable(String token) =>
 /// Marks that belong to the word in front of them rather than between two
 /// words: the `+` of `DD+`, the `#` of `#1`.
 ///
-/// A word is a run of letters and digits, so these fall to the separator
-/// side of the line and are written only when the next word is kept as
-/// well. Row 28's pack line says `DD+ 5 1`; without this, the lead's `5.1`
-/// absorbs the `5 1` and leaves `DD` on its own — **a different codec**
-/// (`DD+` is E-AC-3, `DD` is AC-3), a claim about the file the addon never
-/// made.
+/// A word is a run of letters and digits, so these fall to the separator side
+/// of the line and are written only when the next word is kept as well. Row
+/// 28's pack line says `DD+ 5 1`. Without this, the lead's `5.1` absorbs the
+/// `5 1` and leaves `DD` on its own. That is **a different codec** (`DD+` is
+/// E-AC-3, `DD` is AC-3), a claim about the file the addon never made.
 ///
 /// Only marks that cannot begin a separator are listed. A trailing `.`,
 /// `-` or `/` is punctuation *between* things and keeping it would put a
@@ -1090,13 +1085,13 @@ const String _clingingMarks = '+#';
 /// [file]'s kept words quoted back out of [text], each with any mark that
 /// clings to it ([_clingingMarks]).
 ///
-/// Between two words the addon wrote next to each other, the separator the
-/// addon put there, so what is left reads the way the line it came out of
-/// does — `10bit.HDR.TrueHD.7.1.Atmos` in dots, `Season 1-7 S01-S07` in
-/// spaces and hyphens. Between two words it never wrote next to each other
-/// there is no separator of its own to keep, so a single space: the
-/// alternative is to borrow the punctuation of a word that has gone, which
-/// is how `[RiCK]` came out as `[RiCK`.
+/// Two words the addon wrote next to each other keep the separator the addon
+/// put there, so what is left reads the way the line it came out of does:
+/// `10bit.HDR.TrueHD.7.1.Atmos` in dots, `Season 1-7 S01-S07` in spaces and
+/// hyphens. Two words it never wrote next to each other have no separator of
+/// their own to keep, so they get a single space. The alternative is to
+/// borrow the punctuation of a word that has gone, which is how `[RiCK]` came
+/// out as `[RiCK`.
 String _quoted(String text, List<_Token> file, List<bool> kept) {
   /// Where [token] ends once the marks clinging to it are counted in.
   int endOf(_Token token) {
@@ -1173,7 +1168,7 @@ bool _sameWords(List<_Token> a, List<_Token> b) {
 /// release name that is part of what it is rather than how it looks.
 final RegExp _yearToken = RegExp(r'^(?:19|20)\d{2}$');
 
-/// `S01`, `S01E01`, `1x01` — the other half of what a release *is*, and the
+/// `S01`, `S01E01`, `1x01`: the other half of what a release *is*, and the
 /// one character between naming an episode and naming the season it came in
 /// (recorded row 10).
 final RegExp _episodeToken = RegExp(
@@ -1190,11 +1185,11 @@ final RegExp _rangePattern = RegExp(r'^[-‒-―−]$');
 /// Whether a line of free text is a release rather than a sentence about
 /// the stream.
 ///
-/// A release is built out of tokens joined by dots, underscores or
-/// hyphens -- `1080p.BluRay.x264-CiNEFiLE`, `WEB-DL`, `FLAC2.0` -- and
-/// prose is not: `Subscription`, `Rent, Buy`, `ADS`. One such join is
-/// enough, and requiring one is what keeps an addon that writes a word in
-/// its description from having that word for a headline.
+/// A release is built out of tokens joined by dots, underscores or hyphens
+/// (`1080p.BluRay.x264-CiNEFiLE`, `WEB-DL`, `FLAC2.0`), and prose is not:
+/// `Subscription`, `Rent, Buy`, `ADS`. One such join is enough, and requiring
+/// one is what keeps an addon that writes a word in its description from
+/// having that word for a headline.
 ///
 /// A release with no join in it at all is missed, and falls back to the
 /// name the list showed before. That is the safe way round: a name is
