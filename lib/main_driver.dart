@@ -11,7 +11,7 @@ import 'main.dart' as app;
 /// `tool/drive` sends it commands (docs/DRIVING.md).
 ///
 /// The extension's binding comes up first, so the app's own `main` finds
-/// one already there; everything after that is the app exactly as
+/// one already there. Everything after that is the app exactly as
 /// `lib/main.dart` starts it. Text entry emulation stays off: the keyboard
 /// still types, and a field is filled through its semantics `setText`.
 void main() {
