@@ -28,6 +28,32 @@ and the doc is fixed.
   under `rust/src/api` changes without regenerating the bindings and
   committing them.
 
+## Write for the reader, in plain order
+
+Everything a person reads is written for that reader, not for the author.
+There are two readers, and one rule each on words; the rest holds for both.
+
+**A viewer** reads on-screen copy and release notes. Nothing there names an
+internal thing: no "source", "recompute", "flag", "cell", "signature",
+"rendition". Say what the viewer sees and can do -- "clear the watched
+check and the suggestions leave the row", not "the count alone decides
+now". The mechanism belongs in the commit message.
+
+**A developer** reads docs, doc comments and commit messages. Those may use
+the internal name when no common word exists, and should, since the name
+is what they will search for; where a common word does exist, use it.
+
+For both:
+
+- **One idea per sentence, in natural order.** Subject, verb, object; the
+  condition after the claim, not before it. Do not front-load a sentence
+  with a qualifying clause, and do not chain ideas with dashes and
+  semicolons. If a sentence has to be read twice, split it.
+- **Shorter beats complete.** Cut what the reader does not need in order
+  to act or to understand the next line.
+- **Read it aloud.** If it would sound odd said to a friend across a
+  table, rewrite it.
+
 ## Verification, with real exit codes
 
 **`make check` runs every gate below, in order, and stops at the first
