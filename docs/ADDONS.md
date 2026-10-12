@@ -4,11 +4,11 @@ The record Xtremio keeps of how each installed addon has been answering,
 and the verdict the Installed tab reads off it. The rule itself is
 `lib/features/addons/addon_health.dart`.
 
-A profile collects addons — from the Addons tab, or from an addon site's
+A profile collects addons from the Addons tab, or from an addon site's
 Install button, which hands the OS a `stremio://` link
-([docs/DEEP_LINKS.md](DEEP_LINKS.md)). Some of them die quietly — the host goes away, a
-debrid key expires, a catalog 404s — and nothing in a Stremio client tells
-you which. Xtremio keeps a small record of **how each installed addon has
+([docs/DEEP_LINKS.md](DEEP_LINKS.md)). Some of them die quietly: the host
+goes away, a debrid key expires, a catalog 404s. Nothing in a Stremio
+client tells you which. Xtremio keeps a small record of **how each installed addon has
 been answering**, and the Installed tab reads a verdict off it, so the
 question "which of these can I uninstall?" has an answer that is not a
 guess.
@@ -25,7 +25,7 @@ reads as exactly that.
 **What is counted, and by whom.** The Rust side counts and the app judges.
 `rust/src/addon_observer.rs` watches the runtime's event pump, so every
 board row, search, discover page, details load and subtitle list is
-observed with no per-screen opt-in; `rust/src/addon_health.rs` holds the
+observed with no per-screen opt-in. `rust/src/addon_health.rs` holds the
 counts and writes them to the preferences file at most once a minute (and
 on shutdown). `lib/features/addons/addon_health.dart` holds the rule, as
 one pure function over an immutable record, tested against a table of
@@ -42,21 +42,21 @@ cases. Changing the rule therefore changes no stored data.
 | **Working · streams 34%** | Anything else, with how often the kind it is asked for most actually had something |
 
 Both halves of *unreachable* are required. The ratio alone condemns an
-addon that is failing right now but worked an hour ago — that is the
-network, not the addon — and the silence alone condemns one that is simply
+addon that is failing right now but worked an hour ago, and that is the
+network, not the addon. The silence alone condemns one that is simply
 rarely asked. *Never answered here* is decided inside that verdict's own
 branch rather than beside it, so it always rests on at least as much
-evidence: an addon can only be called it once it could have been called
-unreachable, and a handful of failures on something installed yesterday is
-stopped by the same five-observation guard. It is the one verdict that
-settles the question without a judgement call — an addon that has never
-once worked here is nothing this device is getting anything from — which
-is why it sorts above the rest. An empty answer still counts as an answer,
-because it is one: that addon replied and had nothing, which is *rarely has
-anything* and not this. And the label says **here** because that is the
-whole of what was measured — requests this device made, over the life of a
-record that begins when the addon was installed, or when its history was
-last forgotten from the row's own menu. An addon the rest of the world
+evidence. An addon can only be called it once it could have been called
+unreachable, and the same five-observation guard stops a handful of
+failures on something installed yesterday. It is the one verdict that
+settles the question without a judgement call: an addon that has never
+once worked here is nothing this device is getting anything from. That is
+why it sorts above the rest. An empty answer still counts as an answer,
+because it is one. That addon replied and had nothing, which is *rarely
+has anything* and not this. The label says **here** because that is the
+whole of what was measured: requests this device made, over the life of a
+record. The record begins when the addon was installed, or when its
+history was last forgotten from the row's own menu. An addon the rest of the world
 reaches perfectly well looks identical from a network that cannot get to
 it, so the evidence behind the chip says so in as many words.
 
@@ -67,45 +67,44 @@ deliberately far below what a catalog addon manages: a stream specialist
 that answers one title in twenty is working as intended.
 
 **Counts decay rather than accumulate**: every count halves every 14 days,
-one multiply on read and write, so the record is constant-sized and
-self-healing — an addon that was broken for a week in March is not still
+one multiply on read and write. So the record is constant-sized and
+self-healing. An addon that was broken for a week in March is not still
 being argued with in June. Two timestamps ride along, because no decayed
 float can say "it last worked three days ago". Tapping a verdict shows all
 of it: when the addon last worked, and the three counts for every kind it
-declares, with a kind nothing has asked for reading *not asked yet* — the
+declares, with a kind nothing has asked for reading *not asked yet*. The
 pump only sees what a screen actually requested, which is also why "not
 used yet" is a first-class verdict and not a placeholder. A chevron on the
-chip is what says the verdict can be opened, since three words and a
-coloured dot read as a label; and on a television the chip is drawn under
-its tile rather than inside it, because a tile takes focus as a whole and
+chip says the verdict can be opened, since three words and a coloured dot
+read as a label. On a television the chip is drawn under its tile rather than inside it, because a tile takes focus as a whole and
 a control inside one is reachable by nobody.
 
 **A broken network is charged to nobody.** The addons on a board are asked
 together and, with no connection, they fail together. One field's worth of
 settled answers is held back as a *sweep* and committed only if at least
-one addon in it did not fail; a sweep in which everything failed changes no
-count at all. No reachability probe and no DHT dependency — just the
-observation that a result where nothing worked is a result about the
-connection. When *nothing* has answered since the app started, the Installed
-tab says so in a banner, which is exactly when a list of freshly-failed
+one addon in it did not fail. A sweep in which everything failed changes
+no count at all. There is no reachability probe and no DHT dependency, only
+the observation that a result where nothing worked is a result about the
+connection. The Installed tab shows a banner when *nothing* has answered
+since the app started. That is exactly when a list of freshly-failed
 addons is most tempting to act on.
 
 **What it never does.** It never records against the embedded server or the
-profile's local addon, and it never labels a protected addon — two separate
-rules, so a bad server release cannot put a verdict on Cinemeta. It adds no
+profile's local addon, and it never labels a protected addon. Those are two
+separate rules, so a bad server release cannot put a verdict on Cinemeta. It adds no
 way to remove an addon: Uninstall is the same menu item it always was,
 absent for a protected addon and disabled while the profile is locked,
 because a wrong verdict that silently removed a working addon would be
 unrecoverable. "Forget this addon's history" drops one addon's record for
-when the verdict is wrong — typically right after a debrid key was
-replaced, where the old key's failures describe a configuration that no
+when the verdict is wrong. That is typically right after a debrid key was
+replaced, when the old key's failures describe a configuration that no
 longer exists. Nothing about health is synced to the account: it measures
 *this device's* network.
 
 **What is stored** is a single `addonHealth` key in the preferences file,
 under `host[:port]#<12 hex of sha256(transport URL)>`. The URL itself is
-never written down — a manifest URL can carry a debrid API key — and
-neither is any query string, the resource id (that would be a viewing
+never written down, because a manifest URL can carry a debrid API key.
+Neither is any query string, the resource id (that would be a viewing
 history), a per-request timestamp, or an error message (a transport error
 can carry the URL back in its own text). The app derives the same key by
 hashing the transport URL it already holds, so the URL never leaves the
@@ -116,15 +115,15 @@ Deliberately not built: latency or "slow" verdicts (a hang becomes a
 failure at the 60-second client timeout, and nothing else is claimed), any
 event log or per-title history, an active prober (traffic nobody asked for,
 and it tests the manifest rather than the resource), and auto-uninstall or
-auto-disable — the whole ask was to *decide*.
+auto-disable. The whole ask was to *decide*.
 
 ## What addons are told
 
-Besides the questions it asks them, stremio-core (from 0.64; `rust/Cargo.toml`
-pins the fork at `a98918c`, rebased onto upstream 0.64.1) **tells** an
-installed addon what the viewer does, if the addon asks to be told: one
-whose manifest declares the `player` resource hears about playback, and
-one that declares `library` hears about the library. An addon that
+Besides the questions it asks them, stremio-core **tells** an installed
+addon what the viewer does, if the addon asks to be told. That is from
+0.64; `rust/Cargo.toml` pins the fork at `a98918c`, rebased onto upstream
+0.64.1. An addon whose manifest declares the `player` resource hears about
+playback, and one that declares `library` hears about the library. An addon that
 declares neither is told nothing, and that is every addon in a default
 profile. The manifest's `types` and `idPrefixes` apply as for any
 resource, so an addon declaring `player` for `series` with `tt` hears
@@ -134,12 +133,12 @@ only about IMDb episodes.
 transport and `Env::fetch` as a stream request, to the addon's own
 transport URL: `player/{type}/{videoId}/action=start&currentTime=…&duration=….json`
 and `library/{type}/{id}/action=watched&videoId=….json`. Nothing new rides
-along: no stream, no stream URL, no Stremio auth key and no device name --
-the type, the id and the extras below. The addon's own URL carries
+along, only the type, the id and the extras below: no stream, no stream
+URL, no Stremio auth key and no device name. The addon's own URL carries
 whatever configuration the addon put in it, exactly as every request to it
 does. The embedded server's bearer token is added only for the embedded
 server's own address, which serves no addon, so no addon request can
-carry it; and the profile's Local Files addon is answered on the device
+carry it. The profile's Local Files addon is answered on the device
 (`local_addon_answer`) and never asked.
 
 | Request | Sent when |
@@ -151,10 +150,10 @@ carry it; and the profile's Local Files addon is answered on the device
 | `library` `watched` / `unwatched` | A title is marked by hand from the Library's menu (`LibraryItemMarkAsWatched`), or an episode from the details page (`MarkVideoAsWatched`) |
 
 `currentTime` and `duration` are milliseconds, the player's last report
-(0 before the first); `videoId` is the episode or film being played, or
+(0 before the first). `videoId` is the episode or film being played, or
 on a `watched` request the episode whose mark changed. The core can also
 mark a whole season, sending the ids of the videos whose mark actually
-changed, comma-separated, a hundred to a request; this app has no season
+changed, comma-separated, a hundred to a request. This app has no season
 mark, so it never sends one. **A `player` request
 goes to every addon that declares the resource, whatever the stream came
 from**: a downloaded, local or Drive play is loaded with a stream request
@@ -163,7 +162,7 @@ video. A play with no stream request tells nobody.
 
 **Volume.** `TimeChanged`, which the player sends once a second, tells
 addons nothing, and neither does the core's own watched mark when a video
-is played past the threshold -- only a mark by hand does. The player
+is played past the threshold. Only a mark by hand does. The player
 reports a pause or resume once per change, so an addon hears one request
 per pause, per resume and per end. A seek is the busy case: every seek
 the player reports (`Seek`, one per step of a held key, and one when a
@@ -171,11 +170,11 @@ rewind is noticed from positions) is one request per player addon. Titles
 that are in the Library because they were downloaded or linked are never
 `AddToLibrary`'d, so they send no `libraryAdd`.
 
-**A failure goes nowhere.** Each request is fire-and-forget: its answer
-comes back as `Internal::AddonEventResult`, which no model handles, so a
+**A failure goes nowhere.** Each request is fire-and-forget. Its answer
+comes back as `Internal::AddonEventResult`, which no model handles. So a
 failing or slow addon raises no event, shows the viewer nothing, and is
-not retried. It is not counted in the health record either -- the record
-is built from the answers the model fields hold, and these are held by
-none -- which is right: an acknowledgement says nothing about whether the
+not retried. It is not counted in the health record either, because the
+record is built from the answers the model fields hold and these are held
+by none. That is right: an acknowledgement says nothing about whether the
 addon's catalogs or streams work. A failed fetch logs its host at debug,
 as every fetch does, and never its URL.
