@@ -1071,7 +1071,7 @@ void main() {
       // The spinner never settles, so this one pumps by hand.
       await tester.pumpWidget(harness.build());
       await pumpEvents(tester);
-      expect(find.text('Resolving stream…'), findsOneWidget);
+      expect(find.text('Opening the stream…'), findsOneWidget);
       expect(find.byType(PlayerBottomBar), findsNothing);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);

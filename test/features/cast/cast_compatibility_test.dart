@@ -147,9 +147,9 @@ void main() {
         final refused = result as CastRefused;
         expect(
           refused.explanation,
-          'The player has not said yet what kind of file this is, and that '
-          'is what decides whether a Chromecast can play it. Try again once '
-          'it has started playing.',
+          'The player has not yet said what kind of file this is. That '
+          'decides whether a Chromecast can play it. Try again once it has '
+          'started playing.',
         );
         expect(refused.title, 'Still working out what this file is');
       }
@@ -194,9 +194,9 @@ void main() {
       expect(result.reason, CastRefusal.container);
       expect(
         result.explanation,
-        'A Chromecast plays MP4 and WebM files; this stream is a Matroska '
-        '(.mkv) file. Casting it would need conversion, which this app '
-        'cannot do yet.',
+        'A Chromecast plays MP4 and WebM files. This stream is a Matroska '
+        '(.mkv) file. Casting it would need a conversion this app cannot do '
+        'yet.',
       );
     });
   });
@@ -284,8 +284,8 @@ void main() {
       expect(refusalOf(result), CastRefusal.renditionVideo);
       expect(
         (result as CastRefused).explanation,
-        "This film's video is AV1, which this receiver can't play, and "
-        "xtremio can't convert it for casting yet.",
+        "This film's video is AV1. This receiver can't play it, and xtremio "
+        "can't convert it for casting yet.",
       );
     });
 
@@ -312,7 +312,7 @@ void main() {
       expect(refusalOf(result), CastRefusal.renditionVideo);
       expect(
         (result as CastRefused).explanation,
-        "This film's video is MPEG-4 Part 2, which this receiver can't play, "
+        "This film's video is MPEG-4 Part 2. This receiver can't play it, "
         "and xtremio can't convert it for casting yet.",
       );
     });
@@ -424,8 +424,8 @@ void main() {
       expect(result.reason, CastRefusal.container);
       expect(
         result.explanation,
-        'A Chromecast plays MP4 and WebM files; this stream is an AVI file. '
-        'Casting it would need conversion, which this app cannot do yet.',
+        'A Chromecast plays MP4 and WebM files. This stream is an AVI file. '
+        'Casting it would need a conversion this app cannot do yet.',
       );
     });
 
@@ -446,7 +446,7 @@ void main() {
         expect(result.reason, CastRefusal.container, reason: reader);
         expect(
           result.explanation,
-          contains('this stream is $name.'),
+          contains('This stream is $name.'),
           reason: reader,
         );
       }
@@ -466,8 +466,8 @@ void main() {
       expect(
         result.explanation,
         'Every receiver that calls itself "Chromecast Ultra" plays H.264, '
-        "VP8, HEVC or VP9 video; this film's video is AV1. Casting it would "
-        'need conversion, which this app cannot do yet.',
+        "VP8, HEVC or VP9 video. This film's video is AV1. Casting it would "
+        'need a conversion this app cannot do yet.',
       );
     });
 
@@ -476,9 +476,9 @@ void main() {
       expect(result.reason, CastRefusal.audioCodec);
       expect(
         result.explanation,
-        'A Chromecast decodes AAC or MP3 audio in an MP4 file; this stream is '
-        'Dolby Digital Plus (E-AC3). Casting it would need conversion, which '
-        'this app cannot do yet.',
+        'A Chromecast plays AAC or MP3 audio in an MP4 file. This stream is '
+        'Dolby Digital Plus (E-AC3). Casting it would need a conversion this '
+        'app cannot do yet.',
       );
     });
   });
@@ -534,8 +534,8 @@ void main() {
         expect(
           (result as CastRefused).explanation,
           'The best of the receivers that call themselves "Chromecast" plays '
-          "H.264, VP8, HEVC or VP9 video; this film's video is AV1. Casting it "
-          'would need conversion, which this app cannot do yet.',
+          "H.264, VP8, HEVC or VP9 video. This film's video is AV1. Casting "
+          'it would need a conversion this app cannot do yet.',
         );
       },
     );
@@ -552,8 +552,8 @@ void main() {
       expect(
         (result as CastRefused).explanation,
         'Every receiver that calls itself "Google Nest Hub" plays H.264 or '
-        "VP9 video; this film's video is HEVC. Casting it would need "
-        'conversion, which this app cannot do yet.',
+        "VP9 video. This film's video is HEVC. Casting it would need a "
+        'conversion this app cannot do yet.',
       );
     });
 
@@ -587,9 +587,9 @@ void main() {
       expect(
         (result as CastRefused).explanation,
         'Every receiver that calls itself "Google Nest Hub" plays H.264 up '
-        "to 1280x720 at 60 frames a second; this film's picture is "
-        '1920x1080 at 24 frames a second. xtremio sends the picture as it '
-        'is, so this receiver cannot show it.',
+        "to 1280x720 at 60 frames a second. This film's picture is 1920x1080 "
+        'at 24 frames a second. xtremio sends the picture as it is, so this '
+        'receiver cannot show it.',
       );
     });
 
@@ -630,7 +630,7 @@ void main() {
       expect(
         (result as CastRefused).explanation,
         'The best of the receivers that call themselves "Chromecast" plays '
-        "HEVC up to 3840x2160 at 60 frames a second; this film's picture is "
+        "HEVC up to 3840x2160 at 60 frames a second. This film's picture is "
         '7680x4320 at 24 frames a second. xtremio sends the picture as it '
         'is, so this receiver cannot show it.',
       );
@@ -679,7 +679,7 @@ void main() {
         (result as CastRefused).explanation,
         contains(
           'plays H.264 up to 3840x2160 at 30 frames a second, or 1920x1080 at '
-          '60 frames a second;',
+          '60 frames a second.',
         ),
       );
     });
@@ -708,7 +708,7 @@ void main() {
     );
 
     String refusal(String picture) =>
-        "This film's video is $picture, which no Chromecast can play, and "
+        "This film's video is $picture. No Chromecast can play it, and "
         "xtremio can't convert it for casting yet.";
 
     final receivers = [
@@ -882,7 +882,10 @@ void main() {
         stats: mp4(),
       );
       expect(refusalOf(result), CastRefusal.proxied);
-      expect((result as CastRefused).explanation, contains('local network'));
+      expect(
+        (result as CastRefused).explanation,
+        contains('Other devices on your network cannot reach it'),
+      );
     });
 
     test('/ftp goes the same way', () {

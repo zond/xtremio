@@ -208,7 +208,8 @@ extension _PlayerOpen on _PlayerScreenState {
       if (proxied == null) {
         throw const MediaRefusal(
           'noRanges',
-          'This stream can only be read forward, and nothing here can.',
+          'This stream cannot be skipped through, and the player needs that '
+              'to open it.',
         );
       }
       _proxiedStream |= isProxiedByServer(proxied);

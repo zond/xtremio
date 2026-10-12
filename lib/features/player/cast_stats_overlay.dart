@@ -243,7 +243,7 @@ class CastStatsOverlay extends StatefulWidget {
   /// copied or converted, from the server's answer where it has one and from
   /// what was decided at the hand-over where it does not.
   static String _sending(CastFacts facts, CastNumbers? numbers) {
-    if (facts.direct) return 'from its source, not through this device';
+    if (facts.direct) return 'directly, not through this device';
     final made = numbers?.made;
     final rendition = numbers?.rendition ?? facts.rendition;
     final type = numbers?.contentType ?? (rendition ? 'video/mp4' : null);

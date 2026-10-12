@@ -93,7 +93,7 @@ class CastRemotePanel extends StatelessWidget {
 
   /// What the remote says under the receiver's name while it fetches the
   /// stream from its source and nothing comes from this device.
-  static const String directLine = 'Playing directly from the source';
+  static const String directLine = 'Playing directly, not through this device';
 
   final String deviceName;
   final String title;

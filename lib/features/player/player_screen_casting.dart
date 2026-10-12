@@ -167,7 +167,7 @@ extension _PlayerCasting on _PlayerScreenState {
     final sent = _castSent;
     await _stopCast();
     await _explainCast(
-      '${device.name} played the sound but showed no picture: it cannot '
+      '${device.name} played the sound but showed no picture. It cannot '
       "show this film's picture ($video$size). It was sent $sent. The film "
       'is playing here again.',
       title: 'No picture on ${device.name}',
@@ -287,8 +287,8 @@ extension _PlayerCasting on _PlayerScreenState {
     };
     if (video != null && cast.pictureMemory.showedNoPicture(device.id, video)) {
       await _explainCast(
-        '${device.name} showed no picture for $video video when it was sent '
-        'some earlier, so it is not sent it again.',
+        '${device.name} showed no picture for $video video last time, so '
+        'xtremio does not send it again.',
       );
       return;
     }
@@ -452,8 +452,7 @@ extension _PlayerCasting on _PlayerScreenState {
       // A no-op when nothing was casting.
       await _stopCast(disconnect: false);
       return '${device.name} cannot reach this device over the network, so '
-          'there is no address to give it. Casting a loopback URL it could '
-          'never fetch would only look like it worked.';
+          'it would have nothing to play.';
     }
     // The LAN listener is up by now, so this takes that with it too.
     if (abandoned()) {
@@ -792,7 +791,7 @@ extension _PlayerCasting on _PlayerScreenState {
       );
       await _stopCast();
       await _explainCast(
-        '${device?.name ?? 'The receiver'} never asked for the stream, so it '
+        '${device?.name ?? 'The receiver'} never asked for the stream. It '
         'could not reach this device at the address it was given. The film '
         'is back on this screen.',
       );

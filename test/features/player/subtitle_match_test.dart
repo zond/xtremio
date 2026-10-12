@@ -177,7 +177,7 @@ void main() {
 
     expect(
       find.text(
-        'Nothing to measure: 694 cue timings in this file, 0 in the '
+        'Nothing to measure: 694 subtitle lines in this file, 0 in the '
         'one you picked',
       ),
       findsOneWidget,

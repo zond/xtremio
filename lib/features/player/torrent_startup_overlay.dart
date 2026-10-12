@@ -90,8 +90,8 @@ class TorrentStartupOverlay extends StatelessWidget {
               if (swarm != null)
                 '$swarm ${swarm == 1 ? 'seed' : 'seeds'} in the swarm',
               if (!hasTrackers && (dht?.unavailable ?? false))
-                'no trackers on this stream, and the DHT has not found a '
-                    'peer on this network -- it may not find any',
+                'no trackers on this stream, and the DHT may find no peers '
+                    'on this network',
             ].join(' · '),
           );
         }
@@ -115,7 +115,10 @@ class TorrentStartupOverlay extends StatelessWidget {
           );
         }
         return TorrentProgressStatus(
-          label: TorrentProgressCard.withPercent('Buffering start…', progress),
+          label: TorrentProgressCard.withPercent(
+            'Buffering the start…',
+            progress,
+          ),
           progress: progress,
           detail: detail,
         );

@@ -231,16 +231,16 @@ final class CastRefused extends CastCompatibility {
   const CastRefused._proxy(String prefix)
     : this._(
         CastRefusal.proxied,
-        'This stream is played through the app\'s own $prefix proxy, which '
-        'is never opened to the local network. It cannot be cast.',
+        'This stream plays through the app\'s own $prefix proxy. Other '
+        'devices on your network cannot reach it, so it cannot be cast.',
       );
 
   const CastRefused._pending()
     : this._(
         CastRefusal.pending,
-        'The player has not said yet what kind of file this is, and that is '
-        'what decides whether a Chromecast can play it. Try again once it '
-        'has started playing.',
+        'The player has not yet said what kind of file this is. That '
+        'decides whether a Chromecast can play it. Try again once it has '
+        'started playing.',
         // The one refusal that is not a verdict, so it does not get to be
         // headed like one.
         title: 'Still working out what this file is',
@@ -249,35 +249,35 @@ final class CastRefused extends CastCompatibility {
   const CastRefused._container(String description)
     : this._(
         CastRefusal.container,
-        'A Chromecast plays MP4 and WebM files; this stream is $description. '
-        'Casting it would need conversion, which this app cannot do yet.',
+        'A Chromecast plays MP4 and WebM files. This stream is $description. '
+        'Casting it would need a conversion this app cannot do yet.',
       );
 
   const CastRefused._video(String subject, String supported, String codec)
     : this._(
         CastRefusal.videoCodec,
-        '$subject plays $supported video; this film\'s video is $codec. '
-        'Casting it would need conversion, which this app cannot do yet.',
+        '$subject plays $supported video. This film\'s video is $codec. '
+        'Casting it would need a conversion this app cannot do yet.',
       );
 
   const CastRefused._pictureSize(String subject, String limit, String film)
     : this._(
         CastRefusal.pictureSize,
-        '$subject plays $limit; this film\'s picture is $film. xtremio sends '
+        '$subject plays $limit. This film\'s picture is $film. xtremio sends '
         'the picture as it is, so this receiver cannot show it.',
       );
 
   const CastRefused._audio(String codec, String supported)
     : this._(
         CastRefusal.audioCodec,
-        'A Chromecast decodes $supported; this stream is $codec. Casting it '
-        'would need conversion, which this app cannot do yet.',
+        'A Chromecast plays $supported. This stream is $codec. Casting it '
+        'would need a conversion this app cannot do yet.',
       );
 
   const CastRefused._pictureFormat(String picture)
     : this._(
         CastRefusal.pictureFormat,
-        "This film's video is $picture, which no Chromecast can play, and "
+        "This film's video is $picture. No Chromecast can play it, and "
         "xtremio can't convert it for casting yet.",
       );
 
@@ -419,7 +419,7 @@ CastRefused _renditionRefusal(ReceiverRow receiver, String video) =>
       receiver.decodes(video)
           ? "This film's video is $video, which xtremio can't repackage for "
                 'casting yet.'
-          : "This film's video is $video, which this receiver can't play, and "
+          : "This film's video is $video. This receiver can't play it, and "
                 "xtremio can't convert it for casting yet.",
     );
 

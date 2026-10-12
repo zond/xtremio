@@ -638,8 +638,8 @@ void main() {
       expect(find.byType(CastRefusedDialog), findsOneWidget);
       expect(
         find.text(
-          "This film's video is 10-bit H.264, which no Chromecast can play, "
-          "and xtremio can't convert it for casting yet.",
+          "This film's video is 10-bit H.264. No Chromecast can play it, and "
+          "xtremio can't convert it for casting yet.",
         ),
         findsOneWidget,
       );
@@ -705,7 +705,7 @@ void main() {
         expect(
           find.textContaining(
             'Every receiver that calls itself "Google Nest Hub" plays H.264 '
-            "or VP9 video; this film's video is HEVC.",
+            "or VP9 video. This film's video is HEVC.",
           ),
           findsOneWidget,
         );
@@ -740,8 +740,8 @@ void main() {
         expect(
           find.text(
             'The best Cast receiver xtremio knows of plays H.264, VP8, HEVC, '
-            "VP9 or AV1 video; this film's video is MPEG-2. Casting it would "
-            'need conversion, which this app cannot do yet.',
+            "VP9 or AV1 video. This film's video is MPEG-2. Casting it would "
+            'need a conversion this app cannot do yet.',
           ),
           findsOneWidget,
         );
@@ -817,9 +817,9 @@ void main() {
       expect(find.text(CastRefusedDialog.defaultTitle), findsNothing);
       expect(
         find.text(
-          'The player has not said yet what kind of file this is, and that '
-          'is what decides whether a Chromecast can play it. Try again once '
-          'it has started playing.',
+          'The player has not yet said what kind of file this is. That '
+          'decides whether a Chromecast can play it. Try again once it has '
+          'started playing.',
         ),
         findsOneWidget,
       );
@@ -1811,7 +1811,7 @@ void main() {
     }
 
     const noPicture =
-        "Living Room TV played the sound but showed no picture: it cannot show "
+        "Living Room TV played the sound but showed no picture. It cannot show "
         "this film's picture (HEVC, 3840x2160). It was sent the film "
         'repackaged, its sound converted. The film is playing here again.';
 
@@ -1881,8 +1881,8 @@ void main() {
       await castTo(tester, livingRoom);
       expect(
         find.text(
-          'Living Room TV showed no picture for HEVC video when it was sent '
-          'some earlier, so it is not sent it again.',
+          'Living Room TV showed no picture for HEVC video last time, so '
+          'xtremio does not send it again.',
         ),
         findsOneWidget,
       );

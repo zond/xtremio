@@ -104,7 +104,10 @@ void main() {
     expect(run.lan.toggles, isEmpty);
     expect(run.harness.mediaIds.published, isEmpty);
     expect(find.text('Casting to Living Room TV'), findsOneWidget);
-    expect(find.text('Playing directly from the source'), findsOneWidget);
+    expect(
+      find.text('Playing directly, not through this device'),
+      findsOneWidget,
+    );
     // The link -- its key, even its host -- is never written down.
     expect(lines, anyElement(contains('straight from its source')));
     for (final line in lines) {
@@ -203,7 +206,10 @@ void main() {
       // The same session: nothing was ended or started for it.
       expect(run.cast.connectAttempts, hasLength(1));
       expect(run.cast.disconnects, 0);
-      expect(find.text('Playing directly from the source'), findsNothing);
+      expect(
+        find.text('Playing directly, not through this device'),
+        findsNothing,
+      );
       expect(find.byType(CastRemotePanel), findsOneWidget);
       expect(
         lines,
@@ -317,7 +323,10 @@ void main() {
       expect(run.cast.loads.single.$1.url, isNot(Uri.parse(link)));
       expect(run.harness.mediaIds.published, isNotEmpty);
       expect(run.lan.toggles, [true]);
-      expect(find.text('Playing directly from the source'), findsNothing);
+      expect(
+        find.text('Playing directly, not through this device'),
+        findsNothing,
+      );
     }
 
     testWidgets('a link with request headers', (tester) async {

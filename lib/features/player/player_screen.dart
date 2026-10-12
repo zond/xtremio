@@ -2884,7 +2884,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (state == null || !state.isLoaded) return 'Loading…';
     final unplayable = state.unplayableReason;
     if (unplayable != null) return unplayable;
-    if (_opened == null) return 'Resolving stream…';
+    if (_opened == null) return 'Opening the stream…';
     if (_waiting) {
       // For a torrent this is what the stall card says with nothing from
       // the server yet, and the whole of what a stall says without one.

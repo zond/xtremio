@@ -43,7 +43,7 @@ void main() {
         [
           'receiver Living Room TV · Chromecast · HEVC tried · playing · '
               '1920x1040 sdr',
-          'sending  from its source, not through this device',
+          'sending  directly, not through this device',
           'position 1:02:03 / 2:00:00',
           'buffered never',
         ],

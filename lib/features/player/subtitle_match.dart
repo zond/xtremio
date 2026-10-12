@@ -62,7 +62,7 @@ class RustSubtitleMatchClient implements SubtitleMatchClient {
 String subtitleMatchNote(rust.SubtitleMatch match) {
   final score = match.score;
   if (score == null) {
-    return 'Nothing to measure: ${match.cues} cue timings in this file, '
+    return 'Nothing to measure: ${match.cues} subtitle lines in this file, '
         '${match.referenceCues} in the one you picked';
   }
   // Clamped, because a pair that does *worse* than chance and one that

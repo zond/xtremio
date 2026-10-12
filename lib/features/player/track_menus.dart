@@ -128,7 +128,7 @@ class SubtitleMenu extends StatefulWidget {
         ? 'The language on offer here that you pick most often'
         : 'The $total languages on offer here that you pick most often';
     if (inFile == 0) return '$head, lifted out of the list below.';
-    return '$head. One is already in this file, above; the other is '
+    return '$head. One is already in this file, above. The other is '
         'lifted out of the list below.';
   }
 
@@ -404,9 +404,8 @@ class SubtitleReferenceMenu extends StatefulWidget {
   /// Said once, at the top: the one thing the viewer knows that the app
   /// cannot work out for itself.
   static const String note =
-      'Pick a file you have seen keep time with this video. Its timings '
-      'are what this one is measured against, so the answer is only as '
-      'good as that file.';
+      'Pick a file you have seen keep time with this video. This one is '
+      'measured against it, so the answer is only as good as that file.';
 
   /// What the row that shows or hides a language's remaining candidates
   /// says. [others] is the count behind it, the head of the language
@@ -763,8 +762,8 @@ class PlayerSettingsSheet extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Text(
-            'Text subtitles only (SRT, WebVTT, ASS text). Bitmap '
-            'subtitles such as PGS or VobSub are listed but not drawn yet.',
+            'Only text subtitles are shown (SRT, WebVTT, ASS text). Image '
+            'subtitles such as PGS or VobSub are listed but not shown yet.',
             style: TextStyle(fontSize: 12),
           ),
         ),

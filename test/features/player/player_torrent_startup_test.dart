@@ -286,7 +286,7 @@ void main() {
       expect(spanning.initialWindowProgress, 0.25);
       expect(
         TorrentStartupOverlay.describe(spanning).label,
-        'Buffering start… 25%',
+        'Buffering the start… 25%',
       );
     });
 
@@ -305,7 +305,7 @@ void main() {
       expect(unknown.waitsForOnePiece, isFalse);
       expect(
         TorrentStartupOverlay.describe(unknown).label,
-        'Buffering start… 25%',
+        'Buffering the start… 25%',
       );
     });
 
@@ -540,7 +540,7 @@ void main() {
         peers: 4,
       );
       final status = TorrentStartupOverlay.describe(spanning);
-      expect(status.label, 'Buffering start… 25%');
+      expect(status.label, 'Buffering the start… 25%');
       expect(status.progress, 0.25);
       expect(status.piece, isNull);
     });
@@ -636,8 +636,8 @@ void main() {
           hasTrackers: false,
           dht: neverBootstrapped,
         ).detail,
-        'No peers found yet · no trackers on this stream, and the DHT has '
-        'not found a peer on this network -- it may not find any',
+        'No peers found yet · no trackers on this stream, and the DHT may '
+        'find no peers on this network',
       );
       // A tracked stream gets no explanation: trackers regularly work with
       // no DHT at all, so there is nothing here to explain.
@@ -699,7 +699,7 @@ void main() {
           swarmLeechers: 402,
         ),
       );
-      expect(buffering.label, 'Buffering start… 50%');
+      expect(buffering.label, 'Buffering the start… 50%');
       expect(buffering.progress, 0.5);
       expect(
         buffering.detail,
@@ -856,7 +856,7 @@ void main() {
       swarmLeechers: 402,
     );
     await poll(tester);
-    expect(overlayText('Buffering start… 75%'), findsOneWidget);
+    expect(overlayText('Buffering the start… 75%'), findsOneWidget);
     expect(
       overlayText('1.5 MB/s · connected 4 · seeds 137 · swarm 539'),
       findsOneWidget,
@@ -996,8 +996,7 @@ void main() {
       expect(
         overlayText(
           'No peers found yet · no trackers on this stream, and the '
-          'DHT has not found a peer on this network -- it may not '
-          'find any',
+          'DHT may find no peers on this network',
         ),
         findsOneWidget,
       );
