@@ -1,28 +1,27 @@
 /// Turning a linked Google Drive file into something the player can open.
 ///
-/// A [LinkedDriveFile] is a name and an id; the player plays it as a media
-/// id the embedded server issues for it, which holds the file as a byte
-/// source and renews the account's access token for itself. The press asks
-/// the server to open it first -- the grant renewed, the file probed -- so
-/// the screen that pressed can say why not, and [openLinkedDriveFile] is
-/// the whole of that flow.
+/// A [LinkedDriveFile] is a name and an id. The player plays it as a media id
+/// the embedded server issues for it; the server holds the file as a byte
+/// source and renews the account's access token for itself. The press asks the
+/// server to open it first, which renews the grant and probes the file, so the
+/// screen that pressed can say why not. [openLinkedDriveFile] is the whole of
+/// that flow.
 ///
-/// **The grant crosses one boundary and no more.** The refresh token comes
-/// out of the secure store through [DriveAccount.refreshToken], goes
-/// straight into the FFI call, and is spent inside the server's own
-/// process. It is in no URL, no log line and no exception here: what comes
-/// back is `xtremio-drive:<fileId>` -- the file's id, which is no
-/// credential and is in the preferences file already -- and the player
-/// registers that and finds it opened. [DriveOpenFailure] is a word rather
-/// than a sentence for the same reason.
+/// **The grant crosses one boundary and no more.** The refresh token comes out
+/// of the secure store through [DriveAccount.refreshToken], goes straight into
+/// the FFI call, and is spent inside the server's own process. It is in no URL,
+/// no log line and no exception here. What comes back is
+/// `xtremio-drive:<fileId>`: the file's id, which is no credential and is in
+/// the preferences file already. The player registers that and finds it opened.
+/// [DriveOpenFailure] is a word rather than a sentence for the same reason.
 ///
 /// **A dead pairing is written down here, once.** The server answers
-/// `pairAgain` when the grant is gone, which is terminal -- no retry brings
-/// it back, only a new QR -- so [openLinkedDriveFile] calls
-/// [DriveAccount.notePairAgain] on the way past. The account's state
-/// becomes [DriveLinkState.pairAgain], every screen that reads it redraws,
-/// and the credential is dropped: nothing else has to remember to do any of
-/// that, and nothing gets to decide differently.
+/// `pairAgain` when the grant is gone. That is terminal: no retry brings it
+/// back, only a new QR. So [openLinkedDriveFile] calls
+/// [DriveAccount.notePairAgain] on the way past. The account's state becomes
+/// [DriveLinkState.pairAgain], every screen that reads it redraws, and the
+/// credential is dropped. Nothing else has to remember to do any of that, and
+/// nothing gets to decide differently.
 library;
 
 import 'dart:convert';
@@ -33,8 +32,8 @@ import 'drive_link.dart';
 import 'drive_pairing.dart';
 import 'resource.dart';
 
-/// Why a linked file could not be played. Each is drawn differently, which
-/// is why they are separate and why none of them is a sentence from
+/// Why a linked file could not be played. Each reason is drawn differently,
+/// which is why they are separate, and why none of them is a sentence from
 /// somewhere else.
 enum DriveOpenFailure {
   /// **Terminal.** The grant has been revoked or has expired and the
@@ -94,9 +93,9 @@ final class DriveFileRefused extends DriveOpened {
 /// Asking the embedded server to open a file in the paired Drive.
 ///
 /// Behind an interface so the pairing screen's widget tests can play a file
-/// without reaching FFI, and so a test can say which id and which token
-/// were handed over -- the second of which is the one thing about this that
-/// has to be checked rather than assumed.
+/// without reaching FFI. A test can also say which id and which token were
+/// handed over, and the token is the one thing here that has to be checked
+/// rather than assumed.
 abstract interface class DriveFileOpener {
   /// Opens [fileId] under [refreshToken] and answers a URL or a reason.
   /// **Never throws for a server that is not running**: that is
@@ -127,11 +126,11 @@ class ServerDriveFileOpener implements DriveFileOpener {
         name: name,
       );
     } on Object {
-      // A panic in the core, or a bridge that is not up. The exception's
-      // own text is not shown and not logged: the call it came out of was
-      // handed the grant, and a habit of printing what an exception said
-      // is how the one that carries it gets filed (`AGENTS.md`, "Never log
-      // auth material").
+      // A panic in the core, or a bridge that is not up. The exception's own
+      // text is neither shown nor logged, because the call it came out of was
+      // handed the grant. A habit of printing what an exception said is how the
+      // one that carries the grant gets filed (`AGENTS.md`, "Never log auth
+      // material").
       return const DriveFileRefused(DriveOpenFailure.unavailable);
     }
     return parseDriveOpenAnswer(answer);
@@ -140,8 +139,8 @@ class ServerDriveFileOpener implements DriveFileOpener {
 
 /// The [DriveGrantSink] the app wires: the grant to the Rust side, for the
 /// Drive downloads it pins without a screen above it (`server_drive_grant`).
-/// The token goes into the FFI call and nowhere else; the call's own
-/// failure, if any, is [DriveAccount]'s to report by type.
+/// The token goes into the FFI call and nowhere else. If the call itself fails,
+/// [DriveAccount] reports it by type.
 Future<void> rustDriveGrantSink(String? refreshToken) =>
     rust.serverDriveGrant(refreshToken: refreshToken);
 
@@ -187,18 +186,17 @@ DriveOpened parseDriveOpenAnswer(String answer) {
 /// Opens [file] with the account's own credential, and records a dead
 /// pairing on the way past.
 ///
-/// The account is asked for the token rather than given one: [file] is a
-/// row in a list, and which credential reaches it is [DriveAccount]'s
-/// business alone -- it already refuses to hand out a token the service has
-/// rejected, whatever is still in memory. No token is returned, held, or
-/// put anywhere a caller could reach it.
+/// The account is asked for the token rather than given one. [file] is a row in
+/// a list, and which credential reaches it is [DriveAccount]'s business alone;
+/// it already refuses to hand out a token the service has rejected, whatever is
+/// still in memory. No token is returned, held, or put anywhere a caller could
+/// reach it.
 ///
-/// A `pairAgain` answer calls [DriveAccount.notePairAgain] before it
-/// returns, so the state every screen reads is already
-/// [DriveLinkState.pairAgain] by the time the caller draws anything. That
-/// is the one side effect here, and it is here rather than in a caller
-/// because a second caller that forgot it would leave a television offering
-/// films it can no longer read.
+/// A `pairAgain` answer calls [DriveAccount.notePairAgain] before it returns.
+/// So the state every screen reads is already [DriveLinkState.pairAgain] by the
+/// time the caller draws anything. That is the one side effect here. It lives
+/// here rather than in a caller, because a second caller that forgot it would
+/// leave a television offering films it can no longer read.
 Future<DriveOpened> openLinkedDriveFile({
   required DriveAccount account,
   required LinkedDriveFile file,
@@ -222,29 +220,29 @@ Future<DriveOpened> openLinkedDriveFile({
 
 /// The raw stream JSON a `PlayerScreen` is given for a Drive file.
 ///
-/// The shape stremio-core's `Stream` parses, hand-built, exactly as the
-/// developer play tiles are (`DevStreams`): a `url`, which is what makes it
-/// a `StreamKind.url`, and the core passes it through untouched. It is
-/// `xtremio-drive:<fileId>`, which the player registers as a Drive media
-/// id -- the same string a Drive download's row keeps, so a finished
-/// download of the file plays off the disk.
+/// It is the shape stremio-core's `Stream` parses, hand-built exactly as the
+/// developer play tiles are (`DevStreams`). It has a `url`, which makes it a
+/// `StreamKind.url`, and the core passes it through untouched. The URL is
+/// `xtremio-drive:<fileId>`, which the player registers as a Drive media id. A
+/// Drive download's row keeps the same string, so a finished download of the
+/// file plays off the disk.
 ///
-/// **What the player is given as a title is the file's own name**, because
-/// it is the only true thing anybody knows. A Drive file has no addon, no
-/// `StreamInfo` from the core and no metadata: nothing has matched it
-/// against Cinemeta, so there is no title, no poster and no episode. The
-/// player's overlay shows `PlayerState.title`, which with no meta item
-/// falls through to the stream's own `name` -- so `name` is what the
-/// viewer's Drive calls the file, which is a thing a person recognises,
-/// and `description` says where it came from. Putting "Google Drive" in
-/// `name` instead would draw the source where the film's name belongs and
-/// leave five linked files looking identical on screen.
+/// **What the player is given as a title is the file's own name**, because that
+/// is the only true thing anybody knows. A Drive file has no addon, no
+/// `StreamInfo` from the core and no metadata. Nothing has matched it against
+/// Cinemeta, so there is no title, no poster and no episode. The player's
+/// overlay shows `PlayerState.title`, which with no meta item falls through to
+/// the stream's own `name`. So `name` is what the viewer's Drive calls the
+/// file, which a person recognises, and `description` says where it came from.
+/// Putting "Google Drive" in `name` instead would draw the source where the
+/// film's name belongs, and leave five linked files looking identical on
+/// screen.
 ///
-/// `behaviorHints.filename` is the same name and is not decoration: the
-/// stream URL has no extension on it, it is the release the subtitle
-/// memory keys on (`castFilename`), and it is the name the player
-/// registers the file under. The name is Drive's own and carries the real
-/// suffix. (The cast check reads none of it: mpv says what the file is.)
+/// `behaviorHints.filename` is the same name, and it is not decoration. The
+/// stream URL has no extension on it. The filename is the release the subtitle
+/// memory keys on (`castFilename`), and the name the player registers the file
+/// under. The name is Drive's own and carries the real suffix. (The cast check
+/// reads none of it: mpv says what the file is.)
 Map<String, dynamic> driveStreamJson({
   required LinkedDriveFile file,
   required DriveFilePlayable playable,
@@ -270,23 +268,22 @@ const String driveTrackingManifestUrl =
 ///
 /// **stremio-core only keeps progress for a play that has one.** Its player
 /// writes the resume position, the watched mark and Continue Watching from
-/// `TimeChanged` only while the selection carries a stream request, and it
-/// finds the next episode by that request's id -- so a Drive play loaded
-/// without one was watched and forgotten, with no up-next after it.
+/// `TimeChanged` only while the selection carries a stream request. It also
+/// finds the next episode by that request's id. So a Drive play loaded without
+/// one was watched and forgotten, with no up-next after it.
 ///
 /// **It is our own address and not a borrowed one.** The request names the
-/// addon a stream came from, and the core writes that down (the last-used
-/// stream's transport URL) and asks it for the next episode's streams.
-/// Naming an installed addon would put a file it never offered on its
-/// record; naming this service names the thing that did put the file here.
-/// The manifest is a truthful one that offers no streams, and every
-/// `stream/...` under it is one static `{"streams":[]}` served from the
-/// CDN, so the next-episode fetch the core makes costs a cached empty
-/// answer and finds nothing to binge into -- the Drive file for the next
-/// episode is found by the player itself (`_playNext`), which is the only
-/// thing that can open one. Addon health leaves this address out, the way
-/// it leaves out the app's own loopback stubs, so those empty answers are
-/// no addon's record either.
+/// addon a stream came from. The core writes that down (the last-used stream's
+/// transport URL) and asks it for the next episode's streams. Naming an
+/// installed addon would put a file it never offered on its record. Naming this
+/// service names the thing that did put the file here. The manifest is a
+/// truthful one that offers no streams, and every `stream/...` under it is one
+/// static `{"streams":[]}` served from the CDN. So the core's next-episode
+/// fetch costs a cached empty answer and finds nothing to binge into. The
+/// player finds the Drive file for the next episode itself (`_playNext`), since
+/// it is the only thing that can open one. Addon health leaves this address
+/// out, as it leaves out the app's own loopback stubs, so those empty answers
+/// are on no addon's record either.
 ///
 /// [videoId] is the video the file is: the Cinemeta id for a film, the
 /// episode's `tt…:season:episode` for an episode.
@@ -298,8 +295,8 @@ ResourceRequest driveStreamRequest({
   path: ResourcePath(resource: 'stream', type: type, id: videoId),
 );
 
-/// The meta and stream requests a matched [file] is played under, or null
-/// for a file nothing matched -- which has no title to keep progress on.
+/// The meta and stream requests a matched [file] is played under. Null for a
+/// file nothing matched, since it has no title to keep progress on.
 ///
 /// The meta comes from Cinemeta, which is what the match was made against,
 /// so the id is one it answers for. The video is the episode when the name

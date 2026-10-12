@@ -6,9 +6,9 @@ import '../src/rust/api/media.dart' as rust;
 import 'state/cast_numbers.dart';
 
 /// The scheme of the URL mpv is handed for a stream played by id:
-/// `xtremio://<id>`. libmpv reads it through the protocol
-/// `rust/src/mpv_stream.rs` registers on each player's handle, over the
-/// embedded server's reader -- no HTTP, no URL of the server's.
+/// `xtremio://<id>`. libmpv reads it over the embedded server's reader, through
+/// the protocol `rust/src/mpv_stream.rs` registers on each player's handle.
+/// There is no HTTP, and no URL of the server's.
 const String mediaIdScheme = 'xtremio';
 
 /// The URL mpv is handed for the media id [id].
@@ -79,17 +79,17 @@ class MediaResolution {
   /// Why the server will not play it, or null when it will.
   final MediaRefusal? refusal;
 
-  /// What it is called: the torrent file's name, a link's last segment, a
-  /// Drive file's or a local file's name -- the member's, for a container.
+  /// What it is called: the torrent file's name, a link's last segment, or a
+  /// Drive file's or a local file's name. For a container, it is the member's.
   final String? name;
 
   /// The film inside, when the id turned out to be a container: the
   /// member's path in it. What a cast is judged by, not the container.
   final String? memberName;
 
-  /// Whether this process reads it, through `xtremio://<id>`. False only
-  /// for an origin that will not serve ranges (a live playlist): mpv is
-  /// handed [proxyUrl] and reads it forward over HTTP.
+  /// Whether this process reads it, through `xtremio://<id>`. False only for an
+  /// origin that will not serve ranges (a live playlist). mpv is then handed
+  /// [proxyUrl] and reads it forward over HTTP.
   final bool inProcess;
 
   /// The `/proxy` URL on the embedded server for an origin read forward;
@@ -104,10 +104,10 @@ class MediaResolution {
 /// stream the server makes from a film for a receiver that cannot take it
 /// as it is (stream-server `docs/design/renditions.md`).
 ///
-/// The picture is always copied -- the film's own H.264 or HEVC samples,
-/// moved into fragmented MP4 -- and the sound copied when it is AAC, or
-/// converted to stereo AAC ([convertSound], step F3: Dolby, DTS and the
-/// rest, which zond's television plays silent or not at all).
+/// The picture is always copied: the film's own H.264 or HEVC samples, moved
+/// into fragmented MP4. The sound is copied when it is AAC, or converted to
+/// stereo AAC ([convertSound], step F3) for Dolby, DTS and the rest, which
+/// zond's television plays silent or not at all.
 final class RenditionSpec {
   const RenditionSpec({
     required this.duration,
@@ -130,8 +130,8 @@ final class RenditionSpec {
   /// Where the receiver starts: the first segment produced is this one's.
   final Duration start;
 
-  /// The audio track to carry, by its position among the film's audio
-  /// tracks -- the order mpv lists them in, which is the file's.
+  /// The audio track to carry, by its position among the film's audio tracks.
+  /// That is the order mpv lists them in, which is the file's.
   final int audioTrack;
 
   /// The sound is converted to stereo AAC rather than copied.
@@ -200,9 +200,9 @@ final class RenditionReadiness {
 /// Behind an interface so the player's widget tests can say what was
 /// registered and published without reaching FFI.
 abstract interface class MediaIds {
-  /// Registers [streamingUrl] -- a URL on the embedded server: a torrent
-  /// the core built, a `/proxy` link, an archive member -- and answers its
-  /// id. No I/O; throws when the server is not running.
+  /// Registers [streamingUrl] and answers its id. The URL is one on the
+  /// embedded server: a torrent the core built, a `/proxy` link, an archive
+  /// member. No I/O; throws when the server is not running.
   String register(Uri streamingUrl);
 
   /// Registers the linked Google Drive file [fileId] and answers its id;
@@ -217,9 +217,9 @@ abstract interface class MediaIds {
   /// cannot be opened, and where there are no descriptors to hand over.
   Future<String> registerLocalContent(Uri contentUri, {String? name});
 
-  /// Finds out what [id] is -- adds the torrent and chooses its file,
-  /// probes a link, renews a Drive grant, sniffs for a container -- and
-  /// answers it, or why it cannot be played. Waits as long as the server
+  /// Finds out what [id] is and answers it, or why it cannot be played. That
+  /// means adding the torrent and choosing its file, probing a link, renewing a
+  /// Drive grant, or sniffing for a container. Waits as long as the server
   /// does, which for a magnet without its metadata is up to the server's
   /// metadata timeout. Throws when the server is not running.
   Future<MediaResolution> resolve(String id);
@@ -230,12 +230,11 @@ abstract interface class MediaIds {
   /// id carries the same play.
   void setPlay(String id, {required String token, required String buffer});
 
-  /// Where the playback mpv's reader over [id] will be resumes ([at];
-  /// zero for one from the top) and how long the film is if the app knows
-  /// ([runtime]). Set right after [setPlay]: a torrent then has the swarm
-  /// asked for the resume point while mpv is still reading the file's head
-  /// and index, rather than only once it blocks there. A hint: never
-  /// throws.
+  /// Where the playback of mpv's reader over [id] resumes ([at]; zero for one
+  /// from the top), and how long the film is if the app knows ([runtime]). Set
+  /// right after [setPlay]. A torrent then has the swarm asked for the resume
+  /// point while mpv is still reading the file's head and index, rather than
+  /// only once it blocks there. A hint: never throws.
   void setResume(String id, {required Duration at, Duration? runtime});
 
   /// The viewer changed the read-ahead: the reader open on [id] takes it
@@ -259,10 +258,10 @@ abstract interface class MediaIds {
   /// log it.** Throws as [publish] does.
   Future<String> publishRendition(String id, RenditionSpec spec);
 
-  /// Starts making the published rendition [token]'s start -- its index,
-  /// its header and the slot the receiver will begin in -- with no receiver
-  /// asking yet, so the receiver is told to load only once it is there
-  /// ([renditionReadiness]). Returns at once; the work waits as long as the
+  /// Starts making the start of the published rendition [token] (its index, its
+  /// header and the slot the receiver will begin in) before any receiver asks.
+  /// So the receiver is told to load only once it is there
+  /// ([renditionReadiness]). Returns at once. The work waits as long as the
   /// source takes, and an unpublish ends it.
   Future<void> prepareRendition(String token);
 

@@ -1,11 +1,11 @@
 /// What the viewer fixed about a subtitle's timing, remembered under what
 /// caused it.
 ///
-/// Nothing re-times a subtitle but the viewer, because a declared frame
-/// rate says where an upload came from and not how it is timed. What that
-/// leaves is the correction they made by hand, and a correction made once
-/// is worth not making again: the same release group, on the same show,
-/// is out by the same amount next episode.
+/// Nothing re-times a subtitle but the viewer, because a declared frame rate
+/// says where an upload came from and not how it is timed. That leaves the
+/// correction they made by hand. A correction made once is worth not making
+/// again: the same release group, on the same show, is out by the same amount
+/// next episode.
 ///
 /// The two adjustments have different causes, so they are remembered
 /// under different keys, and the asymmetry is the whole point:
@@ -22,22 +22,22 @@
 ///   assumed, so it depends on *both* sides: change either and the answer
 ///   changes.
 ///
-/// The key is never the addon's own bucket (`g`): it is re-assigned per
-/// answer, so an index does not name one release across a series --
-/// applying a speed found under it would apply the wrong family's
-/// correction (see `SubtitleInfo.releaseGroupKey`).
+/// The key is never the addon's own bucket (`g`). It is re-assigned per answer,
+/// so an index does not name one release across a series. Applying a speed
+/// found under it would apply the wrong family's correction (see
+/// `SubtitleInfo.releaseGroupKey`).
 ///
-/// Both are real numbers, measured rather than judged: a viewer marking
-/// the picture right, or a match against a file they say is in sync,
-/// solves for a ratio and an offset that no menu of fixed values could
-/// hold. The owner's own Swedish files want a ratio of 1.0440 against the
-/// PAL constant's 1.0427 -- three seconds apart across an episode, and
-/// enough to need a real number rather than a direction.
+/// Both are real numbers, measured rather than judged. A viewer marking the
+/// picture right, or a match against a file they say is in sync, solves for a
+/// ratio and an offset that no menu of fixed values could hold. The owner's own
+/// Swedish files want a ratio of 1.0440 against the PAL constant's 1.0427. That
+/// is three seconds apart across an episode, and enough to need a real number
+/// rather than a direction.
 ///
-/// Any part of a key being unknown -- an addon that names no release
-/// group, a release nothing has named yet -- means that adjustment is not
-/// remembered at all. A narrower key is forgotten more often, and being
-/// forgotten is the price of never being wrong.
+/// An adjustment is not remembered at all when any part of its key is unknown:
+/// an addon that names no release group, a release nothing has named yet. A
+/// narrower key is forgotten more often, and being forgotten is the price of
+/// never being wrong.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -53,9 +53,8 @@ final class SubtitleSyncEntry {
   /// [releaseGroup]'s files of [series]: `sub-speed`, with 1.0 being the
   /// file's own timing.
   ///
-  /// Whether it was measured or judged is not recorded, because nothing
-  /// reads it back differently: what is stored is the number that was on
-  /// the player.
+  /// Whether it was measured or judged is not recorded, because nothing reads
+  /// it back differently. What is stored is the number that was on the player.
   const SubtitleSyncEntry.speed({
     required this.series,
     required this.releaseGroup,
@@ -80,13 +79,13 @@ final class SubtitleSyncEntry {
   /// timed against.
   final String series;
 
-  /// The group that cut the release the adjusted file was made for,
-  /// lower-cased (`SubtitleInfo.releaseGroupKey`) -- the only name an
-  /// addon gives a file that survives to the next episode.
+  /// The group that cut the release the adjusted file was made for, lower-cased
+  /// (`SubtitleInfo.releaseGroupKey`). It is the only name an addon gives a
+  /// file that survives to the next episode.
   final String releaseGroup;
 
-  /// The video release the offset was measured against, and null on a
-  /// speed entry -- which does not depend on one.
+  /// The video release the offset was measured against. Null on a speed entry,
+  /// which does not depend on one.
   final String? release;
 
   /// The multiplier, and null on a shift entry.
@@ -106,16 +105,15 @@ final class SubtitleSyncEntry {
     if (release != null) 'shiftSeconds': shiftSeconds,
   };
 
-  /// One stored row, or null when it is not one this build can use: a
-  /// missing key part, a value of the wrong type, a row that names
-  /// neither adjustment. Preferences are forgiving -- a row that cannot
-  /// be read is dropped, never a failure to load.
+  /// One stored row, or null when it is not one this build can use: a missing
+  /// key part, a value of the wrong type, a row that names neither adjustment.
+  /// Preferences are forgiving: a row that cannot be read is dropped, never a
+  /// failure to load.
   ///
-  /// A row keyed on the addon's bucket rather than a release group cannot
-  /// be migrated -- the bucket index does not name a release group, so
-  /// there is nothing to translate it into. It lapses instead: one
-  /// adjustment made again costs less than one applied under a key that
-  /// means something else.
+  /// A row keyed on the addon's bucket rather than a release group cannot be
+  /// migrated. The bucket index does not name a release group, so there is
+  /// nothing to translate it into. It lapses instead: one adjustment made again
+  /// costs less than one applied under a key that means something else.
   static SubtitleSyncEntry? fromJson(Object? json) {
     if (json is! Map) return null;
     final series = _token(json['series']);
@@ -162,11 +160,11 @@ final class SubtitleSyncEntry {
     return text.isEmpty ? null : text;
   }
 
-  /// [value] as a correction, or null when it is not one. A NaN or an
-  /// infinity is not: both survive a round trip through Dart's own JSON
-  /// codec, and both would reach `sub-speed` or `sub-delay` as a number
-  /// the player cannot use. What range a *usable* correction is in is
-  /// the player's business rather than the file's.
+  /// [value] as a correction, or null when it is not one. A NaN or an infinity
+  /// is not one. Both survive a round trip through Dart's own JSON codec, and
+  /// both would reach `sub-speed` or `sub-delay` as a number the player cannot
+  /// use. What range a *usable* correction is in is the player's business
+  /// rather than the file's.
   static double? _number(Object? value) {
     if (value is! num) return null;
     final number = value.toDouble();
@@ -206,10 +204,9 @@ final class SubtitleSyncMemory {
   /// [remembering] is free to move what it touches to the front.
   final List<SubtitleSyncEntry> entries;
 
-  /// How many adjustments are kept. Two per show -- a speed and a shift
-  /// -- so this is dozens of shows, and a viewer who fixes twenty does
-  /// not pay for the twenty-first with a file that grows for the life of
-  /// the install.
+  /// How many adjustments are kept. With two per show (a speed and a shift),
+  /// this is dozens of shows. A viewer who fixes twenty does not pay for the
+  /// twenty-first with a file that grows for the life of the install.
   ///
   /// What falls off the end is what was adjusted longest ago, which is
   /// the one thing about a correction that says it is unlikely to be
@@ -226,9 +223,9 @@ final class SubtitleSyncMemory {
     return null;
   }
 
-  /// The offset in seconds remembered for [releaseGroup]'s files of
-  /// [series] against [release], and 0 when none is -- including when any
-  /// part of the key is unknown.
+  /// The offset in seconds remembered for [releaseGroup]'s files of [series]
+  /// against [release]. It is 0 when none is, including when any part of the
+  /// key is unknown.
   double shiftSecondsFor({
     required String? series,
     required String? releaseGroup,
@@ -243,20 +240,19 @@ final class SubtitleSyncMemory {
     return 0;
   }
 
-  /// This memory with what the viewer has now got on screen written into
-  /// it: [speed] and [shiftSeconds] under their own keys, both moved to
-  /// the front, and either dropped when it has gone back to untouched.
+  /// This memory with what the viewer now has on screen written into it.
+  /// [speed] and [shiftSeconds] go under their own keys and both move to the
+  /// front, and either is dropped when it has gone back to untouched.
   ///
-  /// Untouched is *forgotten* rather than stored as a correction of zero.
-  /// A viewer who presses Reset is saying this file needs nothing, and
-  /// nothing remembered is exactly what nothing applied looks like next
-  /// time.
+  /// Untouched is *forgotten* rather than stored as a correction of zero. A
+  /// viewer who presses Reset is saying this file needs nothing, and nothing
+  /// remembered is exactly what nothing applied looks like next time.
   ///
-  /// Nothing is remembered without a [series] and a [releaseGroup] to key
-  /// it on, and no shift without a [release]: a guess about which files an
-  /// adjustment belongs to would apply it to files it was never made for.
-  /// The shift entries are left alone when the release is unknown --
-  /// there is no way to tell which of them this would have replaced.
+  /// Nothing is remembered without a [series] and a [releaseGroup] to key it
+  /// on, and no shift without a [release]. A guess about which files an
+  /// adjustment belongs to would apply it to files it was never made for. The
+  /// shift entries are left alone when the release is unknown, since there is
+  /// no way to tell which of them this would have replaced.
   SubtitleSyncMemory remembering({
     required String? series,
     required String? releaseGroup,
@@ -295,14 +291,14 @@ final class SubtitleSyncMemory {
     return next == this ? this : next;
   }
 
-  /// What is written under the preferences' one key: a list, because a
-  /// JSON object's key order is not something either side of the FFI
-  /// boundary promises to keep, and the order here *is* the recency.
+  /// What is written under the preferences' one key. It is a list because
+  /// neither side of the FFI boundary promises to keep a JSON object's key
+  /// order, and the order here *is* the recency.
   List<Object> toJson() => [for (final entry in entries) entry.toJson()];
 
-  /// Reads the stored value, dropping any row this build cannot use and
-  /// keeping at most [limit] of them -- a file written by a build with a
-  /// larger bound is not a reason to carry an unbounded list around.
+  /// Reads the stored value, dropping any row this build cannot use and keeping
+  /// at most [limit] of them. A file written by a build with a larger bound is
+  /// not a reason to carry an unbounded list around.
   static SubtitleSyncMemory fromJson(Object? json) {
     if (json is! List) return empty;
     final entries = <SubtitleSyncEntry>[];

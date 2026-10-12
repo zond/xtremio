@@ -1,61 +1,56 @@
 /// What a model answered when it was asked what a title is like, and where
 /// that answer is kept.
 ///
-/// "More like this" is asked of the xtremio-xervice server, which asks a model
-/// once per title and keeps that answer for everybody -- the same model
-/// asked the same question twice agrees with itself about half the time
-/// (`tool/recommendations/README.md`, the `consistent` column), and a row
-/// that changed every time a title was opened would be a row nobody could
-/// point at. **The first answer is the answer**, and this is the device's
-/// copy of it: written down under the title it was asked about and read
-/// back for the life of the install, so a title reaches the server once
-/// per install. What is stored is the *model's* answer -- titles and years -- rather than the catalogue
-/// items it resolved to: the resolution is a lookup against whatever the
-/// catalogues hold now, it is cheap, and it is the half that is allowed to
+/// "More like this" is asked of the xtremio-xervice server. It asks a model
+/// once per title and keeps that answer for everybody. The same model asked the
+/// same question twice agrees with itself about half the time
+/// (`tool/recommendations/README.md`, the `consistent` column). A row that
+/// changed every time a title was opened would be a row nobody could point at.
+/// **The first answer is the answer**, and this is the device's copy of it. It
+/// is written down under the title it was asked about and read back for the
+/// life of the install, so a title reaches the server once per install. What is
+/// stored is the *model's* answer (titles and years) rather than the catalogue
+/// items it resolved to. The resolution is a lookup against whatever the
+/// catalogues hold now; it is cheap, and it is the half that is allowed to
 /// change when a poster does.
 ///
-/// Nothing here is a claim that a suggestion is real. A model invents
-/// films -- one invented twenty out of seventy-one in the measurements --
-/// and every stored row goes through the same guard on the way to the
-/// screen (`resolveSuggestions`), so an invented title is stored, resolves
-/// to nothing, and costs one search.
+/// Nothing here is a claim that a suggestion is real. A model invents films:
+/// one invented twenty out of seventy-one in the measurements. Every stored row
+/// goes through the same guard on the way to the screen (`resolveSuggestions`),
+/// so an invented title is stored, resolves to nothing, and costs one search.
 ///
-/// The one thing that is allowed to expire an answer is the *question*.
-/// Every row carries the version of the wording it came from
-/// ([similarQuestionVersion]) and a row from another version is read back
-/// as nothing remembered, because "the first answer is the answer" is a
-/// rule about a question and not about a title: without it, changing the
-/// wording would change what only a fresh install ever sees.
+/// The one thing allowed to expire an answer is the *question*. Every row
+/// carries the version of the wording it came from ([similarQuestionVersion]).
+/// A row from another version is read back as nothing remembered, because "the
+/// first answer is the answer" is a rule about a question and not about a
+/// title. Without it, a change to the wording would reach only fresh installs.
 library;
 
 import 'package:flutter/foundation.dart';
 
 /// Which version of the question produced a stored answer.
 ///
-/// The first answer is the answer for the life of the install, which is
-/// what makes the row point-at-able and is also a trap: a change to the
-/// wording is a change nobody who has already opened a title ever sees.
-/// Version 1 is the first question that asks about television as well as
-/// film; the film-only question that shipped before it wrote no stamp at
-/// all, and an unstamped row reads back as 0 -- *not this version* --
-/// which is exactly what it is.
+/// The first answer is the answer for the life of the install. That makes the
+/// row point-at-able, and it is also a trap: a change to the wording is a
+/// change nobody who has already opened a title ever sees. Version 1 is the
+/// first question that asks about television as well as film. The film-only
+/// question that shipped before it wrote no stamp at all, and an unstamped row
+/// reads back as 0 (*not this version*), which is exactly what it is.
 ///
-/// The question itself is asked by the server now
-/// (`xtremio-xervice/functions/similar.js`), which keys its own cache by its
-/// `QUESTION_VERSION` and names that version in every answer. **Bump this
-/// when that bumps**, or a device that already holds an answer keeps the
-/// old one for the life of the install while every new install gets the
-/// new one. `test/core/similar_memory_test.dart` reads the server's
-/// constant and fails while the two disagree.
+/// The server asks the question now (`xtremio-xervice/functions/similar.js`).
+/// It keys its own cache by its `QUESTION_VERSION` and names that version in
+/// every answer. **Bump this when that bumps.** Otherwise a device that already
+/// holds an answer keeps the old one for the life of the install while every
+/// new install gets the new one. `test/core/similar_memory_test.dart` reads the
+/// server's constant and fails while the two disagree.
 const int similarQuestionVersion = 1;
 
 /// Which catalogue a suggestion is to be looked for in.
 ///
-/// A model asked for films like one film answers with television too, and
-/// is right to: asked what is like *Wave Twisters* it named *Æon Flux*,
-/// which is a series, and the app plays series. So the kind travels with
-/// the suggestion rather than being taken from whatever the viewer is
-/// looking at.
+/// A model asked for films like one film answers with television too, and is
+/// right to. Asked what is like *Wave Twisters*, it named *Æon Flux*, which is
+/// a series, and the app plays series. So the kind travels with the suggestion
+/// rather than being taken from whatever the viewer is looking at.
 enum SuggestedKind {
   film('film', 'movie'),
   series('series', 'series');
@@ -70,8 +65,8 @@ enum SuggestedKind {
   /// is stremio's own vocabulary and not this enum's.
   final String catalogType;
 
-  /// [stored] read back, or what a model called it, or null for anything
-  /// else -- including nothing at all, which is the ordinary case.
+  /// [stored] read back, or what a model called it. Null for anything else,
+  /// including nothing at all, which is the ordinary case.
   static SuggestedKind? parse(Object? value) => switch (value) {
     'film' || 'movie' => SuggestedKind.film,
     'series' || 'tv' || 'show' || 'tv series' => SuggestedKind.series,
@@ -81,12 +76,12 @@ enum SuggestedKind {
 
 /// One thing a model named: a title, the year it puts on it, and why.
 ///
-/// [year] is not decoration and it is not optional. Searching an invented
-/// title does not fail -- it answers with a real, unrelated film, which is
-/// how *The Otherside (2022)*, which does not exist, resolved happily to a
-/// 2008 film and a 2013 one. The year is the only thing in the answer that
-/// can tell those apart from a hit, so a suggestion that names no year is
-/// not a suggestion this can use.
+/// [year] is not decoration and it is not optional. Searching an invented title
+/// does not fail; it answers with a real, unrelated film. That is how *The
+/// Otherside (2022)*, which does not exist, resolved happily to a 2008 film and
+/// a 2013 one. The year is the only thing in the answer that can tell those
+/// apart from a hit, so a suggestion that names no year is not one this can
+/// use.
 @immutable
 final class SuggestedTitle {
   const SuggestedTitle({
@@ -111,11 +106,10 @@ final class SuggestedTitle {
   /// there, and because the reason is what a viewer judges the row by.
   final String why;
 
-  /// Which catalogue to look in. The schema asks for it now, so an answer
-  /// to the current question states one; null is what a word
-  /// [SuggestedKind.parse] does not know reads back as, and what every row
-  /// stored before the schema asked reads as -- see [resolveSuggestions]
-  /// for what happens then.
+  /// Which catalogue to look in. The schema asks for it now, so an answer to
+  /// the current question states one. Null is what a word [SuggestedKind.parse]
+  /// does not know reads back as, and what every row stored before the schema
+  /// asked reads as; see [resolveSuggestions] for what happens then.
   final SuggestedKind? kind;
 
   /// The row as it is written to the preferences file. The kind is written
@@ -128,10 +122,10 @@ final class SuggestedTitle {
     'kind': ?kind?.stored,
   };
 
-  /// One stored row, or null when it is not one this build can use: no
-  /// title, no year, a value of the wrong type. A row that cannot be read
-  /// is dropped, never a failed load -- the worst it costs is one request
-  /// to the server the next time the title is opened.
+  /// One stored row, or null when it is not one this build can use: no title,
+  /// no year, a value of the wrong type. A row that cannot be read is dropped,
+  /// never a failed load. The worst it costs is one request to the server the
+  /// next time the title is opened.
   static SuggestedTitle? fromJson(Object? json) {
     if (json is! Map) return null;
     final title = json['title'];
@@ -176,11 +170,11 @@ final class SimilarMemory {
   /// the front.
   final List<SimilarAnswer> entries;
 
-  /// How many titles are remembered. Ten suggestions each, a few hundred
-  /// bytes a row: this is a couple of hundred kilobytes at the very most,
-  /// against a preferences file that is otherwise a few kilobytes. What
-  /// falls off the end is the title asked about longest ago, and all it
-  /// costs is being asked again.
+  /// How many titles are remembered. At ten suggestions each and a few hundred
+  /// bytes a row, this is a couple of hundred kilobytes at the very most,
+  /// against a preferences file that is otherwise a few kilobytes. What falls
+  /// off the end is the title asked about longest ago, and all it costs is
+  /// being asked again.
   static const int limit = 128;
 
   /// What was answered about [id] of [type], or null when nothing this
@@ -191,11 +185,11 @@ final class SimilarMemory {
   /// thing, so null and empty are kept apart here the way they are
   /// everywhere else in this file.
   ///
-  /// An answer to an *older* question is null rather than a value, and
-  /// that is the point of [similarQuestionVersion]. A viewer who opened a
-  /// series while the question was film-only has ten films written down
-  /// under it; without this they would keep that row for the life of the
-  /// install, and the change would be one only new installs ever saw.
+  /// An answer to an *older* question is null rather than a value; that is the
+  /// point of [similarQuestionVersion]. A viewer who opened a series while the
+  /// question was film-only has ten films written down under it. Without this
+  /// they would keep that row for the life of the install, and only new
+  /// installs would ever see the change.
   List<SuggestedTitle>? forItem({required String type, required String id}) {
     for (final entry in entries) {
       if (entry.type == type && entry.id == id) {
@@ -295,14 +289,14 @@ final class SimilarAnswer {
     'films': [for (final suggestion in suggestions) suggestion.toJson()],
   };
 
-  /// One stored row, or null when it names no title or no id -- a row
-  /// nothing could be looked up by.
+  /// One stored row, or null when it names no title or no id, since nothing
+  /// could be looked up by such a row.
   ///
-  /// A row with no `asked`, or one whose `asked` is not a number, is
-  /// version 0: an answer this build did not ask for. That is not a row
-  /// to drop -- dropping it and re-asking look the same from here, and
-  /// keeping it means [SimilarMemory.remembering] has something to
-  /// replace rather than a duplicate to make.
+  /// A row with no `asked`, or one whose `asked` is not a number, is version 0:
+  /// an answer this build did not ask for. That row is not dropped. Dropping it
+  /// and re-asking look the same from here, and keeping it means
+  /// [SimilarMemory.remembering] has something to replace rather than a
+  /// duplicate to make.
   static SimilarAnswer? fromJson(Object? json) {
     if (json is! Map) return null;
     final type = json['type'];

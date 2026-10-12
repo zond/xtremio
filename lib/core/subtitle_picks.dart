@@ -14,20 +14,18 @@
 ///   and still gets those two.
 ///
 /// **A count is only ever moved by a pick made by hand.** The auto-pick
-/// applying a remembered row must never write, or one choice becomes
-/// twenty-two counts over a season and the pins ossify -- the same
-/// discipline that makes a press on the timing panel the only writer of
-/// `SubtitleSyncMemory`.
+/// applying a remembered row must never write. Otherwise one choice becomes
+/// twenty-two counts over a season, and the pins ossify. The same discipline
+/// makes a press on the timing panel the only writer of `SubtitleSyncMemory`.
 ///
 /// What is stored is what the menu prints: the language *label*
-/// (`subtitleLanguageLabel`), so an addon answering `sv` and one
-/// answering `swe` are one memory, and the stored word is the row the
-/// viewer chose. The release group is `SubtitleInfo.releaseGroupKey`,
-/// lower-cased, which is the only name an addon gives a file that means
-/// the same thing on the next episode -- and it is absent on about six
-/// files in ten, which is not a shortfall but the rule this store shares
-/// with `SubtitleSyncMemory`: a key nobody can name is not remembered,
-/// and the memory then says only the language.
+/// (`subtitleLanguageLabel`). So an addon answering `sv` and one answering
+/// `swe` are one memory, and the stored word is the row the viewer chose. The
+/// release group is `SubtitleInfo.releaseGroupKey`, lower-cased. It is the only
+/// name an addon gives a file that means the same thing on the next episode. It
+/// is absent on about six files in ten. That is not a shortfall but the rule
+/// this store shares with `SubtitleSyncMemory`: a key nobody can name is not
+/// remembered, and the memory then says only the language.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -35,14 +33,14 @@ import 'package:flutter/foundation.dart';
 /// The subtitle a show was last watched with, or that it was watched with
 /// none.
 ///
-/// [enabled] false is a *value*, not an absence: a viewer who turns
-/// subtitles off on a show they watch undubbed has said something, and
-/// without somewhere to say it every episode would push them back on.
+/// [enabled] false is a *value*, not an absence. A viewer who turns subtitles
+/// off on a show they watch undubbed has said something. Without somewhere to
+/// say it, every episode would push them back on.
 @immutable
 final class SubtitleShowPick {
-  /// A language picked by hand, with the release group of the very file
-  /// when the addon named one and [embedded] set when what was picked was
-  /// a track inside the video rather than an addon's file.
+  /// A language picked by hand. It carries the release group of the very file
+  /// when the addon named one, and sets [embedded] when the pick was a track
+  /// inside the video rather than an addon's file.
   const SubtitleShowPick({
     required this.series,
     required String this.language,
@@ -69,22 +67,21 @@ final class SubtitleShowPick {
   /// null when [enabled] is false.
   final String? language;
 
-  /// The lower-cased release group of the file that was picked, when the
-  /// addon named one. Null is the ordinary case -- six files in ten carry
-  /// no group -- and means the next episode takes the head of the
-  /// language, exactly as it would with nothing remembered.
+  /// The lower-cased release group of the file that was picked, when the addon
+  /// named one. Null is the ordinary case, since six files in ten carry no
+  /// group. It means the next episode takes the head of the language, exactly
+  /// as it would with nothing remembered.
   final String? releaseGroup;
 
-  /// Whether the pick was a track already in the video. Those have no
-  /// release group and no URL to carry to another episode; all this
-  /// remembers is that the file's own track was preferred to a download,
-  /// which is the same thing the session preference's `source` says.
+  /// Whether the pick was a track already in the video. Those have no release
+  /// group and no URL to carry to another episode. All this remembers is that
+  /// the file's own track was preferred to a download, which is what the
+  /// session preference's `source` says too.
   final bool embedded;
 
-  /// The row as it is written to the preferences file: only what this
-  /// pick actually knows, so a file someone reads says `off` where
-  /// subtitles were turned off and names a group only where one was
-  /// named.
+  /// The row as it is written to the preferences file, holding only what this
+  /// pick actually knows. So a file someone reads says `off` where subtitles
+  /// were turned off, and names a group only where one was named.
   Map<String, Object> toJson() => {
     'series': series,
     if (!enabled) 'off': true,
@@ -93,10 +90,9 @@ final class SubtitleShowPick {
     if (embedded) 'embedded': true,
   };
 
-  /// One stored row, or null when it is not one this build can use: no
-  /// series, or a row that is neither an off nor a language. Preferences
-  /// are forgiving -- an unreadable row is dropped, never a failure to
-  /// load.
+  /// One stored row, or null when it is not one this build can use: no series,
+  /// or a row that is neither an off nor a language. Preferences are forgiving:
+  /// an unreadable row is dropped, never a failure to load.
   static SubtitleShowPick? fromJson(Object? json) {
     if (json is! Map) return null;
     final series = _token(json['series']);
@@ -169,26 +165,26 @@ final class SubtitlePickMemory {
   /// language costs them to find. It exists so one curious tap on Thai
   /// does not earn a permanent slot above the alphabet.
   ///
-  /// Two rather than three (2026-09-28): a pick is counted only when
-  /// made by hand, and the show's own memory then applies it to every
-  /// episode after without counting, so a count is roughly one per show.
-  /// At three a viewer had to start three shows in a language before it
-  /// rose to the top, which read as the feature not being there.
+  /// Two rather than three (2026-09-28). A pick is counted only when made by
+  /// hand, and the show's own memory then applies it to every episode after
+  /// without counting, so a count is roughly one per show. At three, a viewer
+  /// had to start three shows in a language before it rose to the top, which
+  /// read as the feature not being there.
   static const int pinThreshold = 2;
 
   /// The total number of picks at which every count is halved. **Also a
-  /// guess.** Halving on picks rather than on days is the point: a
-  /// language a viewer speaks does not go stale while the app is closed,
-  /// so nothing here decays with the clock the way `addon_health` does --
-  /// what makes an old preference weak is newer preferences, and those
-  /// arrive one pick at a time. Halving keeps the store small, keeps the
-  /// arithmetic legible in a file a person may read, and lets a taste
-  /// that changes be followed within a few dozen picks instead of never.
+  /// guess.** Halving on picks rather than on days is the point. A language a
+  /// viewer speaks does not go stale while the app is closed, so nothing here
+  /// decays with the clock the way `addon_health` does. What makes an old
+  /// preference weak is newer preferences, and those arrive one pick at a time.
+  /// Halving keeps the store small, keeps the arithmetic legible in a file a
+  /// person may read, and lets a changing taste be followed within a few dozen
+  /// picks instead of never.
   static const int countCeiling = 256;
 
-  /// What this [series] was last watched with, or null when it has never
-  /// been -- which is also what an unnamed series (an offline file, a
-  /// stream with no meta behind it) answers.
+  /// What this [series] was last watched with, or null when it never has been.
+  /// An unnamed series (an offline file, a stream with no meta behind it)
+  /// answers null too.
   SubtitleShowPick? forSeries(String? series) {
     if (series == null) return null;
     for (final pick in shows) {
@@ -201,25 +197,24 @@ final class SubtitlePickMemory {
   /// most [pinCount], most picked first, and only those picked at least
   /// [pinThreshold] times.
   ///
-  /// **Only languages this episode really offers.** A pin is a row moved,
-  /// never a row invented, so a language nothing answered with cannot be
-  /// pinned -- which is the same rule that stops the auto-pick
-  /// preselecting one.
+  /// **Only languages this episode really offers.** A pin is a row moved, never
+  /// a row invented, so a language nothing answered with cannot be pinned. The
+  /// same rule stops the auto-pick preselecting one.
   ///
-  /// **[offered] is every language the sheet offers**, the tracks inside
-  /// the video as well as the addons' answers: a pick of either raises
-  /// the same count here (`subtitleLanguageLabel` is what both are stored
-  /// as), so a ranking that left the file's own tracks out would call a
-  /// language the commonest of what is on offer while a language picked
-  /// three times as often sat in the section above it. A language named
-  /// twice, because the file and an addon both have it, is one language
-  /// and takes one slot; the first mention is the one that counts.
+  /// **[offered] is every language the sheet offers**: the tracks inside the
+  /// video as well as the addons' answers. A pick of either raises the same
+  /// count here, since `subtitleLanguageLabel` is what both are stored as. A
+  /// ranking that left the file's own tracks out would call a language the
+  /// commonest on offer while a language picked three times as often sat in the
+  /// section above it. A language named twice, because the file and an addon
+  /// both have it, is one language and takes one slot; the first mention
+  /// counts.
   ///
-  /// [offered] is taken in the order the caller has it -- the menu's
-  /// addon rows, then the file's own tracks -- and the sort is on (picks,
-  /// that position) so ties come out in that order and two rebuilds of
-  /// one menu never disagree -- `List.sort` is not stable, so the
-  /// position is part of the key rather than left to it.
+  /// [offered] is taken in the order the caller has it: the menu's addon rows,
+  /// then the file's own tracks. The sort is on (picks, that position), so ties
+  /// come out in that order and two rebuilds of one menu never disagree.
+  /// `List.sort` is not stable, so the position is part of the key rather than
+  /// left to it.
   List<String> pinned(Iterable<String> offered) {
     final candidates = <(int, int, String)>[];
     final seen = <String>{};
@@ -240,9 +235,9 @@ final class SubtitlePickMemory {
   /// This memory with [pick] written into it: the show's row replaced and
   /// moved to the front, and the language's count raised by one.
   ///
-  /// An off row counts towards no language -- there is no language in it
-  /// to count -- but it still takes the show's row, because "none here"
-  /// is exactly what the next episode has to be told.
+  /// An off row counts towards no language, since there is no language in it to
+  /// count. It still takes the show's row, because "none here" is exactly what
+  /// the next episode has to be told.
   SubtitlePickMemory remembering(SubtitleShowPick pick) {
     final kept = [
       for (final row in shows)

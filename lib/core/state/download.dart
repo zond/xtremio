@@ -6,8 +6,8 @@ import 'stream.dart';
 /// `downloads_list`/`downloads_events` answer with, progress merged in from
 /// the embedded server.
 ///
-/// The wire shape is camelCase throughout and the raw map is kept, the way
-/// every other view here keeps it: the `stream`, `meta`, `streamRequest` and
+/// The wire shape is camelCase throughout, and the raw map is kept, as every
+/// other view here keeps it. The `stream`, `meta`, `streamRequest` and
 /// `metaRequest` it carries are handed straight back to `Load Player` and to
 /// Details, so nothing is reshaped on the way through.
 
@@ -30,20 +30,20 @@ enum DownloadState {
   /// Reserved: the server has no pause for a pinned file yet.
   paused('paused'),
 
-  /// Everything this row named is off the device: the server holds no pin
-  /// for its pieces any more, so there is nothing here to read. Written
-  /// once, by the boot reconciliation that found the root moved or
-  /// reclaimed out from under it. Nothing fetches it again until the user
-  /// asks -- which is the whole difference between this and [error].
+  /// Everything this row named is off the device: the server holds no pin for
+  /// its pieces any more, so there is nothing here to read. It is written once,
+  /// by the boot reconciliation that found the root moved or reclaimed out from
+  /// under it. Nothing fetches it again until the user asks, which is the whole
+  /// difference between this and [error].
   gone('gone');
 
   const DownloadState(this.wireName);
 
   final String wireName;
 
-  /// A state this build does not know — a registry written by a newer one —
-  /// reads back as [queued], which is what the Rust side's own deserializer
-  /// does with it. Anything but a string is [queued] too.
+  /// A state this build does not know (a registry written by a newer one) reads
+  /// back as [queued], as the Rust side's own deserializer does. Anything but a
+  /// string is [queued] too.
   static DownloadState parse(Object? value) => values.firstWhere(
     (state) => state.wireName == value,
     orElse: () => queued,
@@ -112,13 +112,12 @@ final class DownloadView {
 
   bool get isComplete => state == DownloadState.complete;
 
-  /// Still on its way: not whole on the device, and not one of the two
-  /// states nothing is working on. The same test `Entry::unfinished` in
-  /// `rust/src/downloads.rs` makes, which is what decides whether the
-  /// progress ticker keeps polling -- an errored entry counts, because a
-  /// peer can still turn up, and a [DownloadState.gone] one does not,
-  /// because nothing is fetching it and nothing will until it is asked
-  /// for again.
+  /// Still on its way: not whole on the device, and not one of the two states
+  /// nothing is working on. `Entry::unfinished` in `rust/src/downloads.rs`
+  /// makes the same test, and it decides whether the progress ticker keeps
+  /// polling. An errored entry counts, because a peer can still turn up. A
+  /// [DownloadState.gone] one does not, because nothing is fetching it and
+  /// nothing will until it is asked for again.
   bool get isUnfinished =>
       state != DownloadState.complete &&
       state != DownloadState.paused &&
@@ -147,8 +146,8 @@ final class DownloadView {
   Map<String, dynamic>? get metaRequest =>
       json['metaRequest'] as Map<String, dynamic>?;
 
-  /// `0..1` of the file, for a progress bar; null while there is nothing to
-  /// be a fraction of (a magnet still resolving reports no size). A complete
+  /// `0..1` of the file, for a progress bar. Null while there is nothing to be
+  /// a fraction of, since a magnet still resolving reports no size. A complete
   /// download is 1 whatever the counters say.
   double? get progress {
     if (isComplete) return 1;
@@ -174,10 +173,10 @@ final class DownloadView {
 /// One row's progress, as the feed reports it: what moves while a download
 /// runs, keyed by the entry it belongs to.
 ///
-/// The whole entry is what a listing is for. A progress event carries these
-/// six fields instead -- the `MetaItem` snapshot, the raw stream JSON and
-/// the two addon requests would otherwise be decoded on the UI isolate once
-/// a second per row, to say that a byte count moved.
+/// The whole entry is what a listing is for. A progress event carries these six
+/// fields instead. Otherwise the `MetaItem` snapshot, the raw stream JSON and
+/// the two addon requests would be decoded on the UI isolate once a second per
+/// row, just to say that a byte count moved.
 final class DownloadProgress {
   const DownloadProgress(this.json);
 
@@ -224,11 +223,11 @@ final class DownloadProgress {
 sealed class DownloadsUpdate {
   const DownloadsUpdate();
 
-  /// Reads whichever shape arrived. A `progress` array is the ticker's
-  /// narrow event; a `removed` array names the entries that are gone (what
-  /// the client pushes for its own removals, and the shape the Rust side
-  /// would push if `remove` ever emitted); anything else is read as a
-  /// listing, the shape a full `downloads_list` snapshot takes.
+  /// Reads whichever shape arrived. A `progress` array is the ticker's narrow
+  /// event. A `removed` array names the entries that are gone: the client
+  /// pushes it for its own removals, and the Rust side would push it if
+  /// `remove` ever emitted. Anything else is read as a listing, the shape a
+  /// full `downloads_list` snapshot takes.
   factory DownloadsUpdate.fromJson(Map<String, dynamic> json) {
     final progress = json['progress'];
     if (progress is List) {
@@ -265,10 +264,10 @@ final class DownloadsProgressUpdate extends DownloadsUpdate {
   String toString() => 'DownloadsProgressUpdate(${rows.length} rows)';
 }
 
-/// The entries that are gone. The other two shapes can only add or move a
-/// row -- a listing envelope is merged, a progress row is laid over -- so
-/// without this a removal reached nobody: the Rust side emits nothing for
-/// one, and whoever held a registry kept the row until they listed again.
+/// The entries that are gone. The other two shapes can only add or move a row:
+/// a listing envelope is merged, and a progress row is laid over. Without this
+/// a removal reached nobody. The Rust side emits nothing for one, and whoever
+/// held a registry kept the row until they listed again.
 /// [DownloadsClient.remove] pushes one for the key it dropped.
 final class DownloadsRemovalUpdate extends DownloadsUpdate {
   const DownloadsRemovalUpdate(this.keys);
@@ -315,16 +314,16 @@ final class DownloadsRegistry {
 
   /// Why the list on this device could not be read, when it could not.
   ///
-  /// **An empty [items] beside this is not "nothing is downloaded".** The
-  /// file is the only record of what the user asked to keep, and the server
-  /// is told the pin set from it, so a read that fails means the app cannot
-  /// say what is kept -- not that nothing is. The files stay on the device
-  /// and the server keeps them for as long as this holds, which is why the
-  /// screen has to say so rather than draw an empty list.
+  /// **An empty [items] beside this is not "nothing is downloaded".** The file
+  /// is the only record of what the user asked to keep, and the server is told
+  /// the pin set from it. So a read that fails means the app cannot say what is
+  /// kept, not that nothing is. The files stay on the device and the server
+  /// keeps them for as long as this holds. That is why the screen has to say so
+  /// rather than draw an empty list.
   ///
-  /// So every copy below carries it on, and a merge takes the update's,
-  /// the newer reading of the file. A copy that dropped it turned a list
-  /// that could not be read into an empty one at the first progress row.
+  /// So every copy below carries it on, and a merge takes the update's, the
+  /// newer reading of the file. A copy that dropped it turned a list that could
+  /// not be read into an empty one at the first progress row.
   final String? unreadable;
 
   /// Nothing downloaded, and what a failed read falls back to.
@@ -353,9 +352,9 @@ final class DownloadsRegistry {
   DownloadView? forVideo(String metaId, String videoId) =>
       items[DownloadView.keyFor(metaId, videoId)];
 
-  /// Newest addition first, which is the order a downloads list shows; an
-  /// entry with no `createdAt` sorts last, and ties go by key so the order
-  /// never wobbles between rebuilds.
+  /// Newest addition first, which is the order a downloads list shows. An entry
+  /// with no `createdAt` sorts last, and ties go by key so the order never
+  /// wobbles between rebuilds.
   List<DownloadView> get newestFirst {
     final sorted = items.values.toList();
     sorted.sort((a, b) {
@@ -404,9 +403,9 @@ final class DownloadsRegistry {
   }
 
   /// This registry with [update]'s entries laid over it. A listing update
-  /// carries only what it knows about, so folding one in is how a screen
-  /// keeps the full picture; an entry that was *removed* is in no listing,
-  /// and only a [DownloadsRemovalUpdate] or a fresh listing drops it.
+  /// carries only what it knows about, so folding one in is how a screen keeps
+  /// the full picture. An entry that was *removed* is in no listing; only a
+  /// [DownloadsRemovalUpdate] or a fresh listing drops it.
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},

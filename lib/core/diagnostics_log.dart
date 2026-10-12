@@ -3,11 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../src/rust/api/diagnostics.dart' as rust;
 import 'stream_proxy.dart' show isEmbeddedServerHost;
 
-/// Where a Dart-side diagnostic line goes. The app installs the one that
-/// writes into the Rust core's log ring ([DiagnosticsLog.useCoreRing]);
-/// tests install a recorder; anything that has installed nothing drops the
-/// line, which is what keeps a widget test off FFI without arranging
-/// anything.
+/// Where a Dart-side diagnostic line goes. The app installs the one that writes
+/// into the Rust core's log ring ([DiagnosticsLog.useCoreRing]), and tests
+/// install a recorder. With nothing installed the line is dropped, which keeps
+/// a widget test off FFI without arranging anything.
 typedef DiagnosticsSink = void Function(
   String level,
   String target,
@@ -16,43 +15,40 @@ typedef DiagnosticsSink = void Function(
 
 /// The Dart half of the log the Diagnostics screen copies.
 ///
-/// The Rust side keeps the ring (`rust/src/logging.rs`) and everything
-/// below the FFI already lands in it. Playback, though, is decided up
-/// here: which URL was opened, what mpv said when it refused, whether the
-/// open is being retried, an unhandled Flutter error. None of that was in
-/// the ring, so a copied report could not explain a playback failure -- the
-/// one thing it is most often asked to explain.
+/// The Rust side keeps the ring (`rust/src/logging.rs`), and everything below
+/// the FFI already lands in it. Playback, though, is decided up here: which URL
+/// was opened, what mpv said when it refused, whether the open is being
+/// retried, an unhandled Flutter error. None of that was in the ring, so a
+/// copied report could not explain a playback failure, the one thing it is most
+/// often asked to explain.
 ///
-/// Lines go through the FFI into the *same* ring, not a second buffer:
-/// one clock, one format, one bound. Order is the order things happened in
-/// because the call is synchronous and the ring is append-only.
+/// Lines go through the FFI into the *same* ring, not a second buffer: one
+/// clock, one format, one bound. The call is synchronous and the ring is
+/// append-only, so lines are in the order things happened.
 ///
-/// **Nothing secret goes in.** No stremio-core action args, no auth
-/// material, no manifest URL with a key (see `AGENTS.md`, "Never log auth
-/// material"). **This class is where a URL is made safe to write**, and
-/// it happens in [write], so every line -- ours, mpv's, an exception's
-/// `toString` -- goes through the one rule ([DiagnosticsLog.url],
-/// [DiagnosticsLog.redactUrls]) before it reaches the ring. The ring is
-/// also what Android's logcat gets (`rust/src/logging.rs` re-emits every
-/// app line there before it is stored), so a scrub any later than this --
-/// in the Rust layer, or in `redactSecrets` on the way to the clipboard --
-/// would be one that logcat never saw. `redactSecrets` is the second lock,
-/// not the first.
+/// **Nothing secret goes in.** No stremio-core action args, no auth material,
+/// no manifest URL with a key (see `AGENTS.md`, "Never log auth material").
+/// **This class is where a URL is made safe to write.** It happens in [write],
+/// so every line (ours, mpv's, an exception's `toString`) goes through the one
+/// rule ([DiagnosticsLog.url], [DiagnosticsLog.redactUrls]) before it reaches
+/// the ring. The ring also feeds Android's logcat: `rust/src/logging.rs`
+/// re-emits every app line there before it is stored. So logcat would never see
+/// a scrub that came any later, in the Rust layer or in `redactSecrets` on the
+/// way to the clipboard. `redactSecrets` is the second lock, not the first.
 abstract final class DiagnosticsLog {
   /// Where lines go. Null drops them.
   static DiagnosticsSink? sink;
 
-  /// Whether URLs are written whole: set while Verbose logging is on
+  /// Whether URLs are written whole. It is set while Verbose logging is on
   /// (`DiagnosticsTraceSync`, the one place that follows the preference).
   ///
   /// Verbose logging is for chasing a problem, and the redaction below is
-  /// exactly what hides the thing being chased: with it on, [url] hands the
-  /// URL back as it is and the copied report skips its scrub
-  /// (`formatDiagnostics`). The switch's own text says so: those URLs can
-  /// carry an addon's debrid key. Lines written before it was turned on
-  /// stay redacted, and the ones written while it was on are scrubbed by
-  /// the report ([safeUrl]) once it is off again: they are still in the
-  /// ring.
+  /// exactly what hides the thing being chased. With it on, [url] hands the URL
+  /// back as it is, and the copied report skips its scrub
+  /// (`formatDiagnostics`). The switch's own text says so: those URLs can carry
+  /// an addon's debrid key. Lines written before it was turned on stay
+  /// redacted. Lines written while it was on are still in the ring, and the
+  /// report scrubs them ([safeUrl]) once it is off again.
   static bool unredacted = false;
 
   /// The last line written, and how many identical ones have been
@@ -61,10 +57,9 @@ abstract final class DiagnosticsLog {
   static String? _last;
   static int _repeats = 0;
 
-  /// Sends Dart-side lines into the Rust core's log ring. Called once the
-  /// Rust library is loaded; a call made before that (or with no core at
-  /// all) is dropped rather than thrown, since a log line is never worth a
-  /// crash.
+  /// Sends Dart-side lines into the Rust core's log ring. Called once the Rust
+  /// library is loaded. A call made before that, or with no core at all, is
+  /// dropped rather than thrown, since a log line is never worth a crash.
   static void useCoreRing() {
     sink = (level, target, message) {
       try {
@@ -81,12 +76,12 @@ abstract final class DiagnosticsLog {
   /// A line identical to the one before it is counted instead of written;
   /// the count is written out as soon as something else happens.
   ///
-  /// Every `http(s)` URL in [message] is rewritten by [url] on the way
-  /// through ([redactUrls]). Callers still write their own URLs through
-  /// [url] -- the rule is the same, and a line built from the safe form
-  /// reads the same after this pass -- but the pass is what catches the
-  /// text nobody composed: mpv's `Failed to open <url>`, media_kit's
-  /// exception messages, a `PlatformException` naming what it was given.
+  /// Every `http(s)` URL in [message] is rewritten by [url] on the way through
+  /// ([redactUrls]). Callers still write their own URLs through [url]: the rule
+  /// is the same, and a line built from the safe form reads the same after this
+  /// pass. But the pass is what catches the text nobody composed: mpv's
+  /// `Failed to open <url>`, media_kit's exception messages, a
+  /// `PlatformException` naming what it was given.
   static void write(String level, String target, String message) {
     final sink = DiagnosticsLog.sink;
     if (sink == null) return;
@@ -123,14 +118,13 @@ abstract final class DiagnosticsLog {
   /// credentials.
   ///
   /// The query is where an addon's API key rides, and the userinfo is a
-  /// password by definition. A debrid link signs its token into a path
-  /// segment, Torrentio and Comet put the debrid *API key* in theirs, and a
-  /// stream proxied through the server carries the whole target path on the
-  /// end of `/proxy/d=<origin>&p=<player token>/…`
-  /// (`proxiedThroughServer`, `lib/core/stream_proxy.dart`). Without the
-  /// rule below, a proxy URL's path and `p=` token -- a working download
-  /// link -- would land in the report the Diagnostics screen tells people
-  /// to paste into an issue:
+  /// password by definition. A debrid link signs its token into a path segment,
+  /// and Torrentio and Comet put the debrid *API key* in theirs. A stream
+  /// proxied through the server carries the whole target path on the end of
+  /// `/proxy/d=<origin>&p=<player token>/…` (`proxiedThroughServer`,
+  /// `lib/core/stream_proxy.dart`). Without the rule below, a proxy URL's path
+  /// and `p=` token, which together are a working download link, would land in
+  /// the report the Diagnostics screen tells people to paste into an issue:
   ///
   /// - A `/proxy/…` URL keeps `scheme://host:port/proxy/d=<target host>/…`:
   ///   the target's host is what a report about a stream needs (which
@@ -147,10 +141,10 @@ abstract final class DiagnosticsLog {
   ///   directory layout, which no report needs.
   static String url(Uri url) => unredacted ? url.toString() : safeUrl(url);
 
-  /// [url] as [url] writes it with Verbose logging off, whatever the
-  /// switch says: what the copied report's scrub (`redactSecrets`) runs on
-  /// every URL in it, so lines written whole while the switch was on do
-  /// not leave in a report taken after it was turned off.
+  /// [url] as [url] writes it with Verbose logging off, whatever the switch
+  /// says. The copied report's scrub (`redactSecrets`) runs this on every URL
+  /// in it, so lines written whole while the switch was on do not leave in a
+  /// report taken after it was turned off.
   static String safeUrl(Uri url) {
     if (url.isScheme('file')) {
       final segments = url.pathSegments;
@@ -182,12 +176,11 @@ abstract final class DiagnosticsLog {
   /// [write] runs on every line; also for a caller that has a whole
   /// message from somewhere else (an exception's text) rather than a URL.
   ///
-  /// A URL in prose is taken up to the next whitespace, and trailing
-  /// sentence punctuation is handed back to the sentence: mpv writes
-  /// `Failed to open <url>.` with the full stop on the URL. Text that does
-  /// not parse as a URL is left as it was -- a token that only looks like
-  /// one is not a place to invent a redaction, and the second lock is
-  /// still there for it.
+  /// A URL in prose is taken up to the next whitespace, and trailing sentence
+  /// punctuation is handed back to the sentence: mpv writes
+  /// `Failed to open <url>.` with the full stop on the URL. Text that does not
+  /// parse as a URL is left as it was. A token that only looks like one is not
+  /// a place to invent a redaction, and the second lock is still there for it.
   ///
   /// [always] redacts with [safeUrl] whatever Verbose logging says; the
   /// report's scrub asks for that.
@@ -235,9 +228,9 @@ abstract final class DiagnosticsLog {
   /// (the embedded server over loopback), or the host *and port* of a
   /// server of ours that is reachable from the network ([noteOwnServer]).
   ///
-  /// Not "any private address": an addon somebody hosts on their own LAN
-  /// is on a private address too, and its path carries its config --
-  /// debrid key included -- the same as a public addon's does.
+  /// Not "any private address". An addon somebody hosts on their own LAN is on
+  /// a private address too, and its path carries its config, debrid key
+  /// included, the same as a public addon's does.
   static bool _isOurs(Uri url) {
     final host = url.host;
     if (isEmbeddedServerHost(host)) return true;
@@ -258,11 +251,11 @@ abstract final class DiagnosticsLog {
 /// the console into the log ring as well.
 ///
 /// A crash in a build, a listener or an async gap is exactly the kind of
-/// failure nobody can read off a phone -- it goes to logcat, which is what
-/// the whole Diagnostics screen exists to avoid needing. The existing
-/// handlers stay in place (Flutter's own still prints the full details with
-/// its stack); only the one line that says what broke is captured, because
-/// a stack trace would fill the ring it is in.
+/// failure nobody can read off a phone. It goes to logcat, which the whole
+/// Diagnostics screen exists to avoid needing. The existing handlers stay in
+/// place, and Flutter's own still prints the full details with its stack. Only
+/// the one line that says what broke is captured, because a stack trace would
+/// fill the ring it is in.
 ///
 /// Idempotent: installing twice does not chain two copies of this.
 void captureUnhandledErrors() {
