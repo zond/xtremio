@@ -28,12 +28,11 @@ final class ReceiverRow {
   /// one of them covering a film's is enough.
   final Map<String, List<VideoLimit>> video;
 
-  /// For a row known only by a name several models announce: what the
-  /// best of them decodes. A cast beyond this row and within that one is
-  /// tried (zond, 2026-10-05: "we could e.g. try HEVC if we are
-  /// uncertain"), the receiver's own report of the picture catching a
-  /// model that cannot. Null where the name names one model, whose row
-  /// is then held to as it is.
+  /// For a row known only by a name several models announce: what the best of
+  /// them decodes. A cast beyond this row and within that one is tried (zond,
+  /// 2026-10-05: "we could e.g. try HEVC if we are uncertain"). The receiver's
+  /// own report of the picture catches a model that cannot. Null where the name
+  /// names one model, whose row is then held to as it is.
   final ReceiverRow? atBest;
 
   /// Whether it decodes [codec] at all.
@@ -181,11 +180,11 @@ abstract final class ReceiverTable {
     },
   );
 
-  /// What every model announcing a name has in common, by that name
-  /// (compared without case). "Chromecast": the 1st, 2nd and 3rd
-  /// generation dongles and both Chromecasts with Google TV -- the 1st
-  /// generation's H.264 (Google lists no VP8 for the Google TV models).
-  /// The rest name one model each, as far as is known.
+  /// What every model announcing a name has in common, by that name (compared
+  /// without case). "Chromecast" is announced by the 1st, 2nd and 3rd
+  /// generation dongles and both Chromecasts with Google TV, so its row is the
+  /// 1st generation's H.264 (Google lists no VP8 for the Google TV models). The
+  /// rest name one model each, as far as is known.
   static final Map<String, ReceiverRow> byAnnouncedName = {
     'chromecast': const ReceiverRow(
       subject: 'Every receiver that calls itself "Chromecast"',
@@ -239,17 +238,16 @@ abstract final class ReceiverTable {
     ),
   );
 
-  /// **The deepest picture any receiver decodes, by codec**: its bit
-  /// depth, always 4:2:0. Google's table lists H.264 as High Profile only --
-  /// 8-bit 4:2:0, so High 10 ("Hi10P", common in anime releases), High
-  /// 4:2:2 and High 4:4:4 are decoded by no Chromecast; HEVC as Main and
-  /// Main 10, so 12 bits, 4:2:2 and 4:4:4 (the range extensions) by none
-  /// either; VP9 as profiles 0 and 2 (8 and 10 bits, 4:2:0); AV1 as Main
-  /// (8 and 10 bits, 4:2:0); VP8 is 8-bit 4:2:0 by definition. One table
-  /// for every row, since a row's limits are size and rate and what no
-  /// receiver decodes is refused whatever the receiver: a model whose row
-  /// holds less (a Nest Hub's VP9) is left to its own report of the
-  /// picture.
+  /// **The deepest picture any receiver decodes, by codec**: its bit depth,
+  /// always 4:2:0. Google's table lists H.264 as High Profile only, which is
+  /// 8-bit 4:2:0. So High 10 ("Hi10P", common in anime releases), High 4:2:2
+  /// and High 4:4:4 are decoded by no Chromecast. It lists HEVC as Main and
+  /// Main 10, so 12 bits, 4:2:2 and 4:4:4 (the range extensions) are decoded by
+  /// none either. VP9 is listed as profiles 0 and 2 (8 and 10 bits, 4:2:0), AV1
+  /// as Main (8 and 10 bits, 4:2:0), and VP8 is 8-bit 4:2:0 by definition. One
+  /// table serves every row, since a row's limits are size and rate, and what
+  /// no receiver decodes is refused whatever the receiver. A model whose row
+  /// holds less (a Nest Hub's VP9) is left to its own report of the picture.
   static const Map<String, int> deepestPicture = {
     'H.264': 8,
     'HEVC': 10,

@@ -6,11 +6,11 @@ import 'cast_client.dart';
 
 /// The list of receivers the cast button opens.
 ///
-/// Rows on a sheet of the app's own, so the theme floor (`FocusTheme`)
-/// fills the one the remote is on and nothing here draws a ring -- the
-/// same decision the player's track menus record. The transport buttons
-/// below, on [CastRemotePanel], are over the video but on its black scrim,
-/// where the floor's stroke reads.
+/// Rows on a sheet of the app's own, so the theme floor (`FocusTheme`) fills
+/// the one the remote is on and nothing here draws a ring. That is the same
+/// decision the player's track menus record. The transport buttons below, on
+/// [CastRemotePanel], are over the video but on its black scrim, where the
+/// floor's stroke reads.
 ///
 /// Only receivers, and only ones that were found: there is no "searching"
 /// spinner to sit through, because the button that opens this is itself
@@ -72,9 +72,9 @@ class CastDeviceSheet extends StatelessWidget {
 /// The player screen while a receiver has the stream: the same transport,
 /// pointed somewhere else.
 ///
-/// There is no video here — the pixels are on the television — so the screen
-/// says what is playing, where it has got to, and what the buttons will do
-/// to it. Everything it shows comes from the receiver's own status, so a
+/// There is no video here, since the pixels are on the television. So the
+/// screen says what is playing, where it has got to, and what the buttons will
+/// do to it. Everything it shows comes from the receiver's own status, so a
 /// pause from the Chromecast's remote (or from another phone) shows up here
 /// too.
 class CastRemotePanel extends StatelessWidget {
@@ -99,8 +99,8 @@ class CastRemotePanel extends StatelessWidget {
   final String title;
   final CastStatus status;
 
-  /// The receiver fetches the stream from its source itself ([directLine]),
-  /// not from this device: what tells a later report about a cast which of
+  /// The receiver fetches the stream from its source itself ([directLine]), not
+  /// from this device. This is what tells a later report about a cast which of
   /// the two it was.
   final bool direct;
 
@@ -238,10 +238,9 @@ class CastRemotePanel extends StatelessWidget {
 /// Says why a stream cannot go to a receiver, and that the conversion which
 /// would fix it does not exist yet.
 ///
-/// A dialog rather than a snackbar: this is the answer to something the
-/// viewer asked for, it is a couple of sentences long, and the alternative
-/// -- letting the load fail on the television -- is what this whole check
-/// exists to avoid.
+/// A dialog rather than a snackbar: this is the answer to something the viewer
+/// asked for, and it is a couple of sentences long. The alternative, letting
+/// the load fail on the television, is what this whole check exists to avoid.
 class CastRefusedDialog extends StatelessWidget {
   const CastRefusedDialog({
     super.key,
@@ -274,12 +273,12 @@ class CastRefusedDialog extends StatelessWidget {
 /// **The phone getting a converted stream ready before the television is
 /// told about it** (a rendition, stream-server `docs/design/renditions.md`).
 ///
-/// The receiver gives up on a load whose first answer stays silent for long
-/// -- measured on a Chromecast with Google TV against a torrent whose first
-/// piece and index took a minute -- so the television is handed the stream
-/// only once its start is made. Until then this card is drawn over the
-/// video, which keeps playing here, with what the server is doing and a
-/// Cancel that leaves the film on this screen.
+/// The receiver gives up on a load whose first answer stays silent for long.
+/// That was measured on a Chromecast with Google TV against a torrent whose
+/// first piece and index took a minute. So the television is handed the stream
+/// only once its start is made. Until then this card is drawn over the video,
+/// which keeps playing here. It shows what the server is doing, and a Cancel
+/// that leaves the film on this screen.
 class CastPreparingPanel extends StatelessWidget {
   const CastPreparingPanel({
     super.key,

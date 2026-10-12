@@ -87,10 +87,10 @@ final class CastStatus {
   /// is what tells the core `Ended` from a session someone closed.
   final bool ended;
 
-  /// The receiver gave up on the media: idle, with the reason `ERROR` -- a
-  /// URL it could not fetch (a 403, a host it cannot reach) or bytes it
-  /// could not play. Only ever true alongside [CastPlayerState.idle]. What
-  /// a cast handed straight to the source falls back on (the player's
+  /// The receiver gave up on the media: idle, with the reason `ERROR`. That is
+  /// a URL it could not fetch (a 403, a host it cannot reach) or bytes it could
+  /// not play. Only ever true alongside [CastPlayerState.idle]. A cast handed
+  /// straight to the source falls back on this (the player's
   /// `_fallBackFromDirect`).
   final bool failed;
 
@@ -224,7 +224,7 @@ final class CastMedia {
 /// stopped explicitly rather than running for the life of the app.
 abstract interface class CastClient {
   /// Whether this platform can cast at all. False on desktop, and on a
-  /// television — a TV is a receiver, not a sender — which is what keeps the
+  /// television, since a TV is a receiver, not a sender. That is what keeps the
   /// cast button off screens that could never use it.
   bool get isSupported;
 
@@ -239,9 +239,9 @@ abstract interface class CastClient {
   /// running replaces it.
   ///
   /// [activeScan] asks for an active scan (Android's MediaRouter
-  /// `CALLBACK_FLAG_PERFORM_ACTIVE_SCAN`), which finds receivers the
-  /// passive search misses and costs power for as long as it runs: only
-  /// while a list of receivers is on screen, which is what Android asks.
+  /// `CALLBACK_FLAG_PERFORM_ACTIVE_SCAN`), which finds receivers the passive
+  /// search misses. It costs power for as long as it runs, so it is asked for
+  /// only while a list of receivers is on screen, which is what Android asks.
   Future<void> startDiscovery({bool activeScan = false});
   Future<void> stopDiscovery();
 
@@ -257,11 +257,11 @@ abstract interface class CastClient {
   /// Connects to [device] and answers the receiver the session is with, or
   /// null when it could not be started.
   ///
-  /// The answer is the device again rather than a bool because this is
-  /// where a platform is asked where the receiver *is*: one lookup as a
-  /// cast starts, instead of one per receiver on every route change, so
-  /// [CastDevice.address] is filled in on the answer and not on the entry
-  /// in the device list this was called with.
+  /// The answer is the device again rather than a bool, because this is where a
+  /// platform is asked where the receiver *is*. That is one lookup as a cast
+  /// starts, instead of one per receiver on every route change. So
+  /// [CastDevice.address] is filled in on the answer, and not on the entry in
+  /// the device list this was called with.
   Future<CastDevice?> connect(CastDevice device);
 
   /// Which receivers showed no picture for which video, this session.
@@ -350,11 +350,11 @@ class UnsupportedCastClient implements CastClient {
 /// Provides the [CastClient] and the [LanMediaControl] to the widget tree,
 /// the way [PlaybackScope] and [DownloadsScope] do.
 ///
-/// The two travel together because a cast session is both of them: the
-/// receiver is told a URL, and that URL only answers while the server's LAN
-/// media listener is up. With no scope above it a widget gets a client that
-/// cannot cast and the real server, so the app needs no scope for the
-/// listener half and a test that fakes one fakes both.
+/// The two travel together because a cast session is both of them: the receiver
+/// is told a URL, and that URL only answers while the server's LAN media
+/// listener is up. A widget with no scope above it gets a client that cannot
+/// cast and the real server. So the app needs no scope for the listener half,
+/// and a test that fakes one fakes both.
 class CastScope extends InheritedWidget {
   const CastScope({
     super.key,

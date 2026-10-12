@@ -8,35 +8,34 @@ import 'cast_compatibility.dart';
 /// (published on the LAN listener) as every cast was before.
 ///
 /// A plain web link the receiver can play as it is gains nothing from the
-/// relay: every byte would cross the Wi-Fi twice and the phone would have
-/// to stay awake for the length of the film. Nothing is shared for such a
-/// stream either way, so the relay's one other reason does not apply. It
-/// is answered [opened] -- the link exactly as the core published it --
-/// when **every** one of these holds:
+/// relay: every byte would cross the Wi-Fi twice, and the phone would have to
+/// stay awake for the length of the film. Nothing is shared for such a stream
+/// either way, so the relay's one other reason does not apply. The answer is
+/// [opened], the link exactly as the core published it, when **every** one of
+/// these holds:
 ///
-/// - [stream] is an addon's `url` stream ([StreamKind.url]): not a torrent,
-///   an archive, a magnet or anything else the server builds.
-/// - [opened] is an `http` or `https` URL with no credentials in it, on a
-///   host the receiver could reach on its own: not this device (a route of
-///   the embedded server, a kept download), not a private, link-local or
-///   loopback address, not a `.local` or single-label name. That leaves out
-///   a Drive file (`xtremio-drive:`), a file on this device (`file:`,
-///   `content:`) by scheme.
+/// - [stream] is an addon's `url` stream ([StreamKind.url]): not a torrent, an
+///   archive, a magnet or anything else the server builds.
+/// - [opened] is an `http` or `https` URL with no credentials in it, on a host
+///   the receiver could reach on its own: not this device (a route of the
+///   embedded server, a kept download), not a private, link-local or loopback
+///   address, not a `.local` or single-label name. That leaves out a Drive file
+///   (`xtremio-drive:`), a file on this device (`file:`, `content:`) by scheme.
 /// - The receiver needs nothing from us to fetch it: no
-///   `behaviorHints.proxyHeaders` (request headers it would have to send,
-///   which only the server's `/proxy` can), and not `notWebReady` (the addon
-///   saying a browser-grade player cannot take the link as it is).
-/// - The server resolved it ([resolution]) to a file it reads in process,
-///   and **not to the member of an archive or a disc image**: a link to a
-///   `.rar` plays the film inside it, which only this device can unwrap.
-///   Not resolved yet is not eligible -- nothing has said what it is.
-/// - [compatibility] is [CastReady]: the receiver plays the file as it is.
-///   A film that needs a rendition is repackaged by this device's server,
-///   so it goes the rendition way.
+///   `behaviorHints.proxyHeaders` (request headers it would have to send, which
+///   only the server's `/proxy` can), and not `notWebReady` (the addon saying a
+///   browser-grade player cannot take the link as it is).
+/// - The server resolved it ([resolution]) to a file it reads in process, and
+///   **not to the member of an archive or a disc image**: a link to a `.rar`
+///   plays the film inside it, which only this device can unwrap. A link not
+///   resolved yet is not eligible, since nothing has said what it is.
+/// - [compatibility] is [CastReady]: the receiver plays the file as it is. A
+///   film that needs a rendition is repackaged by this device's server, so it
+///   goes the rendition way.
 ///
-/// Anything else is relayed. A link that passes and is refused by the
-/// receiver anyway -- a debrid link bound to the phone's address, a 403 --
-/// is relayed then, once (the player's `_fallBackFromDirect`).
+/// Anything else is relayed. A link that passes but is refused by the receiver
+/// anyway (a debrid link bound to the phone's address, a 403) is then relayed,
+/// once (the player's `_fallBackFromDirect`).
 Uri? directCastUrl({
   required Uri? opened,
   required StreamInfo stream,

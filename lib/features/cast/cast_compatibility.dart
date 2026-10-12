@@ -6,62 +6,61 @@ import 'receiver_table.dart';
 /// not at all, and why.
 ///
 /// **The picture is never decoded or encoded.** A cast sends the bytes the
-/// server already serves, or the same picture in another container with
-/// its sound copied or converted to stereo AAC ([CastRendition]), so a
-/// video codec the receiver cannot decode is not a slower cast, it is a
-/// black screen. The gate therefore has to answer
-/// honestly, and a refusal has to say what is wrong rather than let the
-/// cast fail on the television.
+/// server already serves, or the same picture in another container with its
+/// sound copied or converted to stereo AAC ([CastRendition]). So a video codec
+/// the receiver cannot decode is not a slower cast: it is a black screen. The
+/// gate therefore has to answer honestly, and a refusal has to say what is
+/// wrong rather than let the cast fail on the television.
 ///
-/// **mpv is the only authority on what the file is** (zond, 2026-10-05:
-/// "always use the mpv info"). A cast starts from the player, where mpv is
-/// reading the file, so its report ([PlaybackStats.fileFormat],
-/// `videoCodec`, `audioCodec`) is about the file itself. A file name, a
-/// URL's extension and what a release says of itself (`x265`, `DDP5.1`)
-/// are claims, often absent -- a debrid link names no file at all -- and
-/// sometimes wrong, so none of them is read here. Until mpv has reported,
-/// the answer is a "not yet" ([CastRefusal.pending]), never a guess.
+/// **mpv is the only authority on what the file is** (zond, 2026-10-05: "always
+/// use the mpv info"). A cast starts from the player, where mpv is reading the
+/// file, so its report ([PlaybackStats.fileFormat], `videoCodec`, `audioCodec`)
+/// is about the file itself. A file name, a URL's extension and what a release
+/// says of itself (`x265`, `DDP5.1`) are claims. They are often absent (a
+/// debrid link names no file at all) and sometimes wrong, so none of them is
+/// read here. Until mpv has reported, the answer is a "not yet"
+/// ([CastRefusal.pending]), never a guess.
 ///
-/// What a Chromecast plays without help is an MP4 or WebM file whose video
-/// its model decodes ([ReceiverRow]: H.264 everywhere, HEVC, VP8, VP9 and
-/// AV1 on some, each up to a size and rate) and whose audio is one the
-/// container is allowed to carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. mpv
-/// names the reader that opened the file, and a reader opens a family:
+/// A Chromecast plays an MP4 or WebM file without help when its model decodes
+/// the video ([ReceiverRow]: H.264 everywhere, HEVC, VP8, VP9 and AV1 on some,
+/// each up to a size and rate) and the container is allowed to carry the audio:
+/// AAC or MP3 in an MP4, Opus or Vorbis in a WebM. mpv names the reader that
+/// opened the file, and a reader opens a family:
 ///
-/// - **the MP4 family** (`mov,mp4,m4a,3gp,3g2,mj2`: MP4, M4V, QuickTime)
-///   goes as `video/mp4` when its codecs are ones the receiver takes;
-/// - **the Matroska family** (`mkv`, `matroska,webm`) is a WebM when its
-///   codecs are WebM's -- VP8 or VP9 with Opus or Vorbis -- and goes as
-///   `video/webm`; with anything else it is a Matroska file, which a
-///   receiver does not take as it is;
+/// - **the MP4 family** (`mov,mp4,m4a,3gp,3g2,mj2`: MP4, M4V, QuickTime) goes
+///   as `video/mp4` when its codecs are ones the receiver takes;
+/// - **the Matroska family** (`mkv`, `matroska,webm`) is a WebM when its codecs
+///   are WebM's (VP8 or VP9 with Opus or Vorbis), and goes as `video/webm`.
+///   With anything else it is a Matroska file, which a receiver does not take
+///   as it is;
 /// - anything else (AVI, a transport stream) no receiver takes.
 ///
-/// And whatever the file is, a stream this device reads by URL through the
-/// server's `/proxy` (or `/ftp`) route cannot be cast: an origin that will
-/// not serve ranges, read forward, or a route the server names no media id
+/// A stream this device reads by URL through the server's `/proxy` (or `/ftp`)
+/// route cannot be cast, whatever the file is. Such a stream is an origin that
+/// will not serve ranges, read forward, or a route the server names no media id
 /// for. The LAN media listener serves published ids and nothing else, and
-/// nothing here could seek such a stream for a receiver. That refusal is
-/// about the URL and comes first. A stream played by id is judged on
+/// nothing here could seek such a stream for a receiver. That refusal is about
+/// the URL and comes first. A stream played by id is judged on
 /// `xtremio://<id>`, which names no route, and is cast by publishing it.
 ///
-/// **Streams the receiver will not take are cast anyway: as a
-/// rendition.** An H.264 or HEVC film in a Matroska file, played by id, is
-/// [CastRendition] when this device can make one (`canRepackage`): the
-/// server repackages the film's own picture into one fragmented MP4 as the
-/// receiver asks for it (stream-server `docs/design/renditions.md`, step
-/// F2), **with its sound copied when it is AAC in one or two channels and
-/// converted to stereo AAC otherwise** (step F3: Dolby Digital, Dolby
-/// Digital Plus, DTS, TrueHD, Opus, FLAC, MP3, PCM, AAC 5.1 -- whatever mpv
-/// itself decodes, the producer decodes with the same FFmpeg). **Surround
-/// is converted whatever the receiver says it plays**: zond's television
-/// sends its sound over Bluetooth, and a Dolby track cast to it plays
-/// silent. So a file of the MP4 family whose picture the receiver takes but
-/// whose sound the container does not allow (Dolby Digital in an MP4, the
-/// common case), or allows in more than two channels (AAC 5.1), is a
-/// rendition too, not a refusal or a gamble. A rendition is only for a stream played by
-/// id, since the server reads the film through its id. A film that would be
-/// repackaged but whose picture a copy cannot carry is refused with a
-/// sentence that names it and why ([CastRefusal.renditionVideo]).
+/// **Streams the receiver will not take are cast anyway: as a rendition.** An
+/// H.264 or HEVC film in a Matroska file, played by id, is [CastRendition] when
+/// this device can make one (`canRepackage`). The server repackages the film's
+/// own picture into one fragmented MP4 as the receiver asks for it
+/// (stream-server `docs/design/renditions.md`, step F2). **Its sound is copied
+/// when it is AAC in one or two channels and converted to stereo AAC
+/// otherwise** (step F3: Dolby Digital, Dolby Digital Plus, DTS, TrueHD, Opus,
+/// FLAC, MP3, PCM, AAC 5.1). The producer decodes with the same FFmpeg as mpv,
+/// so it decodes whatever mpv itself decodes. **Surround is converted whatever
+/// the receiver says it plays**: zond's television sends its sound over
+/// Bluetooth, and a Dolby track cast to it plays silent. So a file of the MP4
+/// family is a rendition too, not a refusal or a gamble, when the receiver
+/// takes its picture but the container does not allow its sound (Dolby Digital
+/// in an MP4, the common case) or allows it in more than two channels (AAC
+/// 5.1). A rendition is only for a stream played by id, since the server reads
+/// the film through its id. A film that would be repackaged but whose picture a
+/// copy cannot carry is refused with a sentence that names it and why
+/// ([CastRefusal.renditionVideo]).
 ///
 /// **What is judged is the film, not the container it arrived in.** mpv
 /// reads the member of an archive or a disc image, not the archive, so a
@@ -69,23 +68,22 @@ import 'receiver_table.dart';
 sealed class CastCompatibility {
   const CastCompatibility();
 
-  /// The result of judging [url] by [stats], mpv's last report while
-  /// playing it here; null, or one that does not name the file's format
-  /// and its video yet, is a "not yet".
+  /// The result of judging [url] by [stats], mpv's last report while playing it
+  /// here. A null [stats], or one that does not name the file's format and its
+  /// video yet, gives a "not yet".
   ///
   /// [receiver] is what the receiver being cast to decodes
-  /// ([ReceiverTable.of]): a film whose picture it does not decode, or
-  /// decodes only smaller or slower, is refused with a sentence saying what
-  /// it plays -- as it is or as a rendition alike, since a rendition copies
-  /// the picture.
+  /// ([ReceiverTable.of]). A film whose picture it does not decode, or decodes
+  /// only smaller or slower, is refused with a sentence saying what it plays.
+  /// That holds as it is or as a rendition alike, since a rendition copies the
+  /// picture.
   ///
-  /// **A receiver known only by its name is tried, not refused**, with
-  /// what the best model announcing that name decodes
-  /// ([ReceiverRow.atBest]): the answer is then [tentative], and the player
-  /// watches the receiver's own report of the picture to catch one that
-  /// plays the sound over a black screen. What is refused up front is what
-  /// no model announcing the name decodes -- for a name that names one
-  /// model, anything beyond that model's row.
+  /// **A receiver known only by its name is tried, not refused**, with what the
+  /// best model announcing that name decodes ([ReceiverRow.atBest]). The answer
+  /// is then [tentative], and the player watches the receiver's own report of
+  /// the picture to catch one that plays the sound over a black screen. What is
+  /// refused up front is what no model announcing the name decodes: for a name
+  /// that names one model, anything beyond that model's row.
   ///
   /// A file mpv reads no video track in at all (audio alone) is judged by
   /// its container and sound.
@@ -220,9 +218,9 @@ final class CastRendition extends CastCompatibility {
   /// The sound is converted to stereo AAC (`RenditionSpec.convertSound`).
   final bool convertsSound;
 
-  /// The MIME type of what the receiver is handed: an MP4, which it plays
-  /// as a file -- not HLS, which zond's Chromecast with Google TV cannot
-  /// play above 720p (stream-server `docs/design/renditions.md`, F2).
+  /// The MIME type of what the receiver is handed: an MP4, which it plays as a
+  /// file. Not HLS, which zond's Chromecast with Google TV cannot play above
+  /// 720p (stream-server `docs/design/renditions.md`, F2).
   static const String contentType = 'video/mp4';
 }
 
@@ -292,9 +290,9 @@ final class CastRefused extends CastCompatibility {
   /// a particular refusal is the one Media3 could remux around.
   final CastRefusal reason;
 
-  /// The heading over [explanation], or null for the dialog's own -- which
-  /// says the stream cannot be cast, and is right for every refusal that is
-  /// an answer.
+  /// The heading over [explanation], or null for the dialog's own. That one
+  /// says the stream cannot be cast, and is right for every refusal that is an
+  /// answer.
   final String? title;
 
   /// What to put in front of the viewer. Says what is wrong and that the
@@ -302,18 +300,17 @@ final class CastRefused extends CastCompatibility {
   final String explanation;
 }
 
-/// Why a stream was refused. [container] and [audioCodec] are about a file
-/// the receiver would be handed as it is; [videoCodec] and [pictureSize]
-/// about a picture the receiver does not decode, or not that big or that
-/// fast, whether handed as it is or copied into a rendition;
-/// [pictureFormat] about a picture no receiver decodes at all, 10-bit
-/// H.264 and the like ([ReceiverTable.deepestPicture]), either way;
-/// [renditionVideo]
-/// about one that would be repackaged but whose picture a copy cannot carry
-/// (what a transcode, step F4 of the renditions design, would answer); a
-/// rendition's sound is never refused here, since it is converted when it
-/// is not AAC; [proxied] is never castable, and [pending] is not an answer
-/// yet -- ask again when mpv has reported what the file is.
+/// Why a stream was refused. [container] and [audioCodec] are about a file the
+/// receiver would be handed as it is. [videoCodec] and [pictureSize] are about
+/// a picture the receiver does not decode, or not that big or that fast,
+/// whether handed as it is or copied into a rendition. [pictureFormat] is about
+/// a picture no receiver decodes at all, 10-bit H.264 and the like
+/// ([ReceiverTable.deepestPicture]), either way. [renditionVideo] is about one
+/// that would be repackaged but whose picture a copy cannot carry (what a
+/// transcode, step F4 of the renditions design, would answer). A rendition's
+/// sound is never refused here, since it is converted when it is not AAC.
+/// [proxied] is never castable. [pending] is not an answer yet: ask again when
+/// mpv has reported what the file is.
 enum CastRefusal {
   proxied,
   pending,
@@ -328,10 +325,10 @@ enum CastRefusal {
 /// What a receiver plays, by container: the MIME type to declare, how a
 /// sentence names the file, and the audio it may carry.
 ///
-/// The audio hangs off the container because that is where the receiver
-/// draws the line -- an MP3 track plays out of an MP4 and not out of a
-/// WebM, and Opus the other way round -- so one flat list of codecs was
-/// wrong whichever codecs it held.
+/// The audio hangs off the container because that is where the receiver draws
+/// the line. An MP3 track plays out of an MP4 and not out of a WebM, and Opus
+/// the other way round, so one flat list of codecs was wrong whichever codecs
+/// it held.
 typedef _Castable = ({String contentType, String name, Set<String> audio});
 
 const _Castable _mp4 = (
@@ -345,12 +342,12 @@ const _Castable _webm = (
   audio: {'Opus', 'Vorbis'},
 );
 
-/// mpv's names (`file-format`) for the readers that open the MP4 family --
-/// libavformat's one reader for MP4, M4V and QuickTime, which mpv names
-/// `mov,mp4,m4a,3gp,3g2,mj2` -- and the Matroska family: mpv's own reader
-/// (`mkv`) and libavformat's (`matroska,webm`). A name is matched as one
-/// of the comma-separated parts, as libavformat writes them (lower case),
-/// so one part per reader is enough.
+/// mpv's names (`file-format`) for the readers that open the MP4 family and the
+/// Matroska family. The MP4 family has libavformat's one reader for MP4, M4V
+/// and QuickTime, which mpv names `mov,mp4,m4a,3gp,3g2,mj2`. The Matroska
+/// family has mpv's own reader (`mkv`) and libavformat's (`matroska,webm`). A
+/// name is matched as one of the comma-separated parts, as libavformat writes
+/// them (lower case), so one part per reader is enough.
 const Set<String> _mp4Readers = {'mp4'};
 const Set<String> _matroskaReaders = {'mkv', 'matroska'};
 
@@ -370,15 +367,15 @@ const Map<String, String> _knownReaders = {
   'rm': 'a RealMedia file',
 };
 
-/// The video a rendition copies: what the producer and the server's muxer
-/// carry (`avc1`, `hvc1`). Whether the receiver decodes it is its row's
-/// to say ([ReceiverRow]). Dolby Vision is not visible from here: mpv reports it as HEVC, and the
-/// libmpv this app ships (v0.36.0-549, media_kit's
-/// libmpv-android-video-build v1.1.11) has no `dolby-vision-profile`
-/// track property to ask. The producer reads the container's record,
-/// copies profiles 7 and 8 as their base layer and refuses profile 5 with
-/// its own sentence, which reaches the viewer through the readiness the
-/// player polls while it prepares the cast.
+/// The video a rendition copies: what the producer and the server's muxer carry
+/// (`avc1`, `hvc1`). Whether the receiver decodes it is its row's to say
+/// ([ReceiverRow]). Dolby Vision is not visible from here. mpv reports it as
+/// HEVC, and the libmpv this app ships (v0.36.0-549, media_kit's
+/// libmpv-android-video-build v1.1.11) has no `dolby-vision-profile` track
+/// property to ask. The producer reads the container's record, copies profiles
+/// 7 and 8 as their base layer and refuses profile 5 with its own sentence.
+/// That sentence reaches the viewer through the readiness the player polls
+/// while it prepares the cast.
 const Set<String> _repackagedVideo = {'H.264', 'HEVC'};
 
 /// The sound a rendition copies, in one or two channels
@@ -394,9 +391,9 @@ const String _repackagedAudio = 'AAC';
 bool _convertsSound(String? audio, bool surround) =>
     audio != null && (audio != _repackagedAudio || surround);
 
-/// A file of sound alone: an MP4 (an M4A) with AAC or MP3, or a WebM with
-/// Opus or Vorbis, goes as it is; nothing else does, there being no picture
-/// to make a rendition of.
+/// A file of sound alone: an MP4 (an M4A) with AAC or MP3, or a WebM with Opus
+/// or Vorbis, goes as it is. Nothing else does, since there is no picture to
+/// make a rendition of.
 CastCompatibility _soundAlone(List<String> readers, String audio) {
   final format = readers.any(_matroskaReaders.contains)
       ? _webm
@@ -451,9 +448,9 @@ CastRefused? _pictureRefusal(
   );
 }
 
-/// The refusal for a [video] picture no receiver decodes, by mpv's pixel
-/// format ([_pixelsOf]), or null for one some receiver does -- or one mpv
-/// has not described, which is not held against the film.
+/// The refusal for a [video] picture no receiver decodes, by mpv's pixel format
+/// ([_pixelsOf]). Null for one some receiver does, and for one mpv has not
+/// described, which is not held against the film.
 CastRefused? _pictureFormatRefusal(String video, PlaybackStats? stats) {
   final pixels =
       _pixelsOf(stats?.pixelFormat) ?? _pixelsOf(stats?.hwPixelFormat);
@@ -468,20 +465,19 @@ CastRefused? _pictureFormatRefusal(String video, PlaybackStats? stats) {
 }
 
 /// **What a picture is, by mpv's name for its pixels**
-/// (`video-params/pixelformat`): bit depth and chroma subsampling, or null
-/// for a name that does not say -- a hardware surface (`mediacodec`), a
-/// grey or packed format nothing here needs. mpv is the only authority:
-/// the libmpv this app ships (v0.36.0-549) names no profile anywhere,
-/// neither in `video-codec` (`"%s (%s)"`, the decoder and its description)
-/// nor in the track list (no `codec-profile` before mpv 0.37), so the
-/// pixels its decoder hands out are its one word on 10-bit H.264.
-/// Measured with libmpv on files ffmpeg made in each profile: High
-/// `yuv420p`, High 10 and High 10 Intra `yuv420p10`, High 4:2:2 (Intra)
-/// `yuv422p` and `yuv422p10`, High 4:4:4 Predictive, High 4:4:4 Intra and
-/// CAVLC 4:4:4 `yuv444p`; HEVC Main 10 `yuv420p10`, its range extensions
-/// `yuv420p12`, `yuv422p10` and `yuv444p`. FFmpeg's own names (`le`/`be`
-/// suffixed) and the semi-planar ones a hardware surface holds (`nv12`,
-/// `p010`) read the same.
+/// (`video-params/pixelformat`): bit depth and chroma subsampling. Null for a
+/// name that does not say: a hardware surface (`mediacodec`), a grey or packed
+/// format nothing here needs. mpv is the only authority. The libmpv this app
+/// ships (v0.36.0-549) names no profile anywhere: neither in `video-codec`
+/// (`"%s (%s)"`, the decoder and its description) nor in the track list (no
+/// `codec-profile` before mpv 0.37). So the pixels its decoder hands out are
+/// its one word on 10-bit H.264. Measured with libmpv on files ffmpeg made in
+/// each profile: High `yuv420p`, High 10 and High 10 Intra `yuv420p10`, High
+/// 4:2:2 (Intra) `yuv422p` and `yuv422p10`, High 4:4:4 Predictive, High 4:4:4
+/// Intra and CAVLC 4:4:4 `yuv444p`; HEVC Main 10 `yuv420p10`, its range
+/// extensions `yuv420p12`, `yuv422p10` and `yuv444p`. FFmpeg's own names
+/// (`le`/`be` suffixed) and the semi-planar ones a hardware surface holds
+/// (`nv12`, `p010`) read the same.
 ({int depth, String chroma})? _pixelsOf(String? name) {
   if (name == null) return null;
   final format = name.toLowerCase().trim().replaceFirst(
@@ -594,10 +590,10 @@ String _describeReader(String reader) =>
     _knownReaders[reader] ?? 'a file of a kind mpv calls "$reader"';
 
 /// The best name known for the file being played, first hit wins:
-/// [serverFilename], then the converted stream's, then the selected
-/// stream's `behaviorHints.filename`, then nothing. **Not read by the cast
-/// check** -- mpv says what a file is -- but what the subtitle memory keys
-/// a video release on.
+/// [serverFilename], then the converted stream's, then the selected stream's
+/// `behaviorHints.filename`, then nothing. **The cast check does not read it**,
+/// since mpv says what a file is. The subtitle memory keys a video release on
+/// it.
 ///
 /// [serverFilename] is `TorrentStats.streamName`, the file the embedded
 /// server actually opened, and it comes first on purpose. The addon says
@@ -605,13 +601,13 @@ String _describeReader(String reader) =>
 /// it is serving, and for a torrent stream whose URL is
 /// `/{infoHash}/{fileIdx}` it is the only thing that ever names the file.
 ///
-/// It outranks the converted stream too, because for a torrent the two are
-/// the same claim: `Stream::to_converted` clones `behavior_hints` verbatim,
-/// so a converted stream's filename is the addon's filename. The one place
-/// a converted stream knows better is a kept download, where the app builds
-/// a `url` stream on the server's media route -- and a `url` stream has no
-/// torrent behind it as far as the core is concerned, so [serverFilename]
-/// is null there and the order never comes up.
+/// It outranks the converted stream too, because for a torrent the two are the
+/// same claim: `Stream::to_converted` clones `behavior_hints` verbatim, so a
+/// converted stream's filename is the addon's filename. The one place a
+/// converted stream knows better is a kept download, where the app builds a
+/// `url` stream on the server's media route. A `url` stream has no torrent
+/// behind it as far as the core is concerned, so [serverFilename] is null there
+/// and the order never comes up.
 String? castFilename(PlayerState? state, {String? serverFilename}) =>
     serverFilename ??
     state?.convertedStream?.filename ??
