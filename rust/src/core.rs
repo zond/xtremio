@@ -9,22 +9,22 @@
 //!
 //! Every `NewState` is also read for how the addons answered, into
 //! [`crate::addon_health`] by way of [`crate::addon_observer`]. Reading the
-//! model from the pump is safe: `Runtime::dispatch` and
+//! model from the pump is safe. `Runtime::dispatch` and
 //! `Runtime::handle_effect_output` both release the model's *write* guard
-//! before `handle_effects` emits, so nothing is ever waiting on this
-//! channel while holding the lock this pump wants.
+//! before `handle_effects` emits, so nothing is ever waiting on this channel
+//! while holding the lock this pump wants.
 //!
 //! Login and logout replace the profile settings with stremio-core's
-//! defaults, which point the streaming server back at loopback:11470, so the
+//! defaults, which point the streaming server back at loopback:11470. So the
 //! pump re-applies the retarget when `UserAuthenticated` / `UserLoggedOut`
 //! come through.
 //!
-//! Events leave through an [`EventSink`] callback (installed by the FRB layer
-//! around a Dart `StreamSink`, or by tests around a channel). Events emitted
-//! before a sink exists are buffered, bounded, so nothing is lost across the
-//! subscribe/init ordering.
+//! Events leave through an [`EventSink`] callback (installed by the FRB
+//! layer around a Dart `StreamSink`, or by tests around a channel). Events
+//! emitted before a sink exists are buffered, bounded, so nothing is lost
+//! across the subscribe/init ordering.
 //!
-//! None of that is a `static` of its own: it is [`CoreState`], one field of
+//! None of that is a `static` of its own. It is [`CoreState`], one field of
 //! the process's [`crate::state::AppState`], which `init` creates and
 //! `shutdown` takes away whole.
 
@@ -66,15 +66,16 @@ const MAX_PENDING_EVENTS: usize = 1000;
 /// Receives one serialized `RuntimeEvent`; returns `false` once closed.
 pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 
-/// The stremio-core half of [`AppState`]: the Runtime, where its events go
-/// and the ones with nowhere to go yet. Three locks rather than one because
-/// they are taken for unrelated reasons -- a dispatch reads the Runtime
-/// while the pump is delivering an event. The one nesting is `event_sink`
-/// held while `pending` is taken -- by the sink swap, which drains it
-/// ([`set_event_sink_in`]), and by a sink that closed, which buffers into
-/// it ([`sink_refused`]); nothing takes them the other way round -- [`emit`]
-/// lets the sink guard go before it buffers for a missing sink -- so that
-/// order is the whole of the lock discipline here.
+/// The stremio-core half of [`AppState`]: the Runtime, where its events go,
+/// and the ones with nowhere to go yet. There are three locks rather than
+/// one because they are taken for unrelated reasons: a dispatch reads the
+/// Runtime while the pump is delivering an event. The one nesting is
+/// `event_sink` held while `pending` is taken. The sink swap does that when
+/// it drains the buffer ([`set_event_sink_in`]), and so does a sink that
+/// closed, when it buffers into it ([`sink_refused`]). Nothing takes them
+/// the other way round, because [`emit`] lets the sink guard go before it
+/// buffers for a missing sink. That order is the whole of the lock
+/// discipline here.
 #[derive(Default)]
 pub struct CoreState {
     runtime: RwLock<Option<Runtime<XtremioEnv, XtremioModel>>>,
@@ -159,16 +160,16 @@ pub fn set_event_sink(sink: EventSink) {
 fn set_event_sink_in(app: &AppState, sink: EventSink) {
     // The slot is held for the whole swap, replay included. An `emit` that
     // races this call then parks on the read lock and delivers through the
-    // new sink afterwards, in order behind what was buffered. With the slot
-    // taken only at the end, that `emit` saw `None`, buffered *after* the
-    // drain, and its event sat in `pending` until the next subscribe -- on
-    // Android the next activity recreation, on a desktop never -- while a
+    // new sink afterwards, in order behind what was buffered. When the slot
+    // was taken only at the end, that `emit` saw `None` and buffered *after*
+    // the drain. Its event sat in `pending` until the next subscribe (on
+    // Android the next activity recreation, on a desktop never), while a
     // `NewState` for a field Dart had just pulled went undelivered. The
-    // replay is a few hundred port posts at most and the callback does not
+    // replay is a few hundred port posts at most, and the callback does not
     // re-enter the core, so what parks parks briefly.
     //
     // A sink that closes partway through the replay keeps what it did not
-    // take: the event it refused and everything behind it go back to the
+    // take. The event it refused and everything behind it go back to the
     // front of the buffer, in order, for the next subscriber.
     let mut slot = app.core.sink_mut();
     let mut pending: VecDeque<String> = app.core.pending().drain(..).collect();
@@ -216,10 +217,10 @@ fn emit(app: &AppState, event: String) {
 /// sink's [`sink_address`].
 ///
 /// The read guard is gone by now, and a subscribe can have installed a new
-/// sink in the gap -- an activity recreated. Only the sink that refused
-/// comes out of the slot; a newer one is handed the event instead. Buffered
-/// with the slot still held, so a subscribe cannot drain the buffer between
-/// the two and leave this event behind it.
+/// sink in the gap, when an activity is recreated. Only the sink that
+/// refused comes out of the slot. A newer one is handed the event instead.
+/// The event is buffered with the slot still held, so a subscribe cannot
+/// drain the buffer between the two and leave this event behind it.
 fn sink_refused(app: &AppState, closed: *const (), event: String) {
     let mut slot = app.core.sink_mut();
     if slot
@@ -247,19 +248,18 @@ fn buffer(app: &AppState, event: String) {
 ///
 /// A bucket that is not there is `None`, which is what a first start looks
 /// like. One that will not parse is `None` too, but the file is first
-/// renamed `<key>.json.corrupt-<seconds>` (`crate::env::move_aside`): the
-/// engine's first persist -- the first library change, the first settings
-/// edit -- writes a fresh bucket over the key, and that would be over the
-/// only copy of a logged-in profile or a library nothing else holds. Moved
-/// aside, the bytes stay for a later build or a human.
+/// renamed `<key>.json.corrupt-<seconds>` (`crate::env::move_aside`). The
+/// engine's first persist (the first library change, the first settings
+/// edit) writes a fresh bucket over the key. That would be over the only
+/// copy of a logged-in profile or a library nothing else holds. Moved aside,
+/// the bytes stay for a later build or a human.
 ///
-/// Anything else -- a read the disk refused, storage with no directory --
-/// is an error and `init` fails with it, never an empty bucket: read as
-/// empty, a transient `EIO` or a file-descriptor shortage under a busy
-/// swarm would turn into a default profile that the first user action
-/// persisted for good, and the logged-in user into an anonymous one. A boot
-/// the app refuses can be retried; one that quietly starts over cannot be
-/// undone.
+/// Anything else is an error and `init` fails with it, never an empty
+/// bucket: a read the disk refused, storage with no directory. Read as
+/// empty, a transient `EIO` or a file-descriptor shortage under a busy swarm
+/// would turn into a default profile that the first user action persisted
+/// for good, and the logged-in user into an anonymous one. A boot the app
+/// refuses can be retried; one that quietly starts over cannot be undone.
 fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     key: &str,
 ) -> impl std::future::Future<Output = anyhow::Result<Option<T>>> {
@@ -294,17 +294,16 @@ fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     }
 }
 
-/// Whether a failed schema migration refuses the boot: yes, unless all that
-/// went wrong is a bucket that would not parse.
+/// Whether a failed schema migration refuses the boot. It does, unless all
+/// that went wrong is a bucket that would not parse.
 ///
-/// That one case is `hydrate`'s own: a bucket that will not parse is moved
-/// aside and the engine starts without it, and a migration that stops on
-/// one leaves nothing a boot could do better. Everything else -- a read or
-/// write the disk refused, storage with no directory, buckets a newer
-/// build wrote (`StorageSchemaVersionDowngrade`) -- is a condition that
-/// says nothing about the data, and a boot carried on over it hydrates
-/// buckets in a schema this build does not read, moves them aside, and
-/// comes up anonymous with an empty library.
+/// That one case is `hydrate`'s own. A bucket that will not parse is moved
+/// aside and the engine starts without it, and a migration that stops on one
+/// leaves nothing a boot could do better. Everything else says nothing about
+/// the data: a read or write the disk refused, storage with no directory,
+/// buckets a newer build wrote (`StorageSchemaVersionDowngrade`). A boot
+/// carried on over one of those hydrates buckets in a schema this build does
+/// not read, moves them aside, and comes up anonymous with an empty library.
 fn migration_refuses_the_boot(error: &EnvError) -> bool {
     match error {
         EnvError::Serde(_) => false,
@@ -318,11 +317,11 @@ fn migration_refuses_the_boot(error: &EnvError) -> bool {
 /// earlier launch was given, or a remote server's URL.
 ///
 /// **The embedded server is the only one this app streams from.** Everything
-/// the app itself asks of a server -- the stats overlay, the player's
-/// duration and stall notes, stream numbers, storage, Drive, sharing,
-/// downloads -- goes to the embedded one over FFI, so a profile pointed at
-/// any other URL would watch an idle server while streaming elsewhere. A
-/// profile that holds a remote URL is brought back here at the next launch.
+/// the app itself asks of a server goes to the embedded one over FFI: the
+/// stats overlay, the player's duration and stall notes, stream numbers,
+/// storage, Drive, sharing, downloads. So a profile pointed at any other URL
+/// would watch an idle server while streaming elsewhere. A profile that
+/// holds a remote URL is brought back here at the next launch.
 pub fn pin_to_embedded(profile: &mut Profile, embedded: &Url) {
     pin_settings_to_embedded(&mut profile.settings, embedded);
 }
@@ -339,10 +338,10 @@ fn pin_settings_to_embedded(settings: &mut Settings, embedded: &Url) -> bool {
     }
 }
 
-/// Re-applies [`pin_to_embedded`] after stremio-core reset the settings
-/// (login and logout both replace them with `Settings::default()`, whose
-/// server URL is loopback:11470). Dispatches `UpdateSettings` with the
-/// pinned copy when the URL is anything but the embedded server's; with no
+/// Re-applies [`pin_to_embedded`] after stremio-core reset the settings.
+/// Login and logout both replace them with `Settings::default()`, whose
+/// server URL is loopback:11470. It dispatches `UpdateSettings` with the
+/// pinned copy when the URL is anything but the embedded server's. With no
 /// embedded server it leaves everything alone.
 pub(crate) fn reapply_embedded_pin(app: &AppState) {
     let Some(embedded) = server::base_url_in(app) else {
@@ -366,12 +365,13 @@ pub(crate) fn reapply_embedded_pin(app: &AppState) {
 }
 
 /// Serializes [`init`] whole. Its idempotency is a check (is a runtime
-/// installed?) followed, much later, by the act (install one), and two
-/// calls landing together -- a boot screen's retry over a boot still in
-/// flight -- would both pass the check and each build a runtime, an event
-/// pump and a boot re-pin, the second overwriting the first's runtime while
-/// its pump went on emitting. A process static beside the state rather than
-/// a field of it: `init` is what adopts or creates the state.
+/// installed?) followed, much later, by the act (install one). Two calls
+/// landing together, such as a boot screen's retry over a boot still in
+/// flight, would both pass the check. Each would build a runtime, an event
+/// pump and a boot re-pin, and the second would overwrite the first's
+/// runtime while its pump went on emitting. It is a process static beside
+/// the state rather than a field of it, because `init` is what adopts or
+/// creates the state.
 static INIT: Mutex<()> = Mutex::new(());
 
 /// A poisoned lock only means an earlier `init` panicked; there is no value
@@ -396,15 +396,16 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         });
     }
 
-    // Storage first, server second, and the order is load-bearing: the
+    // Storage first, server second, and the order is load-bearing. The
     // server is handed the pin set at startup (`server::spawn` ->
     // `downloads::pins`), and that set is read off the downloads registry
-    // under `storage_dir`. Started before the directory was set, every real
-    // boot read no registry, named no pins, and the server kept every
-    // torrent's data for the life of the process -- the launch sweep
-    // skipped, `PinsUnknown` set, no owner ever reclaiming a byte. The
-    // integration test that covered pins set the directory itself before
-    // calling in here, which is exactly the step the app does not take.
+    // under `storage_dir`. When the server was started before the directory
+    // was set, every real boot read no registry and named no pins. The
+    // server then kept every torrent's data for the life of the process: the
+    // launch sweep skipped, `PinsUnknown` set, no owner ever reclaiming a
+    // byte. The integration test that covered pins set the directory itself
+    // before calling in here, which is exactly the step the app does not
+    // take.
     env::set_storage_dir(&config.storage_dir)?;
 
     let server_base_url = match config.server {
@@ -414,11 +415,11 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 
     if let Err(error) = env::block_on(XtremioEnv::migrate_storage_schema()) {
         if migration_refuses_the_boot(&error) {
-            // The rule `hydrate` keeps, for the same reason: the buckets are
-            // half-migrated or a newer build's, nothing says they are bad,
-            // and booting over them turns the logged-in user into an
-            // anonymous one once hydrate moves aside what it cannot parse.
-            // A refused boot can be retried; one that starts over cannot be
+            // The rule `hydrate` keeps, for the same reason. The buckets are
+            // half-migrated or a newer build's, and nothing says they are
+            // bad. Booting over them turns the logged-in user into an
+            // anonymous one once hydrate moves aside what it cannot parse. A
+            // refused boot can be retried; one that starts over cannot be
             // undone. The server goes down with it, as below.
             if let Err(stop) = server::stop_in(&app) {
                 tracing::warn!(%stop, "could not stop the embedded server after a refused boot");
@@ -450,8 +451,8 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         match hydrated {
             Ok(buckets) => buckets,
             Err(error) => {
-                // A boot the app refuses leaves the process as it found it:
-                // the server started above goes down again, so the retry
+                // A boot the app refuses leaves the process as it found it.
+                // The server started above goes down again, so the retry
                 // Dart's boot screen invites starts from nothing rather than
                 // over a server no runtime owns.
                 if let Err(stop) = server::stop_in(&app) {
@@ -461,9 +462,9 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
             }
         };
 
-    // Beside the buckets, and for the same reason: nothing is written out
-    // before the stored record has been read, or this process's first
-    // minute of answers would replace all of it.
+    // Beside the buckets, and for the same reason. Nothing is written out
+    // before the stored record has been read, or this process's first minute
+    // of answers would replace all of it.
     crate::addon_health::load_in(&app);
 
     let mut profile = profile.unwrap_or_default();
@@ -472,8 +473,8 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     }
     // The record is about addons this profile has. Once one has been gone
     // long enough that reinstalling it would not be "the same addon" any
-    // more, its counts are only a host name the file keeps forever.
-    // After the retarget, so the local addon is judged installed by the
+    // more, its counts are only a host name the file keeps forever. This
+    // runs after the retarget, so the local addon is judged installed by the
     // URL the profile actually holds.
     crate::addon_health::prune_uninstalled_in(
         &app,
@@ -509,11 +510,11 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         EVENT_CHANNEL_CAPACITY,
     );
 
-    // The pump must outlive every Runtime clone: a full channel panics inside
-    // `Runtime::emit`. Per-event work is contained so the task never dies.
-    // It holds the state it was started for, so an event still in flight
-    // when `shutdown` takes that state away is delivered to the sinks that
-    // asked for it and not to whatever a later `init` installs.
+    // The pump must outlive every Runtime clone, because a full channel
+    // panics inside `Runtime::emit`. Per-event work is contained so the task
+    // never dies. The pump holds the state it was started for. So an event
+    // still in flight when `shutdown` takes that state away is delivered to
+    // the sinks that asked for it, not to whatever a later `init` installs.
     let pump = Arc::clone(&app);
     XtremioEnv::exec_concurrent(events.for_each(move |event| {
         let app = &pump;
@@ -540,17 +541,17 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 
     *app.core.runtime_mut() = Some(runtime);
 
-    // The server keeps no pin record of its own -- the launch handed it the
-    // registry's set -- but a pin can name a torrent whose bytes went with a
-    // torrent-data root that was moved or that the system reclaimed, so the
-    // two are put back into agreement: every unfinished download is pinned
-    // again with its trackers, and every finished one the server does not
-    // hold whole is marked as gone rather than left claiming a film that is
-    // not there. Off the boot path: a pin blocks while a magnet resolves its
-    // metadata, and nothing on screen waits for it.
+    // The server keeps no pin record of its own; the launch handed it the
+    // registry's set. But a pin can name a torrent whose bytes went with a
+    // torrent-data root that was moved or that the system reclaimed. So the
+    // two are put back into agreement. Every unfinished download is pinned
+    // again with its trackers. Every finished one the server does not hold
+    // whole is marked as gone, rather than left claiming a film that is not
+    // there. This runs off the boot path, because a pin blocks while a
+    // magnet resolves its metadata, and nothing on screen waits for it.
     if server_base_url.is_some() {
         // Against the state this boot built, not whatever the process holds
-        // when it gets there: a pin blocks until the tracker answers, so a
+        // when it gets there. A pin blocks until the tracker answers, so a
         // shutdown can retire this state first, and looking one up would
         // rebuild what the shutdown took.
         let booted = Arc::clone(&app);
@@ -574,21 +575,21 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 /// Counts how the addons answered in the fields a `NewState` names.
 ///
 /// Reads the model as it is now rather than as it was when the event was
-/// emitted, which is what the edge detection in [`crate::addon_observer`]
-/// is for. Safe to do from the pump: see this module's docs on why no
+/// emitted. That is what the edge detection in [`crate::addon_observer`] is
+/// for. It is safe to do from the pump: see this module's docs on why no
 /// writer can be waiting on the pump's channel while holding the model's
 /// write lock.
 ///
-/// The model is let go before the answers are counted, and that is the
-/// point of the two calls. Counting is what writes the record out -- an
-/// `fsync` and a rename, up to once a minute -- and the model's read lock
-/// held across that would park the next `Runtime::dispatch` (which wants
-/// the write lock) and, behind it, every reader including `get_state`.
+/// The model is let go before the answers are counted, and that is the point
+/// of the two calls. Counting is what writes the record out (an `fsync` and
+/// a rename, up to once a minute). The model's read lock held across that
+/// would park the next `Runtime::dispatch`, which wants the write lock, and
+/// behind it every reader including `get_state`.
 ///
-/// Nothing is counted before the Runtime has been installed (the pump is
+/// Nothing is counted before the Runtime has been installed. The pump is
 /// started first, so the bootstrap effects' events arrive with no model to
-/// read) or after `shutdown` has taken it away -- by which point the record
-/// has already been written out.
+/// read. Nothing is counted after `shutdown` has taken it away either, and
+/// by then the record has already been written out.
 fn observe_addon_answers(app: &AppState, fields: &[XtremioModelField]) {
     let sweeps = {
         let guard = app.core.runtime();
@@ -630,10 +631,10 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
     })
 }
 
-/// The name [`get_state`] answers the whole library under: every item of
-/// the engine's library bucket, removed and temporary ones included
-/// ([`XtremioModel::library_items_json`]). Not a model field -- `ctx`
-/// holds the bucket and does not serialize it -- so it rides `ctx`'s
+/// The name [`get_state`] answers the whole library under: every item of the
+/// engine's library bucket, removed and temporary ones included
+/// ([`XtremioModel::library_items_json`]). It is not a model field, because
+/// `ctx` holds the bucket and does not serialize it. So it rides `ctx`'s
 /// `NewState`: the Dart side re-pulls it whenever `ctx` changes
 /// (`CoreField.libraryItems`).
 pub const LIBRARY_ITEMS: &str = "library_items";
@@ -642,12 +643,11 @@ pub const LIBRARY_ITEMS: &str = "library_items";
 ///
 /// The model's read lock is held for the snapshot alone and let go before
 /// the JSON is written. `std::sync::RwLock` queues new readers behind a
-/// waiting writer, and every dispatch and every addon answer is a writer,
-/// so serializing under the lock parked the whole engine -- the next
-/// dispatch and, behind it, every other `get_state` -- for the length of
-/// the serialization; for a loaded board that was the longest hold the lock
-/// ever saw. See [`crate::model::FieldSnapshot`] for what a snapshot costs
-/// per field.
+/// waiting writer, and every dispatch and every addon answer is a writer. So
+/// serializing under the lock parked the whole engine for the length of the
+/// serialization: the next dispatch and, behind it, every other `get_state`.
+/// For a loaded board that was the longest hold the lock ever saw. See
+/// [`crate::model::FieldSnapshot`] for what a snapshot costs per field.
 pub fn get_state(field: &str) -> anyhow::Result<String> {
     if field == LIBRARY_ITEMS {
         return with_runtime(|runtime| {
@@ -671,7 +671,7 @@ pub fn get_state(field: &str) -> anyhow::Result<String> {
 /// been answering and stops the embedded server. The tokio runtimes stay
 /// alive for the process lifetime.
 ///
-/// The whole [`AppState`] goes with it, and it goes *first*: from here on a
+/// The whole [`AppState`] goes with it, and it goes *first*. From here on a
 /// sink, a dispatch or a subscribe addresses a fresh state, never the one
 /// being torn down. Whatever this call took is dropped when it returns.
 pub fn shutdown() -> anyhow::Result<()> {
@@ -692,16 +692,16 @@ fn retire(app: &AppState) -> anyhow::Result<()> {
         tracing::info!("stremio-core runtime stopped");
     }
     // The engine persists a bucket by queuing its write and returning
-    // (`env::XtremioEnv::exec_sequential`), so the last dispatch -- the
-    // playback progress the app sends on its way out -- has returned long
-    // before its library write has run. Nothing can queue another once the
-    // runtime is gone but what is already queued, and that is waited for.
+    // (`env::XtremioEnv::exec_sequential`). So the last dispatch, the
+    // playback progress the app sends on its way out, has returned long
+    // before its library write has run. Once the runtime is gone, only what
+    // is already queued can queue another, and that is waited for.
     if !env::wait_for_sequential(SHUTDOWN_FLUSH_TIMEOUT) {
         tracing::warn!("stremio-core storage writes still queued at shutdown; not waiting longer");
     }
     // Whatever the throttle says: the last minute of answers is the part
-    // that would otherwise never reach the file. Of *this* state, which is
-    // the only one anything still counting can be counting into.
+    // that would otherwise never reach the file. The flush is of *this*
+    // state, the only one anything still counting can be counting into.
     crate::addon_health::flush_in(app);
     server::stop_in(app)
 }
@@ -895,8 +895,8 @@ mod tests {
     }
 
     /// A refusal clears the slot only if the sink that refused is still in
-    /// it. One installed since -- an activity recreated between the refusal
-    /// and the clear -- stays, and is handed the event.
+    /// it. One installed since (an activity recreated between the refusal
+    /// and the clear) stays, and is handed the event.
     #[test]
     fn a_closed_sink_does_not_take_its_successor_with_it() {
         let app = AppState::default();
@@ -961,9 +961,9 @@ mod tests {
         });
     }
 
-    /// A read the disk refuses is not an empty bucket. Read as one it became
-    /// a default profile that the first user action persisted over the real
-    /// one; refused, the boot can be tried again.
+    /// A read the disk refuses is not an empty bucket. Read as one, it
+    /// became a default profile that the first user action persisted over
+    /// the real one. Refused, the boot can be tried again.
     #[test]
     fn a_bucket_that_cannot_be_read_is_an_error_not_an_empty_one() {
         crate::env::with_storage_dir(|dir| {

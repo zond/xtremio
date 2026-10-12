@@ -2,29 +2,30 @@
 //! screen copies.
 //!
 //! stream-server is embedded with `init_logging: false`, so this crate owns
-//! the one subscriber -- which is why every line the server writes lands in
-//! the same place ours do. [`RingLayer`] sits in that subscriber and keeps
-//! the last [`RING_CAPACITY`] formatted lines in memory, so a release build
-//! on a phone can show and copy its own log without ADB.
+//! the one subscriber. That is why every line the server writes lands in the
+//! same place ours do. [`RingLayer`] sits in that subscriber and keeps the
+//! last [`RING_CAPACITY`] formatted lines in memory, so a release build on a
+//! phone can show and copy its own log without ADB.
 //!
 //! Desktop builds also print to stderr. Installing this subscriber stops
 //! `tracing`'s `log` feature from forwarding events to the `log` crate (it
-//! only forwards while no subscriber is installed), so on Android, where
-//! FRB's `setup_default_user_utils` reads from `log`, [`RingLayer`] re-emits
-//! each line through `log` itself -- which is what routes it to logcat.
+//! only forwards while no subscriber is installed). On Android, FRB's
+//! `setup_default_user_utils` reads from `log`. So there [`RingLayer`]
+//! re-emits each line through `log` itself, which is what routes it to
+//! logcat.
 //!
-//! That FRB setup opens the `log` crate at TRACE, and the crates that log
-//! through `log` rather than `tracing` -- rustls, mio, notify -- never pass
-//! our filter on Android: their lines go straight to logcat at whatever
-//! level they were written. On a Chromecast that was 26k notify, 13k rustls
-//! and 5k mio trace lines in ten minutes, CPU and I/O for nothing, drowning
-//! our own. On the desktop `tracing_subscriber`'s `try_init` prevents this
-//! by installing its `LogTracer` as the `log` logger and setting the `log`
-//! crate's max level to our filter's; on Android FRB's logger is already in
-//! place, so that install fails and `try_init` returns before setting the
-//! level. [`cap_log_bridge`] does that step regardless, and the ring's own
-//! re-emission bypasses the cap (it hands the record to the logger
-//! directly), so what our filter admits is not cut a second time.
+//! That FRB setup opens the `log` crate at TRACE. The crates that log
+//! through `log` rather than `tracing` (rustls, mio, notify) never pass our
+//! filter on Android: their lines go straight to logcat at whatever level
+//! they were written. On a Chromecast that was 26k notify, 13k rustls and 5k
+//! mio trace lines in ten minutes, CPU and I/O for nothing, drowning our
+//! own. On the desktop, `tracing_subscriber`'s `try_init` prevents this. It
+//! installs its `LogTracer` as the `log` logger and sets the `log` crate's
+//! max level to our filter's. On Android FRB's logger is already in place,
+//! so that install fails and `try_init` returns before setting the level.
+//! [`cap_log_bridge`] does that step regardless. The ring's own re-emission
+//! bypasses the cap (it hands the record to the logger directly), so what
+//! our filter admits is not cut a second time.
 
 use std::collections::VecDeque;
 use std::fmt::{self, Write as _};
@@ -41,44 +42,44 @@ use tracing_subscriber::EnvFilter;
 
 /// Default filter when `RUST_LOG` is unset.
 ///
-/// `enginefs` at info rather than warn: it is the torrent engine, so a
+/// `enginefs` at info rather than warn, because it is the torrent engine. A
 /// playback that stalls has its explanation there (what the reader is
-/// waiting for, which piece arrived, why a stream ended) and at warn the
-/// ring said nothing at all about the one subsystem a stalled playback is
-/// about. `librqbit` at warn for the same failure from below -- a peer
-/// that cannot be reached, a write that failed -- without its per-piece
-/// chatter, which would push everything else out of a 400-line ring.
+/// waiting for, which piece arrived, why a stream ended). At warn the ring
+/// said nothing at all about the one subsystem a stalled playback is about.
+/// `librqbit` at warn, for the same failure from below (a peer that cannot
+/// be reached, a write that failed), without its per-piece chatter, which
+/// would push everything else out of a 400-line ring.
 pub const DEFAULT_FILTER: &str = "xtremio_core=info,stream_server=info,enginefs=info,librqbit=warn";
 
-/// How many formatted lines the ring keeps; the oldest is dropped to make
+/// How many formatted lines the ring keeps. The oldest is dropped to make
 /// room. A few hundred is enough to cover a start-up and a failed playback
 /// while staying small enough to hold in memory and paste into a report.
 pub const RING_CAPACITY: usize = 400;
 
-/// A static, not part of `crate::state::AppState`: `tracing`'s global
-/// subscriber is itself process-wide and can only be installed once, so
-/// what remembers that has to outlive any one session. Re-running this
-/// after a shutdown would be a no-op at best.
+/// A static, not part of `crate::state::AppState`. `tracing`'s global
+/// subscriber is itself process-wide and can only be installed once, so what
+/// remembers that has to outlive any one session. Re-running this after a
+/// shutdown would be a no-op at best.
 static INIT: Once = Once::new();
 
 /// The base directives the trace targets are added to, and the handle that
 /// swaps the filter built from them.
 ///
-/// Both traces are off in the filter this installs and are turned on by
-/// [`set_verbose`] alone. Without naming them off, they would be on
-/// unconditionally: this crate owns the process's one subscriber
-/// (stream-server is embedded with `init_logging: false`), so the server's
-/// own switch has no filter to reload -- it writes the setting to its file,
-/// and the log carries the trace either way. `enginefs=info` and
-/// `stream_server=info` admit both targets wholesale, which is why they
-/// have to be named off explicitly rather than merely left out.
+/// Both traces are off in the filter this installs, and only [`set_verbose`]
+/// turns them on. Without naming them off, they would be on unconditionally.
+/// This crate owns the process's one subscriber (stream-server is embedded
+/// with `init_logging: false`), so the server's own switch has no filter to
+/// reload. It writes the setting to its file, and the log carries the trace
+/// either way. `enginefs=info` and `stream_server=info` admit both targets
+/// wholesale, which is why they have to be named off explicitly rather than
+/// merely left out.
 static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLock::new();
 
-/// Serialises every test that writes the process's one filter: the ones
-/// that flip it and read it back, and **every one that starts an embedded
-/// server**, because a start sets the filter from that server's settings
-/// file (`server::start_with`) -- off, for a fresh one. The filter is
-/// global and the lib's tests run in parallel, so a test that starts a
+/// Serialises every test that writes the process's one filter. Those are the
+/// ones that flip it and read it back, and **every one that starts an
+/// embedded server**, because a start sets the filter from that server's
+/// settings file (`server::start_with`): off, for a fresh one. The filter is
+/// global and the lib's tests run in parallel. So a test that starts a
 /// server in another thread could turn the trace off between
 /// `a_start_applies_the_setting_the_last_session_left`'s restart and its
 /// check. Take it through [`serialise_with_the_filter`].
@@ -86,8 +87,9 @@ static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLoc
 static VERBOSE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 /// Holds [`VERBOSE_TEST_LOCK`] for the rest of the calling test. A test that
-/// failed while holding it poisoned nothing worth protecting -- the filter
-/// is set afresh by whoever runs next -- so a poisoned lock is taken as is.
+/// failed while holding it poisoned nothing worth protecting, because
+/// whoever runs next sets the filter afresh. So a poisoned lock is taken as
+/// is.
 #[cfg(test)]
 pub(crate) fn serialise_with_the_filter() -> std::sync::MutexGuard<'static, ()> {
     VERBOSE_TEST_LOCK
@@ -97,9 +99,9 @@ pub(crate) fn serialise_with_the_filter() -> std::sync::MutexGuard<'static, ()> 
 
 /// Turns the retention and proxy traces on or off in the running process.
 ///
-/// Answers whether it reached a filter: false before [`init`] has run, or
-/// when a test harness installed a subscriber of its own, in which case
-/// nothing here is what decides what the log carries.
+/// Answers whether it reached a filter. It is false before [`init`] has run,
+/// or when a test harness installed a subscriber of its own. Then nothing
+/// here decides what the log carries.
 pub fn set_verbose(on: bool) -> bool {
     let Some((base, handle)) = FILTER.get() else {
         return false;
@@ -158,17 +160,16 @@ pub fn recent_lines() -> Vec<String> {
 }
 
 /// Installs the global subscriber once, and caps the `log` crate at the
-/// filter's level ([`cap_log_bridge`]). Safe to call repeatedly; a
+/// filter's level ([`cap_log_bridge`]). It is safe to call repeatedly. A
 /// subscriber installed by someone else (e.g. a test harness) is left in
 /// place.
 ///
-/// The cap has to come after FRB's `setup_default_user_utils`, which is
-/// what opens `log` at TRACE, and it does: that runs from `RustLib.init` on
-/// the Dart side before any other FFI call, and this runs from the first
-/// `core_init` or server start. A second `RustLib.init` (a hot restart)
-/// does not reopen it -- `android_logger::init_once` only sets the level
-/// when it is the one installing the logger, and after the first time it
-/// no longer is.
+/// The cap has to come after FRB's `setup_default_user_utils`, which is what
+/// opens `log` at TRACE, and it does. That runs from `RustLib.init` on the
+/// Dart side before any other FFI call, and this runs from the first
+/// `core_init` or server start. A second `RustLib.init` (a hot restart) does
+/// not reopen it. `android_logger::init_once` only sets the level when it is
+/// the one installing the logger, and after the first time it no longer is.
 pub fn init() {
     INIT.call_once(|| {
         let base = std::env::var("RUST_LOG")
@@ -176,7 +177,7 @@ pub fn init() {
             .filter(|directives| !directives.trim().is_empty())
             .unwrap_or_else(|| DEFAULT_FILTER.to_string());
         // Reloadable, because the Verbose logging switch changes it while
-        // the app is running: the viewer turns it on and plays the thing
+        // the app is running. The viewer turns it on and plays the thing
         // that misbehaves, without restarting anything.
         let (filter, handle) = reload::Layer::new(stream_server::log_filter(&base, false));
         let _ = FILTER.set((base, handle));
@@ -196,15 +197,15 @@ pub fn init() {
 }
 
 /// Caps the `log` crate at the most verbose level the installed `tracing`
-/// filter admits for anything -- INFO under [`DEFAULT_FILTER`] -- so a
-/// crate that logs through `log` rather than `tracing` (rustls, mio,
-/// notify) is held to the same standard as ours instead of the TRACE FRB
-/// opened it at. Our own crates are not affected: they log through
-/// `tracing`, where the filter decides, and the ring's logcat re-emission
-/// does not consult this cap. The same step `tracing_subscriber`'s
-/// `try_init` takes after installing its `LogTracer`, done here because on
-/// Android that install fails (FRB's logger is already there) and
-/// `try_init` returns before reaching it.
+/// filter admits for anything (INFO under [`DEFAULT_FILTER`]). So a crate
+/// that logs through `log` rather than `tracing` (rustls, mio, notify) is
+/// held to the same standard as ours, instead of the TRACE FRB opened it at.
+/// Our own crates are not affected. They log through `tracing`, where the
+/// filter decides, and the ring's logcat re-emission does not consult this
+/// cap. `tracing_subscriber`'s `try_init` takes the same step after
+/// installing its `LogTracer`. It is done here because on Android that
+/// install fails (FRB's logger is already there) and `try_init` returns
+/// before reaching it.
 fn cap_log_bridge() {
     log::set_max_level(as_log(tracing::level_filters::LevelFilter::current()));
 }
@@ -222,15 +223,14 @@ fn as_log(filter: tracing::level_filters::LevelFilter) -> log::LevelFilter {
 /// the lines around it, which are what give it meaning.
 pub const MAX_APP_MESSAGE: usize = 400;
 
-/// Records one line the *Dart* side produced -- a player open, an engine
-/// error, an unhandled Flutter error -- into the same ring as everything
-/// else.
+/// Records one line the *Dart* side produced (a player open, an engine
+/// error, an unhandled Flutter error) into the same ring as everything else.
 ///
-/// It goes in as a real `tracing` event rather than straight into the ring,
-/// so it gets the one clock, the one format, the one filter and (on
-/// Android) the same logcat re-emission with no second path to keep in
-/// step. That is also what keeps the two sides in order: the ring is
-/// append-only and both sides stamp from `Utc::now()` as they push.
+/// It goes in as a real `tracing` event rather than straight into the ring.
+/// So it gets the one clock, the one format, the one filter and (on Android)
+/// the same logcat re-emission, with no second path to keep in step. That is
+/// also what keeps the two sides in order: the ring is append-only, and both
+/// sides stamp from `Utc::now()` as they push.
 ///
 /// `target` names the Dart source (`player`, `flutter`); the tracing target
 /// stays this crate's, since that is what the filter is written against.
@@ -274,14 +274,14 @@ impl<S: Subscriber> Layer<S> for RingLayer {
             &visitor.fields,
         );
         // Straight to the installed logger rather than through `log!`, which
-        // would apply the `log` crate's max level (`cap_log_bridge`) a second
-        // time to a line our own filter already admitted.
+        // would apply the `log` crate's max level (`cap_log_bridge`) a
+        // second time to a line our own filter already admitted.
         //
-        // The module path is what android_logger names the logcat tag after
-        // (FRB configures no tag of its own), and a record built here has
-        // none unless it is given one: without it, `logcat -s` matches
-        // nothing against an empty tag. This is the tag `adb logcat -s
-        // xtremio` filters on.
+        // android_logger names the logcat tag after the module path (FRB
+        // configures no tag of its own), and a record built here has none
+        // unless it is given one. Without it, `logcat -s` matches nothing
+        // against an empty tag. This is the tag `adb logcat -s xtremio`
+        // filters on.
         #[cfg(target_os = "android")]
         log::logger().log(
             &log::Record::builder()
@@ -440,13 +440,13 @@ mod tests {
     }
 
     /// A crate that logs through `log` (rustls, mio, notify) is held to the
-    /// filter's level: its TRACE is not enabled for the process, so it never
-    /// reaches the logger -- nor the ring -- while our own lines still land
-    /// there. The middle of the test is Android's situation: `log` opened
-    /// at TRACE by FRB and nobody but [`cap_log_bridge`] to close it (on the
+    /// filter's level. Its TRACE is not enabled for the process, so it never
+    /// reaches the logger, nor the ring, while our own lines still land
+    /// there. The middle of the test is Android's situation: `log` opened at
+    /// TRACE by FRB and nobody but [`cap_log_bridge`] to close it. On the
     /// desktop `try_init`'s LogTracer has already done the same, which is
-    /// why the first assertion holds either way). One test rather than two
-    /// because the `log` max level is process-wide and the tests run in
+    /// why the first assertion holds either way. It is one test rather than
+    /// two because the `log` max level is process-wide and the tests run in
     /// parallel.
     #[test]
     fn third_party_log_lines_are_capped_at_the_filter() {
