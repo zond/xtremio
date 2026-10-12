@@ -5,9 +5,9 @@
 # `rust/src/libav.rs` reads FFmpeg's structs by layout, transcribed as
 # prefixes, and asserts every field it reads at the offsets this prints
 # (its `layout` module). Run it when the vendored `media_kit_libs_android_video`
-# moves to another FFmpeg: find the version first --
+# moves to another FFmpeg. Find the version first:
 #   strings libmpv.so | grep -E '^FFmpeg version|^Lavf[0-9]'
-# -- then `tool/libav_offsets.sh 6.0` (the release, as ffmpeg.org names its
+# Then run `tool/libav_offsets.sh 6.0` (the release, as ffmpeg.org names its
 # tarballs), and re-transcribe the prefixes and the assertions from what it
 # prints. Within one major the offsets do not move (fields are only appended),
 # which is why the host's own FFmpeg can stand in for the device's in tests.

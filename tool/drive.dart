@@ -1,6 +1,6 @@
 // Sends one command to a running driver session (lib/main_driver.dart) and
 // prints the answer. Run through `tool/drive`, which finds the session's VM
-// service URL; docs/DRIVING.md has the commands.
+// service URL. docs/DRIVING.md has the commands.
 //
 //   dart run tool/drive.dart --url <vm service url> [--json] <command> ...
 import 'dart:convert';

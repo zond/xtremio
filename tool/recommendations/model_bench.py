@@ -2,15 +2,15 @@
 
 The question is a *sort*, not a recall: the model is handed a shuffled list
 of films and asked to order them by similarity to a target. Scoring a sort
-needs no ground truth about taste -- only tiers nobody would argue with (a
+needs no ground truth about taste, only tiers nobody would argue with (a
 film by the same director, on the same preoccupations, is nearer than an
 unrelated musical). Score is pairwise tier accuracy over every pair drawn
 from different tiers: 1.0 perfect, 0.5 a coin toss. Order within a tier is
 opinion and is not scored.
 
 Two of the five targets are deliberately obscure, because that is where a
-model either knows the film or guesses from its title -- and the bottom
-tier of each question holds a film with almost the same name, to catch the
+model either knows the film or guesses from its title. The bottom tier of
+each question holds a film with almost the same name, to catch the
 guessing. The mainstream targets are controls: a model that fails those is
 not being asked something unfair, it is simply bad.
 
@@ -41,7 +41,7 @@ REPEATS = int(os.environ.get("REPEATS", "3"))
 #   0 same director   1 shared named crew   2 influence the maker declared
 #   3 same production mode   4 same subject, no connection
 #   5 subject decoy   6 name decoy
-# The research behind these is cited in docs; three things it corrected are
+# The research behind these is cited in docs. Three things it corrected are
 # worth remembering, because all three are what a plausible guess gets
 # wrong: McAbee rejects the Eraserhead comparison outright, Dark Star is in
 # colour so it is no black-and-white peer, and TMDB dates Wave Twisters to

@@ -1,7 +1,7 @@
 """Score a model on the thing we actually want: open recommendation.
 
 The sort benchmark next door hands a model a list and asks it to order
-them. This asks the real question -- "ten films like this one" -- and
+them. This asks the real question, "ten films like this one", and
 scores the answer against a researched key of 45-60 graded films per
 target.
 
