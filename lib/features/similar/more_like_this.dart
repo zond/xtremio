@@ -28,9 +28,9 @@
 /// could send would re-bill a title without end and replace the answer
 /// for every other install.
 ///
-/// What the row itself does with the result -- how many it shows, what a
-/// reason looks like on a television -- is not here. This hands back
-/// catalogue items and the model's sentence about each.
+/// What the row itself does with the result (how many it shows, what a reason
+/// looks like on a television) is not here. This hands back catalogue items and
+/// the model's sentence about each.
 library;
 
 import '../../core/core.dart';
@@ -52,8 +52,8 @@ final class MoreLikeThis {
   /// hands one that answers without a network; nothing else does.
   final SimilarTitlesProvider provider;
 
-  /// How a suggestion is checked against a catalogue -- injected for the
-  /// same reason and in the same shape as `PlaybackScope.dhtStatus`.
+  /// How a suggestion is checked against a catalogue. Injected for the same
+  /// reason and in the same shape as `PlaybackScope.dhtStatus`.
   final CatalogueSearch search;
 
   /// The types the server answers for: Stremio's own `movie` and `series`.

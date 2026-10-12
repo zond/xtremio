@@ -9,10 +9,10 @@ import 'addon_widgets.dart';
 /// serves, an optional [status] line under them, plus whatever [trailing]
 /// the list wants (a menu, a button).
 ///
-/// On a television it is a [FocusableTile] like every other list of things
-/// in the app, so the D-pad's focus is drawn as a ring and the tile it is
-/// on scrolls itself into view; off one it is the plain ink well it always
-/// was.
+/// On a television it is a [FocusableTile] like every other list of things in
+/// the app, so the D-pad's focus is drawn as a ring and the tile it is on
+/// scrolls itself into view. Off a television it is the plain ink well it
+/// always was.
 class AddonTile extends StatelessWidget {
   const AddonTile({
     super.key,
@@ -30,15 +30,14 @@ class AddonTile extends StatelessWidget {
   /// Drawn under the type labels: the Installed list puts the addon's
   /// health verdict here. Nothing when there is nothing to say about it.
   ///
-  /// On a television it is drawn under the *tile* instead, outside it. The
-  /// tile takes focus as a whole, so directional traversal has nothing
-  /// inside it to step to, and its [RemotePress] takes select before any
-  /// descendant's own activation runs -- a status that opens something,
-  /// like the health verdict, would be drawn and dead. Beside the thing is
-  /// where such a control goes (see `TvTextField.onClear`), and here that
-  /// means beneath: a verdict belongs under the addon it judges, and a
-  /// list a remote walks downwards gains one stop rather than a stop off
-  /// to one side of another.
+  /// On a television it is drawn under the *tile* instead, outside it. The tile
+  /// takes focus as a whole, so directional traversal has nothing inside it to
+  /// step to. Its [RemotePress] also takes select before any descendant's own
+  /// activation runs. So a status that opens something, like the health
+  /// verdict, would be drawn and dead. Such a control goes beside the thing
+  /// (see `TvTextField.onClear`), and here that means beneath. A verdict
+  /// belongs under the addon it judges, and a list a remote walks downwards
+  /// gains one stop rather than a stop off to one side of another.
   final Widget? status;
 
   /// Where the status sits when it is drawn under the tile: lined up with
@@ -121,13 +120,13 @@ class AddonTile extends StatelessWidget {
         ),
       ),
     );
-    // The column is the root whether or not anything is drawn beneath, so
-    // that the tile keeps its element -- and with it the focus node the
-    // remote is on -- when a verdict arrives. The health record is read
-    // once on mount, so every row is built without a status and then again
-    // with one; a root that changed type between those two builds is a
-    // widget the framework cannot update in place, and the whole tile is
-    // torn down and rebuilt under a D-pad already two rows into the list.
+    // The column is the root whether or not anything is drawn beneath, so that
+    // the tile keeps its element, and with it the focus node the remote is on,
+    // when a verdict arrives. The health record is read once on mount, so every
+    // row is built without a status and then again with one. A root that
+    // changed type between those two builds is a widget the framework cannot
+    // update in place. The whole tile is then torn down and rebuilt under a
+    // D-pad already two rows into the list.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

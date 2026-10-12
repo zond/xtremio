@@ -1,15 +1,15 @@
 /// Playing a download from the device instead of fetching it from peers.
 ///
-/// **A finished download is not a file.** Torrent data is stored one file
-/// per piece, for the streaming cache and a kept download alike, and a link
-/// or Drive download is chunks in the server's proxy cache; the only reader
-/// of either is the embedded server. So the player is handed a `url` stream
-/// that names the download's source -- the server's media route for this
-/// torrent and file, the link, or the Drive file's `xtremio-drive:<fileId>`
-/// -- and registers it as a media id; the server resolves a finished
-/// download of it off the disk before it asks any origin: no peer, no
-/// tracker and no network. That is the better source even with a
-/// connection, so it is preferred whenever there is one.
+/// **A finished download is not a file.** Torrent data is stored one file per
+/// piece, for the streaming cache and a kept download alike. A link or Drive
+/// download is chunks in the server's proxy cache. The only reader of either is
+/// the embedded server. So the player is handed a `url` stream that names the
+/// download's source, and registers it as a media id. The source is the
+/// server's media route for this torrent and file, the link, or the Drive
+/// file's `xtremio-drive:<fileId>`. The server resolves a finished download of
+/// it off the disk before it asks any origin: no peer, no tracker and no
+/// network. That is the better source even with a connection, so it is
+/// preferred whenever there is one.
 library;
 
 import '../../core/core.dart';
@@ -17,28 +17,26 @@ import '../../core/core.dart';
 /// The stream JSON that plays [view]'s download at [url].
 ///
 /// stremio-core passes a non-`magnet:` `Url` stream through
-/// (`Stream::convert`), so `player.stream`'s `streaming_url` *is* this URL,
-/// or for a link with request headers the server's `/proxy` URL carrying
-/// them -- which is why `behaviorHints.proxyHeaders` comes along: the
-/// server keys a link's download on the link and its headers, and finds it
-/// only when asked with both. It is deliberately a
-/// `url` stream rather than the torrent it was downloaded from, even though
-/// the URL now names the same server: a torrent stream sends the player
-/// through the engine's own start-up, and the overlay keys on `infoHash`,
-/// so a download with every byte on the device would sit behind a
-/// "connecting to peers" panel it has no need of.
+/// (`Stream::convert`), so `player.stream`'s `streaming_url` *is* this URL. For
+/// a link with request headers it is the server's `/proxy` URL carrying them.
+/// That is why `behaviorHints.proxyHeaders` comes along: the server keys a
+/// link's download on the link and its headers, and finds it only when asked
+/// with both. It is deliberately a `url` stream rather than the torrent it was
+/// downloaded from, even though the URL now names the same server. A torrent
+/// stream sends the player through the engine's own start-up, and the overlay
+/// keys on `infoHash`. So a download with every byte on the device would sit
+/// behind a "connecting to peers" panel it has no need of.
 ///
-/// The addon's own `name`, `description` and `subtitles` come along -- the
-/// source label reads the same as it did online, and the sidecars belong to
-/// the file however it is played -- and so does `behaviorHints.bingeGroup`,
-/// because the core decides the next episode's stream with
-/// `Stream::is_binge_match`, which only matches when *both* streams carry
-/// one: drop it and a downloaded episode never auto-advances, and Details'
-/// "continue with last source" tile stops resolving. Everything else is
-/// dropped. `behaviorHints.filename` is the name the torrent gives the
-/// file, which is what the player reports as the video parameters and what
-/// subtitle addons match on; it comes from the entry, because the URL's
-/// last segment is a file index now and names nothing.
+/// The addon's own `name`, `description` and `subtitles` come along: the source
+/// label reads the same as it did online, and the sidecars belong to the file
+/// however it is played. So does `behaviorHints.bingeGroup`, because the core
+/// decides the next episode's stream with `Stream::is_binge_match`, which only
+/// matches when *both* streams carry one. Without it a downloaded episode never
+/// auto-advances, and Details' "continue with last source" tile stops
+/// resolving. Everything else is dropped. `behaviorHints.filename` is the name
+/// the torrent gives the file, which is what the player reports as the video
+/// parameters and what subtitle addons match on. It comes from the entry,
+/// because the URL's last segment is a file index now and names nothing.
 Map<String, dynamic> offlineStream(DownloadView view, String url) {
   final stream = view.stream;
   final name = view.path?.split(RegExp(r'[/\\]')).last;
@@ -64,21 +62,20 @@ Map<String, dynamic> offlineStream(DownloadView view, String url) {
 /// the caller already had (the addon's, through the server). Also stamps
 /// the entry as played.
 ///
-/// Nothing here throws and nothing here refuses to play: a download that
-/// cannot be played from the device falls back to streaming the addon's own
-/// stream, which is the difference between a title that still plays and a
-/// player stuck on a dead URL. The fallback is silent -- there is nothing
-/// useful to tell anyone about it, and the stream plays either way.
+/// Nothing here throws and nothing here refuses to play: a download that cannot
+/// be played from the device falls back to streaming the addon's own stream.
+/// That is the difference between a title that still plays and a player stuck
+/// on a dead URL. The fallback is silent: there is nothing useful to tell
+/// anyone about it, and the stream plays either way.
 Future<Map<String, dynamic>?> offlinePlayback(
   DownloadsClient client,
   DownloadView view,
 ) => _open(client, view.key, view);
 
 /// The same for the video [videoId] of [metaId], for a caller that holds no
-/// listing to look an entry up in: the registry answers with the entry
-/// along with the URL, and a video with no finished download is a refusal
-/// like any other -- nothing to play from the device, so play what the
-/// caller had.
+/// listing to look an entry up in. The registry answers with the entry along
+/// with the URL. A video with no finished download is a refusal like any other:
+/// nothing to play from the device, so play what the caller had.
 Future<Map<String, dynamic>?> offlinePlaybackOf(
   DownloadsClient client,
   String metaId,

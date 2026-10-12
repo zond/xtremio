@@ -7,21 +7,20 @@
 /// a film everybody knows and `ep6.avi` is nothing at all, and both of those
 /// are ordinary.
 ///
-/// **A wrong match is worse than no match.** A poster is a claim about what
-/// a file *is*, and the failure being guarded against is not a missing
-/// poster -- it is a real poster for the wrong film, which looks exactly
-/// like a right one. The catalogue answers even an invented query happily
-/// (`similar_resolver.dart`'s problem too), so the rule here is the same
-/// rule as there, and reuses its pieces: a **loose title** compared on
-/// [similarTitleKey], and something strict beside it. See [acceptMatch] for
-/// which strict thing, and why there are two cases of it.
+/// **A wrong match is worse than no match.** A poster is a claim about what a
+/// file *is*. The failure being guarded against is not a missing poster: it is
+/// a real poster for the wrong film, which looks exactly like a right one. The
+/// catalogue answers even an invented query happily (`similar_resolver.dart`'s
+/// problem too). So the rule here is the same rule as there, and reuses its
+/// pieces: a **loose title** compared on [similarTitleKey], and something
+/// strict beside it. See [acceptMatch] for which strict thing, and why there
+/// are two cases of it.
 ///
-/// **Nothing here throws and nothing here reports.** A search that fails,
-/// times out or answers prose is a file with no match, which is the same
-/// outcome as a file whose name says nothing -- the list draws a generic
-/// icon and the raw name. There is no error state for a viewer to be shown,
-/// because there is nothing they could do about it and nothing has gone
-/// wrong.
+/// **Nothing here throws and nothing here reports.** A search that fails, times
+/// out or answers prose is a file with no match. That is the same outcome as a
+/// file whose name says nothing: the list draws a generic icon and the raw
+/// name. There is no error state for a viewer to be shown, because there is
+/// nothing they could do about it and nothing has gone wrong.
 library;
 
 import 'dart:async';
@@ -34,11 +33,11 @@ import '../similar/similar_resolver.dart';
 ///
 /// One, not both, and the name chooses: a name that carries `S01E01` is an
 /// episode of a series and a name that does not is a film. That is a firmer
-/// claim than the one `resolveSuggestions` can make about a model's answer
-/// -- a model states a kind or does not, where a season marker is written by
-/// whoever made the file -- and asking both catalogues would put a film
-/// named like a series episode nowhere useful anyway: a series match with no
-/// episode to point at is a poster with no video under it.
+/// claim than the one `resolveSuggestions` can make about a model's answer. A
+/// model states a kind or does not, where a season marker is written by whoever
+/// made the file. Asking both catalogues would put a film named like a series
+/// episode nowhere useful anyway: a series match with no episode to point at is
+/// a poster with no video under it.
 String catalogueTypeFor(ReleaseIdentity identity) =>
     identity.isEpisode ? 'series' : 'movie';
 
@@ -47,25 +46,23 @@ String catalogueTypeFor(ReleaseIdentity identity) =>
 /// Both halves have to agree, and which strict half depends on what the
 /// name gave:
 ///
-///  * **The name gave a year** -- the title must match and the year must be
-///    within one either way, which is the `similar_resolver.dart` rule
-///    verbatim, for its reasons: festival and territory dates genuinely
-///    differ by one, and two years apart is a different film. The year is
-///    the discriminator, so the *first* meta that passes is taken.
-///  * **The name gave no year** -- the title must match and must match
-///    **exactly one** meta. With no year there is nothing else to tell two
-///    candidates apart, and the honest answer to "which of these two is it"
-///    is that we do not know: `The Office` answers with the American series
-///    and the British one, and picking the one the catalogue happened to
-///    rank first would be a coin toss drawn as a fact. Two matches is
-///    therefore no match.
+///  * **The name gave a year**: the title must match and the year must be
+///    within one either way. That is the `similar_resolver.dart` rule verbatim,
+///    for its reasons: festival and territory dates genuinely differ by one,
+///    and two years apart is a different film. The year is the discriminator,
+///    so the *first* meta that passes is taken.
+///  * **The name gave no year**: the title must match, and must match **exactly
+///    one** meta. With no year there is nothing else to tell two candidates
+///    apart, and the honest answer to "which of these two is it" is that we do
+///    not know. `The Office` answers with the American series and the British
+///    one, and picking the one the catalogue happened to rank first would be a
+///    coin toss drawn as a fact. Two matches is therefore no match.
 ///
 /// A name with no title at all is refused before this is reached
-/// ([matchDriveFile]). A name whose title is junk -- `ep6` -- is refused
-/// *here*, by the title having to be equal to a real one, which is why
-/// there is no list of words that look like a title: a pre-filter guessing
-/// at that would be a second parser, and the exactness of this comparison
-/// already answers it.
+/// ([matchDriveFile]). A name whose title is junk (`ep6`) is refused *here*,
+/// because the title has to equal a real one. That is why there is no list of
+/// words that look like a title: a pre-filter guessing at that would be a
+/// second parser, and the exactness of this comparison already answers it.
 ///
 /// [season] and [episode] come from the name, never from [metas]: the search
 /// catalogue answers with titles and carries no videos, and the file is the
@@ -124,12 +121,12 @@ Future<LinkedDriveMatch?> matchDriveFile(
   try {
     metas = await search(type, identity.title);
   } on Object {
-    // Rethrown as the one thing a caller has to be able to tell apart from
-    // a refusal, and nothing more. `null` means the catalogue answered and
-    // none of its answers was this file; this means nobody answered, which
-    // is worth asking again about -- treating the two alike leaves a file
-    // that hit a slow Cinemeta once unmatched for the rest of the run, with
-    // nothing on screen saying why.
+    // Rethrown as the one thing a caller has to be able to tell apart from a
+    // refusal, and nothing more. `null` means the catalogue answered and none
+    // of its answers was this file. This means nobody answered, which is worth
+    // asking again about. Treating the two alike leaves a file that hit a slow
+    // Cinemeta once unmatched for the rest of the run, with nothing on screen
+    // saying why.
     throw const DriveCatalogueUnreachable();
   }
   return acceptMatch(metas, identity, type: type);
@@ -145,25 +142,25 @@ class DriveCatalogueUnreachable implements Exception {
 
 /// Fills in the match of every linked file that has none, once each.
 ///
-/// **Once, and off the build.** A screen that drew linked files by awaiting
-/// a search would not draw until Cinemeta answered, and one that searched
-/// per build would search per frame. So the screen starts a [run] and draws
-/// what it has; each match is written to [DriveAccount] as it arrives, which
-/// notifies, which redraws the one row that changed.
+/// **Once, and off the build.** A screen that drew linked files by awaiting a
+/// search would not draw until Cinemeta answered, and one that searched per
+/// build would search per frame. So the screen starts a [run] and draws what it
+/// has. Each match is written to [DriveAccount] as it arrives, which notifies,
+/// and that redraws the one row that changed.
 ///
 /// Two guards, and they are different guards:
 ///
 ///  * **The store** ([LinkedDriveFile.match]) is what keeps a *matched* file
-///    from ever being searched for again, across restarts. That is the one
-///    the requirement names.
-///  * **[_asked]** is what keeps an *unmatched* file from being searched
-///    again for the life of this run. A file nothing matches stores nothing
-///    -- a null match is exactly what "no match yet" looks like, and writing
-///    a sentinel would be a record claiming knowledge nobody has -- so
-///    without this, every rebuild would ask again about `ep6.avi`. It is
-///    memory and not preferences deliberately: a name that matched nothing
-///    today may match after Cinemeta adds the title, and the next run is a
-///    fair place to find out.
+///    from ever being searched for again, across restarts. That is the one the
+///    requirement names.
+///  * **[_asked]** is what keeps an *unmatched* file from being searched again
+///    for the life of this run. A file nothing matches stores nothing, because
+///    a null match is exactly what "no match yet" looks like, and writing a
+///    sentinel would be a record claiming knowledge nobody has. So without
+///    this, every rebuild would ask again about `ep6.avi`. It is memory and not
+///    preferences deliberately: a name that matched nothing today may match
+///    after Cinemeta adds the title, and the next run is a fair place to find
+///    out.
 ///
 /// One at a time rather than all at once. There are a handful of files, a
 /// viewer picks them by hand, and a burst of parallel requests at a
@@ -174,12 +171,12 @@ final class DriveMatchRun {
   final DriveAccount account;
   final CatalogueSearch search;
 
-  /// The files this run has already asked about, matched or not -- **by id
-  /// and name together**, so that a file linked again under a better name is
-  /// asked about again rather than being remembered as hopeless. That is the
-  /// only thing a viewer can do about a file nothing matched, and the note
-  /// above the list tells them to do it, so it has to work in the session
-  /// they are sitting in.
+  /// The files this run has already asked about, matched or not, **by id and
+  /// name together**. A file linked again under a better name is then asked
+  /// about again rather than being remembered as hopeless. That is the only
+  /// thing a viewer can do about a file nothing matched, and the note above the
+  /// list tells them to do it, so it has to work in the session they are
+  /// sitting in.
   ///
   /// A pair and not the two joined into one string: any separator that could
   /// be picked is a character a Drive file may have in its name.
@@ -188,15 +185,14 @@ final class DriveMatchRun {
   /// Forgets what this run has asked about, so the next [run] asks again
   /// about every file that still has no match.
   ///
-  /// **For a Reload and nothing else.** [_asked] exists to keep a rebuild
-  /// from asking about `ep6.avi` once a frame, and clearing it on any other
-  /// occasion would put that back. A press on Reload is different in kind:
-  /// the viewer has said out loud that what is known about these files is
-  /// out of date, and the answer for a file nothing matched is the one
-  /// thing a reload could otherwise miss -- a renamed file re-matches
-  /// because the rename dropped its match, while an unmatched file whose
-  /// name did not change would be remembered as hopeless for the life of
-  /// the run.
+  /// **For a Reload and nothing else.** [_asked] exists to keep a rebuild from
+  /// asking about `ep6.avi` once a frame, and clearing it on any other occasion
+  /// would put that back. A press on Reload is different in kind: the viewer
+  /// has said out loud that what is known about these files is out of date. The
+  /// answer for a file nothing matched is the one thing a reload could
+  /// otherwise miss. A renamed file re-matches because the rename dropped its
+  /// match, but an unmatched file whose name did not change would be remembered
+  /// as hopeless for the life of the run.
   ///
   /// A file that *did* match is unaffected either way: [run] steps over it
   /// on the store, which is the guard that outlives this one.
@@ -205,7 +201,7 @@ final class DriveMatchRun {
   /// Asks about every linked file that has no match and has not been asked.
   ///
   /// Safe to call on every build, and on a build made while a pass is still in
-  /// flight -- **which is what [_asked] is for, and not only a memory of the
+  /// flight. **That is what [_asked] is for, and not only a memory of the
   /// misses.** A file is claimed there *before* the await, so a second pass
   /// walking the same list steps over everything the first one has taken and
   /// asks only about what has arrived since. There is no flag saying a pass is
@@ -247,13 +243,13 @@ final class DriveMatchRun {
 }
 
 /// What a device does with a Drive grant it took from the account's vault
-/// (`DriveVault`): lists every file the grant reaches -- everything the
-/// Google account picked through this client, on any device -- into the
-/// linked list ([reloadLinkedDriveFiles], which adds and never takes away
-/// from a list that was empty), then matches them to titles the way the
-/// Library does, so the files are under their titles on the details pages
-/// before the Library is ever opened. Nothing here throws; a listing that
-/// failed leaves the next Reload to try.
+/// (`DriveVault`). It lists every file the grant reaches into the linked list
+/// ([reloadLinkedDriveFiles], which adds and never takes away from a list that
+/// was empty). That is everything the Google account picked through this
+/// client, on any device. Then it matches them to titles the way the Library
+/// does, so the files are under their titles on the details pages before the
+/// Library is ever opened. Nothing here throws. A listing that failed leaves
+/// the next Reload to try.
 Future<void> fillSharedDrive(
   DriveAccount account, {
   DriveFileLister lister = const XtremioDriveFileLister(),

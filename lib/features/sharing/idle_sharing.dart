@@ -12,19 +12,18 @@ import '../../src/rust/api/server.dart' as rust;
 /// **What the server offers, and what the app adds.** The setting is the
 /// server's: `seedingEnabled` in its `ServerSettings`
 /// (`server/src/routes/system.rs`), true by default, merged and persisted by
-/// `POST /settings` -- which the app reaches as
-/// `ServerClient.updateSettings`, over `server_update_settings`, the same
-/// function that route runs. The server uploads while a player is reading
-/// and while a torrent download is on its way, whatever this says:
-/// downloading is activity, not idling. What the setting governs is the
-/// rest -- what was watched or downloaded before -- which on, goes on
-/// being shared when nothing is happening, and off, is not. "What was
-/// watched" is the last thing the viewer watched, until they start
-/// watching something else: the server keeps it as the viewer's idle
-/// share, and runs its torrent only while the sharing is allowed.
-/// Nothing here speaks HTTP: what the app adds is somebody deciding what to put in it,
-/// which is [IdleSharingPolicy] below. It governs uploading and nothing
-/// else: a title kept offline goes on downloading whatever this says.
+/// `POST /settings`. The app reaches that as `ServerClient.updateSettings`,
+/// over `server_update_settings`, the same function that route runs. The server
+/// uploads while a player is reading and while a torrent download is on its
+/// way, whatever this says: downloading is activity, not idling. What the
+/// setting governs is the rest, what was watched or downloaded before. With it
+/// on, that goes on being shared when nothing is happening, and with it off, it
+/// is not. "What was watched" is the last thing the viewer watched, until they
+/// start watching something else. The server keeps it as the viewer's idle
+/// share, and runs its torrent only while the sharing is allowed. Nothing here
+/// speaks HTTP. What the app adds is somebody deciding what to put in it, which
+/// is [IdleSharingPolicy] below. It governs uploading and nothing else: a title
+/// kept offline goes on downloading whatever this says.
 ///
 /// **It is on everywhere, and the switch is the whole of the control.**
 /// There is no per-device default: a device this app has never met is not
@@ -32,14 +31,13 @@ import '../../src/rust/api/server.dart' as rust;
 /// polite way to have taken the film in the first place, so it happens by
 /// default, and one press stops it.
 ///
-/// **Nothing here asks what the connection costs, and nothing should.**
-/// Only Android can report whether a link is metered; Linux, macOS and
-/// Windows -- all first-class targets -- resolve to "unmetered"
-/// unconditionally, so a rule built on that would seed over a phone's
-/// billed tether while a tile promised it never would. A rule right on one
-/// platform and lying on three is worse than no rule. The switch means what
-/// it says; on a phone that means the data is spent, which is accepted
-/// rather than hidden.
+/// **Nothing here asks what the connection costs, and nothing should.** Only
+/// Android can report whether a link is metered. Linux, macOS and Windows, all
+/// first-class targets, resolve to "unmetered" unconditionally. So a rule built
+/// on that would seed over a phone's billed tether while a tile promised it
+/// never would. A rule right on one platform and lying on three is worse than
+/// no rule. The switch means what it says. On a phone that means the data is
+/// spent, which is accepted rather than hidden.
 ///
 /// **On a phone or a tablet the idle sharing stops while the app is in the
 /// background** ([DeviceProfile.isHandheld]), and comes back when the app
@@ -53,9 +51,9 @@ import '../../src/rust/api/server.dart' as rust;
 /// on. The tile says so where it applies ([backgroundNote]).
 ///
 /// **Charging is deliberately *not* a term either**: it is invisible, so a
-/// switch somebody turned on would do nothing for most of the day with
-/// nothing on screen saying why, and it changes several times a day, which
-/// would flap the server's policy on every plug and unplug.
+/// switch somebody turned on would do nothing for most of the day with nothing
+/// on screen saying why. It also changes several times a day, which would flap
+/// the server's policy on every plug and unplug.
 class IdleSharing {
   const IdleSharing._();
 
@@ -69,12 +67,12 @@ class IdleSharing {
 
   /// What turning it on buys, on the tile rather than in a help page.
   ///
-  /// The server uploads while a player is reading whatever this says, and
-  /// with it on goes on uploading when nothing is: `seedingEnabled`, which
-  /// the server turns into the torrent session's choke, so nothing is
-  /// paused and nothing stops downloading. What the tile names is therefore
-  /// what is left once playback stops -- uploading, and only uploading --
-  /// and where to see it happen.
+  /// The server uploads while a player is reading, whatever this says. With it
+  /// on, the server goes on uploading when nothing is playing. The setting is
+  /// `seedingEnabled`, which the server turns into the torrent session's choke,
+  /// so nothing is paused and nothing stops downloading. What the tile names is
+  /// therefore what is left once playback stops (uploading, and only
+  /// uploading), and where to see it happen.
   ///
   /// **This sentence must say what the server actually does at the rev**
   /// `rust/Cargo.toml` **pins**, and change when that does: the copy and
@@ -95,12 +93,12 @@ class IdleSharing {
       'In the background, Xtremio shares only while it is downloading or '
       'casting.';
 
-  /// The gentler of the two stops the status light offers, and what it
-  /// costs: nothing is written down, so the next start of the app shares
-  /// again. It is the run that ends it and not a session, because a run is
-  /// a thing this app has -- [IdleSharingPolicy] lives exactly as long as
-  /// the process, and the server it is telling goes down with it -- where a
-  /// "session" would be a timer somebody had to choose the length of.
+  /// The gentler of the two stops the status light offers, and what it costs:
+  /// nothing is written down, so the next start of the app shares again. The
+  /// run ends it and not a session, because a run is a thing this app has:
+  /// [IdleSharingPolicy] lives exactly as long as the process, and the server
+  /// it is telling goes down with it. A "session" would be a timer somebody had
+  /// to choose the length of.
   static const String pauseTitle = 'Not now';
   static const String pauseDescription =
       'Stops sharing what you have watched and downloaded, until you next '
@@ -112,15 +110,14 @@ class IdleSharing {
   static const String stopDescription =
       'Turns this setting off for good, the same switch as in Settings.';
 
-  /// What the popup offers instead of those two when the light is lit with
-  /// the setting already off, which it can honestly be for a few seconds:
-  /// the light is drawn from bytes the server measured moving and never
-  /// from the setting, the server stops uploading at its first pass after
-  /// playback ends -- they run every two seconds -- and the light's sample
-  /// can still hold the bytes from before that. Neither stop has anything
-  /// to do then. One would pause a setting that is already off, and the
-  /// other would turn off a switch that is already off, so the popup says
-  /// so and offers only the way out of itself.
+  /// What the popup offers instead of those two when the light is lit with the
+  /// setting already off, which it can honestly be for a few seconds. The light
+  /// is drawn from bytes the server measured moving and never from the setting.
+  /// The server stops uploading at its first pass after playback ends (passes
+  /// run every two seconds), and the light's sample can still hold the bytes
+  /// from before that. Neither stop has anything to do then. One would pause a
+  /// setting that is already off, and the other would turn off a switch that is
+  /// already off, so the popup says so and offers only the way out of itself.
   static const String alreadyOffTitle = 'Sharing is already off';
   static const String alreadyOffDescription =
       'Xtremio shares only while you watch and while a download is on its '
@@ -139,10 +136,10 @@ class IdleSharing {
       'What is still going out stops within a few seconds, unless a download '
       'is on its way. The setting is still on.';
 
-  /// What the settings tile adds while a "Not now" is in force. Without it
-  /// the tile would show the switch on while nothing is being shared, which
-  /// is the exact fault -- a tile describing something the app is not
-  /// doing -- that the rest of this class was rewritten to remove.
+  /// What the settings tile adds while a "Not now" is in force. Without it the
+  /// tile would show the switch on while nothing is being shared, which is the
+  /// exact fault the rest of this class was rewritten to remove: a tile
+  /// describing something the app is not doing.
   ///
   /// It is only ever drawn under a switch that is *on*, and that is what
   /// makes it true. [IdleSharingPolicy] holds that from both ends: a pause
@@ -176,56 +173,53 @@ class RustIdleSharingHold implements IdleSharingHold {
 /// Keeps the embedded server's `seedingEnabled` equal to
 /// [AppPrefs.shareWhileIdle], for as long as the app is running.
 ///
-/// One of these for the whole app, built by `XtremioApp`, because there is
-/// one server and one answer. It reads one thing -- the viewer's choice
-/// ([AppPrefs], which notifies) -- and writes one settings key. That is
-/// thin enough to look like a wrapper and is not: what it is for is that
-/// nothing else in the app writes `seedingEnabled`, so the server's belief
-/// has one author however many screens change the preference.
+/// One of these for the whole app, built by `XtremioApp`, because there is one
+/// server and one answer. It reads one thing, the viewer's choice ([AppPrefs],
+/// which notifies), and writes one settings key. That is thin enough to look
+/// like a wrapper and is not: what it is for is that nothing else in the app
+/// writes `seedingEnabled`, so the server's belief has one author however many
+/// screens change the preference.
 ///
-/// **It pushes as soon as it starts.** The server's own default is `true`
-/// and so is the preference's, so this agrees with the server on a fresh
-/// install -- but a viewer who has turned it off has to be told before
-/// anything can be shared, and [start] is called after the preferences have
-/// loaded, so the first thing the server hears is their answer and not the
-/// default they overrode.
+/// **It pushes as soon as it starts.** The server's own default is `true` and
+/// so is the preference's, so this agrees with the server on a fresh install.
+/// But the server has to hear from a viewer who has turned it off before
+/// anything can be shared. [start] is called after the preferences have loaded,
+/// so the first thing the server hears is their answer and not the default they
+/// overrode.
 ///
-/// **It pushes only changes, and one at a time.** Nothing is written when
-/// the answer is the answer already sent, so a preference that notifies for
-/// some other key costs nothing; and the writes are chained rather than
-/// fired off, because two settings calls in flight land on the bridge's
-/// worker pool in no particular order and the loser decides what the server
-/// ends up believing.
+/// **It pushes only changes, and one at a time.** Nothing is written when the
+/// answer is the answer already sent, so a preference that notifies for some
+/// other key costs nothing. The writes are chained rather than fired off,
+/// because two settings calls in flight land on the bridge's worker pool in no
+/// particular order, and the loser decides what the server ends up believing.
 ///
 /// **A "Not now" is this same policy with a shorter memory.** The status
-/// light's popup calls [pauseUntilRestart], which holds the answer at false
-/// for the rest of the run without writing anything down, so the setting
-/// still says what the viewer chose and the next start of the app shares
-/// again. It is not a second author of `seedingEnabled` -- there is still
-/// exactly one -- and it is not a third state in the preference either,
-/// because it must not survive the process that granted it. Nor does it
-/// survive the switch moving, or begin without it: a pause is what a
-/// switch that is on looks like this run, either press of the switch is a
-/// newer answer than the one the popup took, and with the switch off there
-/// is no sharing for a pause to hold back and [pauseUntilRestart] takes
-/// none.
+/// light's popup calls [pauseUntilRestart], which holds the answer at false for
+/// the rest of the run without writing anything down. So the setting still says
+/// what the viewer chose, and the next start of the app shares again. It is not
+/// a second author of `seedingEnabled` (there is still exactly one), and it is
+/// not a third state in the preference either, because it must not survive the
+/// process that granted it. Nor does it survive the switch moving, or begin
+/// without it. A pause is what a switch that is on looks like this run, and
+/// either press of the switch is a newer answer than the one the popup took.
+/// With the switch off there is no sharing for a pause to hold back, and
+/// [pauseUntilRestart] takes none.
 ///
-/// **On a phone or a tablet, the app being in the background is a hold of
-/// its own** ([pausesInBackground], from [DeviceProfile.isHandheld]):
-/// [appHidden] tells the server to hold the idle sharing off
-/// ([IdleSharingHold]) and [appResumed] lets go. It is not written into
-/// `seedingEnabled`, which the server persists: the setting keeps saying
-/// what the viewer chose, and the hold is a fact about this run that the
-/// server forgets with the process. It is the server's to apply because
-/// only the server knows what else is happening -- held, a player reading
-/// and a torrent download still on its way go on sharing, and what is
-/// held off is what was watched or finished before. It is not a "Not now"
-/// either: the tile says nothing about it (nobody is looking at the tile
-/// while the app is away) and it lifts by itself on the way back, where a
-/// "Not now" outlasts every resume of the run it was granted in. The two
-/// are held apart so that either can end without ending the other.
-/// `XtremioApp` calls both from the lifecycle listener that tells the
-/// server's footprint the same thing.
+/// **On a phone or a tablet, the app being in the background is a hold of its
+/// own** ([pausesInBackground], from [DeviceProfile.isHandheld]): [appHidden]
+/// tells the server to hold the idle sharing off ([IdleSharingHold]) and
+/// [appResumed] lets go. It is not written into `seedingEnabled`, which the
+/// server persists: the setting keeps saying what the viewer chose, and the
+/// hold is a fact about this run that the server forgets with the process. It
+/// is the server's to apply because only the server knows what else is
+/// happening. While held, a player reading and a torrent download still on its
+/// way go on sharing. What is held off is what was watched or finished before.
+/// It is not a "Not now" either. The tile says nothing about it (nobody is
+/// looking at the tile while the app is away), and it lifts by itself on the
+/// way back, while a "Not now" outlasts every resume of the run it was granted
+/// in. The two are held apart so that either can end without ending the other.
+/// `XtremioApp` calls both from the lifecycle listener that tells the server's
+/// footprint the same thing.
 ///
 /// **It notifies when that pause goes on or off**, and that is the only
 /// thing it says anything about: what the server was told is the server's
@@ -327,20 +321,20 @@ class IdleSharingPolicy extends ChangeNotifier {
   /// Stops the sharing for the rest of this run, leaving the preference
   /// alone: what the status light's "Not now" does.
   ///
-  /// The server is told at once, through the one path that tells it
-  /// anything. Nothing persists it, so the next start of the app pushes the
-  /// preference again and sharing resumes -- which is what the popup says
-  /// it does, and the whole difference between this and the switch.
+  /// The server is told at once, through the one path that tells it anything.
+  /// Nothing persists it, so the next start of the app pushes the preference
+  /// again and sharing resumes. That is what the popup says it does, and the
+  /// whole difference between this and the switch.
   ///
-  /// **With the switch off it does nothing, and that is the invariant
-  /// rather than a guard.** A pause is a state of a switch that is on: it
-  /// holds back a sharing the setting still allows. With the setting off
-  /// there is no such sharing to hold back, and a pause recorded anyway
-  /// would have the settings tile promise a resumption at the next start
-  /// that the setting will not be asking for. The popup does not draw the
-  /// row while the switch is off, so nothing presses this then; it is
-  /// refused here as well because whether a pause can exist is this
-  /// object's to answer and not the order its callers press things in.
+  /// **With the switch off it does nothing, and that is the invariant rather
+  /// than a guard.** A pause is a state of a switch that is on: it holds back a
+  /// sharing the setting still allows. With the setting off there is no such
+  /// sharing to hold back, and a pause recorded anyway would have the settings
+  /// tile promise a resumption at the next start that the setting will not be
+  /// asking for. The popup does not draw the row while the switch is off, so
+  /// nothing presses this then. It is refused here as well, because whether a
+  /// pause can exist is this object's to answer and not the order its callers
+  /// press things in.
   void pauseUntilRestart() {
     if (_paused || _stopped || !prefs.shareWhileIdle) return;
     _paused = true;
@@ -348,27 +342,25 @@ class IdleSharingPolicy extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A "Not now" is in force, which it can only be while the setting is
-  /// on: [pauseUntilRestart] refuses one while the switch is off, and
-  /// [_reconsider] lifts one the moment the switch moves either way. What
-  /// reads it is the settings tile, which must not show a switch
-  /// that is on over a run in which nothing is being shared -- and which
-  /// is on screen when the popup that grants one is, so this notifies when
-  /// it changes.
+  /// A "Not now" is in force, which it can only be while the setting is on:
+  /// [pauseUntilRestart] refuses one while the switch is off, and [_reconsider]
+  /// lifts one the moment the switch moves either way. The settings tile reads
+  /// it, and must not show a switch that is on over a run in which nothing is
+  /// being shared. The tile is on screen when the popup that grants one is, so
+  /// this notifies when it changes.
   bool get pausedForRun => _paused;
 
   void _reconsider() {
     if (_stopped) return;
-    // A pause is a state of a switch that is *on*, and it ends the moment
-    // the switch moves. Since [pauseUntilRestart] refuses one while the
-    // switch is off, the one move a held pause can see is the switch going
-    // off, and that lifts it: the switch is the longer of the two stops,
-    // and "paused until you next start Xtremio" under a switch that is off
-    // would promise a resumption that is never coming. The comparison is
-    // written as "moved" rather than "turned off" as a guard: should a
-    // pause ever be held under a switch that is off, turning it on must
-    // not leave the viewer with a switch they have just pressed that does
-    // nothing until the app is restarted.
+    // A pause is a state of a switch that is *on*, and it ends the moment the
+    // switch moves. Since [pauseUntilRestart] refuses one while the switch is
+    // off, the one move a held pause can see is the switch going off, and that
+    // lifts it. The switch is the longer of the two stops, and "paused until
+    // you next start Xtremio" under a switch that is off would promise a
+    // resumption that is never coming. The comparison is written as "moved"
+    // rather than "turned off" as a guard. Should a pause ever be held under a
+    // switch that is off, turning it on must not leave the viewer with a switch
+    // they have just pressed that does nothing until the app is restarted.
     final wanted = prefs.shareWhileIdle;
     final lifted = wanted != _wasAllowed && _paused;
     if (lifted) _paused = false;
@@ -385,9 +377,9 @@ class IdleSharingPolicy extends ChangeNotifier {
       await server.updateSettings({IdleSharing.seedingEnabledKey: allowed});
     } catch (error) {
       // A server that is not up yet, or that refused: the policy is not
-      // recorded as sent, so the next press writes it again. Nothing
-      // retries on its own -- there is no deadline here, and a timer would
-      // be a second thing to get wrong.
+      // recorded as sent, so the next press writes it again. Nothing retries on
+      // its own: there is no deadline here, and a timer would be a second thing
+      // to get wrong.
       if (kDebugMode) debugPrint('sharing policy not applied: $error');
       if (_sent == allowed) _sent = null;
     }

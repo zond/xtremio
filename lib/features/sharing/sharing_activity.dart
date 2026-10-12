@@ -9,20 +9,19 @@ import 'idle_sharing.dart';
 /// Asks the embedded server whether it is using this device's connection
 /// while nothing is playing: one [BackgroundTraffic] per reading.
 ///
-/// It is a reading, not a claim. Everything in the answer is what the
-/// server measured -- per direction, whether librqbit's own peer counters
-/// grew over the last window with no player reading over it -- and nothing
-/// derives from the sharing setting. A viewer who has turned sharing on but
-/// is moving no bytes reads exactly the same as one who has turned it off,
-/// which is the whole point of measuring rather than reporting the switch.
+/// It is a reading, not a claim. Everything in the answer is what the server
+/// measured: per direction, whether librqbit's own peer counters grew over the
+/// last window with no player reading over it. Nothing derives from the sharing
+/// setting. A viewer who has turned sharing on but is moving no bytes reads
+/// exactly the same as one who has turned it off, which is the whole point of
+/// measuring rather than reporting the switch.
 ///
-/// **The per-torrent stats calls must not stand in for this.** A stats
-/// request for a hash with no engine *creates* one
-/// (`routes::system::stats_target` falls through to
-/// `get_or_begin_add_magnet`), so polling the last film's hash to find out
-/// whether it is still being shared would re-add the torrent the server had
-/// already swept -- the light would start the very sharing it exists to
-/// report. `ServerHandle::background_traffic` is the opposite kind of call:
+/// **The per-torrent stats calls must not stand in for this.** A stats request
+/// for a hash with no engine *creates* one (`routes::system::stats_target`
+/// falls through to `get_or_begin_add_magnet`), so polling the last film's hash
+/// to find out whether it is still being shared would re-add the torrent the
+/// server had already swept. The light would start the very sharing it exists
+/// to report. `ServerHandle::background_traffic` is the opposite kind of call:
 /// it peeks at the counters of the engines that exist, creates nothing and
 /// touches no idle clock, which is what makes it safe to poll.
 abstract interface class SharingActivityClient {
@@ -48,20 +47,20 @@ class RustSharingActivityClient implements SharingActivityClient {
 /// [IdleSharingPolicy], because there is one server to ask.
 ///
 /// **It polls only while [watching].** The shell turns it on while its own
-/// route is on top and off as soon as anything is pushed over it, so nothing
-/// is asked while a film is playing. The server folds "nothing playing" into
-/// the answer itself, so this is not what keeps the light off during a
-/// film; it is what keeps a light nobody can see from costing anything.
+/// route is on top and off as soon as anything is pushed over it, so nothing is
+/// asked while a film is playing. The server folds "nothing playing" into the
+/// answer itself, so this is not what keeps the light off during a film. It is
+/// what keeps a light nobody can see from costing anything.
 ///
-/// **What it reports is what the server judged, unchanged.** [uploading]
-/// and [downloading] are the reading's own halves -- each "that direction's
-/// counter grew over the last window and nothing was playing" -- and
-/// [active] is either. The window is closed by whoever asks, so [period] is
-/// its length: five seconds, the server's own `TRAFFIC_WINDOW`, long enough
-/// to cover the gap between two block requests and short enough that the
-/// answer is about now. Nothing is inferred here from a previous reading;
-/// the comparison of two counters is the server's, made over one set of
-/// torrents, and doing it again on this side would be a second judge.
+/// **What it reports is what the server judged, unchanged.** [uploading] and
+/// [downloading] are the reading's own halves, each meaning "that direction's
+/// counter grew over the last window and nothing was playing". [active] is
+/// either. The window is closed by whoever asks, so [period] is its length:
+/// five seconds, the server's own `TRAFFIC_WINDOW`, long enough to cover the
+/// gap between two block requests and short enough that the answer is about
+/// now. Nothing is inferred here from a previous reading. The comparison of two
+/// counters is the server's, made over one set of torrents, and doing it again
+/// on this side would be a second judge.
 ///
 /// **A failure is darkness, not the last answer.** An error means the app
 /// does not know, and a light that stays on when nothing is known is a claim
@@ -151,12 +150,12 @@ class SharingActivityMonitor extends ChangeNotifier {
 /// The one [SharingActivityMonitor] and the one [IdleSharingPolicy], where
 /// the shell can reach them.
 ///
-/// An [InheritedNotifier] over the monitor, so anything drawing the light
-/// is rebuilt when what the server is doing changes. The policy is a plain
-/// field, and a [Listenable] of its own: this scope is not rebuilt when a
-/// "Not now" is granted -- the same object goes on holding it -- so the
-/// settings tile, which draws that pause and is on screen while the popup
-/// granting it is open, listens to the policy rather than to this.
+/// An [InheritedNotifier] over the monitor, so anything drawing the light is
+/// rebuilt when what the server is doing changes. The policy is a plain field,
+/// and a [Listenable] of its own. This scope is not rebuilt when a "Not now" is
+/// granted, since the same object goes on holding it. So the settings tile,
+/// which draws that pause and is on screen while the popup granting it is open,
+/// listens to the policy rather than to this.
 class SharingScope extends InheritedNotifier<SharingActivityMonitor> {
   const SharingScope({
     super.key,

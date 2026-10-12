@@ -13,41 +13,40 @@ import 'remove_download_dialog.dart';
 /// room it takes.
 ///
 /// **Not where it goes.** Torrent data has one root now, shared by the
-/// streaming cache and the kept downloads, and it is named and moved where
-/// the rest of that root's business is (Settings, "Server storage"): a
-/// folder control here would go on saying downloads have a place of their
-/// own to be moved between.
+/// streaming cache and the kept downloads, and it is named and moved where the
+/// rest of that root's business is (Settings, "Server storage"). A folder
+/// control here would go on saying downloads have a place of their own to be
+/// moved between.
 ///
-/// The poster on a row is a [PosterTile] and wears the full indicator
-/// like every other poster in the app; everything else here -- the rows,
-/// the ⋮ per download, the buttons in the confirmations -- is Material's
-/// and is marked by the theme floor (`FocusTheme`) alone, since a row in a
-/// list is not a thing to lift.
+/// The poster on a row is a [PosterTile] and wears the full indicator like
+/// every other poster in the app. Everything else here (the rows, the ⋮ per
+/// download, the buttons in the confirmations) is Material's and is marked by
+/// the theme floor (`FocusTheme`) alone, since a row in a list is not a thing
+/// to lift.
 ///
 /// The rows come from the registry the Rust side owns, with live progress
-/// merged in ([DownloadsController]); every action here is one call on the
-/// [DownloadsClient], never HTTP. Deleting asks first, and says that the
-/// bytes go with the entry: a dropped pin with its bytes left behind is a
-/// torrent nobody kept and nobody plays, which the server gives back at
-/// its next pass, so there is no keeping them to offer
-/// ([RemoveDownloadDialog]).
+/// merged in ([DownloadsController]). Every action here is one call on the
+/// [DownloadsClient], never HTTP. Deleting asks first, and says that the bytes
+/// go with the entry ([RemoveDownloadDialog]). A dropped pin with its bytes
+/// left behind is a torrent nobody kept and nobody plays, which the server
+/// gives back at its next pass, so there is no keeping them to offer.
 ///
-/// Play goes through the embedded server (`offline_play.dart`), because
-/// that is the only reader the pieces have: the row is handed the server's
-/// media route for its own torrent and file, served off the pieces already
-/// here -- no peer, no tracker, no network -- and never a `file://` URL,
-/// since no whole file is written. It is refused when the pieces cannot be
-/// served (the server is not running, or it no longer holds them), and a
-/// refusal streams the title instead, silently: the stream plays either
-/// way, and there is nothing useful to say about which of the two it was.
-/// A row whose pieces are gone for good says so on the row itself
-/// (`DownloadState.gone`) rather than in a message about a play.
+/// Play goes through the embedded server (`offline_play.dart`), because that is
+/// the only reader the pieces have. The row is handed the server's media route
+/// for its own torrent and file, served off the pieces already here with no
+/// peer, no tracker and no network. It is never handed a `file://` URL, since
+/// no whole file is written. Play is refused when the pieces cannot be served
+/// (the server is not running, or it no longer holds them). A refusal silently
+/// streams the title instead: the stream plays either way, and there is nothing
+/// useful to say about which of the two it was. A row whose pieces are gone for
+/// good says so on the row itself (`DownloadState.gone`) rather than in a
+/// message about a play.
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key, this.canPlay = true});
 
-  /// The name this screen's route carries, so something outside the tree
-  /// -- the downloads notification -- can tell whether it is already up
-  /// rather than stacking a second one over it.
+  /// The name this screen's route carries, so something outside the tree, like
+  /// the downloads notification, can tell whether it is already up rather than
+  /// stacking a second one over it.
   static const String routeName = 'downloads';
 
   /// Plays [view] off this device, with the addon requests the download was
@@ -79,8 +78,8 @@ class DownloadsScreen extends StatefulWidget {
     );
   }
 
-  /// The stream request [view] plays under: the stored one, or -- for a
-  /// Drive download with none -- [driveStreamRequest] for its video.
+  /// The stream request [view] plays under: the stored one, or
+  /// [driveStreamRequest] for its video when a Drive download has none.
   ///
   /// A stored Drive download may have no stream request at all (an older
   /// build did not track one), and without it the engine keeps no progress
@@ -152,12 +151,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   /// press that burns another worker for the same file.
   final Set<String> _retrying = {};
 
-  /// Whether a play is between its tap and its player. Asking the registry
-  /// for the file is a round trip and the row stays hit-testable across
-  /// it, so without this a second press pushes a second player: each one
-  /// loads the shared `player` field and starts an engine of its own, and
-  /// the one left underneath keeps its mpv alive and plays the title again
-  /// when the top one is backed out of.
+  /// Whether a play is between its tap and its player. Asking the registry for
+  /// the file is a round trip, and the row stays hit-testable across it.
+  /// Without this a second press pushes a second player. Each one loads the
+  /// shared `player` field and starts an engine of its own, and the one left
+  /// underneath keeps its mpv alive and plays the title again when the top one
+  /// is backed out of.
   bool _playing = false;
 
   @override
@@ -189,13 +188,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
-  /// Plays what is on this device -- the embedded server's own media route
-  /// for the download's torrent and file, off the pieces already here --
-  /// with the addon requests the download was taken with: those are what
-  /// keep continue-watching moving while the player runs offline (`Load
-  /// Player` needs the stream request to record progress at all, and the
-  /// meta request to find the library item -- which offline comes out of
-  /// the bucket the download put the title in).
+  /// Plays what is on this device, with the addon requests the download was
+  /// taken with. What is played is the embedded server's own media route for
+  /// the download's torrent and file, off the pieces already here. The requests
+  /// are what keep continue-watching moving while the player runs offline.
+  /// `Load Player` needs the stream request to record progress at all, and the
+  /// meta request to find the library item, which offline comes out of the
+  /// bucket the download put the title in.
   ///
   /// A row is only offered Play when it is finished, but the registry can
   /// still refuse by the time it is pressed. Then the addon's own stream is
@@ -216,12 +215,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   /// Give up on a list that will not read, and start an empty one.
   ///
-  /// Asked for plainly, because it is the only thing here that loses
-  /// something on purpose: the list goes, so the files it named stop being
-  /// named, and the server -- which is keeping them precisely because we
-  /// cannot say what is pinned -- takes them at the next launch. The old
-  /// file is kept beside the new one for anyone who can still get something
-  /// out of it.
+  /// Asked for plainly, because it is the only thing here that loses something
+  /// on purpose: the list goes, so the files it named stop being named. The
+  /// server is keeping them precisely because we cannot say what is pinned, and
+  /// takes them at the next launch. The old file is kept beside the new one for
+  /// anyone who can still get something out of it.
   Future<void> _startFresh() async {
     final client = _client;
     final downloads = _downloads;
@@ -372,8 +370,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   }
 }
 
-/// How much of the device these downloads take, and how many there are --
-/// or that this is not known, which is not the same as none.
+/// How much of the device these downloads take, and how many there are. Or that
+/// this is not known, which is not the same as none.
 class _StorageHeader extends StatelessWidget {
   const _StorageHeader({required this.registry, required this.failed});
 
@@ -502,10 +500,10 @@ class _DownloadRow extends StatelessWidget {
   }
 }
 
-/// The listing itself failed -- a broken bridge, since the Rust side
-/// answers off the disk when the server cannot be asked. What was listed
-/// before (if anything) stays below; this says why nothing newer arrived
-/// and offers the only useful action.
+/// The listing itself failed. That means a broken bridge, since the Rust side
+/// answers off the disk when the server cannot be asked. What was listed before
+/// (if anything) stays below. This says why nothing newer arrived and offers
+/// the only useful action.
 class _ListingFailed extends StatelessWidget {
   const _ListingFailed({required this.onRetry});
 
@@ -531,12 +529,12 @@ class _ListingFailed extends StatelessWidget {
 
 /// **The list could not be read, and that is not an empty list.**
 ///
-/// It is the only record of what the user asked to keep, and the server is
-/// told the pin set from it -- so while it will not read, the server names
-/// nothing and keeps every file it has. Nothing is lost, nothing can be
-/// added or removed either, and a retry will not help: the file will read
-/// the same way next time. The way out is deliberate and costs something,
-/// which is why it is a button and not something the app did quietly.
+/// It is the only record of what the user asked to keep, and the server is told
+/// the pin set from it. So while it will not read, the server names nothing and
+/// keeps every file it has. Nothing is lost, nothing can be added or removed
+/// either, and a retry will not help: the file will read the same way next
+/// time. The way out is deliberate and costs something, which is why it is a
+/// button and not something the app did quietly.
 class _RegistryUnreadable extends StatelessWidget {
   const _RegistryUnreadable({required this.reason, required this.onStartFresh});
 

@@ -2,9 +2,9 @@
 /// faces say: which titles are sources, how much each weighs, and how the
 /// titles their "More like this" answers name are ranked.
 ///
-/// Nothing here asks anybody anything. The asking -- the suggestions, the
-/// episode lists, the catalogue -- is `ForYouController`'s, and this is what
-/// it does with the answers, so a test can hold every rule with a list.
+/// Nothing here asks anybody anything. The asking (the suggestions, the episode
+/// lists, the catalogue) is `ForYouController`'s. This is what it does with the
+/// answers, so a test can hold every rule with a list.
 library;
 
 import '../../core/core.dart';
@@ -53,8 +53,8 @@ final class ForYouSource {
   final String type;
   final String name;
 
-  /// One per listing it is in -- watched through, added by hand -- and one
-  /// more for a happy face.
+  /// One per listing it is in (watched through, added by hand), and one more
+  /// for a happy face.
   final int weight;
   final ForYouReason reason;
 
@@ -88,12 +88,12 @@ final class ForYouSource {
   String toString() => 'ForYouSource($id, $weight, ${reason.name})';
 }
 
-/// A series is "watched through" once one whole season is -- every episode
-/// the meta lists for a season numbered one or more -- or, for a show with
-/// no such seasons, every episode it has. Specials (season 0) are never a
-/// season of their own. A season still airing is not whole until its last
-/// listed episode is watched: [videos] lists what is announced, and an
-/// episode not out yet cannot have been watched.
+/// A series is "watched through" once one whole season is: every episode the
+/// meta lists for a season numbered one or more. For a show with no such
+/// seasons, it is every episode it has. Specials (season 0) are never a season
+/// of their own. A season still airing is not whole until its last listed
+/// episode is watched: [videos] lists what is announced, and an episode not out
+/// yet cannot have been watched.
 bool seriesWatchedThrough(
   List<({String id, int? season})> videos,
   Set<String> watched,
@@ -122,12 +122,12 @@ bool libraryItemWatchedThrough(
 
 /// The sources among [library], heaviest-and-latest first:
 ///
-/// * a **movie watched** (`timesWatched > 0`: the state the details page's
-///   check shows and moves -- not the flag a playback leaves, which no
-///   mark can clear, so a film the account wrongly calls watched can be
-///   taken out of the sources by clearing the check), or a **series
-///   watched through** ([watchedThrough] answers for one);
-/// * a title **added by hand** (`temp == false`, `removed == false`).
+///  * a **movie watched** (`timesWatched > 0`), or a **series watched through**
+///    ([watchedThrough] answers for one). `timesWatched` is the state the
+///    details page's check shows and moves. It is not the flag a playback
+///    leaves, which no mark can clear, so a film the account wrongly calls
+///    watched can be taken out of the sources by clearing the check;
+///  * a title **added by hand** (`temp == false`, `removed == false`).
 ///
 /// A title that is both counts twice. A happy face adds one; a sad face
 /// takes the title out whatever else it is. Only `movie` and `series` are

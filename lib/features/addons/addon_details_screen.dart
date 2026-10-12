@@ -15,25 +15,24 @@ import 'addon_widgets.dart';
 /// stroke reads, and a button that grew would overlap the one beside it.
 ///
 /// On mount it dispatches `Load AddonDetails {transportUrl}` (a `stremio://`
-/// URL is accepted; the engine reads it as `https://`) and unloads the field
-/// on dispose, unless another details screen has loaded it since. The
-/// engine fills `localAddon` from the profile and
-/// `remoteAddon` from the fetch, and refreshes both after every mutation, so
-/// the buttons follow the state: Install while not installed, Update when
-/// the fetched version differs, Uninstall unless protected. A manifest that
-/// declares `configurationRequired` cannot be installed (`Other` code 6):
-/// its primary action is Configure. While `profile.addonsLocked` every
-/// mutation is disabled behind a banner.
+/// URL is accepted; the engine reads it as `https://`). It unloads the field on
+/// dispose, unless another details screen has loaded it since. The engine fills
+/// `localAddon` from the profile and `remoteAddon` from the fetch, and
+/// refreshes both after every mutation, so the buttons follow the state:
+/// Install while not installed, Update when the fetched version differs,
+/// Uninstall unless protected. A manifest that declares `configurationRequired`
+/// cannot be installed (`Other` code 6), so its primary action is Configure.
+/// Every mutation is disabled behind a banner while `profile.addonsLocked`.
 class AddonDetailsScreen extends StatefulWidget {
   const AddonDetailsScreen({super.key, required this.transportUrl});
 
   /// The manifest URL, as typed or as a catalog entry carries it.
   final String transportUrl;
 
-  /// The `RouteSettings.name` every route showing this screen carries, with
-  /// the transport URL as the route's arguments. A `stremio://` deep link
-  /// arriving while one of these is on top replaces it rather than stacking
-  /// a second screen over the same core field; that is how it knows.
+  /// The `RouteSettings.name` every route showing this screen carries, with the
+  /// transport URL as the route's arguments. The name is how a `stremio://`
+  /// deep link knows one of these is on top. The link then replaces it rather
+  /// than stacking a second screen over the same core field.
   static const String routeName = 'addon-details';
 
   /// The route to push for [transportUrl], named so a deep link recognises
@@ -69,9 +68,9 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
 
   @override
   void dispose() {
-    // A popping route stays in the tree for its transition while the list
-    // beneath is already tappable, so a second details screen can have
-    // loaded the field by now: only its owner unloads it.
+    // Only the field's owner unloads it. A popping route stays in the tree for
+    // its transition while the list beneath is already tappable, so a second
+    // details screen can have loaded the field by now.
     SharedFieldOwnership.release(CoreField.addonDetails, this, _client);
     _details?.dispose();
     _ctx?.dispose();

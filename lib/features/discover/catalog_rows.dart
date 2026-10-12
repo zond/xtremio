@@ -21,12 +21,12 @@ import '../for_you/for_you_rules.dart';
 /// nothing chosen, of [type] or of every type (`board`, a
 /// `CatalogsWithExtra`).
 ///
-/// `Load CatalogsWithExtra` only plans the catalogs; their first pages are
-/// fetched by `LoadRange` for the rows on screen (plus overscan), re-issued
-/// as the user scrolls whenever the requested range grows, like stremio-web.
-/// Changing [type] plans the rows again and starts them from the top. The
-/// continue-watching row is never loaded or unloaded: the engine keeps it
-/// in step with the library, and it follows [type] here.
+/// `Load CatalogsWithExtra` only plans the catalogs. Their first pages are
+/// fetched by `LoadRange` for the rows on screen (plus overscan), which is
+/// re-issued as the user scrolls whenever the requested range grows, like
+/// stremio-web. Changing [type] plans the rows again and starts them from the
+/// top. The continue-watching row is never loaded or unloaded: the engine keeps
+/// it in step with the library, and it follows [type] here.
 class CatalogRows extends StatefulWidget {
   const CatalogRows({
     super.key,
@@ -43,10 +43,10 @@ class CatalogRows extends StatefulWidget {
   /// A row's "See all" was pressed.
   final ValueChanged<CatalogRow> onSeeAll;
 
-  /// Whether the first tile takes the remote when nothing else has it --
-  /// which it has at start-up, Discover being the screen the app opens on,
-  /// and not when the tab is walked to from the rail, where the remote
-  /// stays like on every other tab.
+  /// Whether the first tile takes the remote when nothing else has it. It does
+  /// at start-up, since Discover is the screen the app opens on. It does not
+  /// when the tab is walked to from the rail, where the remote stays as on
+  /// every other tab.
   final bool defaultFocus;
 
   /// Drawn where there are no rows at all, in place of the "install an
@@ -60,9 +60,9 @@ class CatalogRows extends StatefulWidget {
   /// are.
   ///
   /// A television's is the other way round: the poster is
-  /// [PosterTile.tvImageHeight], every television screen's one size, and
-  /// the row is that and what goes round it -- which is what puts two whole
-  /// rows on a Google TV's screen ([PosterTile.tvImageHeight] says how).
+  /// [PosterTile.tvImageHeight], every television screen's one size, and the
+  /// row is that plus what goes round it. That is what puts two whole rows on a
+  /// Google TV's screen ([PosterTile.tvImageHeight] says how).
   static double rowExtentFor(double width, {bool isTv = false}) => isTv
       ? _RowLayout.tvBaseExtent
       : width >= 720
@@ -114,10 +114,10 @@ class _CatalogRowsState extends State<CatalogRows> {
   /// into an addon with a name that can be checked or uninstalled.
   ///
   /// Subscribed to only once a catalog has actually failed, by
-  /// [_watchProfileForFailures]: `ctx` is the profile with its
-  /// notifications and events, every event that touches it costs a
-  /// serialize across FFI and a decode here, and the board stays mounted
-  /// under the player while a film reports its progress.
+  /// [_watchProfileForFailures]. `ctx` is the profile with its notifications
+  /// and events. Every event that touches it costs a serialize across FFI and a
+  /// decode here, and the board stays mounted under the player while a film
+  /// reports its progress.
   CoreFieldNotifier? _ctx;
   final ScrollController _scroll = ScrollController();
   Timer? _debounce;
@@ -177,8 +177,8 @@ class _CatalogRowsState extends State<CatalogRows> {
     _tellForYou();
   }
 
-  /// Faces are preferences: a like, a dislike or a dismissal changes the
-  /// row. Only those -- every other preference leaves it alone.
+  /// Faces are preferences: a like, a dislike or a dismissal changes the row.
+  /// Every other preference leaves it alone.
   Faces? _faces;
   void _onPrefsForYou() {
     final faces = _prefs?.faces;
@@ -277,16 +277,16 @@ class _CatalogRowsState extends State<CatalogRows> {
     return ctx == null ? null : _profileParse.of(ctx);
   }
 
-  /// The addons behind the rows that were dropped, one card's worth each.
-  /// The count the summary line reports is still catalogs — that is what
-  /// went missing — even where two of them are one card.
+  /// The addons behind the rows that were dropped, one card's worth each. The
+  /// count the summary line reports is still catalogs, because that is what
+  /// went missing, even where two of them are one card.
   List<AddonFailure> _failures(CatalogsWithExtraState board) =>
       addonFailuresOf(board.failedRows, _profile);
 
-  /// The rows as laid out: continue watching first when it has items,
-  /// For you under it when it has any, then every catalog row that has
-  /// something to show — the ones the addon answered empty and the ones it
-  /// could not answer at all are both left out.
+  /// The rows as laid out: continue watching first when it has items, For you
+  /// under it when it has any, then every catalog row that has something to
+  /// show. Rows the addon answered empty and rows it could not answer at all
+  /// are both left out.
   List<_BoardRow> _rows(
     CatalogsWithExtraState board,
     ContinueWatchingState continueWatching,
@@ -391,9 +391,9 @@ class _CatalogRowsState extends State<CatalogRows> {
     _onContinueWatchingChanged();
   }
 
-  /// The For you tile's long press: "Not interested", asked first, which
-  /// marks the title dismissed -- kept on the device and synced like a
-  /// face -- and takes it off the row at once.
+  /// The For you tile's long press: "Not interested", asked first. It marks the
+  /// title dismissed, which is kept on the device and synced like a face, and
+  /// takes it off the row at once.
   Future<void> _forYouLongPress(ForYouTitle title) async {
     final focused = FocusManager.instance.primaryFocus;
     final at = _boardFocus.hasFocus ? focused?.rect : null;
@@ -452,13 +452,13 @@ class _CatalogRowsState extends State<CatalogRows> {
   /// Puts the remote on the board's tile nearest [at], if it was left on
   /// nothing.
   ///
-  /// A strip's tiles are not keyed, so a tile taken out of the middle of
-  /// the row hands its place, and the remote with it, to the one after it,
-  /// and nothing needs doing. The last tile of a row has no one after it,
-  /// and the row's only tile takes the row with it; there the remote would
-  /// be left on the tab's bare scope, with no ring anywhere. Nearest is
-  /// the tile before it in the row, or, with the row gone, the tile of the
-  /// row that moved up into its place.
+  /// A strip's tiles are not keyed, so a tile taken out of the middle of the
+  /// row hands its place, and the remote with it, to the one after it, and
+  /// nothing needs doing. The last tile of a row has no one after it, and the
+  /// row's only tile takes the row with it. In those two cases the remote would
+  /// be left on the tab's bare scope, with no ring anywhere. Nearest is the
+  /// tile before it in the row, or, with the row gone, the tile of the row that
+  /// moved up into its place.
   void _refocusAfterRemoval(Rect at) {
     if (!mounted || _boardFocus.hasFocus) return;
     FocusNode? nearest;
@@ -582,10 +582,10 @@ class PosterRow {
   final String posterShape;
 }
 
-/// Rows of posters in Discover's geometry -- the same extent, heading,
-/// tiles and focus room, and on a television the same run into the band at
-/// the right -- for a screen whose rows are already in hand rather than
-/// planned and fetched as the board's are: Search's hits, on a television.
+/// Rows of posters in Discover's geometry, for a screen whose rows are already
+/// in hand rather than planned and fetched as the board's are: Search's hits,
+/// on a television. The geometry is the same extent, heading, tiles and focus
+/// room, and on a television the same run into the band at the right.
 ///
 /// [before] and [after] are slivers drawn above and below the rows, in the
 /// same scroll.
@@ -753,15 +753,15 @@ class _RowLayout {
   /// picked for this window.
   final double baseExtent;
 
-  /// [TvDensity.textFactorOf], never below 1. The header and the caption
-  /// are text in boxes of a fixed height, so both boxes grow with it -- and
-  /// so does the row, rather than the strip between them shrinking.
+  /// [TvDensity.textFactorOf], never below 1. The header and the caption are
+  /// text in boxes of a fixed height, so both boxes grow with it, and so does
+  /// the row, rather than the strip between them shrinking.
   ///
-  /// Never below 1: the boxes are an exact fit at scale 1 (52 dp of header
-  /// is 12 of padding around 40 of title and subtitle), and the padding is
-  /// fixed, so shrinking the box for a smaller system font -- Android's
-  /// "Small" is 0.85, and a GTK text-scaling-factor goes under 1 too --
-  /// overflows the text out of it. A small font just leaves the row roomy.
+  /// Never below 1: the boxes are an exact fit at scale 1 (52 dp of header is
+  /// 12 of padding around 40 of title and subtitle), and the padding is fixed.
+  /// So shrinking the box for a smaller system font overflows the text out of
+  /// it. Android's "Small" is 0.85, and a GTK text-scaling-factor goes under 1
+  /// too. A small font just leaves the row roomy.
   final double textFactor;
 
   /// Room kept above and below the tiles in a strip, out of the strip's own
@@ -775,11 +775,11 @@ class _RowLayout {
   /// poster height on the room.
   final double focusSlack;
 
-  /// The header is one line, the catalog's subtitle after its title rather
-  /// than under it, and the rows have no gap of their own between them (the
-  /// strip's [focusSlack] and the header's padding are gap enough): a
-  /// television's, whose rows share the screen two at a time, and for
-  /// which these are height off the poster.
+  /// On a television the header is one line, the catalog's subtitle after its
+  /// title rather than under it, and the rows have no gap of their own between
+  /// them (the strip's [focusSlack] and the header's padding are gap enough). A
+  /// television's rows share the screen two at a time, and these are height off
+  /// the poster.
   final bool inlineHeader;
 
   /// The row geometry [context] is in.
@@ -802,10 +802,9 @@ class _RowLayout {
 
   static const double rowGap = 8;
 
-  /// A television's row at text scale 1: a [PosterTile.tvImageHeight]
-  /// poster and everything round it -- the one-line header, the room a
-  /// focused tile grows into above and below, and the caption's box and
-  /// inset.
+  /// A television's row at text scale 1: a [PosterTile.tvImageHeight] poster
+  /// plus everything round it (the one-line header, the room a focused tile
+  /// grows into above and below, and the caption's box and inset).
   static const double tvBaseExtent =
       inlineHeaderHeight +
       focusRoom * 2 +
@@ -827,11 +826,11 @@ class _RowLayout {
   EdgeInsets get stripPadding =>
       EdgeInsets.symmetric(horizontal: stripSidePadding, vertical: focusSlack);
 
-  /// What the list scrolls by: [baseExtent] plus exactly the room the two
-  /// text boxes gained. The poster between them therefore keeps the same
-  /// height at every text scale, instead of being squeezed -- without this,
-  /// past a 2.1x text scale the height goes negative, which is a
-  /// `NOT NORMALIZED` constraints failure, not just a cramped layout.
+  /// What the list scrolls by: [baseExtent] plus exactly the room the two text
+  /// boxes gained. The poster between them therefore keeps the same height at
+  /// every text scale, instead of being squeezed. Without this, the height goes
+  /// negative past a 2.1x text scale, which is a `NOT NORMALIZED` constraints
+  /// failure, not just a cramped layout.
   double get extent =>
       baseExtent + (baseHeaderHeight + captionHeight) * (textFactor - 1);
 
@@ -993,10 +992,10 @@ class _ContinueWatchingRowView extends StatelessWidget {
   }
 }
 
-/// "For you": suggestions from the library's watched-through, saved and
-/// liked titles ([ForYouController]), each tile the poster and the name
-/// like every other row's -- there is no room on a tile for why, so why is
-/// the long press's ([_NotInterestedSheet]), and a screen reader's.
+/// "For you": suggestions from the library's watched-through, saved and liked
+/// titles ([ForYouController]). Each tile is the poster and the name, like
+/// every other row's. There is no room on a tile for why, so the why is the
+/// long press's ([_NotInterestedSheet]), and a screen reader's.
 class _ForYouRowView extends StatelessWidget {
   const _ForYouRowView({
     required this.titles,
@@ -1074,9 +1073,9 @@ class _ForYouTile extends StatelessWidget {
   );
 }
 
-/// A [PosterTile]'s face -- the poster and the name, one line on a
-/// television and two elsewhere -- under a [FocusableTile] of the For you
-/// row's own, which [PosterTile] cannot take a long press for.
+/// A [PosterTile]'s face (the poster and the name, one line on a television and
+/// two elsewhere) under the For you row's own [FocusableTile], since
+/// [PosterTile] cannot take a long press.
 class _ForYouPoster extends StatelessWidget {
   const _ForYouPoster({required this.item});
 
@@ -1122,16 +1121,16 @@ final class _OpenSource {
 }
 
 /// The For you long press (a held OK on a television, through the same
-/// `RemotePress` path as Continue watching): the title, then every source
-/// that suggested it, strongest first, each with what it counted for --
-/// `Watched and saved: Heat (×2)` -- each a stop that closes the sheet and
-/// opens that title's details page, and the total that ranked it; then
-/// "Add to library" (the bookmark's action), for a film "Mark as
-/// watched" (seen elsewhere; a series' watched state is which episodes,
-/// the details page's to say), "Not interested", or Cancel, where a
-/// television's remote starts, so a key held a moment too long dismisses
-/// nothing. All of it is in the row's
-/// kept result, so nothing is fetched to draw it.
+/// `RemotePress` path as Continue watching). The sheet shows the title, then
+/// every source that suggested it, strongest first, each with what it counted
+/// for (`Watched and saved: Heat (×2)`), and the total that ranked it. Each
+/// source is a stop that closes the sheet and opens that title's details page.
+/// Then come "Add to library" (the bookmark's action), "Mark as watched" for a
+/// film (seen elsewhere), "Not interested", and Cancel. A series gets no "Mark
+/// as watched": its watched state is which episodes, the details page's to say.
+/// A television's remote starts on Cancel, so a key held a moment too long
+/// dismisses nothing. All of it is in the row's kept result, so nothing is
+/// fetched to draw it.
 class _NotInterestedSheet extends StatelessWidget {
   const _NotInterestedSheet({required this.title});
 
@@ -1396,9 +1395,9 @@ class _PlaceholderStrip extends StatelessWidget {
 /// A horizontal list of tiles with its own controller so desktop gets a
 /// visible scrollbar (touch platforms keep the default fading one).
 ///
-/// A television gets none at all: a thumb is there to be dragged, and a
-/// remote has nothing to drag it with -- the row scrolls when focus moves
-/// off its end, which is the only way it ever scrolls there.
+/// A television gets none at all: a thumb is there to be dragged, and a remote
+/// has nothing to drag it with. The row scrolls when focus moves off its end,
+/// which is the only way it ever scrolls there.
 class _HorizontalStrip extends StatefulWidget {
   const _HorizontalStrip({
     required this.itemCount,

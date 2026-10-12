@@ -9,13 +9,13 @@ import 'local_media.dart';
 /// [LocalMediaSource] on a desktop: the folders the viewer chose in
 /// Settings ([AppPrefs.localFolders]), walked for video files.
 ///
-/// **Folders the viewer chose, not the disk.** Stremio's own Local Files
-/// addon searched the whole home folder (seven levels deep on Linux, the
-/// system's search index elsewhere), which finds every clip and sample
-/// file on the machine; a folder somebody pointed at is a folder of films.
-/// Hidden folders are skipped, links are not followed, and a walk stops at
-/// [maxDepth] and [maxFiles] so a folder chosen by mistake -- a whole disk
-/// -- costs a bounded scan.
+/// **Folders the viewer chose, not the disk.** Stremio's own Local Files addon
+/// searched the whole home folder (seven levels deep on Linux, the system's
+/// search index elsewhere), which finds every clip and sample file on the
+/// machine. A folder somebody pointed at is a folder of films. Hidden folders
+/// are skipped, links are not followed, and a walk stops at [maxDepth] and
+/// [maxFiles], so a folder chosen by mistake (a whole disk) costs a bounded
+/// scan.
 class DesktopLocalMediaSource implements LocalMediaSource {
   DesktopLocalMediaSource({
     required this.prefs,

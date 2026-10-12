@@ -79,10 +79,9 @@ final RegExp _urlUserInfo = RegExp(
   caseSensitive: false,
 );
 
-/// An addon's manifest URL with a path in front of `manifest.json`: that
-/// path is where a debrid API key rides (`AGENTS.md`, "Deep links open an
-/// addon"). The host stays -- it is what names the addon -- and the path
-/// goes.
+/// An addon's manifest URL with a path in front of `manifest.json`: that path
+/// is where a debrid API key rides (`AGENTS.md`, "Deep links open an addon").
+/// The host stays, since it is what names the addon, and the path goes.
 final RegExp _manifestUrl = RegExp(
   r'\b([a-z][a-z0-9+.-]*://[^/\s]+)/\S+/manifest\.json',
   caseSensitive: false,
@@ -94,11 +93,11 @@ final RegExp _manifestUrl = RegExp(
 /// [DiagnosticsLog.safeUrl] keeps of it -- the origin, and the path only
 /// where the path is this app's own.
 ///
-/// The URL pass is the one that matters most. The ring holds lines nobody
-/// on this side composed -- the Rust half writes whole archive and proxy
-/// URLs, a debrid link's token signed into the path -- and lines written
-/// whole while Verbose logging was on stay in the ring after it is turned
-/// off. Both reach the clipboard only through here.
+/// The URL pass is the one that matters most. The ring holds lines nobody on
+/// this side composed: the Rust half writes whole archive and proxy URLs, a
+/// debrid link's token signed into the path. Lines written whole while Verbose
+/// logging was on also stay in the ring after it is turned off. Both reach the
+/// clipboard only through here.
 ///
 /// Deliberately blunt. A false positive costs a line of context in a bug
 /// report; a false negative puts a credential in a paste.
@@ -137,12 +136,12 @@ String redactSecrets(
     );
 
 /// The text the Diagnostics screen copies: a short header saying what this
-/// build is, what the embedded server is doing and what the app is holding
-/// on a device with little to hold it in, then the core's log
-/// lines, oldest first. Everything in it has been through [redactSecrets],
-/// unless [redact] is false -- by default, while Verbose logging is on
-/// ([DiagnosticsLog.unredacted]), when the report is for chasing a problem
-/// and the switch has said that it holds credentials.
+/// build is, what the embedded server is doing and what the app is holding on a
+/// device with little to hold it in, then the core's log lines, oldest first.
+/// Everything in it has been through [redactSecrets], unless [redact] is false.
+/// By default it is false while Verbose logging is on
+/// ([DiagnosticsLog.unredacted]): the report is then for chasing a problem, and
+/// the switch has said that it holds credentials.
 String formatDiagnostics({
   required DiagnosticsSnapshot snapshot,
   required String platform,
@@ -169,17 +168,17 @@ String formatDiagnostics({
     // and a line nobody could read is `unknown` rather than absent.
     ...?storage?.reportLines,
     if (storage == null) ...ServerStorage.unknownReportLines,
-    // Under the disk lines, because it is the same question one step in:
-    // what this device is spending. The cache the app caps and the images
-    // no cap reaches, both as of the `taken:` stamp above -- they are read
-    // with nothing awaited between them and the clock, so this is one
-    // instant and not a minute-old figure beside a fresh one.
+    // Under the disk lines, because it is the same question one step in: what
+    // this device is spending. The cache the app caps and the images no cap
+    // reaches, both as of the `taken:` stamp above. They are read with nothing
+    // awaited between them and the clock, so this is one instant and not a
+    // minute-old figure beside a fresh one.
     ...?images?.reportLines,
     if (images == null) ...ImageCacheUsage.unknownReportLines,
     // Information, not a failure, and only worth a line when it is the one
     // state that explains a slow start: a DHT that never found a node this
-    // session. A bootstrapped or disabled DHT (or one nobody could ask)
-    // says nothing here -- there is nothing to explain.
+    // session. A bootstrapped or disabled DHT (or one nobody could ask) says
+    // nothing here, since there is nothing to explain.
     if (dht != null && dht.unavailable)
       'dht: ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}',
     'stream-server: ${snapshot.streamServerRev ?? 'unknown'}',

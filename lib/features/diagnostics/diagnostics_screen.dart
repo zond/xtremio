@@ -10,16 +10,15 @@ import 'diagnostics_report.dart';
 /// What the app can say about itself when something went wrong on a device
 /// nobody can attach a debugger to.
 ///
-/// The Rust core keeps its last few hundred `tracing` lines in memory --
-/// its own and the embedded stream-server's, which share the one
-/// subscriber -- and this screen shows them under a short header (build,
-/// device, server, what the disk and Flutter's image cache are holding, the
-/// pinned revisions) and copies the lot to the clipboard. With Verbose logging off, everything shown and copied has
-/// been through [redactSecrets]: the server's bearer token, auth keys and
-/// passwords never leave the process, and every URL is cut down to its
-/// origin unless its path is this app's own. With it on, the report is
-/// the log as written, credentials included, which is what the switch
-/// says it adds.
+/// The Rust core keeps its last few hundred `tracing` lines in memory: its own
+/// and the embedded stream-server's, which share the one subscriber. This
+/// screen shows them under a short header (build, device, server, what the disk
+/// and Flutter's image cache are holding, the pinned revisions) and copies the
+/// lot to the clipboard. With Verbose logging off, everything shown and copied
+/// has been through [redactSecrets]: the server's bearer token, auth keys and
+/// passwords never leave the process, and every URL is cut down to its origin
+/// unless its path is this app's own. With it on, the report is the log as
+/// written, credentials included, which is what the switch says it adds.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({
     super.key,
@@ -39,8 +38,8 @@ class DiagnosticsScreen extends StatefulWidget {
 }
 
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
-  /// The whole report -- redacted unless Verbose logging is on -- or null
-  /// when it could not be read.
+  /// The whole report, redacted unless Verbose logging is on, or null when it
+  /// could not be read.
   String? _report;
 
   /// How many log lines it carries (the header is not one of them).
@@ -60,11 +59,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   /// Reads a fresh snapshot.
   ///
-  /// The log itself is sync and cheap on the Rust side (a lock and a clone
-  /// of a few hundred short strings); what the device is has to be asked
-  /// for on Android, over the same channel the TV detection uses, so the
-  /// report is built once both have answered. Nothing here is slow enough
-  /// to need a spinner of its own.
+  /// The log itself is sync and cheap on the Rust side (a lock and a clone of a
+  /// few hundred short strings). What the device is has to be asked for on
+  /// Android, over the same channel the TV detection uses, so the report is
+  /// built once both have answered. Nothing here is slow enough to need a
+  /// spinner of its own.
   Future<void> _read() async {
     final DiagnosticsSnapshot snapshot;
     try {
@@ -92,8 +91,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     } catch (error) {
       storage = null;
     }
-    // Cheap and synchronous, but still asked for only here -- on open and
-    // on an explicit refresh -- and never on a timer of its own.
+    // Cheap and synchronous, but still asked for only here, on open and on an
+    // explicit refresh, and never on a timer of its own.
     DhtStatus? dht;
     try {
       dht = widget.client.dhtStatus();
@@ -101,13 +100,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       dht = null;
     }
     if (!mounted) return;
-    // Read last, with nothing awaited between it and the clock below:
-    // Flutter's image cache changes fast enough (a screenful of posters
-    // resolves in the time one platform channel call takes) that an
-    // earlier reading would be stamped `taken:` at a moment it no longer
-    // matches. It is framework state, not the core's, so it is read here
-    // rather than asked of the client -- a seam would only let a test
-    // disagree with the cache the app is really running.
+    // Read last, with nothing awaited between it and the clock below: Flutter's
+    // image cache changes fast enough (a screenful of posters resolves in the
+    // time one platform channel call takes) that an earlier reading would be
+    // stamped `taken:` at a moment it no longer matches. It is framework state,
+    // not the core's, so it is read here rather than asked of the client. A
+    // seam would only let a test disagree with the cache the app is really
+    // running.
     ImageCacheUsage? images;
     try {
       images = ImageCacheUsage.read();

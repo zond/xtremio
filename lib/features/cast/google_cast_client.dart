@@ -22,10 +22,10 @@ import 'cast_client.dart';
 /// types onto ours, holds the subscriptions that shape its streams, and
 /// initialises the Cast context once.
 ///
-/// Only Android and iOS have a Cast SDK. Everywhere else [isSupported] is
-/// false and nothing here is ever reached — importantly, the plugin's
-/// singletons switch on `Platform.isAndroid` when they are first touched, so
-/// they must not be touched at all on a desktop.
+/// Only Android and iOS have a Cast SDK. Everywhere else [isSupported] is false
+/// and nothing here is ever reached. That matters: the plugin's singletons
+/// switch on `Platform.isAndroid` when they are first touched, so they must not
+/// be touched at all on a desktop.
 ///
 /// Discovery is not started here. It costs radio and battery, so the screen
 /// that shows a device list starts it and stops it again
@@ -68,14 +68,14 @@ class GoogleCastClient implements CastClient {
   /// depends on it, so every entry point that reaches the SDK goes through
   /// here first.
   Future<void> _ensureInitialised() async {
-    // **The plugin logs nothing below a warning.** Left at its legacy
-    // level it writes every media status to logcat as the SDK's JSON,
-    // whose `contentId` is the URL the receiver was handed: a published
-    // cast token, or a link straight to its source with its key in it --
-    // neither of which is ever logged (AGENTS.md). What the receiver says
-    // is written down by [_logWhatTheReceiverSays] instead. Set before the
-    // context is, which is when the plugin's Kotlin reads it; the setter
-    // is plain Dart and touches no platform singleton.
+    // **The plugin logs nothing below a warning.** Left at its legacy level it
+    // writes every media status to logcat as the SDK's JSON, whose `contentId`
+    // is the URL the receiver was handed. That is a published cast token, or a
+    // link straight to its source with its key in it, and neither is ever
+    // logged (AGENTS.md). What the receiver says is written down by
+    // [_logWhatTheReceiverSays] instead. The level is set before the context,
+    // since that is when the plugin's Kotlin reads it. The setter is plain Dart
+    // and touches no platform singleton.
     GoogleCastLogger.level = pluginLogLevel;
     if (_initialised || !isSupported) return;
     _initialised = true;
@@ -190,12 +190,11 @@ class GoogleCastClient implements CastClient {
   void _onMediaStatus(GoggleCastMediaStatus? status) {
     _logWhatTheReceiverSays(status);
     if (status == null) {
-      // No media status is the receiver saying it has nothing loaded --
-      // a session ending, or one still connecting -- and says nothing
-      // about where the film had got to. A zero here was the position
-      // the player then resumed from locally, so the film started again
-      // from the beginning; the last one the receiver reported is the
-      // last that was true.
+      // No media status is the receiver saying it has nothing loaded (a session
+      // ending, or one still connecting). It says nothing about where the film
+      // had got to. A zero here was the position the player then resumed from
+      // locally, so the film started again from the beginning. The last
+      // position the receiver reported is the last that was true.
       _emit(
         CastStatus(
           state: CastPlayerState.idle,
@@ -287,14 +286,14 @@ class GoogleCastClient implements CastClient {
 
   /// The SDK's session reports as [session] tells them.
   ///
-  /// The plugin reports every step of a session's life -- starting,
-  /// started, ending, ended -- and a session on its way up is not one on
-  /// its way out. Reported as a null, a receiver still connecting read as
-  /// a session that had ended, so the one starting in place of a live one
-  /// told the player that the cast was over while it was being handed on.
-  /// A session connecting is therefore not reported at all: it is either
-  /// connected next, which is reported, or it fails, and the session that
-  /// is then current (none) is reported as it is.
+  /// The plugin reports every step of a session's life: starting, started,
+  /// ending, ended. A session on its way up is not one on its way out. A
+  /// receiver still connecting, reported as a null, read as a session that had
+  /// ended. So the one starting in place of a live one told the player that the
+  /// cast was over while it was being handed on. A session connecting is
+  /// therefore not reported at all. It is either connected next, which is
+  /// reported, or it fails, and the session that is then current (none) is
+  /// reported as it is.
   @visibleForTesting
   Stream<CastDevice?> sessionsOf(Stream<GoogleCastSession?> sessions) =>
       sessions
@@ -326,12 +325,12 @@ class GoogleCastClient implements CastClient {
   /// Whether the session is connected, waiting up to [timeout] for it.
   ///
   /// **A LOAD sent before the session is up reaches nobody.** Starting a
-  /// session answers as soon as the platform has taken the request, long
-  /// before the receiver has launched its application; a load handed over
-  /// into that gap leaves the receiver with no media, reporting "No media
-  /// status" until the sender gives up -- indistinguishable, from the
-  /// sending side, from a receiver that could never reach us, since it
-  /// never asked the LAN listener for anything either.
+  /// session answers as soon as the platform has taken the request, long before
+  /// the receiver has launched its application. A load handed over into that
+  /// gap leaves the receiver with no media, reporting "No media status" until
+  /// the sender gives up. From the sending side, that looks the same as a
+  /// receiver that could never reach us, since it never asked the LAN listener
+  /// for anything either.
   ///
   /// [reports] says whether each session the platform reports is
   /// connected; [now] answers the same question about the session standing
@@ -404,21 +403,20 @@ class GoogleCastClient implements CastClient {
 
   /// Asks Android where the receiver with [id] is and remembers the answer.
   ///
-  /// The Cast SDK knows -- a MediaRouter route's extras carry the
-  /// `CastDevice` and the address it announced over mDNS -- but the
-  /// plugin's own `CastDeviceExtensions.toMap()` drops it, so
+  /// The Cast SDK knows: a MediaRouter route's extras carry the `CastDevice`
+  /// and the address it announced over mDNS. The plugin's own
+  /// `CastDeviceExtensions.toMap()` drops it, so
   /// `MainActivity.castDeviceAddress` reads it off the route instead.
   ///
-  /// A silence is the answer this call never having existed gives: iOS has
-  /// no such lookup, an old build has no such channel method, and a route
-  /// can go stale between discovering it and casting to it. The row is
-  /// removed before the lookup runs, not merely replaced after one
-  /// succeeds, so a silence falls back to the server's own interface
-  /// ranking rather than reusing this receiver's last known address --
-  /// which would be wrong for a receiver that has since moved to another
-  /// part of the network. There is no test for this and there cannot be
-  /// one here: everything below the first line is the platform's, and
-  /// `isSupported` is false wherever the tests run.
+  /// A silence is the same answer this call would give if it did not exist: iOS
+  /// has no such lookup, an old build has no such channel method, and a route
+  /// can go stale between discovering it and casting to it. The row is removed
+  /// before the lookup runs, not merely replaced after one succeeds. So a
+  /// silence falls back to the server's own interface ranking rather than
+  /// reusing this receiver's last known address, which would be wrong for a
+  /// receiver that has since moved to another part of the network. There is no
+  /// test for this and there cannot be one here: everything below the first
+  /// line is the platform's, and `isSupported` is false wherever the tests run.
   Future<void> _rememberAddress(String id) async {
     if (!Platform.isAndroid) return;
     _addresses.remove(id);
@@ -443,17 +441,16 @@ class GoogleCastClient implements CastClient {
 
   @override
   Future<void> load(CastMedia media, {Duration start = Duration.zero}) async {
-    // The position the SDK reports arrives on its own stream, so a state
-    // change is built on whatever position was last seen -- and until the
-    // receiver's first tick that is the *previous* session's, minutes into
-    // a film this receiver has not begun. So the record starts where the
-    // media is being started: the first status of this session then
-    // carries [start], which is the one position that is true of it. The
-    // player's own rule cannot tell that case apart -- a stale forty
-    // minutes looks exactly like a receiver reporting forty minutes --
-    // which is why it is settled here, before anything is loaded and
-    // whether or not the SDK is up (a client that never initialised has
-    // nothing to report either way).
+    // The position the SDK reports arrives on its own stream, so a state change
+    // is built on whatever position was last seen. Until the receiver's first
+    // tick, that is the *previous* session's, minutes into a film this receiver
+    // has not begun. So the record starts where the media is being started: the
+    // first status of this session then carries [start], which is the one
+    // position that is true of it. The player's own rule cannot tell that case
+    // apart, since a stale forty minutes looks exactly like a receiver
+    // reporting forty minutes. That is why it is settled here, before anything
+    // is loaded and whether or not the SDK is up (a client that never
+    // initialised has nothing to report either way).
     _last = _last.at(start);
     if (!_initialised) return;
     _lastReported = null;

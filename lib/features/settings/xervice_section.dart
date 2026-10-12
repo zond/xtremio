@@ -54,8 +54,8 @@ class XerviceSection extends StatefulWidget {
 class _XerviceSectionState extends State<XerviceSection> {
   bool _busy = false;
 
-  /// Asks [question], and on a yes runs [forget] and says how it went --
-  /// with [after] instead of the plain line when it went, if given.
+  /// Asks [question], and on a yes runs [forget] and says how it went. When it
+  /// went and [after] is given, [after] replaces the plain line.
   Future<void> _confirmThen(
     String question,
     Future<bool> Function() forget, {

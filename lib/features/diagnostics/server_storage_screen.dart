@@ -7,11 +7,11 @@ import '../../core/core.dart';
 import '../../widgets/tv_text_field.dart';
 import 'clear_cache.dart';
 
-/// The directories this platform can offer as a torrent-data root. On
-/// Android those are the app's own external storage directories, an SD card
-/// among them -- permission-free on `minSdk` 24, and the only way to reach
-/// a card without one; everywhere else there are none to enumerate and a
-/// path is typed instead.
+/// The directories this platform can offer as a torrent-data root. On Android
+/// those are the app's own external storage directories, an SD card among them.
+/// They are permission-free on `minSdk` 24, and the only way to reach a card
+/// without one. Everywhere else there are none to enumerate, and a path is
+/// typed instead.
 Future<List<String>> platformDataRoots() async {
   if (!Platform.isAndroid) return const [];
   final roots = await getExternalStorageDirectories();
@@ -21,30 +21,29 @@ Future<List<String>> platformDataRoots() async {
 /// Where the embedded server puts torrent data, what that costs, and the
 /// one way there is to ask it to reclaim some.
 ///
-/// This is the first screen to look at when the cache is well past its
-/// limit: the same cache-vs-limit number is in the copied diagnostics
-/// header (alongside the device's free space, which lives there and not
-/// here); this is where it can be watched and acted on. There is no
-/// scheduled sweep behind it. The server's torrent engine and proxy cache
-/// each give back what nobody is playing and nobody kept as they go, and
-/// Clean now asks both for that slack at once. It never stops playback, so
-/// the action needs no confirmation. Beside it, "Clear the cache" is the
-/// one that does stop playback -- every torrent that streams, and every
-/// byte no download keeps, the title played last included -- so it asks
-/// first ([ClearCacheDialog]).
+/// This is the first screen to look at when the cache is well past its limit.
+/// The same cache-vs-limit number is in the copied diagnostics header
+/// (alongside the device's free space, which lives there and not here), but
+/// this is where it can be watched and acted on. There is no scheduled sweep
+/// behind it. The server's torrent engine and proxy cache each give back what
+/// nobody is playing and nobody kept as they go, and Clean now asks both for
+/// that slack at once. It never stops playback, so the action needs no
+/// confirmation. Beside it, "Clear the cache" is the one that does stop
+/// playback, so it asks first ([ClearCacheDialog]). It stops every torrent that
+/// streams and takes every byte no download keeps, the title played last
+/// included.
 ///
 /// **What is never taken** is a kept download, and the window around the
-/// playhead of the title played last -- which stays kept after the player
-/// closes, until something else is played. The text here says so rather
-/// than "a live stream": the case it has to explain is a clean that frees
-/// nothing with the player shut.
+/// playhead of the title played last, which stays kept after the player closes
+/// until something else is played. The text here says so rather than "a live
+/// stream": the case it has to explain is a clean that frees nothing with the
+/// player shut.
 ///
-/// **There is one root**, `cacheRoot`, and everything a torrent puts on
-/// this device is under it: the piece store the streaming cache and the
-/// kept downloads share, the session's own records, and what the proxy
-/// cached. So it is named here, beside the size it is held to, rather
-/// than on the Downloads screen -- a download has no location of its own
-/// to be moved to.
+/// **There is one root**, `cacheRoot`, and everything a torrent puts on this
+/// device is under it: the piece store the streaming cache and the kept
+/// downloads share, the session's own records, and what the proxy cached. So it
+/// is named here, beside the size it is held to, rather than on the Downloads
+/// screen, since a download has no location of its own to be moved to.
 ///
 /// A refresh button, a clean-now button, the folder controls and rows, all
 /// on the app's own surface: the theme floor marks every one of them and
@@ -116,9 +115,9 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     setState(() => _roots = roots);
   }
 
-  /// Points `cacheRoot` at [path]. The server validates it -- absolute,
-  /// creatable, writable -- and a root it refuses fails the whole update,
-  /// so nothing here has to check a path itself.
+  /// Points `cacheRoot` at [path]. The server validates it (absolute,
+  /// creatable, writable), and a root it refuses fails the whole update, so
+  /// nothing here has to check a path itself.
   Future<void> _setRoot(String path) async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
@@ -143,12 +142,12 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
   }
 
   /// Reads [CacheUsage]. Called on open, after a clean and on an explicit
-  /// refresh. Cheap, but not free: `cacheUsage` counts what the server's
-  /// owners say they hold plus one listing of the store root -- no walk of
-  /// the tree -- and `storage` counts it again beside the settings and one
-  /// `statvfs`. Nothing caches the answer, so it is not something to poll on
-  /// a sub-second timer, and nothing on this screen moves fast enough to
-  /// want a timer at all.
+  /// refresh. Cheap, but not free. `cacheUsage` counts what the server's owners
+  /// say they hold plus one listing of the store root, with no walk of the
+  /// tree. `storage` counts it again beside the settings and one `statvfs`.
+  /// Nothing caches the answer, so it is not something to poll on a sub-second
+  /// timer, and nothing on this screen moves fast enough to want a timer at
+  /// all.
   Future<void> _read() async {
     setState(() => _busy = true);
     try {
@@ -181,11 +180,11 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     }
   }
 
-  /// Asks the server for its slack and reports honestly what happened:
-  /// bytes freed when something was given back, and -- when the cache is
-  /// still over its limit afterwards -- that a kept download or the title
-  /// played last is holding what is left, never "clean failed" (nothing
-  /// here can fail short of the server not running).
+  /// Asks the server for its slack and reports honestly what happened: bytes
+  /// freed when something was given back. When the cache is still over its
+  /// limit afterwards, it says a kept download or the title played last is
+  /// holding what is left. It never says "clean failed" (nothing here can fail
+  /// short of the server not running).
   Future<void> _clean() async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
@@ -201,9 +200,9 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     await _read();
   }
 
-  /// Asks first, then stops what streams and deletes everything no
-  /// download keeps ([confirmAndClearCache]); the numbers are read again
-  /// after a clear that ran.
+  /// Asks first, then stops what streams and deletes everything no download
+  /// keeps ([confirmAndClearCache]). The numbers are read again after a clear
+  /// that ran.
   Future<void> _clear() async {
     setState(() => _busy = true);
     final report = await confirmAndClearCache(context, widget.client);

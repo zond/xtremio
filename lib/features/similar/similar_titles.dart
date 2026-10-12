@@ -2,24 +2,23 @@
 /// can go wrong with.
 ///
 /// The question is not asked here. It lives on the xtremio-xervice server
-/// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini
-/// key there is, asks the model once per title, and hands the same answer
-/// to every install after that -- so nobody but the server needs a key of
-/// their own for the row to appear. What is measured about the model and
-/// the wording lives in `tool/recommendations/`; none of it is this
-/// app's to choose.
+/// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini key
+/// there is, asks the model once per title, and hands the same answer to every
+/// install after that. So nobody but the server needs a key of their own for
+/// the row to appear. What is measured about the model and the wording lives in
+/// `tool/recommendations/`; none of it is this app's to choose.
 library;
 
 import '../../core/core.dart';
 
 /// How long one ask is allowed to take.
 ///
-/// Twenty seconds, which is long for a request and deliberate: the first
-/// device to open a title is the one that waits while the server asks the
-/// model, and every device after it reads a stored answer in a fraction of
-/// that. The row is late by design -- it appears under a Details screen
-/// that is already usable -- so waiting costs the viewer nothing, and
-/// abandoning early would only make the first ask of every title fail.
+/// Twenty seconds, which is long for a request and deliberate: the first device
+/// to open a title is the one that waits while the server asks the model, and
+/// every device after it reads a stored answer in a fraction of that. The row
+/// is late by design, since it appears under a Details screen that is already
+/// usable. So waiting costs the viewer nothing, and abandoning early would only
+/// make the first ask of every title fail.
 const Duration similarBudget = Duration(seconds: 20);
 
 /// Where suggestions come from.
@@ -31,8 +30,8 @@ const Duration similarBudget = Duration(seconds: 20);
 /// Nothing here promises the titles exist. That is [resolveSuggestions]'s
 /// job, and it is not optional.
 abstract interface class SimilarTitlesProvider {
-  /// What is like the item [id] (a Cinemeta id, `tt0063350`) of [type]
-  /// (`movie` or `series`) -- or a [SimilarTitlesFailure].
+  /// What is like the item [id] (a Cinemeta id, `tt0063350`) of [type] (`movie`
+  /// or `series`), or a [SimilarTitlesFailure].
   ///
   /// Throws rather than answering empty, because the two mean different
   /// things to everything upstream: empty is a server that answered and had
@@ -58,10 +57,10 @@ enum SimilarTrouble {
   /// model. Fixes itself; the next opening of the title reads its answer.
   busy('server busy with this title'),
 
-  /// Any other status that is not 200: the model or the catalogue failed
-  /// behind the server (502), the server did (500), or it would not take
-  /// the type or id (400 -- which the caller never sends, since it asks
-  /// only about `movie` and `series`).
+  /// Any other status that is not 200: the model or the catalogue failed behind
+  /// the server (502), the server did (500), or it would not take the type or
+  /// id (400, which the caller never sends, since it asks only about `movie`
+  /// and `series`).
   unavailable('server could not answer'),
 
   /// The budget passed with no answer ([similarBudget]).

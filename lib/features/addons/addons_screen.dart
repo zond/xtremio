@@ -19,31 +19,29 @@ import 'addon_widgets.dart';
 /// Addons: the profile's (`installed_addons`) and the community catalog
 /// (`remote_addons`), plus "Add addon" by manifest URL.
 ///
-/// An addon is an [AddonTile] and wears the full indicator; the type
-/// filters are chips and are marked one at a time (`FilterChips`). What is
-/// left -- the ⋮ menu beside a tile, the "Add addon" dialog, the retry
-/// buttons -- is Material's on the app's own surface and is left to the
-/// theme floor (`FocusTheme`).
+/// An addon is an [AddonTile] and wears the full indicator. The type filters
+/// are chips and are marked one at a time (`FilterChips`). The rest is
+/// Material's on the app's own surface and is left to the theme floor
+/// (`FocusTheme`): the ⋮ menu beside a tile, the "Add addon" dialog, the retry
+/// buttons.
 ///
 /// On mount it dispatches `Load InstalledAddonsWithFilters {type: null}` and
-/// `Load CatalogWithFilters` with no request (the engine picks the first
-/// addon catalog, Cinemeta's); both fields are unloaded on dispose, unless
-/// another Addons screen has loaded them since. Every
-/// filter option carries the request that selects it and the controls
-/// dispatch those verbatim. The Installed list follows the profile on its
-/// own after each mutation; whether a community entry is installed is not
-/// part of the model, so it is read off `ctx.profile.addons`. Search over
-/// the community list is client-side (name and description), as in
-/// stremio-web. While `profile.addonsLocked` every mutation is disabled
-/// behind a banner.
+/// `Load CatalogWithFilters` with no request (the engine picks the first addon
+/// catalog, Cinemeta's). Both fields are unloaded on dispose, unless another
+/// Addons screen has loaded them since. Every filter option carries the request
+/// that selects it, and the controls dispatch those verbatim. The Installed
+/// list follows the profile on its own after each mutation. Whether a community
+/// entry is installed is not part of the model, so it is read off
+/// `ctx.profile.addons`. Search over the community list is client-side (name
+/// and description), as in stremio-web. Every mutation is disabled behind a
+/// banner while `profile.addonsLocked`.
 ///
-/// Installed also carries each addon's health: what it has answered, read
-/// once on mount from the [AddonHealthScope] above (nothing is shown
-/// without one), turned into a verdict by `AddonHealth.verdict`. Health
-/// adds no way to remove an addon -- Uninstall is the same menu item it
-/// always was, still absent for a protected addon and still disabled while
-/// the profile is locked -- because a verdict is advice and the decision
-/// stays the viewer's.
+/// Installed also carries each addon's health: what it has answered, read once
+/// on mount from the [AddonHealthScope] above and turned into a verdict by
+/// `AddonHealth.verdict`. Nothing is shown without that scope. Health adds no
+/// way to remove an addon, because a verdict is advice and the decision stays
+/// the viewer's. Uninstall is the same menu item it always was, still absent
+/// for a protected addon and still disabled while the profile is locked.
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
 
@@ -107,9 +105,9 @@ class _AddonsScreenState extends State<AddonsScreen> {
       );
       client.dispatch(CoreActions.loadRemoteAddons(null));
     }
-    // Built even with no client above -- an empty report is what "nothing
-    // can tell us how these have been answering" looks like, and the tab
-    // then shows no verdicts rather than empty ones.
+    // Built even with no client above. An empty report is what "nothing can
+    // tell us how these have been answering" looks like, and the tab then shows
+    // no verdicts rather than empty ones.
     final health = AddonHealthScope.maybeOf(context);
     final current = _health;
     if (current == null || current.client != health) {
@@ -120,9 +118,9 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
   @override
   void dispose() {
-    // A popping route stays in the tree for its transition while the screen
-    // beneath is already tappable, so a new Addons screen can have loaded
-    // the lists by now: only their owner unloads them.
+    // Only their owner unloads the lists. A popping route stays in the tree for
+    // its transition while the screen beneath is already tappable, so a new
+    // Addons screen can have loaded them by now.
     SharedFieldOwnership.release(CoreField.installedAddons, this, _client);
     SharedFieldOwnership.release(CoreField.remoteAddons, this, _client);
     _installed?.dispose();
@@ -170,10 +168,10 @@ class _AddonsScreenState extends State<AddonsScreen> {
     if (url != null && mounted) _openDetails(url);
   }
 
-  /// Drops everything recorded about one addon, for when the verdict is
-  /// wrong -- most often right after a debrid key was replaced, where the
-  /// old key's failures are about a configuration that no longer exists.
-  /// It removes history and nothing else: the addon stays installed.
+  /// Drops everything recorded about one addon, for when the verdict is wrong.
+  /// That is most often right after a debrid key was replaced: the old key's
+  /// failures are about a configuration that no longer exists. It removes
+  /// history and nothing else, and the addon stays installed.
   Future<void> _forgetHistory(AddonDescriptor addon) async {
     final health = _health;
     final forgotten =

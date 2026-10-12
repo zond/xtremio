@@ -1,31 +1,30 @@
 /// The For you row's work: asking, ranking, resolving, and remembering the
 /// answer.
 ///
-/// The rules are `for_you_rules.dart`; this is when they run and what they
-/// are fed. It runs on the device, from the library the engine holds (all
-/// of it, removed and temporary items too: `CoreField.libraryItems`), the
-/// faces, and three questions asked over the network -- each source's "More
-/// like this" answer, a watched series' episode list, and the catalogue
-/// search that confirms a suggestion exists. Each goes through a
-/// [TaskLimiter] of [ForYouController.concurrency] -- the server's answers
-/// and episode lists one, the searches another -- so a first run over a
-/// big library is a trickle and not a burst.
+/// The rules are in `for_you_rules.dart`. This is when they run and what they
+/// are fed. It runs on the device, from the library the engine holds (all of
+/// it, removed and temporary items too: `CoreField.libraryItems`), the faces,
+/// and three questions asked over the network. Those are each source's "More
+/// like this" answer, a watched series' episode list, and the catalogue search
+/// that confirms a suggestion exists. Each goes through a [TaskLimiter] of
+/// [ForYouController.concurrency], one for the server's answers and episode
+/// lists and another for the searches, so a first run over a big library is a
+/// trickle and not a burst.
 ///
-/// **What is kept.** The ranked, resolved titles with their reasons, when
-/// they were worked out, and a signature of the sources they came from
-/// (the `forYou` preference). The row draws that at once on the next
-/// start. It is worked out again when the signature changes -- a title
-/// watched through or added, a face given or taken -- and otherwise at
-/// most once a day ([ForYouController.refreshEvery]). A first run with
-/// nothing kept shows the row as soon as the first answers are in and
-/// fills it as the rest arrive; a later one swaps the whole row when it is
-/// done.
+/// **What is kept.** The ranked, resolved titles with their reasons, when they
+/// were worked out, and a signature of the sources they came from (the `forYou`
+/// preference). The row draws that at once on the next start. It is worked out
+/// again when the signature changes (a title watched through or added, a face
+/// given or taken), and otherwise at most once a day
+/// ([ForYouController.refreshEvery]). A first run with nothing kept shows the
+/// row as soon as the first answers are in and fills it as the rest arrive. A
+/// later one swaps the whole row when it is done.
 ///
 /// **What is not asked twice.** A source's suggestions go through
 /// `MoreLikeThis` and its `similarSuggestions` memory, so a title already
-/// opened on its details page costs nothing here; a show's episodes are
-/// kept per show (`ShowEpisodesMemory`); a catalogue search is kept for
-/// the life of the controller.
+/// opened on its details page costs nothing here. A show's episodes are kept
+/// per show (`ShowEpisodesMemory`). A catalogue search is kept for the life of
+/// the controller.
 library;
 
 import 'dart:async';
@@ -66,7 +65,8 @@ final class ForYouAsk {
   final EpisodesFetch episodes;
 }
 
-/// Supplies how the row asks, for Discover: absent, the real questions.
+/// Supplies how the row asks, for Discover. Without one, the real questions are
+/// asked.
 class ForYouScope extends InheritedWidget {
   const ForYouScope({super.key, required this.askFor, required super.child});
 
@@ -184,12 +184,12 @@ class ForYouController extends ChangeNotifier {
     ];
   }
 
-  /// Titles taken off the row by hand ahead of what says so -- marked
+  /// Titles taken off the row by hand before the library says so: marked
   /// watched, which the library shows a moment later.
   final Set<String> _hidden = {};
 
-  /// Takes [id] off the row now; the library or the faces say so for good
-  /// once they have caught up.
+  /// Takes [id] off the row now. The library or the faces say so for good once
+  /// they have caught up.
   void hide(String id) {
     if (_hidden.add(id)) notifyListeners();
   }

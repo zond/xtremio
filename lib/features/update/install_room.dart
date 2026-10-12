@@ -34,8 +34,8 @@ class DataVolumeRoom {
 
   /// The device's `sys_storage_threshold_percentage` and
   /// `sys_storage_threshold_max_bytes` (`Settings.Global`), null where the
-  /// setting is unset or this app may not read it -- which is nearly
-  /// everywhere, and means Android's defaults.
+  /// setting is unset or this app may not read it. That is nearly everywhere,
+  /// and means Android's defaults.
   final int? thresholdPercent;
   final int? thresholdMaxBytes;
 }

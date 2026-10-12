@@ -5,8 +5,8 @@
 /// adds to it.
 ///
 /// Lives here rather than on the details screen because a failure looks the
-/// same wherever it is reported: a screen that asks several addons at once
-/// and shows only what came back — the sources list, the board — owes the
+/// same wherever it is reported. A screen that asks several addons at once and
+/// shows only what came back, like the sources list or the board, owes the
 /// viewer an account of the rest.
 library;
 
@@ -18,11 +18,10 @@ import 'addon_details_screen.dart';
 /// One addon that answered a request with an error, and the installed addon
 /// behind the manifest URL it was asked at.
 ///
-/// A failed request carries the transport URL and nothing else, so without
-/// the profile a dead addon can only be named by its host — which is
-/// exactly the "a lot of 404s from domains I do not recognise" problem.
-/// With it, the row says which of the installed addons is broken and can
-/// offer to drop it.
+/// A failed request carries the transport URL and nothing else, so without the
+/// profile a dead addon can only be named by its host. That is exactly the "a
+/// lot of 404s from domains I do not recognise" problem. With the profile, the
+/// row says which of the installed addons is broken and can offer to drop it.
 final class AddonFailure {
   const AddonFailure({
     required this.transportUrl,
@@ -53,9 +52,9 @@ final class AddonFailure {
   bool get isRemovable => addon != null && !addon!.isProtected;
 }
 
-/// The addons behind [rows] -- the catalog rows a screen dropped because
-/// their addon could not answer -- one entry each, in the order they were
-/// first met.
+/// The addons behind [rows], one entry each, in the order they were first met.
+/// [rows] are the catalog rows a screen dropped because their addon could not
+/// answer.
 ///
 /// One entry per addon rather than per catalog: an entry's actions are
 /// about the addon, so a host that took two of its own catalogs down would
@@ -84,10 +83,10 @@ List<AddonFailure> addonFailuresOf(
 /// The addons that failed, below whatever did arrive.
 ///
 /// One failure is the row itself, unless [collapseSingle] says otherwise.
-/// Several — a profile full of dead mirrors answers every request with
-/// the same wall of 404s — collapse into a single summary row naming
-/// them, which expands into the same rows, so what did work stays the
-/// first thing on screen.
+/// Several collapse into a single summary row naming them, which expands into
+/// the same rows. A profile full of dead mirrors answers every request with the
+/// same wall of 404s, and collapsing keeps what did work the first thing on
+/// screen.
 class FailedAddonsSection extends StatefulWidget {
   const FailedAddonsSection({
     super.key,
@@ -101,9 +100,9 @@ class FailedAddonsSection extends StatefulWidget {
 
   final List<AddonFailure> failures;
 
-  /// The collapsed line's text. The caller counts what its viewer lost —
-  /// addons on the details screen, catalogs on the board — and that need
-  /// not be the number of cards underneath.
+  /// The collapsed line's text. The caller counts what its viewer lost (addons
+  /// on the details screen, catalogs on the board), and that need not be the
+  /// number of cards underneath.
   final String summaryLabel;
 
   /// `profile.addonsLocked`: every install and uninstall fails until the
@@ -173,9 +172,9 @@ class _FailedAddonsSectionState extends State<FailedAddonsSection> {
   }
 }
 
-/// One dead addon: what it is called, what it said, and the two things to
-/// do about it — look at its manifest (the details screen fetches it, which
-/// is the reachability test) or drop it from the profile.
+/// One dead addon: what it is called, what it said, and the two things to do
+/// about it. Those are to look at its manifest, or to drop it from the profile.
+/// The details screen fetches the manifest, which is the reachability test.
 class AddonFailureCard extends StatelessWidget {
   const AddonFailureCard({
     super.key,
@@ -284,10 +283,10 @@ void openAddonDetails(BuildContext context, String transportUrl) {
   Navigator.of(context).push(AddonDetailsScreen.route(transportUrl));
 }
 
-/// Drops [addon] from the profile once the user has said so. Uninstalling
-/// is a profile-wide change made from a screen about something else, so it
-/// is never a single tap; the engine refreshes `ctx` itself, and whatever
-/// named the addon stays on screen until the next `Load` stops asking it.
+/// Drops [addon] from the profile once the user has said so. Uninstalling is a
+/// profile-wide change made from a screen about something else, so it is never
+/// a single tap. The engine refreshes `ctx` itself, and whatever named the
+/// addon stays on screen until the next `Load` stops asking it.
 Future<void> confirmAndUninstallAddon(
   BuildContext context,
   CoreClient? client,

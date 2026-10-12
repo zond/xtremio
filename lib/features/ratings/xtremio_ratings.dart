@@ -120,9 +120,8 @@ final class RatingsService {
   /// The clock, a parameter so a test can age a remembered answer.
   final DateTime Function() now;
 
-  /// What the server answers for: Stremio's `movie` and `series`, by an
-  /// IMDb id. Anything else is not asked about -- the server would refuse
-  /// it.
+  /// What the server answers for: Stremio's `movie` and `series`, by an IMDb
+  /// id. Anything else is not asked about, since the server would refuse it.
   static bool askable({required String type, required String id}) =>
       (type == 'movie' || type == 'series') && _imdbId.hasMatch(id);
 
@@ -137,9 +136,9 @@ final class RatingsService {
   /// the remembered ones are under a day old, the title is not one the
   /// server answers for, the server failed, or it had no score at all.
   ///
-  /// An answer with no scores is not written down, so a title MDBList had
-  /// not heard of yet -- or a day the server could not ask it -- does not
-  /// hide the scores for a day once there are some.
+  /// An answer with no scores is not written down, so a title MDBList had not
+  /// heard of yet (or a day the server could not ask it) does not hide the
+  /// scores for a day once there are some.
   Future<TitleRatings?> refreshed({
     required String type,
     required String id,

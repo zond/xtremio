@@ -14,12 +14,12 @@ import '../../widgets/content_type_label.dart';
 /// The manifest's logo, or an extension icon when there is none or it does
 /// not load.
 ///
-/// The decode is bounded to the box the logo is drawn in. An addon is free
-/// to ship whatever it has -- a 512 px square is a megabyte decoded, and
-/// the addons list draws one of these per addon, the catalog rows another.
-/// `cacheWidth` counts physical pixels, which is why the device's ratio is
-/// in it; only the width is given, so the logo keeps its own aspect and
-/// `contain` letterboxes it into the square exactly as it did.
+/// The decode is bounded to the box the logo is drawn in. An addon is free to
+/// ship whatever it has. A 512 px square is a megabyte decoded, and the addons
+/// list draws one of these per addon, the catalog rows another. `cacheWidth`
+/// counts physical pixels, which is why the device's ratio is in it. Only the
+/// width is given, so the logo keeps its own aspect and `contain` letterboxes
+/// it into the square exactly as it did.
 class AddonLogo extends StatelessWidget {
   const AddonLogo({super.key, required this.url, this.size = defaultSize});
 

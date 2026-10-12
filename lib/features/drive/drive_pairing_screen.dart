@@ -11,22 +11,21 @@ import '../player/player_screen.dart';
 /// Linking files in somebody's Google Drive to this device, which is a
 /// pairing made on a second screen.
 ///
-/// The television cannot run the Google Picker -- it is web-only -- and
-/// cannot hold an OAuth client secret, because it is an app anybody can
-/// unpack. So a phone does the signing in and the picking, the service in
-/// `xtremio-xervice/` does the two things that need the secret, and this screen
-/// is the television's whole part: ask for a session, draw it, poll until
-/// the phone has finished, hand what comes back to [DriveAccount].
+/// The television cannot run the Google Picker, which is web-only, and cannot
+/// hold an OAuth client secret, because it is an app anybody can unpack. So a
+/// phone does the signing in and the picking, and the service in
+/// `xtremio-xervice/` does the two things that need the secret. This screen is
+/// the television's whole part: ask for a session, draw it, poll until the
+/// phone has finished, hand what comes back to [DriveAccount].
 ///
-/// **Two shapes, one flow.** On a television the session is drawn -- the QR
-/// for the link, and nothing else, because nothing on that screen can be
-/// typed into and the second device is the point. On a phone or a desktop
-/// there is no second device, and scanning your own screen is absurd, so the
-/// app opens the link itself and waits for the same answer. That is the split
-/// this app makes everywhere ([DeviceScope.isTv]). Two shapes here, but
-/// *three* on the wire: what the page has to say at the end splits the phone
-/// from the desktop, which this screen treats alike -- see the hand-back
-/// below.
+/// **Two shapes, one flow.** On a television the session is drawn: the QR for
+/// the link, and nothing else, because nothing on that screen can be typed into
+/// and the second device is the point. On a phone or a desktop there is no
+/// second device, and scanning your own screen is absurd, so the app opens the
+/// link itself and waits for the same answer. That is the split this app makes
+/// everywhere ([DeviceScope.isTv]). There are two shapes here, but *three* on
+/// the wire. What the page has to say at the end splits the phone from the
+/// desktop, which this screen treats alike (see the hand-back below).
 ///
 /// **One pairing links everything the viewer picked.** The Picker takes
 /// several files at once, so a scan can link a whole season, and
@@ -41,25 +40,24 @@ import '../player/player_screen.dart';
 /// [openInBrowser], which is [UrlLauncherLinkOpener] and hard-codes
 /// `LaunchMode.externalApplication`.
 ///
-/// **The hand-back is a link nothing acts on.** A viewer on a phone was
-/// handed to a browser by this app, and leaving them there with a page that
-/// says "on its way" and nothing to press is the one part of the phone shape
-/// that was plainly wrong. So the pick page now navigates to
-/// [drivePairingHandBackLink] when it is finished -- but only for a session
-/// that asked ([DrivePairingShape.handsBack]), and this app does not act on
-/// the link when it arrives.
+/// **The hand-back is a link nothing acts on.** A viewer on a phone was handed
+/// to a browser by this app, and leaving them there with a page that says "on
+/// its way" and nothing to press is the one part of the phone shape that was
+/// plainly wrong. So the pick page now navigates to [drivePairingHandBackLink]
+/// when it is finished, but only for a session that asked
+/// ([DrivePairingShape.handsBack]). This app does not act on the link when it
+/// arrives.
 ///
-/// **No second meaning is added and nothing is dispatched.** `stremio://`
-/// means exactly one thing (open that addon's details, install nothing --
-/// `AGENTS.md`), so a second meaning on a channel the platform hands to
-/// anybody would be a second thing to get wrong; a host-less
-/// `stremio:///pair` is already the shape `deepLinkAddonManifestUrl` drops,
-/// so the link arrives, is recognised as nothing, and is dropped, on a cold
-/// start exactly as when the app is up. That matters because `app_links`
-/// replays the launch link on a cold start too, so acting on it could
-/// reopen this screen days later for a session that no longer exists. What
-/// brings the app forward is only the platform switching tasks; polling is
-/// unchanged and still what collects the pairing.
+/// **No second meaning is added and nothing is dispatched.** `stremio://` means
+/// exactly one thing (open that addon's details, install nothing: `AGENTS.md`).
+/// A second meaning on a channel the platform hands to anybody would be a
+/// second thing to get wrong. A host-less `stremio:///pair` is already the
+/// shape `deepLinkAddonManifestUrl` drops. So the link arrives, is recognised
+/// as nothing, and is dropped, on a cold start exactly as when the app is up.
+/// That matters because `app_links` replays the launch link on a cold start
+/// too, so acting on it could reopen this screen days later for a session that
+/// no longer exists. What brings the app forward is only the platform switching
+/// tasks. Polling is unchanged and still what collects the pairing.
 ///
 /// A television asks for no hand-back, and neither does a desktop: the
 /// scheme's registration there is installed by hand or not at all
@@ -69,19 +67,19 @@ import '../player/player_screen.dart';
 /// app.
 ///
 /// **The service is told which of three shapes asked, not whether to hand
-/// back** ([_shapeOf], [DrivePairingShape]). Those are not the same fact:
-/// the two shapes that want no hand-back want it for opposite reasons, and
+/// back** ([_shapeOf], [DrivePairingShape]). Those are not the same fact: the
+/// two shapes that want no hand-back want it for opposite reasons, and
 /// conflating them would misdescribe a desktop's pairing as going to "your
-/// television". A television's viewer is already looking elsewhere; a
-/// desktop's is looking at the page, and is told the pairing landed in the
-/// app and the window can be closed.
+/// television". A television's viewer is already looking elsewhere. A desktop's
+/// is looking at the page, and is told the pairing landed in the app and the
+/// window can be closed.
 ///
-/// **Polling ends.** A session lasts about ten minutes and the screen says
-/// so; when it is up, the screen says *that* and offers a fresh code rather
-/// than spinning. Three things can end it -- the pairing arriving, the
-/// window closing, and the session turning out not to be there -- and each
-/// has somewhere to go on the screen. Nothing retries past a terminal
-/// answer; a failed poll is not one (see [DrivePairingUnreachable]).
+/// **Polling ends.** A session lasts about ten minutes and the screen says so.
+/// When it is up, the screen says *that* and offers a fresh code rather than
+/// spinning. Three things can end it: the pairing arriving, the window closing,
+/// and the session turning out not to be there. Each has somewhere to go on the
+/// screen. Nothing retries past a terminal answer, and a failed poll is not one
+/// (see [DrivePairingUnreachable]).
 ///
 /// **The collecting read is one-shot**, and three things hold it to that.
 /// The poll timer is *not* periodic: the next one is armed when the last
@@ -95,13 +93,13 @@ import '../player/player_screen.dart';
 /// copy of the credential, and dropping it because the viewer pressed Back
 /// half a second early would lose a pairing they completed.
 ///
-/// **The token is never drawn, never logged, never in an error.** It goes
-/// from the response object into [DriveAccount.linkFiles] in one statement
-/// and is in no field of this state. What the screen draws about a finished
-/// pairing is the files' names. And [DriveLinkOutcome.thisRunOnly] -- the
-/// secure store refusing the write -- is said out loud rather than dressed
-/// up as success: the pairing works now and will be gone after a restart,
-/// which is a thing a viewer would want to know before they settle in.
+/// **The token is never drawn, never logged, never in an error.** It goes from
+/// the response object into [DriveAccount.linkFiles] in one statement and is in
+/// no field of this state. What the screen draws about a finished pairing is
+/// the files' names. And [DriveLinkOutcome.thisRunOnly], the secure store
+/// refusing the write, is said out loud rather than dressed up as success. The
+/// pairing works now and will be gone after a restart, which is a thing a
+/// viewer would want to know before they settle in.
 class DrivePairingScreen extends StatefulWidget {
   const DrivePairingScreen({
     super.key,
@@ -135,23 +133,23 @@ class DrivePairingScreen extends StatefulWidget {
   /// Three seconds, and the number is about two things.
   ///
   /// What it has to be fast enough for is only the *last* hop: the seconds
-  /// between a viewer tapping a file in the Picker and the television
-  /// reacting. Everything before that -- finding the phone, the camera, a
-  /// Google password, two-factor, scrolling a Drive -- takes between half a
-  /// minute and several, and no polling interval makes any of it quicker.
-  /// Three seconds means an average wait of a second and a half after the
-  /// tap, which reads as "it noticed"; one second would cost three times the
-  /// requests to buy one second of feeling.
+  /// between a viewer tapping a file in the Picker and the television reacting.
+  /// Everything before that (finding the phone, the camera, a Google password,
+  /// two-factor, scrolling a Drive) takes between half a minute and several,
+  /// and no polling interval makes any of it quicker. Three seconds means an
+  /// average wait of a second and a half after the tap, which reads as "it
+  /// noticed". One second would cost three times the requests to buy one second
+  /// of feeling.
   ///
-  /// What it has to be slow enough for is cost. `GET /session/{id}` carries
-  /// no rate limit of its own in the service today -- only `POST /session`
-  /// (sixty an hour per address) and `POST /refresh` do -- so what bounds
-  /// this is not a `429` but a Firestore read and a function invocation per
-  /// poll, on a project with no budget cap
-  /// (`xtremio-xervice/README.md`, "What is deliberately not here"). Three
-  /// seconds over the whole ten minutes is two hundred reads for one
-  /// pairing, which is nothing, and it is bounded because the window is:
-  /// the screen stops asking rather than sitting on a code all evening.
+  /// What it has to be slow enough for is cost. `GET /session/{id}` carries no
+  /// rate limit of its own in the service today. Only `POST /session` (sixty an
+  /// hour per address) and `POST /refresh` do. So what bounds this is not a
+  /// `429` but a Firestore read and a function invocation per poll, on a
+  /// project with no budget cap (`xtremio-xervice/README.md`, "What is
+  /// deliberately not here"). Three seconds over the whole ten minutes is two
+  /// hundred reads for one pairing, which is nothing. It is bounded because the
+  /// window is: the screen stops asking rather than sitting on a code all
+  /// evening.
   ///
   /// It is also why a fresh code is a press and not automatic. Reopening a
   /// session is the call that *is* limited, and a screen that renewed
@@ -200,10 +198,10 @@ class DrivePairingScreen extends StatefulWidget {
       'file. This screen is watching for it.';
   static const String windowMessage = 'This lasts about ten minutes.';
 
-  /// What a device that picks in place says when the picker closed with
-  /// nothing chosen. Not "waiting for your phone": no phone is involved and
-  /// nothing is being waited for -- the viewer backed out, which is a thing
-  /// they are allowed to do, so this says what to press to go back in.
+  /// What a device that picks in place says when the picker closed with nothing
+  /// chosen. Not "waiting for your phone": no phone is involved and nothing is
+  /// being waited for. The viewer backed out, which they are allowed to do, so
+  /// this says what to press to go back in.
   static const String nothingChosenMessage =
       'Nothing chosen yet. Open Google Drive to pick what to play.';
   static const String chooseFilesLabel = 'Choose files';
@@ -250,15 +248,15 @@ class DrivePairingScreen extends StatefulWidget {
   /// from the moment the session opened.
   ///
   /// A length and not a deadline, and clamped, because the two ends of that
-  /// subtraction are not on the same clock: [DrivePairingSession.expiresAt]
-  /// is the service's time and [now] is a television's, which is set by
-  /// whatever DHCP handed it and is routinely wrong by hours. A set running
-  /// behind would read the window as hours and never stop polling; one
-  /// running ahead would read it as already over and refuse to draw a code
-  /// that works perfectly well. So the difference is taken as a hint and
-  /// held between [shortestWindow] and [sessionWindow], and the service's
-  /// own `410` is what really ends a session either way -- which is why a
-  /// clamp is safe here and a comparison would not have been.
+  /// subtraction are not on the same clock. [DrivePairingSession.expiresAt] is
+  /// the service's time, and [now] is a television's, which is set by whatever
+  /// DHCP handed it and is routinely wrong by hours. A set running behind would
+  /// read the window as hours and never stop polling. One running ahead would
+  /// read it as already over and refuse to draw a code that works perfectly
+  /// well. So the difference is taken as a hint and held between
+  /// [shortestWindow] and [sessionWindow]. The service's own `410` is what
+  /// really ends a session either way, which is why a clamp is safe here and a
+  /// comparison would not have been.
   static Duration windowOf(DrivePairingSession session, DateTime now) {
     final left = session.expiresAt.difference(now.toUtc());
     if (left > sessionWindow) return sessionWindow;
@@ -272,11 +270,10 @@ class DrivePairingScreen extends StatefulWidget {
 
 /// Whether this device is doing its own picking, and how far it has got.
 ///
-/// Drawn instead of the scan/browser wording, which is about somebody
-/// else's screen and is a lie here. It is a *phase of waiting* rather than
-/// a [_Stage]: the session is open and being polled throughout, and every
-/// way the wait can end -- the window closing, the service refusing -- still
-/// ends it.
+/// Drawn instead of the scan/browser wording, which is about somebody else's
+/// screen and is a lie here. It is a *phase of waiting* rather than a [_Stage]:
+/// the session is open and being polled throughout, and every way the wait can
+/// end (the window closing, the service refusing) still ends it.
 enum _Picking { no, choosing, adding }
 
 /// Where the screen is, which is also which of the three outcomes it landed
@@ -308,8 +305,8 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// here, never echoed from a response body.
   String _refusal = '';
 
-  /// What the pairing linked, for the screen to name and to offer -- and
-  /// nothing else about the pairing is kept, least of all the credential.
+  /// What the pairing linked, for the screen to name and to offer. Nothing else
+  /// about the pairing is kept, least of all the credential.
   ///
   /// The ids and the names, not the rows: the account is the record of what
   /// is linked, so [_Stage.linked] looks each id up there rather than
@@ -331,9 +328,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   bool _collected = false;
 
   /// A native pick went to the account's job, which collects from here on.
-  /// Latches, and ends this screen's polling for good: cancelling [_poll]
-  /// stops only a timer, and a poll already out would otherwise come back
-  /// and arm the next -- a second destructive read racing the job's.
+  /// Latches, and ends this screen's polling for good: cancelling [_poll] stops
+  /// only a timer, and a poll already out would otherwise come back and arm the
+  /// next. That would be a second destructive read racing the job's.
   bool _handedToJob = false;
 
   /// See [_Picking]. Only ever anything but `no` on a device that picks
@@ -345,11 +342,10 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// answer arrives [_picking] is over.
   bool _pickedHere = false;
 
-  /// A browser really was opened, so the block that talks about "the page
-  /// that opened" has a page to be about: a phone that picks in place opens
-  /// no page, and without this the block would tell the viewer to sign in
-  /// to one that is not there, and offer a button to open it that they
-  /// should not press.
+  /// A browser really was opened, so the block that talks about "the page that
+  /// opened" has a page to be about. A phone that picks in place opens no page.
+  /// Without this the block would tell the viewer to sign in to one that is not
+  /// there, and offer a button to open it that they should not press.
   bool _openedBrowser = false;
 
   /// This screen is listening to the account's pairing job.
@@ -369,8 +365,8 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     super.didChangeDependencies();
     final account = _account ??= DriveAccountScope.of(context);
     // Watched, not owned. The job belongs to the account and runs whether or
-    // not this screen is here; what this listener is for is the one thing
-    // the screen still does -- getting out of the way when it is done.
+    // not this screen is here. This listener is for the one thing the screen
+    // still does: getting out of the way when it is done.
     if (!_watchingJob) {
       _watchingJob = true;
       account.pairing.addListener(_onPairingJob);
@@ -379,11 +375,11 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     // A code every time, on a device that has never paired and on one that
     // linked a season last week alike.
     //
-    // **This spends the rate-limited call on purpose.** A linked file has
-    // its own home in the library's **Remote** pill and its own details
-    // page, so nobody arrives here to play -- the cloud button means only
-    // *add something*, and a code is the whole of that. The bound on it is
-    // unchanged: a fresh code is still a press and never automatic (see
+    // **This spends the rate-limited call on purpose.** A linked file has its
+    // own home in the library's **Remote** pill and its own details page, so
+    // nobody arrives here to play. The cloud button means only *add something*,
+    // and a code is the whole of that. The bound on it is unchanged: a fresh
+    // code is still a press and never automatic (see
     // [DrivePairingScreen.defaultPollEvery]), so nothing here renews itself
     // while nobody is in the room.
     //
@@ -395,23 +391,23 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   @override
   void dispose() {
     if (_watchingJob) _account?.pairing.removeListener(_onPairingJob);
-    // Leaving the screen stops the asking. The answer to a poll already out
-    // is still handed over (see the class comment); what stops is arming
-    // another one.
+    // Leaving the screen stops the asking. The answer to a poll already out is
+    // still handed over (see the class comment). What stops is arming another
+    // one.
     _poll?.cancel();
     _window?.cancel();
     super.dispose();
   }
 
-  /// Which of the three shapes this device is, in the service's terms --
-  /// which is also what decides whether a finished pairing puts this app
-  /// back in front of the viewer ([DrivePairingShape.handsBack]).
+  /// Which of the three shapes this device is, in the service's terms. That
+  /// also decides whether a finished pairing puts this app back in front of the
+  /// viewer ([DrivePairingShape.handsBack]).
   ///
-  /// The television first, because `hasTouch` is true on some of them and
-  /// the remote is what decides that split everywhere else in this app.
-  /// After that, touch tells a phone or tablet from a desktop -- which is
-  /// the line the hand-back falls on, and the line the pick page's own
-  /// wording falls on. See [DrivePairingShape] and the class comment.
+  /// The television first, because `hasTouch` is true on some of them and the
+  /// remote is what decides that split everywhere else in this app. After that,
+  /// touch tells a phone or tablet from a desktop. That is the line the
+  /// hand-back falls on, and the line the pick page's own wording falls on. See
+  /// [DrivePairingShape] and the class comment.
   static DrivePairingShape _shapeOf(DeviceProfile device) => device.isTv
       ? DrivePairingShape.television
       : device.hasTouch
@@ -531,14 +527,14 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   ///
   /// A phone pairing with itself never leaves this screen: the picker is an
   /// activity on top of it, not a place to navigate to, so the poll that
-  /// collects the result is still running when the answer lands. Relying on
-  /// the App Link instead -- Android handing the link back to this app,
-  /// which picks natively and posts to the session -- would leave the
-  /// result to whichever screen polls next, and a viewer who has already
-  /// pressed Done and left leaves nothing polling: the session would sit at
-  /// `ready` until it expires. The App Link path is then only what it was
-  /// ever for -- a phone scanning a *television's* QR, where the files
-  /// really are going somewhere else.
+  /// collects the result is still running when the answer lands. The App Link
+  /// is Android handing the link back to this app, which picks natively and
+  /// posts to the session. Relying on it instead would leave the result to
+  /// whichever screen polls next. A viewer who has already pressed Done and
+  /// left leaves nothing polling, and the session would sit at `ready` until it
+  /// expires. The App Link path is then only what it was ever for: a phone
+  /// scanning a *television's* QR, where the files really are going somewhere
+  /// else.
   ///
   /// False means "not done here": no native picker on this device, or one
   /// that turned out not to be there after all, and the browser is the
@@ -546,12 +542,11 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// been shown a picker and sending them to a second one would be the app
   /// arguing with itself.
   Future<bool> _pickHere(DrivePairingSession session) async {
-    // Everything the pick needs is taken *before* the first await, and
-    // nothing after it reads `widget` or `_account`. A viewer can leave
-    // while the picker is up -- that is the ordinary case this whole
-    // arrangement is for -- and a method that went looking for its own
-    // widget afterwards would drop the pairing on the floor, one level
-    // further in.
+    // Everything the pick needs is taken *before* the first await, and nothing
+    // after it reads `widget` or `_account`. A viewer can leave while the
+    // picker is up, which is the ordinary case this whole arrangement is for. A
+    // method that went looking for its own widget afterwards would drop the
+    // pairing on the floor, one level further in.
     final picker = widget.picker;
     final account = _account;
     if (account == null) return false;
@@ -576,8 +571,8 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         return false;
       case DriveNativePickCancelled():
         // Nothing was chosen. The code is still good and the screen is still
-        // waiting, so this is not a refusal -- it is a viewer who changed
-        // their mind, and the window is what ends it.
+        // waiting, so this is not a refusal. It is a viewer who changed their
+        // mind, and the window is what ends it.
         return true;
       case DriveNativePickFailed(:final reason):
         _say(() {
@@ -587,10 +582,10 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         return true;
       case DriveNativePicked(:final serverAuthCode, :final fileIds):
         _say(() => _picking = _Picking.adding);
-        // Handed to the account, which outlives this screen, and **not
-        // awaited here**. This screen's own polling stops first, so the
-        // collecting read -- destructive, and answering exactly once --
-        // happens in one place.
+        // Handed to the account, which outlives this screen, and **not awaited
+        // here**. This screen's own polling stops first, so the collecting read
+        // happens in one place. That read is destructive, and answers exactly
+        // once.
         _handedToJob = true;
         _poll?.cancel();
         _window?.cancel();
@@ -639,12 +634,11 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     if (session == null || _collected || _handedToJob) return;
     final answer = await widget.service.collect(session.sessionId);
 
-    // A collected pairing is never dropped, whatever else has happened
-    // since -- not for this screen being gone, not for the window having
-    // closed, not for the viewer having asked for a fresh code a moment
-    // before. The session is deleted on the service now, so this object is
-    // the credential; refusing it because the screen moved on would throw
-    // away a pairing the viewer really did complete.
+    // A collected pairing is never dropped, whatever else has happened since:
+    // this screen being gone, the window having closed, the viewer having asked
+    // for a fresh code a moment before. The session is deleted on the service
+    // now, so this object is the credential. Refusing it because the screen
+    // moved on would throw away a pairing the viewer really did complete.
     if (answer case final DrivePairingCollected collected) {
       await _store(collected);
       return;
@@ -711,11 +705,11 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     // that is news, it is about *later*, and it is the one thing this
     // screen has to say that the library cannot.
     if (_pickedHere && outcome != DriveLinkOutcome.thisRunOnly) {
-      // Asked, not assumed. `maybePop` is allowed to refuse -- a route that
-      // is the first of its navigator, or anything that has taken the back
-      // button -- and a screen that trusted it would silently stay exactly
-      // where it was, on a spinner saying "adding" while the files sat
-      // already linked in the library.
+      // Asked, not assumed. `maybePop` is allowed to refuse (a route that is
+      // the first of its navigator, or anything that has taken the back
+      // button). A screen that trusted it would silently stay exactly where it
+      // was, on a spinner saying "adding" while the files sat already linked in
+      // the library.
       if (await Navigator.of(context).maybePop()) return;
       if (!mounted) return;
     }
@@ -743,16 +737,16 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
 
   /// Opens [file] on the embedded server and pushes the player at it.
   ///
-  /// The whole of what this knows about the credential is that it does not
-  /// have it: [openLinkedDriveFile] asks the account, which is the only
-  /// thing that holds one. A dead pairing is written down in there too, so
-  /// what is left here is a sentence and a code to scan -- the account's
-  /// state is already [DriveLinkState.pairAgain] by the time this draws,
-  /// and the rows the confirmation was offering are no longer any use.
+  /// The whole of what this knows about the credential is that it does not have
+  /// it: [openLinkedDriveFile] asks the account, which is the only thing that
+  /// holds one. A dead pairing is written down in there too, so what is left
+  /// here is a sentence and a code to scan. The account's state is already
+  /// [DriveLinkState.pairAgain] by the time this draws, and the rows the
+  /// confirmation was offering are no longer any use.
   ///
   /// A file the match pass has already named plays under its title
   /// ([driveMatchRequests]), so the engine keeps its progress and finds its
-  /// next episode; one it has not plays as the bare file it is.
+  /// next episode. One it has not named plays as the bare file it is.
   Future<void> _play(LinkedDriveFile file) async {
     final account = _account;
     if (account == null || _playing) return;
@@ -842,18 +836,17 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             PairingQrCode(link: session.link)
           else if (_openedBrowser)
             ..._openedSession(session, theme),
-          // Drawn while this device is doing the work itself, because that
-          // is the only part of the wait that looks like nothing happening.
-          // A television waiting for a phone has a QR to look at and a
-          // viewer who knows they have not scanned it yet; here the viewer
-          // has done their part, the app is talking to Google about every
-          // file they chose, and a line of text that does not move reads as
-          // stuck. It is: a season of twelve is twelve files to ask about.
-          // Without this button, backing out of the picker would leave the
-          // screen with no QR, no page, nothing to press, and a line saying
-          // it is waiting for a phone that was never involved -- but the
-          // session is still open and good, so the honest offer is the
-          // picker again.
+          // Drawn while this device is doing the work itself, because that is
+          // the only part of the wait that looks like nothing happening. A
+          // television waiting for a phone has a QR to look at and a viewer who
+          // knows they have not scanned it yet. Here the viewer has done their
+          // part, the app is talking to Google about every file they chose, and
+          // a line of text that does not move reads as stuck. It is: a season
+          // of twelve is twelve files to ask about. Without this button,
+          // backing out of the picker would leave the screen with no QR, no
+          // page, nothing to press, and a line saying it is waiting for a phone
+          // that was never involved. But the session is still open and good, so
+          // the honest offer is the picker again.
           if (!isTv && !_openedBrowser && _picking == _Picking.no)
             FilledButton.icon(
               onPressed: () => unawaited(_pickAgain()),
@@ -915,11 +908,11 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           if (_refusal.isNotEmpty) _Line(_refusal, theme: theme, warning: true),
           if (_playing)
             _Line(DrivePairingScreen.openingFileMessage, theme: theme),
-          // Straight into the film from the screen that linked it: the
-          // pairing is the one moment the viewer is certainly holding a
-          // remote and certainly means to watch what they just picked. One
-          // file is one press; a season is a row each, because "Play" over
-          // twelve episodes would have to guess which one.
+          // Straight into the film from the screen that linked it: the pairing
+          // is the one moment the viewer is certainly holding a remote and
+          // certainly means to watch what they just picked. One file is one
+          // press. A season is a row each, because "Play" over twelve episodes
+          // would have to guess which one.
           if (justLinked.length == 1)
             FilledButton.icon(
               onPressed: _playing
@@ -968,14 +961,14 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
 
 /// The QR for a pairing link, with the quiet zone a camera needs.
 ///
-/// A widget of this app's own rather than `QrImageView` bare, for two
-/// reasons. The white margin is not decoration: a QR painted straight onto
-/// this app's near-black surface has no light zone round it, and a phone
-/// held up to one simply never locks on -- so the padding and the white
-/// behind it are part of the thing being drawn. And it puts the link on a
-/// field a test can read: `QrImageView` keeps its own data private, so a
-/// test that could only find the library's widget could say a QR was drawn
-/// and not that it was drawn for *this* session.
+/// A widget of this app's own rather than `QrImageView` bare, for two reasons.
+/// The white margin is not decoration: a QR painted straight onto this app's
+/// near-black surface has no light zone round it, and a phone held up to one
+/// simply never locks on. So the padding and the white behind it are part of
+/// the thing being drawn. And it puts the link on a field a test can read:
+/// `QrImageView` keeps its own data private, so a test that could only find the
+/// library's widget could say a QR was drawn and not that it was drawn for
+/// *this* session.
 class PairingQrCode extends StatelessWidget {
   const PairingQrCode({super.key, required this.link, this.size = 240});
 

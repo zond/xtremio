@@ -8,10 +8,10 @@ import '../../core/core.dart';
 ///
 /// **Only macOS needs it.** A sandboxed Mac app may read a folder the viewer
 /// picked until it quits, and after that only through a security-scoped
-/// bookmark taken while it still could -- so a folder is bookmarked when it
-/// is added ([remember]) and opened again from its bookmark before every
-/// scan ([open]). Linux and Windows read a path as a path, and this does
-/// nothing there.
+/// bookmark taken while it still could. So a folder is bookmarked when it is
+/// added ([remember]) and opened again from its bookmark before every scan
+/// ([open]). Linux and Windows read a path as a path, and this does nothing
+/// there.
 abstract interface class FolderAccess {
   /// Takes what is needed to reach [folder] again, right after it was
   /// picked.
