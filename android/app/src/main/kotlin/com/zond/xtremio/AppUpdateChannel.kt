@@ -37,12 +37,12 @@ import java.util.concurrent.Executors
  * (`USER_ACTION_REQUIRED`), so Android puts its own confirmation up even
  * where it would have let an update by the installer of record through
  * without one. The confirmation arrives as `STATUS_PENDING_USER_ACTION` at
- * [InstallStatusReceiver] and is started from here; what the viewer
+ * [InstallStatusReceiver] and is started from here. What the viewer
  * answers comes back the same way. A self-update that succeeds ends this
  * process, usually before the success is delivered.
  *
  * **The release app only.** Debug and profile builds are
- * `com.zond.xtremio.debug`, signed with the debug key; a release APK is a
+ * `com.zond.xtremio.debug`, signed with the debug key. A release APK is a
  * different package to them, so `install` refuses there rather than put a
  * second app on the device. Dart never offers it there either.
  */
@@ -88,8 +88,8 @@ class AppUpdateChannel(
      * The volume an update is downloaded to and installed on, and the two
      * `Settings.Global` values `StorageManager.getStorageLowBytes` reads
      * for the reserve Android keeps free on it. Either setting is null when
-     * unset or unreadable -- from Android 12 an app may not read a hidden
-     * key, and these are hidden -- which Dart reads as Android's defaults.
+     * unset or unreadable, and Dart reads null as Android's defaults. From
+     * Android 12 an app may not read a hidden key, and these are hidden.
      */
     private fun room(): Map<String, Any?> {
         val data = Environment.getDataDirectory()
@@ -117,8 +117,8 @@ class AppUpdateChannel(
     /**
      * This app's "Install unknown apps" screen. Not resolved first: under
      * package visibility a resolve can answer null for a Settings screen
-     * that opens fine, so it is started and a device with nothing behind it
-     * is told apart by the exception.
+     * that opens fine. So the screen is started, and a device with nothing
+     * behind it is told apart by the exception.
      */
     private fun openInstallPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
@@ -255,9 +255,9 @@ class AppUpdateChannel(
  * not exported, so only the installer's `PendingIntent` reaches it.
  *
  * With the activity gone (the viewer left while Android was working) a
- * confirmation is still put up, as a new task -- the install was asked for
- * and Android's screen is where it is answered -- and a final status has
- * nobody to tell.
+ * confirmation is still put up, as a new task: the install was asked for,
+ * and Android's screen is where it is answered. A final status has nobody
+ * to tell.
  */
 class InstallStatusReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

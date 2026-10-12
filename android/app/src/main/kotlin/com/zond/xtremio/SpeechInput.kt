@@ -22,15 +22,16 @@ import io.flutter.plugin.common.MethodChannel
  * **Recognized here, not handed off.** `RecognizerIntent`'s activity route
  * is Google TV's own search on a Chromecast with Google TV: it searched the
  * whole TV and never gave the words back. So the app runs a
- * [SpeechRecognizer] of its own -- the on-device one where Android 12+ has
- * it, the device's default recognition service otherwise -- and the words
- * come back as partial results while the viewer speaks and one final
- * result at the end.
+ * [SpeechRecognizer] of its own: the on-device one where Android 12+ has
+ * it, the device's default recognition service otherwise. The words come
+ * back as partial results while the viewer speaks, and as one final result
+ * at the end.
  *
  * **Only while a press asked for it.** The recognizer exists from
  * `startSpeech` to its own final result or error, `stopSpeech`, the event
- * stream being cancelled, or the activity stopping (the app hidden); each
- * of those destroys it. `RECORD_AUDIO` is asked for at the first press and never otherwise.
+ * stream being cancelled, or the activity stopping (the app hidden). Each
+ * of those destroys it. `RECORD_AUDIO` is asked for at the first press and
+ * never otherwise.
  *
  * `startSpeech` answers `listening`, `unavailable` (no recognition service
  * on the device), `denied` (no microphone permission, after the system
@@ -139,7 +140,7 @@ class SpeechInput(private val activity: Activity) : EventChannel.StreamHandler {
 
     /**
      * One recognizer's callbacks. Anything from a recognizer that is no
-     * longer the current one -- stopped, or replaced -- is dropped, so a
+     * longer the current one (stopped, or replaced) is dropped, so a
      * late callback never reaches a field that has moved on.
      */
     private inner class Listener(private val owner: SpeechRecognizer) : RecognitionListener {

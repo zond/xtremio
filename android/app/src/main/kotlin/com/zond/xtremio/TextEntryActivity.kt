@@ -23,14 +23,14 @@ import android.widget.TextView
  *
  * Flutter sets `IME_FLAG_NO_FULLSCREEN` on every field it creates, and Dart
  * cannot unset it. On a phone that keeps the keyboard from swallowing the
- * screen; on a television it is the flag that makes typing impossible,
+ * screen. On a television it is the flag that makes typing impossible,
  * because fullscreen ("extract") mode is precisely the mode in which the
  * keyboard takes window focus and owns the D-pad. Without it the app window
  * keeps focus, every D-pad press reaches Flutter and moves Flutter's focus,
  * and the keyboard cannot move its own selection.
  *
- * This screen is a plain [EditText] with plain [EditorInfo] options — no
- * such flag — so Gboard for Android TV goes fullscreen and the remote
+ * This screen is a plain [EditText] with plain [EditorInfo] options (no
+ * such flag), so Gboard for Android TV goes fullscreen and the remote
  * drives it. Back cancels and returns nothing; Done returns the string.
  *
  * Started by [MainActivity] for the `editText` call on the `xtremio/device`
@@ -79,8 +79,8 @@ class TextEntryActivity : Activity() {
         setContentView(screen(intent.getStringExtra(EXTRA_LABEL).orEmpty()))
         field.requestFocus()
         // The manifest's stateAlwaysVisible is what should put the keyboard
-        // up, and asking again once the view is attached costs nothing --
-        // this screen is worth nothing without one, and there is no press
+        // up, and asking again once the view is attached costs nothing.
+        // This screen is worth nothing without one, and there is no press
         // to spend on summoning it with a D-pad.
         field.post {
             val ime = getSystemService(Context.INPUT_METHOD_SERVICE)
@@ -150,7 +150,7 @@ class TextEntryActivity : Activity() {
             }
 
         /**
-         * Done, and — for a password — a keyboard that learns nothing from
+         * Done, and, for a password, a keyboard that learns nothing from
          * what is typed. Never `IME_FLAG_NO_FULLSCREEN`: that flag is the
          * whole bug this screen exists for.
          */

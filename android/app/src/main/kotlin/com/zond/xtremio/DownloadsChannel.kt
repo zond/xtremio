@@ -16,15 +16,15 @@ import io.flutter.plugin.common.MethodChannel
  * to tell Dart.
  *
  * A sibling of the `xtremio/device` channel in [MainActivity] and a
- * separate concern from it — that one is asked once, at start-up, what kind
- * of device this is; this one is a running conversation about downloads.
+ * separate concern from it. That one is asked once, at start-up, what kind
+ * of device this is. This one is a running conversation about downloads.
  *
  * From Dart: `start` and `update` (the notification's title, text,
  * percentage and action label), `stop`, `requestNotificationPermission`,
  * and `takePendingOpen` for a tap that arrived before Dart had a handler
- * installed. To Dart: `open` (the notification was tapped), `cancelAll`
- * (its action was pressed) — the registry is behind the FFI, so only Dart
- * can act on either — and `timedOut` (the system ended the service's
+ * installed. To Dart: `open` (the notification was tapped) and `cancelAll`
+ * (its action was pressed). The registry is behind the FFI, so only Dart
+ * can act on either. And `timedOut` (the system ended the service's
  * running-time budget and it stopped itself), so Dart knows there is no
  * service to update and asks for one again when the app is next in front.
  */
@@ -38,7 +38,7 @@ class DownloadsChannel(
     private var permission: MethodChannel.Result? = null
 
     /**
-     * A notification tapped while there was no Dart handler yet — the app
+     * A notification tapped while there was no Dart handler yet: the app
      * was cold started by it. Dart asks for this once it is up.
      */
     var pendingOpen: Boolean = false
@@ -103,8 +103,8 @@ class DownloadsChannel(
     /**
      * Asks for `POST_NOTIFICATIONS` if it is a thing on this release and
      * has not been granted. Dart asks only when a download has actually
-     * started, and only once a run; a refusal is answered `false` and
-     * changes nothing else — the service still runs, silently.
+     * started, and only once a run. A refusal is answered `false` and
+     * changes nothing else: the service still runs, silently.
      */
     private fun requestNotifications(result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {

@@ -4,7 +4,7 @@ package com.zond.xtremio
  * The three numbers `Notification.Builder.setProgress` wants, from the one
  * percentage the Dart side sends.
  *
- * Dart sends `-1` when it cannot say how far along the downloads are — a
+ * Dart sends `-1` when it cannot say how far along the downloads are. A
  * magnet whose metadata has not resolved knows no length, and a percentage
  * of the entries that *do* know theirs would be a percentage of the wrong
  * number. That is the bar with no end. Anything else is clamped rather than

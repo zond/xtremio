@@ -23,10 +23,11 @@ import io.flutter.plugin.common.MethodChannel
  *
  * Two things about the request are load-bearing and neither is obvious:
  *
- *  * `PICKER_OAUTH_TRIGGER` is spelled `trigger_onepick` on the wire — the
- *    same parameter the web flow is refused for with `invalid_request`. What
- *    refuses it there is Google's legacy consent page, which a web client is
- *    routed to; nothing on this path goes near it.
+ *  * `PICKER_OAUTH_TRIGGER` is spelled `trigger_onepick` on the wire. It
+ *    is the same parameter the web flow is refused for with
+ *    `invalid_request`. What refuses it there is Google's legacy consent
+ *    page, which a web client is routed to; nothing on this path goes near
+ *    it.
  *  * `requestOfflineAccess(WEB_CLIENT_ID, true)` names the **web** client on
  *    purpose. A `drive.file` grant belongs to a user *and a client*, and the
  *    television reads with a token minted from the web client's secret, so a
@@ -160,8 +161,8 @@ class DrivePicker(
         } catch (error: Throwable) {
             // A viewer who pressed Back arrives here too. Dart reads an empty
             // answer as "cancelled", which is what it is, so this stays an
-            // error only when something was genuinely wrong — and Dart treats
-            // a code-less answer as cancelled either way.
+            // error only when something was genuinely wrong. Dart treats a
+            // code-less answer as cancelled either way.
             finish { it.error("pick_failed", describe(error), null) }
         }
         return true
@@ -176,7 +177,7 @@ class DrivePicker(
     /**
      * What Dart is given: the ids, and the code that turns into the
      * television's credential. Nothing else, and nothing about the access
-     * token — the television mints its own.
+     * token: the television mints its own.
      *
      * `picked_file_ids` is produced by Play services at runtime and appears
      * nowhere in the client library, which is why it is read by name out of
@@ -207,8 +208,8 @@ class DrivePicker(
 
         /**
          * The **web** client, whose secret the pairing service holds. See the
-         * class comment for why this and not the Android one; it is a public
-         * identifier and carries no secret.
+         * class comment for why this and not the Android one. It is a
+         * public identifier and carries no secret.
          */
         const val WEB_CLIENT_ID =
             "931205572142-d7bo9sfqr2o9aurefpk1vnbj47pheta4.apps.googleusercontent.com"
