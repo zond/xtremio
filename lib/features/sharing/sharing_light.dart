@@ -392,10 +392,10 @@ class SharingStopDialog extends StatelessWidget {
   /// something else is, and fetches what the server keeps of it for a resume.
   /// Nothing in the app stops that, and nothing needs to, so this says what it
   /// is and that it ends.
-  static const String noDownloadTitle = 'No offline download is in flight';
+  static const String noDownloadTitle = 'No download is running';
   static const String noDownloadDescription =
-      'What is arriving is the title you last played, fetching what it '
-      'keeps for you to carry on watching. It stops by itself.';
+      'This is the title you last played. Xtremio is fetching a little of '
+      'it so you can carry on watching. It stops by itself.';
 
   /// What the "Cancel" row costs, on the row: the download stops being kept
   /// and its part-file goes, the same as the downloads notification's

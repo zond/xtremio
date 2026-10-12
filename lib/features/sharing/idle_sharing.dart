@@ -80,9 +80,9 @@ class IdleSharing {
   /// did nothing.
   static const String description =
       'Keeps sharing your downloads and the last thing you watched when '
-      'nothing is playing. Off, Xtremio shares only while you watch and while a '
-      'download is on its way. The light in the corner shows when it is '
-      'happening.';
+      'nothing is playing. Xtremio always shares while you watch and while '
+      'a download is on its way. The light in the corner shows when it is '
+      'sharing.';
 
   /// What the settings tile adds on a device where [IdleSharingPolicy]
   /// holds the sharing off while the app is in the background, so nobody
@@ -90,7 +90,7 @@ class IdleSharing {
   /// leave. Drawn only there: on a television or a desktop the sharing does
   /// go on, and the sentence would be about some other device.
   static const String backgroundNote =
-      'In the background, Xtremio shares only while it is downloading or '
+      'Xtremio shares in the background only while it is downloading or '
       'casting.';
 
   /// The gentler of the two stops the status light offers, and what it costs:
@@ -121,8 +121,8 @@ class IdleSharing {
   static const String alreadyOffTitle = 'Sharing is already off';
   static const String alreadyOffDescription =
       'Xtremio shares only while you watch and while a download is on its '
-      'way, and stops a few seconds after both end. There is nothing left '
-      'here to switch off.';
+      'way. It stops a few seconds after both end. There is nothing here to '
+      'switch off.';
 
   /// What the popup says while a "Not now" is in force and the light is
   /// still lit, which it can be for the same few seconds as above: the
@@ -133,8 +133,8 @@ class IdleSharing {
   /// does something: the switch, which is the longer of the two.
   static const String pausedTitle = 'Paused until you next start Xtremio';
   static const String pausedDescription =
-      'What is still going out stops within a few seconds, unless a download '
-      'is on its way. The setting is still on.';
+      'Sharing stops within a few seconds, unless a download is on its way. '
+      'The setting is still on.';
 
   /// What the settings tile adds while a "Not now" is in force. Without it the
   /// tile would show the switch on while nothing is being shared, which is the
