@@ -6,23 +6,23 @@ import 'drive_pairing_screen.dart';
 /// Where files this device does not hold are linked from: the button in the
 /// library's app bar, and the short list of services it opens.
 ///
-/// **The button does not say Google Drive**, and the dialog is not a
-/// shortcut past it. Drive is the only entry today and the dialog is
-/// therefore one row -- which looks like a dialog that could be skipped
-/// until you read what is coming: `docs/design/translated-sources.md` in
-/// the streaming server names `SmbSource` and `NfsSource` as the same seam as
-/// `DriveSource`, "a `ProxySource` with a header supplier that refreshes",
-/// and being the same seam is the point of having one. A share on the
-/// landing and a folder on a NAS arrive as rows here. A button wired
-/// straight to the Drive pairing would have to be renamed, re-drawn and
-/// re-taught to the remote on the day the second one lands, and the viewer
-/// would have learnt a button that meant one thing and now means another.
+/// **The button does not say Google Drive**, and the dialog is not a shortcut
+/// past it. Drive is the only entry today, so the dialog is one row, which
+/// looks like a dialog that could be skipped. It is not, given what is coming:
+/// `docs/design/translated-sources.md` in the streaming server names
+/// `SmbSource` and `NfsSource` as the same seam as `DriveSource`, "a
+/// `ProxySource` with a header supplier that refreshes", and being the same
+/// seam is the point of having one. A share on the landing and a folder on a
+/// NAS arrive as rows here. A button wired straight to the Drive pairing would
+/// have to be renamed, re-drawn and re-taught to the remote on the day the
+/// second one lands, and the viewer would have learnt a button that meant one
+/// thing and now means another.
 ///
 /// It is drawn as an icon button in the **library's** app bar. The board is
-/// what an addon catalogue offers and the library is what the viewer has;
-/// a file on their own Drive is theirs, not a catalogue's, so this is a
-/// control about the library. Discreet either way: linking a remote file is
-/// something a viewer does once a month.
+/// what an addon catalogue offers and the library is what the viewer has. A
+/// file on their own Drive is theirs, not a catalogue's, so this is a control
+/// about the library. Discreet either way: linking a remote file is something a
+/// viewer does once a month.
 class RemoteFilesButton extends StatelessWidget {
   const RemoteFilesButton({super.key});
 
@@ -45,9 +45,8 @@ class RemoteFilesButton extends StatelessWidget {
 /// Opens the short list of services, and then whatever the viewer picked.
 ///
 /// The dialog closes *before* the pairing screen is pushed, so Back from a
-/// pairing lands on the library rather than on the list it was chosen from
-/// -- a viewer who abandons a pairing wants their titles, not the menu
-/// again.
+/// pairing lands on the library rather than on the list it was chosen from. A
+/// viewer who abandons a pairing wants their titles, not the menu again.
 Future<void> showRemoteFilesDialog(BuildContext context) async {
   final navigator = Navigator.of(context);
   final picked = await showDialog<_RemoteService>(
@@ -70,16 +69,17 @@ enum _RemoteService { googleDrive }
 /// The short list of services, drawn so that a row of it is plainly a thing
 /// to press.
 ///
-/// **A plain [ListTile] would read as a message with a Cancel button.** It
-/// has no edge, no fill and no arrow, so the only control on screen with a
-/// button's shape would be the one that closes the dialog -- asking a
-/// viewer who has never seen this before to guess that the sentence is
-/// tappable. That is a dialog that says "no" for you.
+/// **A plain [ListTile] would read as a message with a Cancel button.** It has
+/// no edge, no fill and no arrow, so the only control on screen with a button's
+/// shape would be the one that closes the dialog. A viewer who has never seen
+/// this before would have to guess that the sentence is tappable. That is a
+/// dialog that says "no" for you.
 ///
 /// So the row is an [OutlinedButton]: an outline that is there before the
 /// remote arrives rather than only under it, an arrow saying it leads
-/// somewhere, and -- the half that matters on a television -- a button's own
-/// semantics, so the readout says *button* and not a line of prose.
+/// somewhere, and a button's own semantics, so the readout says *button* and
+/// not a line of prose. The semantics are the half that matters on a
+/// television.
 ///
 /// On a television the row also takes focus on arrival, the way an actions
 /// sheet's first action does. A remote has nothing to point with, and a

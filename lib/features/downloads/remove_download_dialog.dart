@@ -6,22 +6,21 @@ import '../../core/core.dart';
 /// stream tile of the release that is kept, an episode's badge. One
 /// dialog, so what it says is the same everywhere.
 ///
-/// **A removal deletes, and the dialog says so.** There is no meaningful
-/// way to keep the file "as ordinary cache" instead: an unpinned torrent
-/// nobody is playing is exactly what the server reclaims at its next pass,
-/// so the bytes go either way -- offering otherwise would only delay the
-/// same deletion behind a message that said they had stayed. So there is
-/// one thing to confirm, and the bytes going is part of it. The one case
-/// where they stay -- the same file kept for another title too -- is said
-/// by the message after the removal, which is the first point anything
-/// knows it.
+/// **A removal deletes, and the dialog says so.** There is no meaningful way to
+/// keep the file "as ordinary cache" instead: an unpinned torrent nobody is
+/// playing is exactly what the server reclaims at its next pass, so the bytes
+/// go either way. Offering otherwise would only delay the same deletion behind
+/// a message that said they had stayed. So there is one thing to confirm, and
+/// the bytes going is part of it. In the one case where they stay, the same
+/// file kept for another title too, the message after the removal says so. That
+/// is the first point anything knows it.
 ///
 /// Popping `true` confirms; anything else is a cancel.
 ///
-/// Two buttons on a dialog's own surface, so the theme floor is the whole
-/// of what marks them -- which is the point of having a floor at all: a
-/// dialog is exactly the kind of surface nobody remembers to wrap, and this
-/// one is the last thing a viewer sees before a file goes.
+/// Two buttons on a dialog's own surface, so the theme floor is the whole of
+/// what marks them. That is the point of having a floor at all: a dialog is
+/// exactly the kind of surface nobody remembers to wrap, and this one is the
+/// last thing a viewer sees before a file goes.
 class RemoveDownloadDialog extends StatelessWidget {
   const RemoveDownloadDialog({super.key, required this.view});
 

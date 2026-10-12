@@ -9,18 +9,16 @@ import 'downloads_listings.dart';
 /// screen comes up, every progress event folded into it, and a fresh
 /// listing after anything the screen itself changed.
 ///
-/// A progress event carries only what moved -- the six numbers of a row,
-/// not the entry -- which is why the registry is kept here and updates are
-/// laid over it rather than replacing it. An entry *added* needs a
-/// [refresh]: its row says nothing about it but its numbers. A removal
-/// through the client arrives as its own update and is folded in like the
-/// rest; the [refresh] a screen makes after its own remove is still the
-/// listing that settles what it did.
+/// A progress event carries only what moved: the six numbers of a row, not the
+/// entry. That is why the registry is kept here and updates are laid over it
+/// rather than replacing it. An entry *added* needs a [refresh]: its row says
+/// nothing about it but its numbers. A removal through the client arrives as
+/// its own update and is folded in like the rest. The [refresh] a screen makes
+/// after its own remove is still the listing that settles what it did.
 ///
-/// A failed listing is a value ([error]), not a throw: the Rust side
-/// answers what is on disk when the server cannot be asked, so the only way
-/// here is a genuinely broken bridge, and a screen still has to draw
-/// something.
+/// A failed listing is a value ([error]), not a throw. The Rust side answers
+/// what is on disk when the server cannot be asked, so the only way here is a
+/// genuinely broken bridge, and a screen still has to draw something.
 class DownloadsController extends ChangeNotifier {
   DownloadsController(this.client) {
     _listen();
@@ -93,8 +91,8 @@ class DownloadsController extends ChangeNotifier {
   }
 
   /// The feed died (the Rust side handed the sink to another client, or the
-  /// bridge broke). Progress stops arriving; what was listed stays on
-  /// screen, and every [refresh] still works.
+  /// bridge broke). Progress stops arriving. What was listed stays on screen,
+  /// and every [refresh] still works.
   void _onFeedError(Object failure) {
     if (kDebugMode) debugPrint('downloads progress feed: $failure');
   }

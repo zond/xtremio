@@ -6,8 +6,8 @@ library;
 
 import '../../core/core.dart';
 
-/// What the way to the Downloads screen is called wherever it is offered
-/// from a screen that is about something else -- a title, a running player.
+/// What the way to the Downloads screen is called wherever it is offered from a
+/// screen that is about something else: a title, a running player.
 const String kDownloadsScreenTooltip = 'Downloads on this device';
 
 /// Tooltip of the download button on a stream tile.
@@ -23,10 +23,10 @@ const String kDownloadDeleteTooltip = 'Downloaded — delete from this device';
 /// ... when the server reported a reason it stopped; pressing it pins again.
 const String kDownloadRetryTooltip = 'Download stopped — try again';
 
-/// ... when the pieces this row named are not on the device any more (the
-/// root they were under was moved or reclaimed); pressing it downloads the
-/// same file again. A separate sentence from the one above because it is a
-/// separate thing to have happened: nothing is being tried.
+/// ... when the pieces this row named are not on the device any more (the root
+/// they were under was moved or reclaimed). Pressing it downloads the same file
+/// again. A separate sentence from the one above because it is a separate thing
+/// to have happened: nothing is being tried.
 const String kDownloadGoneTooltip = 'No longer on this device — download again';
 
 /// The chip a stream tile carries once its release is the one kept on this
@@ -77,9 +77,9 @@ String downloadRemovedMessage(DownloadRemoveResult result, DownloadView view) =>
     };
 
 /// The sentence to show for a refused pin. The server's own message is
-/// client-safe (it never names a local path); a full disk gets the numbers
-/// that message was built from, since "not enough space" is only useful
-/// with "how much".
+/// client-safe (it never names a local path). A full disk gets the numbers that
+/// message was built from, since "not enough space" is only useful with "how
+/// much".
 String downloadFailureMessage(DownloadFailure failure) {
   final message = failure.message.isEmpty
       ? 'The download was refused.'

@@ -10,17 +10,17 @@ import 'downloads_listings.dart';
 /// entries are on their way and how far they have got between them.
 ///
 /// On its way is narrower than the registry's own unfinished
-/// ([DownloadView.isUnfinished]): a paused or complete download is not a
-/// reason to hold a service, and neither is one in the error state. An
-/// errored entry is a pin the server refused (a full or missing downloads
-/// volume, the commonest case on a TV box) or a torrent whose add failed,
-/// and in both the server has nothing in flight for it -- no engine, no
-/// peers to wait for -- so counting it would hold a service (and, on
-/// Android 15, burn its `dataSync` time budget) for a notification that
-/// never moves. A retry re-adds the entry; the row that follows is what
-/// brings the service up. The Rust ticker still counts an error as unfinished
-/// (`Entry::unfinished`), because the boot's re-pin does and the two share
-/// the test; that is its question and not this one's.
+/// ([DownloadView.isUnfinished]). A paused or complete download is not a reason
+/// to hold a service, and neither is one in the error state. An errored entry
+/// is a pin the server refused (a full or missing downloads volume, the
+/// commonest case on a TV box) or a torrent whose add failed. In both, the
+/// server has nothing in flight for it: no engine, no peers to wait for. So
+/// counting it would hold a service (and, on Android 15, burn its `dataSync`
+/// time budget) for a notification that never moves. A retry re-adds the entry,
+/// and the row that follows is what brings the service up. The Rust ticker
+/// still counts an error as unfinished (`Entry::unfinished`), because the
+/// boot's re-pin does and the two share the test. That is its question and not
+/// this one's.
 @immutable
 class DownloadsSummary {
   const DownloadsSummary({
@@ -118,19 +118,19 @@ class DownloadsSummary {
 }
 
 /// The only action on the notification, and the only one the registry can
-/// really carry out: there is no pause for a pinned file, so what is left
-/// is dropping every unfinished download and the part-file with it — what
+/// really carry out. There is no pause for a pinned file, so what is left is
+/// dropping every unfinished download and the part-file with it. That is what
 /// deleting one on the Downloads screen does, for all of them at once.
 const String kDownloadsCancelAllAction = 'Cancel all';
 
 /// Keeps Android's downloads foreground service in step with the registry.
 ///
 /// Android freezes a process whose app the user has left, and the whole
-/// download stack — the embedded server and librqbit — lives in this one.
-/// A `dataSync` foreground service is what keeps the process running and
-/// tells the system why; it hosts nothing itself. So it is started as soon
-/// as one download is unfinished and stopped the moment none is: playing
-/// and seeding are not reasons to hold it.
+/// download stack (the embedded server and librqbit) lives in this one. A
+/// `dataSync` foreground service is what keeps the process running and tells
+/// the system why; it hosts nothing itself. So it is started as soon as one
+/// download is unfinished and stopped the moment none is: playing and seeding
+/// are not reasons to hold it.
 ///
 /// Only Android has such a thing. Everywhere else this is inert: no channel
 /// is installed, no listing is taken, and nothing is ever invoked.
@@ -144,30 +144,30 @@ const String kDownloadsCancelAllAction = 'Cancel all';
 /// loses anything: librqbit keeps its verified pieces, the server keeps its
 /// pin set, and start-up re-pins every unfinished entry.
 ///
-/// **And it has a budget.** From Android 15 a `dataSync` service may run
-/// about six hours in twenty-four while the app is not in front, and at the
-/// end of that the platform side stops itself -- it has to, since a service
-/// that ignores the call is crashed with its process ten seconds later --
-/// and says so with `timedOut`. This side then forgets it had a service: the
-/// download is not moved on, nothing is sent to a service that is gone, and
-/// the next change to the registry asks for a start again, which the system
-/// grants once the app has been in front (that is what resets the budget;
-/// from the background it is refused, and the refusal is already the
-/// ordinary "not running, ask next time" path). Nothing is lost meanwhile,
-/// for the reasons above; the download simply waits for the app.
+/// **And it has a budget.** From Android 15 a `dataSync` service may run about
+/// six hours in twenty-four while the app is not in front. At the end of that
+/// the platform side stops itself and says so with `timedOut`. It has to: a
+/// service that ignores the call is crashed with its process ten seconds later.
+/// This side then forgets it had a service. The download is not moved on,
+/// nothing is sent to a service that is gone, and the next change to the
+/// registry asks for a start again. The system grants that once the app has
+/// been in front, which is what resets the budget. From the background it is
+/// refused, and the refusal is already the ordinary "not running, ask next
+/// time" path. Nothing is lost meanwhile, for the reasons above. The download
+/// simply waits for the app.
 ///
-/// **How it learns what changed.** Progress arrives on the client's feed
-/// once a second, and that feed only ever carries rows that *moved* — an
-/// entry that has just appeared is not a row it knows. A row for a key no
-/// listing has mentioned means something was added, and is answered with a
-/// fresh listing; a removal is the client's own event
-/// ([DownloadsRemovalUpdate], pushed by [DownloadsClient.remove]), since
-/// the Rust side emits nothing for one. That is the whole of it: the
-/// listing is taken once at [start], once after a [cancelAll], and once
-/// per addition -- not polled every few seconds to notice a removal, which
-/// would parse every entry's `MetaItem` snapshot on the UI isolate twelve
-/// times a minute on top of the progress rows already arriving, for one
-/// thing the client can simply say. At rest nothing runs at all.
+/// **How it learns what changed.** Progress arrives on the client's feed once a
+/// second, and that feed only ever carries rows that *moved*. An entry that has
+/// just appeared is not a row it knows. A row for a key no listing has
+/// mentioned means something was added, and is answered with a fresh listing. A
+/// removal is the client's own event ([DownloadsRemovalUpdate], pushed by
+/// [DownloadsClient.remove]), since the Rust side emits nothing for one. That
+/// is the whole of it: the listing is taken once at [start], once after a
+/// [cancelAll], and once per addition. It is not polled every few seconds to
+/// notice a removal. That would parse every entry's `MetaItem` snapshot on the
+/// UI isolate twelve times a minute, on top of the progress rows already
+/// arriving, for one thing the client can simply say. At rest nothing runs at
+/// all.
 class DownloadsForegroundService {
   DownloadsForegroundService({
     required this.client,
@@ -234,10 +234,9 @@ class DownloadsForegroundService {
   /// it: an app reopened with a download still unfinished puts the service
   /// back up without waiting for anything to move.
   ///
-  /// Also collects the tap that launched the app, if the app was cold
-  /// started from the notification — the platform side cannot invoke a
-  /// handler that Dart has not installed yet, so it keeps the tap and this
-  /// asks for it.
+  /// Also collects the tap that launched the app, if the app was cold started
+  /// from the notification. The platform side cannot invoke a handler that Dart
+  /// has not installed yet, so it keeps the tap and this asks for it.
   Future<void> start() async {
     if (!isSupported || _disposed) return;
     channel.setMethodCallHandler(_onPlatformCall);
@@ -271,9 +270,9 @@ class DownloadsForegroundService {
     await _sync();
   }
 
-  /// Drops every unfinished download, the part-file with it: the
-  /// notification's action. A removal that fails is logged and the rest go
-  /// on — a half-cancelled list is worse than a noisy one.
+  /// Drops every unfinished download, the part-file with it: the notification's
+  /// action. A removal that fails is logged and the rest go on, because a
+  /// half-cancelled list is worse than a noisy one.
   Future<void> cancelAll() async {
     if (_disposed) return;
     DownloadsRegistry? listing;
@@ -331,19 +330,19 @@ class DownloadsForegroundService {
     unawaited(_sync());
   }
 
-  /// The feed died (the Rust side handed its one sink to another client).
-  /// The app builds one client, so this is a broken bridge rather than a
-  /// rival: what the notification says stands until the next listing — a
-  /// cancel from the notification, or the next launch — and nothing polls
-  /// for a case the design rules out.
+  /// The feed died (the Rust side handed its one sink to another client). The
+  /// app builds one client, so this is a broken bridge rather than a rival.
+  /// What the notification says stands until the next listing (a cancel from
+  /// the notification, or the next launch), and nothing polls for a case the
+  /// design rules out.
   void _onFeedError(Object error) {
     if (kDebugMode) debugPrint('downloads feed for the notification: $error');
   }
 
-  /// Brings the service into line with [_registry], after every [_sync]
-  /// before it: taken out of turn, a stop from one sync could go out after
-  /// the start from a later one, leaving the service running with nothing
-  /// to hold it and every later sync believing it already stopped.
+  /// Brings the service into line with [_registry], after every [_sync] before
+  /// it. Out of turn, a stop from one sync could go out after the start from a
+  /// later one. That would leave the service running with nothing to hold it,
+  /// and every later sync believing it already stopped.
   Future<void> _sync() => _syncs = _syncs.then((_) => _syncNow());
 
   Future<void> _syncNow() async {
@@ -372,13 +371,12 @@ class DownloadsForegroundService {
     if (starting && sent) _resuming = false;
   }
 
-  /// Asks for `POST_NOTIFICATIONS`, once, and only now — a download has
-  /// actually started, which is the only moment the question means
-  /// anything. Never at launch: a download already unfinished when the app
-  /// opens puts the service up silently, and the question waits for one
-  /// that really begins. The answer is not acted on either — a refused
-  /// notification does not stop the service, it only leaves it invisible,
-  /// and the download finishes either way.
+  /// Asks for `POST_NOTIFICATIONS`, once, and only now: a download has actually
+  /// started, which is the only moment the question means anything. Never at
+  /// launch. A download already unfinished when the app opens puts the service
+  /// up silently, and the question waits for one that really begins. The answer
+  /// is not acted on either. A refused notification does not stop the service,
+  /// it only leaves it invisible, and the download finishes either way.
   Future<void> _requestNotifications() async {
     if (_asked || _startingUp) return;
     _asked = true;
@@ -411,10 +409,9 @@ class DownloadsForegroundService {
     Map<String, Object?>? arguments,
   ]) async => await _ask<Object?>(method, arguments) != _refused;
 
-  /// Invokes [method] for its answer, [_refused] when the platform side
-  /// could not take it at all. A missing implementation is final — desktop
-  /// builds and widget tests have none — so nothing is tried again after
-  /// one.
+  /// Invokes [method] for its answer, [_refused] when the platform side could
+  /// not take it at all. A missing implementation is final (desktop builds and
+  /// widget tests have none), so nothing is tried again after one.
   Future<Object?> _ask<T>(
     String method, [
     Map<String, Object?>? arguments,

@@ -7,25 +7,25 @@ import '../../core/core.dart';
 /// The phone's half of a pairing, when the phone is running *this app*.
 ///
 /// A television draws `https://<origin>/link?s=<session>` as a QR. A phone
-/// without this app opens that in a browser and uses the web page, exactly
-/// as before. A phone **with** this app gets the URL handed here instead,
-/// because Android verified the app against `assetlinks.json` on a domain
-/// this project serves — and this screen does the same job natively.
+/// without this app opens that in a browser and uses the web page, exactly as
+/// before. A phone **with** this app gets the URL handed here instead, because
+/// Android verified the app against `assetlinks.json` on a domain this project
+/// serves. This screen does the same job natively.
 ///
 /// **Why bother, when the page already works.** The web Google Picker cannot
-/// select more than one file on a phone: it gates selection on a Ctrl/Cmd
-/// key, so a device with no keyboard holds exactly one
-/// (issuetracker.google.com/issues/334994030). The native picker can --
-/// measured at seven files in one go. That is the whole of the difference,
-/// and it is why the page is kept rather than replaced.
+/// select more than one file on a phone: it gates selection on a Ctrl/Cmd key,
+/// so a device with no keyboard holds exactly one
+/// (issuetracker.google.com/issues/334994030). The native picker can: it was
+/// measured at seven files in one go. That is the whole of the difference, and
+/// it is why the page is kept rather than replaced.
 ///
-/// **Nothing is stored on this device.** The phone is not the device that
-/// plays anything: it signs in, picks, and hands both halves to the session
-/// the television is waiting on. The credential is a one-time code that
-/// crosses this screen in a single field and is written down nowhere — not
-/// in a log line, not in this state, not on the screen. The television
-/// collects the refresh token from the service on its next poll, exactly as
-/// it does for a browser pairing; nothing about that side changes.
+/// **Nothing is stored on this device.** The phone is not the device that plays
+/// anything: it signs in, picks, and hands both halves to the session the
+/// television is waiting on. The credential is a one-time code that crosses
+/// this screen in a single field and is written down nowhere: not in a log
+/// line, not in this state, not on the screen. The television collects the
+/// refresh token from the service on its next poll, exactly as it does for a
+/// browser pairing. Nothing about that side changes.
 ///
 /// **There is no polling here and no session to lose.** The pick either
 /// reaches the service or it does not, and the answer is one sentence. A
@@ -81,9 +81,9 @@ class _DriveNativePairScreenState extends State<DriveNativePairScreen> {
   String _said = '';
   int _linked = 0;
 
-  /// Latched, so that a picker answering twice — a resolution and a result,
-  /// on a platform that has been known to deliver both — cannot spend the
-  /// same one-time code twice.
+  /// Latched, so that a picker answering twice cannot spend the same one-time
+  /// code twice. A platform has been known to deliver both a resolution and a
+  /// result.
   bool _handedOver = false;
 
   @override
@@ -133,10 +133,10 @@ class _DriveNativePairScreenState extends State<DriveNativePairScreen> {
           case DrivePairingHandover.refused:
             _stop(DriveNativePairScreen.refusedMessage);
           case DrivePairingHandover.unreachable:
-            // The code is spent either way -- it went to Google or it did
-            // not, and this side cannot tell -- so "try again" here means a
-            // fresh pick, which `_handedOver` allows only because the pick
-            // that follows mints a new code.
+            // The code is spent either way: it went to Google or it did not,
+            // and this side cannot tell. So "try again" here means a fresh
+            // pick, which `_handedOver` allows only because the pick that
+            // follows mints a new code.
             _handedOver = false;
             _stop(DriveNativePairScreen.unreachableMessage);
         }
