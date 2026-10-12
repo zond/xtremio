@@ -1,26 +1,26 @@
 # Android and Android TV
 
-Building, running and checking Xtremio on Android, and the Android-only
-decisions behind it. How the app works is in
-[ARCHITECTURE.md](ARCHITECTURE.md); running it anywhere else is in
+This covers building, running and checking Xtremio on Android, and the
+Android-only decisions behind it. How the app works is in
+[ARCHITECTURE.md](ARCHITECTURE.md). Running it anywhere else is in
 [OPERATIONS.md](OPERATIONS.md).
 
 ## Prerequisites
 
-`nix develop .#android` provides these but rustup's targets
+`nix develop .#android` provides all of these except rustup's targets
 ([OPERATIONS.md](OPERATIONS.md#with-nix)).
 
-- **Android SDK**: platform 36, build-tools 36.0.0, NDK 28.2.13676358 (the
-  versions Flutter 3.47 pins; `android/app/build.gradle.kts` takes the NDK,
-  `minSdk` 24 and `targetSdk` from the Flutter Gradle plugin), and
-  **platform 37**, which the app compiles against (`compileSdk = 37`):
+- **Android SDK**: platform 36, build-tools 36.0.0 and NDK 28.2.13676358,
+  the versions Flutter 3.47 pins. `android/app/build.gradle.kts` takes the
+  NDK, `minSdk` 24 and `targetSdk` from the Flutter Gradle plugin. The app
+  also needs **platform 37**, which it compiles against (`compileSdk = 37`).
   `flutter_chrome_cast` 1.5.0 brings `permission_handler_android` 14.1,
   compiled against API 37, and AGP's AAR metadata check makes every module
   that depends on it do the same. `targetSdk` stays Flutter's. Plugins
-  that pin an older one need it too: platform 35 for `flutter_chrome_cast`,
-  `jni` and `jni_flutter`. Gradle fetches a missing platform into a
-  writable SDK by itself; the Nix shell's SDK is read-only, so `flake.nix`
-  names 35, 36 and 37.
+  that pin an older platform need it too: platform 35 for
+  `flutter_chrome_cast`, `jni` and `jni_flutter`. Gradle fetches a missing
+  platform into a writable SDK by itself. The Nix shell's SDK is read-only,
+  so `flake.nix` names 35, 36 and 37.
 - **JDK 21**.
 - **Rust via rustup**, with the Android targets added (cargokit adds them on
   first build, but pre-installing keeps that build predictable):
@@ -31,7 +31,7 @@ decisions behind it. How the app works is in
 
 - **libclang**, for **x86_64 or armv7** builds only. `aws-lc-sys` ships
   pregenerated bindings for aarch64-linux-android only, so the other two
-  enable its `bindgen` feature (`rust/Cargo.toml`); `rust/cargokit.yaml`
+  enable its `bindgen` feature (`rust/Cargo.toml`). `rust/cargokit.yaml`
   forces the `cc` builder for them and the vendored cargokit points bindgen
   at the NDK sysroot (`rust_builder/README.md`). Ubuntu's `libclang-18` is
   found without setting `LIBCLANG_PATH`. arm64-only builds do not need it.
@@ -41,7 +41,7 @@ decisions behind it. How the app works is in
 Redirect to a log and check the real exit code: the first Rust
 cross-compile per target takes several minutes. The `make` targets
 ([OPERATIONS.md](OPERATIONS.md#building-and-running)) stamp the version and
-commit the Diagnostics header reads; the plain commands work too.
+commit the Diagnostics header reads. The plain commands work too.
 
 ```bash
 make apk-debug                                                     # emulator only (x86_64)
@@ -53,17 +53,17 @@ make apk-debug FLAGS="--target-platform android-arm64,android-x64" # phone/64-bi
 
 Debug and profile builds are the package `com.zond.xtremio.debug`
 ("Xtremio debug"), installed beside a release build rather than over it
-([DRIVING.md](DRIVING.md#the-second-app)). Debug builds always add x86_64 for the emulator (cargokit mirrors Flutter
-here; the vendored copy is patched to stop also adding android-x86, which
-Flutter 3.47 cannot package). Output lands in
-`build/app/outputs/flutter-apk/`.
+([DRIVING.md](DRIVING.md#the-second-app)). Debug builds always add x86_64
+for the emulator, since cargokit mirrors Flutter here. The vendored copy is
+patched to stop also adding android-x86, which Flutter 3.47 cannot package.
+Output lands in `build/app/outputs/flutter-apk/`.
 
 **The APK carries only the ABIs requested.** `--target-platform` controls
 only what Flutter compiles (`libapp.so`, `libflutter.so`,
 `libxtremio_core.so`), never the prebuilt libraries a plugin's AAR ships
 (`libmpv.so` and friends, for every ABI). Only AGP's `ndk.abiFilters`
 prunes those, and the Flutter plugin's default filter is always all three
-ABIs, so `android/app/build.gradle.kts` re-derives `abiFilters` from the
+ABIs. So `android/app/build.gradle.kts` re-derives `abiFilters` from the
 same `-Ptarget-platform` property Flutter reads. An arm64 release is about
 55 MB instead of 83. `--split-per-abi` and `-P disable-abi-filtering=true`
 are untouched.
@@ -81,7 +81,7 @@ log. `full` is the same libmpv, ffmpeg and NDK revision built with
 
 **On any media_kit bump, check the four URLs and MD5 sums in that file**:
 upstream goes on pinning the default flavour, and re-vendoring without
-looking loses TrueHD with nothing failing. DTS-HD MA was never affected;
+looking loses TrueHD with nothing failing. DTS-HD MA was never affected.
 Atmos objects fold to the channel bed on every build, since ffmpeg has no
 renderer for them.
 
@@ -93,7 +93,7 @@ renderer for them.
   `play-services-cast-framework` and the `datatransport` libraries under it
   add it. Check the merge report
   (`build/app/outputs/logs/manifest-merger-*-report.txt`) rather than
-  re-adding the line on seeing the permission on an install.
+  re-adding the line when an install shows the permission.
 - **`android:usesCleartextTraffic="true"`** governs only Android's own
   network stack (`dart:io`: posters from plain-http addons). reqwest/rustls
   and libmpv ignore it.
@@ -103,7 +103,7 @@ renderer for them.
   Kotlin half nor the JNI init it needs. That verifier parsed CRLs in Java on
   every handshake, measured at 400 MB of heap per tracker announce on a
   Chromecast. `clippy.toml` in each repo refuses the reqwest constructors
-  that would reach it; uninitialised, it would panic.
+  that would reach it. Uninitialised, it would panic.
 - **No `HOME` is needed**: every path the server uses comes from the
   directories the app passes it.
 - **Leanback.** One build runs on Android TV, Chromecast with Google TV and
@@ -125,11 +125,11 @@ renderer for them.
 - **Google Cast**: `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, the
   `OPTIONS_PROVIDER_CLASS_NAME` meta-data naming
   `com.felnanuke.google_cast.GoogleCastOptionsProvider`, and Play services'
-  `MediaNotificationService`; everything else merges in from
-  `flutter_chrome_cast`. `play-services-cast` and
-  `play-services-cast-framework` (21.5.0, the versions the plugin already
-  resolves, so the APK gains nothing) are named in Gradle to put them on
-  the app's own compile classpath: `CastDevice` for `castDeviceAddress`
+  `MediaNotificationService`. Everything else merges in from
+  `flutter_chrome_cast`. Gradle names `play-services-cast` and
+  `play-services-cast-framework` to put them on the app's own compile
+  classpath. They are 21.5.0, the versions the plugin already resolves, so
+  the APK gains nothing. The app needs `CastDevice` for `castDeviceAddress`
   (below), and `CastContext` and `RemoteMediaClient` for
   `CastPictureChannel.kt`.
 - **Local videos**: `READ_MEDIA_VIDEO` and
@@ -138,13 +138,13 @@ renderer for them.
   ([ARCHITECTURE.md](ARCHITECTURE.md#local-videos)).
 - **Channels.**
   - `xtremio/device`: `DeviceProfile.detect()` (`lib/shell/device_profile.dart`)
-    asks once (`profile`), before `runApp`, for `{isTv, hasTouch}` -- `isTv` is
+    asks once (`profile`), before `runApp`, for `{isTv, hasTouch}`. `isTv` is
     `UiModeManager` in television mode or the `android.software.leanback`
-    feature; any error means "a phone", and no other platform calls it. The
+    feature. Any error means "a phone", and no other platform calls it. The
     answer goes down the tree as `DeviceScope`, the only thing the TV layout
     keys on. The channel also carries `os` (the Diagnostics device line),
     `editText`, `startSpeech` and `stopSpeech` (below), the
-    frame-rate calls, and `castDeviceAddress` -- the
+    frame-rate calls, and `castDeviceAddress`. That is the
     receiver's IPv4 address off the MediaRouter route, which
     `flutter_chrome_cast` drops and the server needs to pick an interface
     (see [CASTING.md](CASTING.md)).
@@ -166,7 +166,7 @@ renderer for them.
   are the in-app update's: see
   [Updating from inside the app](#updating-from-inside-the-app).
 - **`RECORD_AUDIO`** is the TV search field's microphone, asked for at its
-  first press, with `android.hardware.microphone` not required; see
+  first press. `android.hardware.microphone` is not required. See
   [Typing with a remote](#typing-with-a-remote).
 
 ## Updating from inside the app
@@ -180,43 +180,45 @@ updates" asks at any time and says "up to date" too. The code is in
   never while a player is on the stack: both the look and the dialog wait
   for the player to close. The time of the last look is written before
   GitHub is asked (`updateCheckedAt` in the preferences), so a failed look
-  counts too: the unauthenticated API allows 60 requests an hour per IP,
+  counts too. The unauthenticated API allows 60 requests an hour per IP,
   shared with everything else on the network. "Check for updates" ignores
   the day.
 - **What it compares.** The release tag (`vX.Y.Z`, from
   `releases/latest`, which leaves drafts and pre-releases out) against the
-  `XTREMIO_VERSION` the Makefile stamps -- never the version code, which is
-  2001 on a phone and 1001 on a television for every release.
+  `XTREMIO_VERSION` the Makefile stamps. It never compares the version
+  code, which is 2001 on a phone and 1001 on a television for every
+  release.
 - **Which builds look by themselves.** Only a release-mode build with a
   release version stamped and a commit that is not `-dirty`
   (`BuildIdentity.checksByItself`). A `flutter run`, a build from a
   modified tree and every debug or profile build stay quiet. A debug or
   profile build is `com.zond.xtremio.debug`, signed with the debug key, so
-  the release APK could never update it: "Check for updates" works there,
+  the release APK could never update it. "Check for updates" works there,
   and offers only the release page.
 - **Installing.** Update downloads the APK for `Build.SUPPORTED_ABIS[0]`
   (`arm64-v8a` or `armeabi-v7a`; a Chromecast with Google TV reports the
   latter) into the app's own storage, picks up a stopped download where it
-  left off, and checks it against the SHA-256 GitHub lists for the asset;
-  a mismatch, or no checksum at all, deletes it and installs nothing. The
+  left off, and checks it against the SHA-256 GitHub lists for the asset.
+  A mismatch, or no checksum at all, deletes it and installs nothing. The
   install is a `PackageInstaller` session that asks for user action
-  outright, so Android's own confirmation is always shown. When it
-  succeeds Android closes xtremio; open it again.
+  outright, so Android's own confirmation is always shown. Android closes
+  xtremio when the install succeeds. Open it again.
 - **Room first.** On a television the embedded server's torrent cache can
   fill the disk, and Android then refuses the install
   (`INSTALL_FAILED_INSUFFICIENT_STORAGE`, "Requested internal only, but
-  not enough space"). So the Update press, before the download and again
-  before the install, makes room in steps (`AppUpdates.makeRoom`), each
-  taken only while the update still does not fit and each followed by a
-  measurement of the data volume (`room` on `xtremio/update`):
+  not enough space"). So the Update press makes room in steps
+  (`AppUpdates.makeRoom`), before the download and again before the
+  install. Each step is taken only while the update still does not fit,
+  and each is followed by a measurement of the data volume (`room` on
+  `xtremio/update`):
   1. **Measure.** A device with room is left alone: nothing is cleaned.
-  2. **The gentle clean** -- the Server storage screen's "Clean cache
-     now": what nobody is playing and nobody kept, never a kept download
+  2. **The gentle clean**, the Server storage screen's "Clean cache now".
+     It takes what nobody is playing and nobody kept, never a kept download
      or the part of the title played last around where it was left.
-  3. **The full clear** -- "Clear the cache": every stream stopped and
-     everything no download keeps deleted, the title played last
-     included. No confirmation: the user already pressed Update or
-     Install; the "Making room" dialog says "Stopping streams and clearing
+  3. **The full clear**, "Clear the cache". It stops every stream and
+     deletes everything no download keeps, the title played last included.
+     There is no confirmation, since the user already pressed Update or
+     Install. The "Making room" dialog says "Stopping streams and clearing
      the cache…" while it runs.
 
   Each server call is waited for up to 30 seconds (`AppUpdates.cleanBound`),
@@ -225,32 +227,32 @@ updates" asks at any time and says "up to date" too. The code is in
   Android's installer wants the session to fit in the
   free space less its low-storage reserve
   (`InstallLocationUtils.fitsOnInternal`,
-  `StorageManager.getAllocatableBytes`), and the reserve is
+  `StorageManager.getAllocatableBytes`). The reserve is
   `StorageManager.getStorageLowBytes`: the smaller of
   `sys_storage_threshold_percentage` of the volume (default 5%) and
-  `sys_storage_threshold_max_bytes` (default 500 MiB), the defaults
-  wherever the app cannot read the settings. The update asks for that
+  `sys_storage_threshold_max_bytes` (default 500 MiB). The app takes the
+  defaults wherever it cannot read the settings. The update asks for that
   reserve plus two APKs' worth before the install (the session's copy and
   the native code unpacked from it) and three before the download
   (`UpdateRoom`, `lib/features/update/install_room.dart`). A Chromecast
   with Google TV refused a 50 MB update with 130-330 MB free and took it
-  with about 500 MB; this asks it for 350-450 MB before the download and
-  300-400 MB before the install. When even the clear leaves too little the
-  dialog downloads and installs nothing, says how much is free, how much
-  is needed and what the clear did (streams stopped, how much it and the
-  clean freed -- or that the cache could not be cleared), and offers
-  Server storage and Try again. A volume that could not be measured is not
+  with about 500 MB. This rule asks it for 350-450 MB before the download
+  and 300-400 MB before the install. The dialog downloads and installs
+  nothing when even the clear leaves too little. It then says how much is
+  free, how much is needed and what the clear did: the streams it stopped
+  and how much it and the clean freed, or that the cache could not be
+  cleared. It offers Server storage and Try again. A volume that could not be measured is not
   taken for a full one: the install goes ahead and Android decides.
-  Nothing else reclaims the cache for an update: the daily look and the
-  offer never clean or clear anything; only an Update or Install press,
-  from the offer or from "Check for updates", does.
+  Nothing else reclaims the cache for an update. The daily look and the
+  offer never clean or clear anything. Only an Update or Install press
+  does, from the offer or from "Check for updates".
 - **"Install unknown apps".** Android lets an app install packages only
   with that per-app switch. The dialog explains it and opens the switch
-  (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`); where nothing answers that screen
-  it says where the setting lives, and Install goes ahead anyway, which
-  makes Android ask in place.
+  (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`). The dialog says where the setting
+  lives when nothing answers that screen. Install then goes ahead anyway,
+  which makes Android ask in place.
 - **A different key.** Installs from before v0.1.8 are signed with another
-  key; Android refuses the update, and the dialog says to uninstall first
+  key. Android refuses the update, and the dialog says to uninstall first
   (which loses the login, settings and downloads). Every release since is
   signed with the same key, and CI checks it.
 - **Desktops** get the same look and dialog, with "Open release page"
@@ -260,41 +262,42 @@ updates" asks at any time and says "up to date" too. The code is in
 
 On Android TV the app window keeps input focus while the on-screen keyboard
 is up, because Flutter sets `IME_FLAG_NO_FULLSCREEN` on every field and Dart
-cannot unset it -- so the D-pad moves Flutter's focus and the keyboard can
-never be driven. So on a television the app hosts no text field at all.
+cannot unset it. The D-pad then moves Flutter's focus, and the keyboard
+can never be driven. So on a television the app hosts no text field at all.
 `TvTextField` (`lib/widgets/tv_text_field.dart`) draws the field and, on
 select, asks `MainActivity` (`editText`) for `TextEntryActivity`: one plain
-`EditText` on a screen of its own. Back cancels; Done returns the text to
+`EditText` on a screen of its own. Back cancels. Done returns the text to
 `onChanged` and `onSubmitted`. A password is masked, kept out of
 personalized learning and autofill, and runs behind `FLAG_SECURE`. A
 field's clear button sits *beside* the box on a television, never inside
 it. Off a television `TvTextField` is an ordinary `TextField`.
 
-Search's field also has a microphone on a television (`TvTextField.voice`):
-a button at the right end inside the box, reached by right from the field
-(which sends right there itself, since traversal does not step onto a box
-inside the one it leaves) and left back. Speech is recognized in the app
+Search's field also has a microphone on a television (`TvTextField.voice`).
+It is a button at the right end inside the box. Right from the field
+reaches it, and left goes back. The field sends right there itself, since
+traversal does not step onto a box inside the one it leaves. Speech is recognized in the app
 (`SpeechInput.kt`, `lib/shell/speech_input.dart`), not handed off:
 `RecognizerIntent`'s activity route is Google TV's own search on a
 Chromecast with Google TV, which searched the whole TV and never gave the
 words back.
 
 - **A press** asks for `RECORD_AUDIO` the first time (the system dialog,
-  nothing of ours before it), then starts a `SpeechRecognizer` -- the
-  on-device one where Android 12+ has one, the device's recognition
-  service otherwise, and that one also when the on-device one has no model
-  for the language -- free-form, partial results on. `startSpeech` answers
-  `listening`, `unavailable`, `denied` or `busy`; what is heard arrives on
+  nothing of ours before it). Then it starts a free-form `SpeechRecognizer`
+  with partial results on. That is the on-device one where Android 12+ has
+  one, and otherwise the device's recognition service, which is also used
+  when the on-device one has no model for the language. `startSpeech`
+  answers `listening`, `unavailable`, `denied` or `busy`. What is heard
+  arrives on
   `xtremio/speech` as `partial`, then one `final` or an `error` word
   (`SpeechEvents`, never Android's code).
 - **While it listens** the button is the filled microphone in a ring of
-  the accent colour and holds the remote's focus; what has been heard shows
+  the accent colour and holds the remote's focus. What has been heard shows
   in the field, muted, and is not the value yet. The final transcript
-  replaces the value and is confirmed as Done on the text-entry screen is,
-  so Search runs it.
+  replaces the value and is confirmed the way Done on the text-entry screen
+  confirms, so Search runs it.
 - **It stops** at the final result or an error, at a second press, Back,
   focus leaving the button, the app hidden (Dart's `onHide`, and
-  `MainActivity.onStop`) and the field leaving the screen; each destroys
+  `MainActivity.onStop`) and the field leaving the screen. Each destroys
   the recognizer, and every way but the result leaves the value as it was.
   The microphone is open from the press to one of those and never
   otherwise.
@@ -304,7 +307,7 @@ words back.
   recognizer that cannot record (`ERROR_AUDIO`) opens the text-entry screen
   instead, whose keyboard has a microphone of its own (Gboard for TV's types
   by voice into it). A refusal and a recognizer that cannot record say so
-  in a snackbar; nothing understood, no connection and anything else end
+  in a snackbar. Nothing understood, no connection and anything else end
   quietly with a line in plain words.
 - `android.hardware.microphone` is declared not required, so a television
   without one still installs and keeps the keyboard.
@@ -314,19 +317,19 @@ where Android offers it, otherwise Google's service); xtremio receives only
 the text.** Off a television the field is unchanged: it is a Flutter
 `TextField`, and Gboard's microphone is on the keyboard there.
 
-Search's field also `typesInPlace`: while it has focus a hardware
-keyboard's characters and Backspace change it directly, each announced to
-`onChanged` as a phone's keystroke is, so the results follow the typing
-through the same pause. The remote never reaches that path -- the D-pad,
-select, Enter and Back carry no character -- and whether a keyboard paired
-with a television delivers its keys to Flutter this way is untested on a
-device.
+Search's field also `typesInPlace`. While it has focus, a hardware
+keyboard's characters and Backspace change it directly. Each is announced
+to `onChanged` as a phone's keystroke is, so the results follow the typing
+through the same pause. The remote never reaches that path, since the
+D-pad, select, Enter and Back carry no character. It is untested on a
+device whether a keyboard paired with a television delivers its keys to
+Flutter this way.
 
 ## Telling the television what rate the film is
 
 A 23.976 fps film on a 59.94 Hz output lands on a 3:2 cadence, which is the
-picture jumping. So while a film plays the player asks the display for the
-film's rate and gives it back when it stops. `DisplayFrameRate`
+picture jumping. So the player asks the display for the film's rate while
+a film plays, and gives it back when it stops. `DisplayFrameRate`
 (`lib/shell/display_frame_rate.dart`) is the Dart half, asked only on a
 television, with the container's rate (`PlaybackEngine.videoFrameRate`).
 `MainActivity` answers on one of two paths:
@@ -342,14 +345,15 @@ television, with the container's rate (`PlaybackEngine.videoFrameRate`).
 On API 31+ the vote can be dropped in silence, so the user's
 match-content setting is read first
 (`DisplayManager.getMatchContentFrameRateUserPreference`, mapped by
-`FrameRateMode.askFor`): **seamless only, or unknown** -- vote, and name the
-mode as well (an unset setting is seamless-only, and 59.94 to 23.976 is
-never seamless); **always** -- the vote alone; **never** -- nothing at all.
+`FrameRateMode.askFor`). For **seamless only, or unknown**, the player
+votes and names the mode as well (an unset setting is seamless-only, and
+59.94 to 23.976 is never seamless). For **always**, it votes alone. For
+**never**, it does nothing at all.
 
 A rate outside 20-120 fps (`FrameRateMode.plausible`) is never asked for:
 `container-fps` is computed from track timing, and a broken file can claim
 1000 fps. The ask is repeated on resume (the surface, and its vote, is
-rebuilt) and when playback runs again after the rate was given back; the
+rebuilt) and when playback runs again after the rate was given back. The
 player keeps the rate rather than relying on libmpv's one event.
 
 **Giving it back matters more than asking**, since a system UI left at
@@ -359,19 +363,19 @@ left, and in `PlayerScreen.dispose`, on both paths.
 ## Telling mpv when the screen refreshes
 
 Matching the panel fixes the cadence but not the drops, which are the
-decoder's doing: media_kit's `hwdec=auto-safe` can only pick `mediacodec-copy`
-in the libmpv it ships, which copies every frame into CPU memory -- on a
-Chromecast with Google TV thousands of `vo` drops, frames decoded on time
-and presented late. `MediaKitEngine.configurationFor` names
+decoder's doing. media_kit's `hwdec=auto-safe` can only pick
+`mediacodec-copy` in the libmpv it ships, and that copies every frame into
+CPU memory. On a Chromecast with Google TV it meant thousands of `vo`
+drops: frames decoded on time and presented late. `MediaKitEngine.configurationFor` names
 `hwdec=mediacodec,mediacodec-copy` (mpv-android's list): direct first, the
 copy as fallback (224 % of a core down to 45 %, and `1 vo / 0 decoder`
 drops). The OSD's `hwdec` row is the only reliable check of which one took:
 the logcat line does not distinguish them, since the direct decoder logs
 the same line the copy mode does.
 
-**No display sync**: `video-sync=display-resample` does not engage on this
-VO, and forcing it draws the audio audibly ahead of the picture over
-minutes, so `video-sync` stays mpv's default (`audio`). What remains is
+**No display sync.** `video-sync=display-resample` does not engage on this
+VO. Forcing it draws the audio audibly ahead of the picture over minutes,
+so `video-sync` stays mpv's default (`audio`). What remains is
 **`override-display-fps`** (`MediaKitEngine.displayRateProperties`), because
 Android's `gpu-context` answers `VO_NOTIMPL` to every display-rate request
 and this is the only way mpv learns the rate at all. It is:
@@ -386,9 +390,9 @@ and this is the only way mpv learns the rate at all. It is:
 
 The stats OSD draws `display 23.976 Hz` between the drop counts and
 `hwdec`. The fixed state is `hwdec mediacodec` with a `vo` count that has
-stopped climbing. Not in scope unless the drops return: rendering into a
-real `Surface` rather than a Flutter texture, which is what the libVLC and
-Media3 players of the official app do.
+stopped climbing. Rendering into a real `Surface` rather than a Flutter
+texture, as the libVLC and Media3 players of the official app do, is not in
+scope unless the drops return.
 
 ## Where torrent data goes
 
@@ -399,8 +403,8 @@ The root and its rules are in
   `/storage/emulated/0/Android/data/com.zond.xtremio/files`, not
   `getCacheDir()`, which the system may reclaim mid-download. It is readable
   over adb without `run-as` (`adb shell ls
-  /sdcard/Android/data/com.zond.xtremio/files/media-cache/.pieces`);
-  the internal directories (`files/core`, `files/server`) need `run-as`.
+  /sdcard/Android/data/com.zond.xtremio/files/media-cache/.pieces`).
+  The internal directories (`files/core`, `files/server`) need `run-as`.
 - **No permission is involved, and none may be added.** An app's own
   external files directory needs none on `minSdk` 24, and the Server storage
   picker offers `getExternalStorageDirectories()`, the same directory on
@@ -412,32 +416,33 @@ The root and its rules are in
 
 Android freezes the process of an app the user has left, and the whole
 download stack lives in it. A `dataSync` foreground service keeps it
-running; it hosts nothing.
+running. The service hosts nothing.
 
-- **The pieces**: `DownloadsService.kt` is the service; `DownloadsChannel.kt`
-  is the `xtremio/downloads` channel. Dart calls `start`, `update`, `stop`,
+- **The pieces**: `DownloadsService.kt` is the service, and
+  `DownloadsChannel.kt` is the `xtremio/downloads` channel. Dart calls `start`, `update`, `stop`,
   `requestNotificationPermission` and `takePendingOpen`; the platform calls
   back `open` (notification tapped), `cancelAll` and `timedOut`.
 - **When it runs**: `DownloadsForegroundService`
   (`lib/features/downloads/downloads_service.dart`) puts it up while any
-  entry is on its way -- not complete, paused, gone or errored (an errored
-  entry has no engine behind it) -- and takes it down when none is. It reacts
+  entry is on its way, and takes it down when none is. On its way means not
+  complete, paused, gone or errored (an errored entry has no engine behind
+  it). It reacts
   to the progress feed and to the client's own removal events; nothing is
   re-read on a timer.
 - **The notification**: one ongoing, low-importance notification
   (`xtremio.downloads`, no sound or vibration): `Downloading 3 titles` over
   `1.2 GB of 4.0 GB · 30%`, indeterminate while any download has no length
-  yet. Tapping opens the Downloads screen; its one action is **Cancel all**,
+  yet. Tapping opens the Downloads screen. Its one action is **Cancel all**,
   since a pinned file has no pause.
 - **Permissions**: `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`,
   and `POST_NOTIFICATIONS` asked at runtime on API 33+ the first time a
   download actually starts, once a run. A refusal costs only the
   notification.
 - **What Android still reserves.** The process may be killed under memory
-  pressure; Doze may throttle an idle screen-off device; Android 15 gives
+  pressure. Doze may throttle an idle screen-off device. Android 15 gives
   `dataSync` about 6 hours in 24 in the background, then calls `onTimeout`,
   and a service that does not stop within seconds crashes the process. So
-  `DownloadsService.onTimeout` tells Dart and stops; the download waits for
+  `DownloadsService.onTimeout` tells Dart and stops. The download waits for
   the app to open. Swiping the app from recents stops the service
   (`android:stopWithTask="true"`), since the Flutter engine goes too. In
   every case the pin set and the registry are on disk, and the next launch
@@ -473,8 +478,9 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am start -n com.zond.xtremio.debug/com.zond.xtremio.MainActivity
 ```
 
-For **Android TV**, the same flow with `system-images;android-36;android-tv;x86_64`
-and `-d tv_1080p` (AVD `xtremio_tv36`); the same x86_64 debug APK installs.
+For **Android TV**, use the same flow with
+`system-images;android-36;android-tv;x86_64` and `-d tv_1080p` (AVD
+`xtremio_tv36`). The same x86_64 debug APK installs.
 Use the x86_64 TV image, not the 32-bit `x86` one: Flutter 3.47 cannot
 package an x86 APK at all. Check the image answers "television":
 
@@ -483,11 +489,11 @@ adb shell dumpsys uimode | grep mCurUiMode   # 0x24 → & 0x0f = 4 = UI_MODE_TYP
 adb shell pm list features | grep leanback   # android.software.leanback
 ```
 
-The TV AVD also claims a touchscreen, which a real box does not; nothing
+The TV AVD also claims a touchscreen, which a real box does not. Nothing
 on a television keys on `hasTouch` (the one reader, the Drive pairing's
-shape, asks `isTv` first). Under `swiftshader_indirect` libmpv draws no video, so
-decoding cannot be checked on an emulator: the position advancing is what
-can.
+shape, asks `isTv` first). libmpv draws no video under
+`swiftshader_indirect`, so decoding cannot be checked on an emulator. The
+position advancing can.
 
 ### Driving it with the remote
 
@@ -524,7 +530,7 @@ adb shell screencap -p /sdcard/tv.png && adb pull /sdcard/tv.png
 
 ### Checking a run
 
-Every line the app keeps goes to logcat under the tag `xtremio`; crates
+Every line the app keeps goes to logcat under the tag `xtremio`. Crates
 logging through `log` keep their own module tags.
 
 ```bash
@@ -556,9 +562,9 @@ adb shell getprop ro.product.cpu.abilist
 ```
 
 The first entry is the one to build for. A **Chromecast with Google TV**
-(`sabrina`, Android 14) answers `armeabi-v7a,armeabi` -- a 64-bit chip with
-a 32-bit userspace, which refuses an arm64 APK with
-`INSTALL_FAILED_NO_MATCHING_ABIS` -- so it takes **`make apk-tv`**. A phone
+(`sabrina`, Android 14) answers `armeabi-v7a,armeabi`, so it takes
+**`make apk-tv`**. It is a 64-bit chip with a 32-bit userspace, which
+refuses an arm64 APK with `INSTALL_FAILED_NO_MATCHING_ABIS`. A phone
 or a 64-bit TV box (a list starting `arm64-v8a`) takes `make apk`.
 
 ```bash
@@ -577,5 +583,5 @@ adb shell settings get secure match_content_frame_rate                # null = t
 ```
 
 `dumpsys display` should name the film's mode while it plays and the
-previous one once it stops; `FrameRateMode` itself has a JVM test
+previous one once it stops. `FrameRateMode` itself has a JVM test
 (`./gradlew :app:testDebugUnitTest`).
