@@ -88,6 +88,9 @@ void main() {
             removed: true,
             timesWatched: 1,
           ),
+          // Flagged by a playback and never counted: the flag is not a
+          // state the viewer can clear, and an account can carry it
+          // wrongly (zond's did, for three films he never saw).
           libraryItemJson(
             'tt-flagged',
             temp: true,
@@ -110,13 +113,7 @@ void main() {
       );
       expect(
         {for (final s in sources) s.id: s.weight},
-        {
-          'tt-both': 2,
-          'tt-played': 1,
-          'tt-flagged': 1,
-          'tt-saved': 1,
-          'tt-show': 1,
-        },
+        {'tt-both': 2, 'tt-played': 1, 'tt-saved': 1, 'tt-show': 1},
       );
       final byId = {for (final s in sources) s.id: s};
       expect(byId['tt-both']!.reason, ForYouReason.watched);

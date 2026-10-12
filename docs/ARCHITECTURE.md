@@ -1109,7 +1109,10 @@ names `ctx` (`CoreField.ridesOn`).
 **Sources** (`for_you_rules.dart`). A title is a source for each of these
 it is, weight one each, so a title in both counts twice:
 
-- **watched**: a film with `timesWatched > 0` or `flaggedWatched`; a
+- **watched**: a film with `timesWatched > 0` -- the state the details
+  page's check shows and moves, and not `flaggedWatched`, which a playback
+  leaves and no mark clears, so a film the account wrongly calls watched
+  leaves the sources when its check is cleared; a
   series once every episode of one season numbered one or more is
   watched, or every episode it has when it has no such season. The
   watched marks are stremio-core's per-video bitfield (`state.watched`),

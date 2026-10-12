@@ -122,8 +122,11 @@ bool libraryItemWatchedThrough(
 
 /// The sources among [library], heaviest-and-latest first:
 ///
-/// * a **movie watched** (`timesWatched > 0` or `flaggedWatched`), or a
-///   **series watched through** ([watchedThrough] answers for one);
+/// * a **movie watched** (`timesWatched > 0`: the state the details page's
+///   check shows and moves -- not the flag a playback leaves, which no
+///   mark can clear, so a film the account wrongly calls watched can be
+///   taken out of the sources by clearing the check), or a **series
+///   watched through** ([watchedThrough] answers for one);
 /// * a title **added by hand** (`temp == false`, `removed == false`).
 ///
 /// A title that is both counts twice. A happy face adds one; a sad face
@@ -142,7 +145,7 @@ List<ForYouSource> forYouSources(
     final face = faces.of(item.id);
     if (face == Face.dislike) continue;
     final watched = item.type == 'movie'
-        ? item.timesWatched > 0 || item.flaggedWatched
+        ? item.timesWatched > 0
         : watchedThrough(item);
     final saved = !item.temp && !item.removed;
     if (!watched && !saved) continue;

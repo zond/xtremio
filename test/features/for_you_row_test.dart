@@ -188,7 +188,7 @@ void main() {
           name: 'Liked Film',
           temp: true,
           removed: true,
-          flaggedWatched: 1,
+          timesWatched: 1,
         ),
         libraryItemJson('tt-disliked', name: 'Hated Film', timesWatched: 1),
         libraryItemJson('tt-temp', temp: true, removed: true, timeOffset: 9),
