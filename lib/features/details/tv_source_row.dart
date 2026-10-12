@@ -15,11 +15,11 @@ import '../../widgets/tv_ladder.dart';
 ///
 /// The phone and the desktop list every source in one vertical column, cut
 /// into collapsible sections. A remote cannot walk that: a title with six
-/// addons answering is a hundred rows deep, and the column is the wrong
-/// shape for a screen that is all width. So the same two levels the
-/// sections already have become two rows -- the first one groups, the
-/// second one sources -- which is the shape every other row on this screen
-/// is in and the one the D-pad is built for.
+/// addons answering is a hundred rows deep, and the column is the wrong shape
+/// for a screen that is all width. So the same two levels the sections
+/// already have become two rows, the first of groups and the second of
+/// sources. That is the shape every other row on this screen is in, and the
+/// one the D-pad is built for.
 ///
 /// What the first level groups *by* is the layout preference the sources
 /// list already has ([AppPrefs.streamsSectioned]): a pill per resolution,
@@ -39,11 +39,11 @@ import '../../widgets/tv_ladder.dart';
 ///   the D-pad back at the last realised card. Each row is a
 ///   [SingleChildScrollView] over a [Row], the same shape the season pills
 ///   and the episode cards use.
-/// - **Which group is open is the screen's, not a preference.** The
-///   phone's open sections are a global set that survives a restart; here
-///   exactly one row is open at a time and Back closes it, which is a
-///   different thing wearing the same word. Nothing about opening a group
-///   on a television is written down.
+/// - **Which group is open is the screen's, not a preference.** The phone's
+///   open sections are a global set that survives a restart. Here exactly one
+///   row is open at a time and Back closes it, which is a different thing
+///   wearing the same word. Nothing about opening a group on a television is
+///   written down.
 ///
 /// **Up and down move by level, not by distance** ([TvLadder]): the group
 /// row and the row of sources it opens are two rungs of the screen's
@@ -55,11 +55,11 @@ import '../../widgets/tv_ladder.dart';
 /// reach.
 ///
 /// Closing the second row takes the card the remote was on off the screen
-/// with it, and nothing here puts the remote back: the enclosing
-/// [FocusScope] remembers what held focus before and hands it the ring
-/// when a focused node goes away, which is the group pill that opened the
-/// row. A test walks that path, because "focus nowhere" on a television is
-/// a dead D-pad and the fallback is the only thing standing between them.
+/// with it, and nothing here puts the remote back. The enclosing [FocusScope]
+/// remembers what held focus before, and hands it the ring when a focused
+/// node goes away: the group pill that opened the row. A test walks that
+/// path, because "focus nowhere" on a television is a dead D-pad and the
+/// fallback is the only thing standing between them.
 class TvSourceRows extends StatefulWidget {
   const TvSourceRows({
     super.key,
@@ -170,11 +170,11 @@ class TvSourceRows extends StatefulWidget {
 class _TvSourceRowsState extends State<TvSourceRows> {
   /// Whether the first group has been opened on arrival ([openOnArrival]).
   ///
-  /// Once per row, and never again: Back closes an open row by rebuilding
-  /// this one with nothing open and the remote back on the pill that
-  /// opened it, so opening it again there would make Back do nothing at
-  /// all. The groups arrive after the screen does -- the addons are still
-  /// answering -- so this cannot simply be done in [initState].
+  /// Once per row, and never again. Back closes an open row by rebuilding
+  /// this one with nothing open and the remote back on the pill that opened
+  /// it, so opening it again there would make Back do nothing at all. The
+  /// groups arrive after the screen does, while the addons are still
+  /// answering, so this cannot simply be done in [initState].
   bool _shownOnArrival = false;
 
   @override
@@ -290,14 +290,13 @@ class TvSourceRow extends StatelessWidget {
 /// A row of cards the remote walks end to end, built all at once (see
 /// [TvSourceRows]), and which a sideways press cannot walk out of.
 ///
-/// Directional traversal takes the nearest node in the direction pressed,
-/// and "nearest" is not confined to the row: a press past the last card
-/// found the layout toggle in the header above and left the sources
-/// altogether, several rows from where the remote was, with no press that
-/// obviously undoes it. So the two keys that run along the row are
-/// swallowed at its ends -- the same thing the shell's rail does with up
-/// and down at its own ends, and for the same reason. Every other key
-/// passes, so up and down still leave the row.
+/// Directional traversal takes the nearest node in the direction pressed, and
+/// "nearest" is not confined to the row. A press past the last card found the
+/// layout toggle in the header above and left the sources altogether, several
+/// rows from where the remote was, with no press that obviously undoes it. So
+/// the two keys that run along the row are swallowed at its ends. The shell's
+/// rail does the same with up and down at its own ends, for the same reason.
+/// Every other key passes, so up and down still leave the row.
 ///
 /// Public because it is the shape of a row on this screen rather than of
 /// a source: the suggestions row ([SimilarTitlesRow]) is the same strip
@@ -315,11 +314,11 @@ class TvCardStrip extends StatelessWidget {
   /// Every card is drawn the height of the tallest one, rather than the
   /// height it happens to want.
   ///
-  /// For the strips whose cards hold text an addon wrote and so are not
-  /// all the same size ([TvSourceRow]). It costs an [IntrinsicHeight] --
-  /// a second layout pass over the row -- which is why it is asked for
-  /// rather than always done: a strip of posters is a strip of one shape
-  /// and has nothing to reconcile.
+  /// For the strips whose cards hold text an addon wrote and so are not all
+  /// the same size ([TvSourceRow]). It costs an [IntrinsicHeight], a second
+  /// layout pass over the row. That is why it is asked for rather than always
+  /// done: a strip of posters is a strip of one shape and has nothing to
+  /// reconcile.
   final bool equalHeights;
 
   /// Left at the first card and right at the last stay where they are.
@@ -373,7 +372,7 @@ class TvCardStrip extends StatelessWidget {
 }
 
 /// One pill of the first row: a resolution rung, an addon, or the line of
-/// accounting the sources rows have nowhere else to put -- what it is
+/// accounting the sources rows have nowhere else to put. It says what it is
 /// called, how many it holds, and whether those are the sources on screen.
 ///
 /// A pill and not a card, because a resolution is one word. It is as wide
@@ -456,11 +455,10 @@ class TvSourceGroupPill extends StatelessWidget {
                 ),
               ),
             ),
-            // The count is a second line of text and not part of the
-            // label: the label is the choice and the count is what is
-            // behind it, so the count is drawn quieter -- and the label on
-            // its own is what anything looking for this pill by name
-            // finds.
+            // The count is a second line of text and not part of the label.
+            // The label is the choice and the count is what is behind it, so
+            // the count is drawn quieter. The label on its own is also what
+            // anything looking for this pill by name finds.
             if (count != null)
               Text(
                 '· $count',
@@ -490,21 +488,21 @@ class TvSourceGroupPill extends StatelessWidget {
 ///
 /// **The pills are the parse, beside the text it was read out of**
 /// ([StreamFacts.pills]): resolution, size, seeders, the languages and the
-/// indexer. A `💾 4.98 GB` on the addon's own line with a `4.98 GB` pill
-/// under it is the repetition working -- it is how a viewer sees that the
-/// sort and the sections are built on a reading that agrees with what was
-/// written. Nothing is taken out of the text to avoid saying it twice.
+/// indexer. A `💾 4.98 GB` on the addon's own line with a `4.98 GB` pill under
+/// it is the repetition working. It is how a viewer sees that the sort and
+/// the sections are built on a reading that agrees with what was written.
+/// Nothing is taken out of the text to avoid saying it twice.
 ///
 /// **Its height is its own.** The recorded addons answer with between one
-/// line and five, so a card is as tall as it needs and every card in a row
-/// is as tall as the tallest ([TvCardStrip.equalHeights]) -- the price of
-/// a horizontal strip, and measured in `details_sources_row_test.dart`
+/// line and five, so a card is as tall as it needs and every card in a row is
+/// as tall as the tallest ([TvCardStrip.equalHeights]). That is the price of
+/// a horizontal strip, and it is measured in `details_sources_row_test.dart`
 /// rather than guessed at.
 ///
-/// A source that the player cannot open takes no press, and so is not a
-/// focus stop either -- the remote steps over it, exactly as the vertical
-/// list's disabled row does. What kind of source it is leads the quiet
-/// last line instead, since there is no play arrow to replace.
+/// A source that the player cannot open takes no press, and so is not a focus
+/// stop either. The remote steps over it, exactly as the vertical list's
+/// disabled row does. What kind of source it is leads the quiet last line
+/// instead, since there is no play arrow to replace.
 class TvSourceCard extends StatelessWidget {
   const TvSourceCard({super.key, required this.source});
 
@@ -514,18 +512,18 @@ class TvSourceCard extends StatelessWidget {
   /// before they are ellipsized.
   ///
   /// **A television only.** The phone's list scrolls and a row of it may be
-  /// any height, so nothing there is cut at all: a release name cut
-  /// mid-token says less about which file it is than the whole of it does.
-  /// A strip cannot do that -- every card in it is the height of the
-  /// tallest, on a panel that has five other rungs to fit.
+  /// any height, so nothing there is cut at all: a release name cut mid-token
+  /// says less about which file it is than the whole of it does. A strip
+  /// cannot do that. Every card in it is the height of the tallest, on a
+  /// panel that has five other rungs to fit.
   ///
   /// **Measured, not chosen**, against the recorded rows
-  /// (`details_recorded_sources_test.dart`): uncapped, the tallest row runs
-  /// to 427 dp of a 648 dp panel, enough that walking from a group pill to
-  /// a card would scroll the screen. Three lines for the lead and three for
-  /// each line under it hold the tallest row to 337 dp; neither cap can be
-  /// raised without going past the room this panel is known to carry (a
-  /// fourth line on either runs past 342 dp).
+  /// (`details_recorded_sources_test.dart`). Uncapped, the tallest row runs
+  /// to 427 dp of a 648 dp panel, enough that walking from a group pill to a
+  /// card would scroll the screen. Three lines for the lead and three for
+  /// each line under it hold the tallest row to 337 dp. Neither cap can be
+  /// raised without going past the room this panel is known to carry: a
+  /// fourth line on either runs past 342 dp.
   static const int leadLines = 3;
   static const int bodyLines = 3;
 
@@ -591,10 +589,9 @@ class TvSourceCard extends StatelessWidget {
                 children: [for (final pill in source.pills) _Pill(pill)],
               ),
             // What is left is provenance: which addon answered, who else
-            // offered the same file, the release tags, and -- for a source
-            // no press can open -- what kind it is. Quiet, last, and on
-            // one line, because it is what a viewer checks rather than
-            // what they read.
+            // offered the same file, the release tags, and what kind it is
+            // for a source no press can open. Quiet, last, and on one line,
+            // because it is what a viewer checks rather than what they read.
             if (source.notes.isNotEmpty || mark != null)
               Row(
                 spacing: 6,
@@ -670,14 +667,13 @@ class _Pill extends StatelessWidget {
 ///
 /// `Avalon.2001.1080p.BluRay.x264-CiNEFiLE` is one word as far as Unicode
 /// line breaking is concerned: nothing in UAX #14 breaks after a full stop
-/// between two letters. So a card 260 wide broke it wherever the second
-/// line happened to start -- `Avalon.2001.1080p.BluRay.x2` / `64-CiNEFiLE`
-/// -- which splits the very tokens a viewer reads the name by. A
-/// zero-width space after each `.`, `_` and `-` gives the layout somewhere
-/// to break that a reader would have broken it anyway, and nothing is
-/// added anywhere else: a space is already a break opportunity, and a
-/// release with neither still breaks mid-token because a word longer than
-/// the line has to.
+/// between two letters. So a card 260 wide broke it wherever the second line
+/// happened to start (`Avalon.2001.1080p.BluRay.x2` / `64-CiNEFiLE`), which
+/// splits the very tokens a viewer reads the name by. A zero-width space
+/// after each `.`, `_` and `-` gives the layout somewhere to break where a
+/// reader would have broken it anyway. Nothing is added anywhere else. A
+/// space is already a break opportunity, and a release with neither still
+/// breaks mid-token, because a word longer than the line has to.
 ///
 /// The character is invisible and has no width, so the line is drawn
 /// exactly as it reads. It is in the string the card lays out and
@@ -718,10 +714,10 @@ const BorderRadius _cardRadius = BorderRadius.all(Radius.circular(8));
 /// One source as a television card draws it, or one line of the accounting
 /// that the sources rows have taken the place of.
 ///
-/// The screen builds these: what a card shows about a stream (which release
-/// it is, what could be read out of it, which addon answered) is the
-/// sources list's business, and what a press does about it -- play it, keep
-/// it, check the addon that failed -- is the screen's.
+/// The screen builds these. What a card shows about a stream (which release
+/// it is, what could be read out of it, which addon answered) is the sources
+/// list's business. What a press does about it (play it, keep it, check the
+/// addon that failed) is the screen's.
 typedef TvSource = ({
   /// What the card is the same card by, across rebuilds that reorder or
   /// add to its row ([TvLadderStopId]): the source's [StreamInfo.sourceKey].
@@ -736,8 +732,8 @@ typedef TvSource = ({
   String title,
 
   /// The addon's remaining lines, in the order it wrote them and whole
-  /// ([StreamPresentation.rest]) -- or, for an accounting card, the one
-  /// thing there is to say about that addon. Each on a line of its own.
+  /// ([StreamPresentation.rest]). For an accounting card, the one thing there
+  /// is to say about that addon. Each on a line of its own.
   List<String> lines,
 
   /// The parse, as pills ([StreamFacts.pills]): only what is actually
