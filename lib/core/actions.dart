@@ -25,11 +25,11 @@ final class CoreAction {
   /// What this action *is*, in names alone: the model field and the tags
   /// of the enums it is nested in, `player/Player.Seek`.
   ///
-  /// Safe to write down, which is the whole point of it. An action's args
-  /// are not -- a `Ctx` action carries the password and the auth key
-  /// (`AGENTS.md`, "Never log auth material") -- so this reads the `serde`
-  /// tags and stops: two levels, which is as deep as a tag goes, and never
-  /// far enough to reach a credential, a manifest URL or a search query.
+  /// Safe to write down, which is the whole point of it. An action's args are
+  /// not: a `Ctx` action carries the password and the auth key (`AGENTS.md`,
+  /// "Never log auth material"). So this reads the `serde` tags and stops after
+  /// two levels. That is as deep as a tag goes, and never far enough to reach a
+  /// credential, a manifest URL or a search query.
   String get name {
     final tags = <String>[];
     Object? node = action;
@@ -181,18 +181,17 @@ abstract final class CoreActions {
   /// A playback position on the wire, in milliseconds: never negative.
   ///
   /// stremio-core takes a time as a `u64` (`Seek`/`TimeChanged` in
-  /// `stremio_core::runtime::msg`), so a negative one is not a bad
-  /// position -- it is a *rejected action*: serde refuses the whole
-  /// envelope and nothing is dispatched at all. The positions here are
-  /// mpv's, and mpv answers `time-pos` with a seek's raw, unclamped
-  /// target until the first frame after it lands, so one can arrive from
-  /// below whatever the player does. The player does not ask for a seek
-  /// that lands before the start (`_seekTo` in `player_screen.dart`);
-  /// this is the last line before the bridge, for the positions nobody
-  /// here computed -- mpv's, and a Cast receiver's.
+  /// `stremio_core::runtime::msg`). So a negative one is not a bad position but
+  /// a *rejected action*: serde refuses the whole envelope and nothing is
+  /// dispatched at all. The positions here are mpv's. mpv answers `time-pos`
+  /// with a seek's raw, unclamped target until the first frame after it lands,
+  /// so a negative one can arrive whatever the player does. The player does not
+  /// ask for a seek that lands before the start (`_seekTo` in
+  /// `player_screen.dart`). This is the last line before the bridge, for the
+  /// positions nobody here computed: mpv's, and a Cast receiver's.
   ///
-  /// It clamps rather than drops: the viewer really is at the start of the
-  /// film, and a report that never arrives is a continue-watching entry
+  /// It clamps rather than drops. The viewer really is at the start of the
+  /// film, and a report that never arrives leaves a continue-watching entry
   /// still pointing at where they were before the seek.
   static int _wireTime(int milliseconds) => milliseconds < 0 ? 0 : milliseconds;
 
@@ -225,10 +224,10 @@ abstract final class CoreActions {
 
   static CoreAction playerNextVideo() => _player('NextVideo');
 
-  /// What the player learned about the file once it opened. The engine
-  /// only asks subtitle addons once some parameter is known, so this is
-  /// what triggers the subtitle request; [hash] and [size] are the
-  /// OpenSubtitles hash and byte size when available.
+  /// What the player learned about the file once it opened. The engine only
+  /// asks subtitle addons once some parameter is known, so this is what
+  /// triggers the subtitle request. [hash] and [size] are the OpenSubtitles
+  /// hash and byte size when available.
   static CoreAction playerVideoParamsChanged({
     String? filename,
     String? hash,
@@ -336,11 +335,11 @@ abstract final class CoreActions {
   static CoreAction dismissNotificationItem(String id) =>
       _ctx('DismissNotificationItem', id);
 
-  /// Takes the item [id] off Continue watching, as Stremio's own clients
-  /// do it (stremio-web's `LibItem` "Dismiss"): its progress back to the
-  /// start, and its new-episode notifications dismissed, the two things
-  /// `ContinueWatchingPreview` keeps an item for. Neither touches whether
-  /// it is in the library or whether it is watched.
+  /// Takes the item [id] off Continue watching, as Stremio's own clients do it
+  /// (stremio-web's `LibItem` "Dismiss"). Its progress goes back to the start,
+  /// and its new-episode notifications are dismissed: the two things
+  /// `ContinueWatchingPreview` keeps an item for. Neither touches whether it is
+  /// in the library or whether it is watched.
   static List<CoreAction> dismissFromContinueWatching(String id) => [
     rewindLibraryItem(id),
     dismissNotificationItem(id),
@@ -353,14 +352,14 @@ abstract final class CoreActions {
   }) => _ctx('LibraryItemMarkAsWatched', {'id': id, 'is_watched': watched});
 
   /// Marks a title watched from its catalogue item alone
-  /// (`ActionCtx::MetaItemMarkAsWatched`): an item the library already
-  /// holds is flagged as [libraryItemMarkAsWatched] does, and one it does
-  /// not is made a temporary item -- `temp` and `removed`, so not a saved
-  /// title -- watched once, the state a finished playback leaves a film it
-  /// was never added for. [meta] is the `MetaItemPreview` JSON.
+  /// (`ActionCtx::MetaItemMarkAsWatched`). An item the library already holds is
+  /// flagged as [libraryItemMarkAsWatched] does. One it does not hold becomes a
+  /// temporary item (`temp` and `removed`, so not a saved title) watched once:
+  /// the state a finished playback leaves a film it was never added for. [meta]
+  /// is the `MetaItemPreview` JSON.
   ///
-  /// [watched] false takes the mark off again (`timesWatched` back to 0); for
-  /// a title the library does not hold, that changes nothing.
+  /// [watched] false takes the mark off again (`timesWatched` back to 0). For a
+  /// title the library does not hold, that changes nothing.
   static CoreAction metaItemMarkAsWatched(
     Map<String, dynamic> meta, {
     bool watched = true,

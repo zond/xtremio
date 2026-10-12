@@ -10,14 +10,13 @@ import 'secret_store.dart';
 /// What this device's Google Drive pairing amounts to, as one of three
 /// answers.
 ///
-/// Three and not two, because "the token is gone" and "the token is no
-/// good" are answered differently by the viewer: one is a pairing that has
-/// never happened, the other is a pairing that has to happen again. And
-/// three and not four: a request that failed because the television is off
-/// the network is not in here at all. **Nothing transient reaches this
-/// enum** -- it is derived from what is stored, it is read synchronously,
-/// and it is never thrown, so a caller cannot mistake a timeout for
-/// [pairAgain] by handling an error badly.
+/// There are three and not two, because the viewer answers "the token is gone"
+/// and "the token is no good" differently: one is a pairing that has never
+/// happened, the other a pairing that has to happen again. And three and not
+/// four: a request that failed because the television is off the network is not
+/// in here at all. **Nothing transient reaches this enum.** It is derived from
+/// what is stored, read synchronously and never thrown, so a caller cannot
+/// mistake a timeout for [pairAgain] by handling an error badly.
 enum DriveLinkState {
   /// Nobody has paired this device, or the last pairing was undone
   /// ([DriveAccount.unlink]). Nothing is stored and nothing is reachable.
@@ -28,19 +27,18 @@ enum DriveLinkState {
   /// statement that there is a credential to try.
   linked,
 
-  /// The pairing service answered `pairAgain` for the stored token: it has
-  /// been revoked or expired, and no amount of retrying will change that
-  /// -- the viewer has to pair from their phone again. The list of linked
-  /// files survives, because those files are still the ones a new token
-  /// will reach.
+  /// The pairing service answered `pairAgain` for the stored token. It has been
+  /// revoked or expired, and no amount of retrying will change that: the viewer
+  /// has to pair from their phone again. The list of linked files survives,
+  /// because those files are still the ones a new token will reach.
   pairAgain,
 }
 
-/// Where the grant is handed once it is known, so that the Rust side can
-/// spend it on the pins nobody presses a button for -- the launch's re-pin
-/// of an unfinished Drive download, a retry after a refusal. `null` takes
-/// it back. [rustDriveGrantSink] is the one the app wires; a test passes
-/// its own or none.
+/// Where the grant is handed once it is known, so that the Rust side can spend
+/// it on the pins nobody presses a button for: the launch's re-pin of an
+/// unfinished Drive download, a retry after a refusal. `null` takes it back.
+/// [rustDriveGrantSink] is the one the app wires; a test passes its own or
+/// none.
 typedef DriveGrantSink = Future<void> Function(String? refreshToken);
 
 /// Told the refresh token of every pairing (not of a grant taken from the
@@ -65,10 +63,10 @@ enum DriveLinkOutcome {
 /// rest of the feature is looking at.
 ///
 /// **One token, not one per file.** The token is a live credential to the
-/// viewer's Drive: it does not expire on its own and it reaches every file
-/// that account has picked through this OAuth client -- grants accumulate
-/// per user and per client, and a token from a second pairing was measured
-/// reading a file picked during the first. So there is one secret here,
+/// viewer's Drive. It does not expire on its own, and it reaches every file
+/// that account has picked through this OAuth client. Grants accumulate per
+/// user and per client, and a token from a second pairing was measured reading
+/// a file picked during the first. So there is one secret here,
 /// [refreshTokenKey], replaced by each new pairing, and one list of files
 /// beside it in the preferences.
 ///
@@ -78,18 +76,17 @@ enum DriveLinkOutcome {
 /// [unlink] is the whole account, and it is the only thing here that
 /// removes the credential.
 ///
-/// **When the store will not open.** A Linux box with no keyring daemon
-/// has no secure store at all (see [SecureStorageSecretStore]), a keystore
-/// entry restored onto another device by Android's backup cannot be
-/// decrypted, and a widget test has no platform channel. None of those is
-/// worth taking the app down for, and none of them is worth putting the
-/// token in the preferences file instead -- so the store failing is
-/// handled the way [AppPrefs] handles a failed write: the value is kept in
-/// memory and the choice holds for this run. A read that fails reads as
-/// "nothing stored", which is [DriveLinkState.unlinked], and the worst it
-/// costs is a pairing the viewer does again. A write that fails is
-/// [DriveLinkOutcome.thisRunOnly], which the pairing screen can say out
-/// loud, and the token never touches a disk it cannot be encrypted on.
+/// **When the store will not open.** A Linux box with no keyring daemon has no
+/// secure store at all (see [SecureStorageSecretStore]). A keystore entry
+/// restored onto another device by Android's backup cannot be decrypted. A
+/// widget test has no platform channel. None of those is worth taking the app
+/// down for, or worth putting the token in the preferences file instead. So a
+/// failing store is handled the way [AppPrefs] handles a failed write: the
+/// value is kept in memory and the choice holds for this run. A read that fails
+/// reads as "nothing stored", which is [DriveLinkState.unlinked], and the worst
+/// it costs is a pairing the viewer does again. A write that fails is
+/// [DriveLinkOutcome.thisRunOnly], which the pairing screen can say out loud,
+/// and the token never touches a disk it cannot be encrypted on.
 ///
 /// **Nothing here logs the token.** No method writes it to
 /// [DiagnosticsLog], and the lines that report a store failure carry the
@@ -98,14 +95,14 @@ enum DriveLinkOutcome {
 /// leak it through a log line either. The report's scrub is the second
 /// lock and knows [refreshTokenKey] by name (`redactSecrets`).
 ///
-/// **The grant crosses to Rust exactly when it changes.** Playing a Drive
-/// file hands the token down per call (`openLinkedDriveFile`), but a Drive
-/// *download* is a pin the embedded server fills with the grant, and the
-/// pins nobody presses a button for -- the launch's re-pin of what was
-/// unfinished, a retry -- have no screen above them to fetch it from. So
-/// [grantSink] is told the token when it is loaded or a pairing is made,
-/// and told `null` on [unlink] and [notePairAgain]; Rust holds it in memory
-/// beside the server handle for as long as this says the device is linked
+/// **The grant crosses to Rust exactly when it changes.** Playing a Drive file
+/// hands the token down per call (`openLinkedDriveFile`). A Drive *download* is
+/// different: it is a pin the embedded server fills with the grant. The pins
+/// nobody presses a button for (the launch's re-pin of what was unfinished, a
+/// retry) have no screen above them to fetch it from. So [grantSink] is told
+/// the token when it is loaded or a pairing is made, and told `null` on
+/// [unlink] and [notePairAgain]. Rust holds it in memory beside the server
+/// handle for as long as this says the device is linked
 /// (`crate::server::set_drive_grant`), and writes it nowhere.
 class DriveAccount extends ChangeNotifier {
   DriveAccount({
@@ -131,11 +128,11 @@ class DriveAccount extends ChangeNotifier {
   /// Told by [DrivePairingJob] that a pairing started, finished or was left
   /// outstanding.
   ///
-  /// The job has listeners of its own, but they only *watch* a pairing.
-  /// This wakes everything that merely depends on the account -- the
-  /// library among them, which is where an outstanding pairing gets
-  /// collected -- without it a pairing left behind would sit unnoticed
-  /// until the screen happened to rebuild.
+  /// The job has listeners of its own, but they only *watch* a pairing. This
+  /// wakes everything that merely depends on the account, the library among
+  /// them, which is where an outstanding pairing gets collected. Without it, a
+  /// pairing left behind would sit unnoticed until the screen happened to
+  /// rebuild.
   void notePairingChanged() => notifyListeners();
 
   /// The pairing being finished, if any. Outlives every screen, because the
@@ -162,21 +159,21 @@ class DriveAccount extends ChangeNotifier {
   /// The key the refresh token is stored under.
   ///
   /// Hyphenated, and that is not a style choice. `redactSecrets` matches
-  /// `refresh[_-]?token` on a word boundary, so a line that wrote this key
+  /// `refresh[_-]?token` on a word boundary. So a line that wrote this key
   /// beside its value comes out of the report as
-  /// `drive-refresh-token: <redacted>` -- while `driveRefreshToken` would
-  /// have gone through whole, there being no boundary in front of the `R`
-  /// for the pattern to start at. Nothing here writes the token into a
-  /// line, but the second lock is worth having a name it can catch.
+  /// `drive-refresh-token: <redacted>`. `driveRefreshToken` would have gone
+  /// through whole, since there is no boundary in front of the `R` for the
+  /// pattern to start at. Nothing here writes the token into a line, but the
+  /// second lock is worth having a name it can catch.
   static const String refreshTokenKey = 'drive-refresh-token';
 
   String? _refreshToken;
   bool _thisRunOnly = false;
   bool _loaded = false;
 
-  /// Whether [load] has finished. A screen built before it has may draw a
-  /// wait rather than "nothing linked yet", which is an answer this cannot
-  /// give until the store has been asked once.
+  /// Whether [load] has finished. A screen built before then may draw a wait
+  /// rather than "nothing linked yet", which this cannot answer until the store
+  /// has been asked once.
   bool get loaded => _loaded;
 
   /// Which of the three this device is in. Synchronous and free: the token
@@ -189,9 +186,9 @@ class DriveAccount extends ChangeNotifier {
         : DriveLinkState.linked;
   }
 
-  /// The refresh token to send to the pairing service, or null in either
-  /// of the other two states -- a token that has been answered `pairAgain`
-  /// is never handed out again, whatever is still in memory.
+  /// The refresh token to send to the pairing service, or null in either of the
+  /// other two states. A token that has been answered `pairAgain` is never
+  /// handed out again, whatever is still in memory.
   ///
   /// **Never log this, never put it in a URL path, never return it over
   /// the FFI** (`AGENTS.md`, "Never log auth material"): it is a live
@@ -209,14 +206,13 @@ class DriveAccount extends ChangeNotifier {
   bool get thisRunOnly => _thisRunOnly;
 
   /// Reads the stored token. Called once at start-up, **after**
-  /// `AppPrefs.load` -- the state is half this and half the preferences,
-  /// and reading this half first would answer [DriveLinkState.unlinked]
-  /// for an install that is linked.
+  /// `AppPrefs.load`. The state is half this and half the preferences, and
+  /// reading this half first would answer [DriveLinkState.unlinked] for an
+  /// install that is linked.
   ///
-  /// A store that throws is a store with nothing in it as far as this is
-  /// concerned: there is no way to tell "no keyring on this machine" from
-  /// "no token stored" that the viewer could act on differently, and both
-  /// end at the same pairing screen.
+  /// A store that throws counts as a store with nothing in it. The viewer could
+  /// not act differently on "no keyring on this machine" and "no token stored",
+  /// and both end at the same pairing screen.
   Future<void> load() async {
     final store = secrets;
     if (store == null) {
@@ -252,15 +248,15 @@ class DriveAccount extends ChangeNotifier {
   /// is cleared: a fresh token is exactly what [DriveLinkState.pairAgain]
   /// was waiting for.
   ///
-  /// [files] is empty when a pairing hands back only a rotated token and
-  /// picks nothing new. It is a list rather than one file because one
-  /// pairing links everything the viewer picked in the one Picker, and
-  /// because the whole of it has to be one write: a store write and a
-  /// preferences write per file would leave the list disagreeing with what
-  /// was picked if one of them failed half way down a season.
+  /// [files] is empty when a pairing hands back only a rotated token and picks
+  /// nothing new. It is a list rather than one file because one pairing links
+  /// everything the viewer picked in the one Picker, and the whole of it has to
+  /// be one write. A store write and a preferences write per file would leave
+  /// the list disagreeing with what was picked if one of them failed half way
+  /// down a season.
   ///
-  /// [shared] is a grant taken from the account's vault rather than made
-  /// by a pairing here, which is not sent back to it ([pairedSink]).
+  /// [shared] is a grant taken from the account's vault rather than made by a
+  /// pairing here. It is not sent back to the vault ([pairedSink]).
   Future<DriveLinkOutcome> link({
     required String refreshToken,
     Iterable<LinkedDriveFile> files = const [],
@@ -279,10 +275,10 @@ class DriveAccount extends ChangeNotifier {
   }
 
   /// Installs a grant another device of the account paired, taken from the
-  /// vault (`DriveVault.reconcile`): stored and handed to Rust as a pairing
-  /// is, and with no files, since this device has linked none. Does nothing
-  /// when this device has a grant of its own -- or one Google refused --
-  /// by now: the device's own always wins over a copy.
+  /// vault (`DriveVault.reconcile`). It is stored and handed to Rust as a
+  /// pairing is, with no files, since this device has linked none. Does nothing
+  /// when this device has a grant of its own by now, or one Google refused: the
+  /// device's own always wins over a copy.
   Future<void> adoptSharedGrant(String refreshToken) async {
     if (state != DriveLinkState.unlinked) return;
     await link(refreshToken: refreshToken, shared: true);
@@ -309,8 +305,8 @@ class DriveAccount extends ChangeNotifier {
   /// One stamp for all of them: they became reachable in the same moment,
   /// because they were handed over by the same pairing.
   ///
-  /// The shape of [files] is spelled out rather than named so that this does
-  /// not depend on the pairing service's own types; it is
+  /// The shape of [files] is spelled out rather than named, so that this does
+  /// not depend on the pairing service's own types. It is
   /// `DrivePairingCollected.files`, which is a record for that reason.
   Future<DriveLinkOutcome> linkFiles({
     required String refreshToken,
@@ -333,19 +329,18 @@ class DriveAccount extends ChangeNotifier {
 
   /// Records that the service answered `pairAgain` for the stored token.
   ///
-  /// The credential is removed as well as flagged. A refresh token the
-  /// service has rejected opens nothing, so keeping it would be keeping a
-  /// credential for no reason; the flag is what carries the state, and it
-  /// is the flag and not the absence that [state] reads, so this stays
-  /// apart from [DriveLinkState.unlinked] even on a device where the
+  /// The credential is removed as well as flagged. A refresh token the service
+  /// has rejected opens nothing, so there is no reason to keep it. The flag
+  /// carries the state, and [state] reads the flag rather than the absence, so
+  /// this stays apart from [DriveLinkState.unlinked] even on a device where the
   /// delete could not happen.
   ///
-  /// The list of files is untouched. Those files are still what a new
-  /// pairing will reach, and the viewer is owed the list they built.
+  /// The list of files is untouched. Those files are still what a new pairing
+  /// will reach, and the viewer is owed the list they built.
   ///
   /// [ifToken] is the token the refused call was made with. A caller that
-  /// awaited the service passes it, and nothing happens when the account
-  /// holds another by then: a pairing landed meanwhile, and the refusal was
+  /// awaited the service passes it. Nothing happens when the account holds
+  /// another token by then: a pairing landed meanwhile, and the refusal was
   /// about the grant it replaced, not the one it would delete.
   Future<void> notePairAgain({String? ifToken}) async {
     if (ifToken != null && _refreshToken != ifToken) return;
@@ -357,9 +352,9 @@ class DriveAccount extends ChangeNotifier {
     await _handOver();
   }
 
-  /// Undoes the pairing: the credential is deleted, the list of files is
-  /// cleared and the dead flag with it, leaving
-  /// [DriveLinkState.unlinked] -- a device nobody has paired.
+  /// Undoes the pairing. The credential is deleted, and the list of files is
+  /// cleared with the dead flag, leaving [DriveLinkState.unlinked]: a device
+  /// nobody has paired.
   ///
   /// The secret goes first and unconditionally. Clearing the list without
   /// it would leave a live credential to the viewer's Drive on a
@@ -375,10 +370,10 @@ class DriveAccount extends ChangeNotifier {
     await _handOver();
   }
 
-  /// Tells [grantSink] what [refreshToken] answers now. A sink that throws
-  /// is reported by type and nothing else -- the call it failed in was
-  /// handed the grant -- and the account's own state stands regardless:
-  /// what Rust holds is a copy, and the next change tells it again.
+  /// Tells [grantSink] what [refreshToken] answers now. A sink that throws is
+  /// reported by type and nothing else, since the call it failed in was handed
+  /// the grant. The account's own state stands regardless: what Rust holds is a
+  /// copy, and the next change tells it again.
   Future<void> _handOver() async {
     final sink = grantSink;
     if (sink == null) return;
@@ -407,13 +402,13 @@ class DriveAccount extends ChangeNotifier {
 
   /// Writes down the list a reload worked out, as one write.
   ///
-  /// **The list it is given is the whole list**, so this is the one method
-  /// here that can take rows away without touching the credential. It is
-  /// narrow on purpose: it does not list, it does not decide what is gone,
-  /// and it does not know what Drive said -- `reloadLinkedDriveFiles`
-  /// works all of that out from a `DriveFilesListed`, which is a value that
-  /// exists only for a listing that ran to its last page. Calling this with
-  /// anything less is calling it with a list the viewer did not ask for.
+  /// **The list it is given is the whole list**, so this is the one method here
+  /// that can take rows away without touching the credential. It is narrow on
+  /// purpose. It does not list, it does not decide what is gone, and it does
+  /// not know what Drive said. `reloadLinkedDriveFiles` works all of that out
+  /// from a `DriveFilesListed`, a value that exists only for a listing that ran
+  /// to its last page. Calling this with anything less is calling it with a
+  /// list the viewer did not ask for.
   ///
   /// A list identical to the stored one writes nothing and notifies
   /// nothing, the way [noteMatch] does: a reload that found no change is a
@@ -422,10 +417,10 @@ class DriveAccount extends ChangeNotifier {
   Future<void> forgetFile(String fileId) =>
       noteReconciled(prefs.driveLinkedFiles.without(fileId));
 
-  /// Takes every file matched to [cinemetaId] off the list, as the viewer
-  /// asked of the title's card, and answers what was taken -- the card is
-  /// the title and not the file, so two episodes linked under one show go
-  /// together. [rememberFiles] is the undo.
+  /// Takes every file matched to [cinemetaId] off the list, as the viewer asked
+  /// of the title's card, and answers what was taken. The card is the title and
+  /// not the file, so two episodes linked under one show go together.
+  /// [rememberFiles] is the undo.
   Future<List<LinkedDriveFile>> forgetTitle(String cinemetaId) async {
     final files = prefs.driveLinkedFiles;
     final gone = files.matching(cinemetaId);
@@ -480,10 +475,10 @@ class DriveAccount extends ChangeNotifier {
     }
   }
 
-  /// Removes the stored token, swallowing a store that will not open: the
-  /// caller has already dropped it from memory, and a delete that could
-  /// not happen on a device whose store cannot be read is a delete of
-  /// something nothing can read either.
+  /// Removes the stored token, swallowing a store that will not open. The
+  /// caller has already dropped the token from memory. On a device whose store
+  /// cannot be read, a delete that could not happen is a delete of something
+  /// nothing can read either.
   Future<void> _forget() async {
     final store = secrets;
     if (store == null) return;
