@@ -28,11 +28,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   final Stream<PlaybackStats> stats;
 
-  /// The stream's own URL, the one the screen was asked to play, the
-  /// `stream` row: how stremio-core names it (a torrent reads
-  /// `http://127.0.0.1:<port>/<infoHash>/<fileIdx>?tr=…`, on whatever port
-  /// the embedded server bound; an addon's link is the link). Nobody
-  /// fetches it: it says which stream this is, not how it is read.
+  /// The stream's own URL, the one the screen was asked to play: the `stream`
+  /// row. It is how stremio-core names it. A torrent reads
+  /// `http://127.0.0.1:<port>/<infoHash>/<fileIdx>?tr=…`, on whatever port the
+  /// embedded server bound; an addon's link is the link. Nobody fetches it: it
+  /// says which stream this is, not how it is read.
   final Uri? source;
 
   /// What libmpv was handed for [source], the `read` row: `xtremio://<id>`
@@ -50,22 +50,21 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// poll has not answered yet.
   final TorrentStats? torrent;
 
-  /// The DHT's status, read once when this torrent's polling started; null
-  /// when it was not asked or could not be read. Shown as its own row only
-  /// when [DhtStatus.unavailable] -- a bootstrapped or disabled DHT is not
-  /// news, and this panel is not where it would be worth a row anyway.
+  /// The DHT's status, read once when this torrent's polling started; null when
+  /// it was not asked or could not be read. Shown as its own row only when
+  /// [DhtStatus.unavailable]. A bootstrapped or disabled DHT is not news, and
+  /// this panel is not where it would be worth a row anyway.
   final DhtStatus? dht;
 
   /// What the embedded server holds of this stream right now, or null when
   /// it holds nothing of it (an addon's direct link, a debrid URL, a file
   /// on the device) and while the panel's first ask has not answered.
   ///
-  /// Its two halves are two different rows: the bytes held unbroken round
-  /// the playhead go on the cache row, beside mpv's own buffer, and the
-  /// sharing numbers are a row of their own that a stream with no swarm
-  /// does not have. Every absence in it takes its row or its half of one
-  /// away rather than drawing a dash -- see [describe] and
-  /// [describeSharing].
+  /// Its two halves are two different rows. The bytes held unbroken round the
+  /// playhead go on the cache row, beside mpv's own buffer. The sharing numbers
+  /// are a row of their own, which a stream with no swarm does not have. Every
+  /// absence in it takes its row or its half of one away rather than drawing a
+  /// dash; see [describe] and [describeSharing].
   final StreamNumbers? held;
 
   static const TextStyle _style = TextStyle(
@@ -82,11 +81,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// point of looking.
   static const double tvFontSize = 16;
 
-  /// How wide the two rows carrying text from somewhere else -- the
-  /// server's reason for stopping, and the URL -- are allowed to get.
-  /// Every other row is short by construction; these two are as long as
-  /// whoever wrote them, and unbounded either one stretches the panel
-  /// across the picture.
+  /// How wide the two rows carrying text from somewhere else (the server's
+  /// reason for stopping, and the URL) are allowed to get. Every other row is
+  /// short by construction. These two are as long as whoever wrote them, and
+  /// either one unbounded stretches the panel across the picture.
   static const double wideRowWidth = 480;
 
   /// One of those rows: held to [wideRowWidth] and cut off with an
@@ -159,26 +157,24 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// The one row standing in for every reading mpv has not taken yet, in
   /// the same label column as the rest.
   ///
-  /// Named for mpv specifically, not the whole panel: the rows below come
-  /// from the embedded server, which is answering about a file on the disk
-  /// and has no wait to share, so they must not be suppressed along with
-  /// mpv's -- a stream that has not started yet is exactly when those rows
-  /// are worth watching.
+  /// Named for mpv specifically, not the whole panel. The rows below come from
+  /// the embedded server, which is answering about a file on the disk and has
+  /// no wait to share. So they must not be suppressed along with mpv's: a
+  /// stream that has not started yet is exactly when those rows are worth
+  /// watching.
   static const String collecting = 'mpv      collecting…';
 
   /// One text line per stat, in the order the panel shows them: what mpv
-  /// reports about the playback, and -- from [held] -- what this server
-  /// holds of the stream feeding it. The two meet on the cache row, which
-  /// is why the server's half comes in here rather than as rows of its
-  /// own after them.
+  /// reports about the playback, and, from [held], what this server holds of
+  /// the stream feeding it. The two meet on the cache row, which is why the
+  /// server's half comes in here rather than as rows of its own after them.
   ///
-  /// **A null [s] is mpv with no sample yet, not an empty panel.** It
-  /// takes mpv's own rows away and leaves [collecting] in their place, and
-  /// everything from [held] is drawn as usual: neither the window nor the
-  /// sharing row is mpv's to report, and the player asks for them without
-  /// waiting for the media to load, precisely because what is on the disk
-  /// is what somebody watching a stream that has not started yet is
-  /// looking for.
+  /// **A null [s] is mpv with no sample yet, not an empty panel.** It takes
+  /// mpv's own rows away and leaves [collecting] in their place, and everything
+  /// from [held] is drawn as usual. Neither the window nor the sharing row is
+  /// mpv's to report. The player asks for them without waiting for the media to
+  /// load, precisely because what is on the disk is what somebody watching a
+  /// stream that has not started yet is looking for.
   static List<String> describe(PlaybackStats? s, {StreamNumbers? held}) => [
     if (s == null)
       collecting
@@ -213,9 +209,9 @@ class PlaybackStatsOverlay extends StatelessWidget {
       if (s.videoBitrate case final bitrate?)
         'bitrate  ${formatBitrate(bitrate)}',
     ],
-    // Whichever halves of it were measured: mpv's buffer, the server's
-    // window, or -- while mpv is still collecting under an open panel --
-    // the window on its own.
+    // Whichever halves of it were measured: mpv's buffer, the server's window,
+    // or the window on its own while mpv is still collecting under an open
+    // panel.
     if (_cache(s, held?.window) case final cache?) 'cache    $cache',
     // What the retention policy has committed, directly under the cache
     // row: the disk round the playhead and what of the disk is promised
@@ -237,32 +233,31 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// At what rate mpv thinks the screen refreshes.
   ///
-  /// The row the vo drop count above is read against. On Android mpv
-  /// cannot measure the display, so the app tells it
-  /// (`MediaKitEngine.displayRateProperties`), and this is mpv's own
-  /// belief read back rather than the number handed over -- which is the
-  /// point of showing it: a rate here that is not the one the display
-  /// settled on is a set that went nowhere, and the drops below it belong
-  /// to something else.
+  /// The row the vo drop count above is read against. On Android mpv cannot
+  /// measure the display, so the app tells it
+  /// (`MediaKitEngine.displayRateProperties`). This is mpv's own belief read
+  /// back rather than the number handed over, which is the point of showing it.
+  /// A rate here that is not the one the display settled on is a set that went
+  /// nowhere, and the drops below it belong to something else.
   static String _display(double hz) => '${hz.toStringAsFixed(3)} Hz';
 
   /// A yes/no mpv answered.
   static String _flag(bool value) => value ? 'yes' : 'no';
 
-  /// The halves of a row that were measured, joined by [separator], or
-  /// null -- no row -- when none was.
+  /// The halves of a row that were measured, joined by [separator], or null (no
+  /// row) when none was.
   static String? _halves(String separator, List<String> halves) =>
       halves.isEmpty ? null : halves.join(separator);
 
-  /// Whether mpv will seek in the open media -- and whose answer that is.
+  /// Whether mpv will seek in the open media, and whose answer that is.
   ///
-  /// `forced` rather than `yes` when we set `force-seekable` for this
-  /// stream, which the player does for the embedded server's own URLs: the
-  /// row is then our claim rather than a reading, and reporting it as a
-  /// reading is what would send someone looking in the wrong place. What
-  /// still reads is `partially`, which mpv sets alongside a forced
-  /// `seekable`: a yes there under `forced` is the demuxer saying it could
-  /// not seek and being overruled.
+  /// `forced` rather than `yes` when we set `force-seekable` for this stream,
+  /// which the player does for the embedded server's own URLs. The row is then
+  /// our claim rather than a reading, and reporting it as a reading is what
+  /// would send someone looking in the wrong place. What still reads is
+  /// `partially`, which mpv sets alongside a forced `seekable`. A yes there
+  /// under `forced` is the demuxer saying it could not seek and being
+  /// overruled.
   ///
   /// Null when mpv has not said and nothing forced it: the half is then
   /// left off the row.
@@ -274,14 +269,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// The demuxer's seekable ranges, in whole seconds of playback time.
   ///
-  /// `none` is a reading and not a blank -- but it is not on its own a
-  /// fault, and it must not be read as one. mpv refuses a seek on
-  /// `seekable`; the ranges say only what the cache can serve without
-  /// going back to the demuxer, and nothing is recorded until a whole
-  /// keyframe range has been queued, so `none` is what every file reads
-  /// for its first seconds while every seek works. What the row is for is
-  /// the pair: which parts a seek lands in without a wait, next to the
-  /// `seekable`/`partially` row that says whether one can be made at all.
+  /// `none` is a reading and not a blank, but it is not on its own a fault, and
+  /// it must not be read as one. mpv refuses a seek on `seekable`. The ranges
+  /// say only what the cache can serve without going back to the demuxer, and
+  /// nothing is recorded until a whole keyframe range has been queued. So
+  /// `none` is what every file reads for its first seconds while every seek
+  /// works. What the row is for is the pair: which parts a seek lands in
+  /// without a wait, next to the `seekable`/`partially` row that says whether
+  /// one can be made at all.
   static String _ranges(List<SeekableRange> ranges) => ranges.isEmpty
       ? 'none'
       : [
@@ -295,13 +290,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   ///
   /// Three rows say three different things and the panel keeps them apart.
   /// `seeds` and `peers` are *our connections*: how many have handshaked
-  /// (`live`), how many addresses the search has turned up (`seen`), and
-  /// how many of the connections hold the whole file. `swarm` is not a
-  /// measurement at all but what the trackers last said about everyone,
-  /// which is why it carries its age -- and why it says so plainly when
-  /// nobody answered, since a swarm we could not ask about is not an empty
-  /// one. The phase is worth a row only while the torrent is not ready;
-  /// once it is, the numbers are the news.
+  /// (`live`), how many addresses the search has turned up (`seen`), and how
+  /// many of the connections hold the whole file. `swarm` is not a measurement
+  /// at all but what the trackers last said about everyone, which is why it
+  /// carries its age. It is also why it says so plainly when nobody answered: a
+  /// swarm we could not ask about is not an empty one. The phase is worth a row
+  /// only while the torrent is not ready; once it is, the numbers are the news.
   static List<String> describeTorrent(TorrentStats? s) {
     if (s == null) return const ['torrent  waiting for the server'];
     return [
@@ -315,10 +309,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
       // becomes readable until a whole piece is verified.
       if (s.pieceLength case final piece?)
         'piece    ${TorrentProgressCard.formatPieceSize(piece)}',
-      // ...and how far the one piece the reader is sitting on has come,
-      // which is the only thing between 0 and done. `verified` is what
-      // says it can be served: a full byte count on its own only means
-      // it is complete enough to be hashed.
+      // ...and how far the one piece the reader is sitting on has come, which
+      // is the only thing between 0 and done. `verified` is what says it can be
+      // served. A full byte count on its own only means it is complete enough
+      // to be hashed.
       if (s.inFlightPiece case final piece?)
         'inflight #${piece.index} · '
             '${TorrentProgressCard.formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}'
@@ -326,10 +320,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
     ];
   }
 
-  /// The swarm row's numbers: what the trackers reported and how long ago,
-  /// or `not reported` when none of them answered. Never a 0 in that case
-  /// -- "nobody is seeding this" and "we could not ask" are different news
-  /// and this is the row that has to tell them apart.
+  /// The swarm row's numbers: what the trackers reported and how long ago, or
+  /// `not reported` when none of them answered. Never a 0 in that case. "Nobody
+  /// is seeding this" and "we could not ask" are different news, and this is
+  /// the row that has to tell them apart.
   static String _swarm(TorrentStats s) {
     final seeders = s.swarmSeeders;
     final leechers = s.swarmLeechers;
@@ -342,10 +336,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
     return age == null ? counts : '$counts · ${formatAge(age)} ago';
   }
 
-  /// A duration in one coarse unit: `12 s`, `4 min`, `1 h`. The panel's
-  /// only duration format, and both its uses want the same coarseness --
-  /// how old a tracker scrape is (the panel has to say whether the numbers
-  /// are current, and the server drops anything past an hour anyway), and
+  /// A duration in one coarse unit: `12 s`, `4 min`, `1 h`. It is the panel's
+  /// only duration format, and both its uses want the same coarseness. One is
+  /// how old a tracker scrape is (the panel has to say whether the numbers are
+  /// current, and the server drops anything past an hour anyway). The other is
   /// how much watching a half of the cache row's server run is.
   static String formatAge(Duration age) {
     if (age.inMinutes < 1) return '${age.inSeconds} s';
@@ -363,11 +357,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
     return error == null ? null : 'error    $error';
   }
 
-  /// The DHT row, shown only while [DhtStatus.unavailable] holds: this
-  /// panel is already the details view a curious person opened, so the
-  /// node counts ride along with the wording rather than sitting behind
-  /// another tap. Information, never phrased as a problem -- trackers keep
-  /// working regardless.
+  /// The DHT row, shown only while [DhtStatus.unavailable] holds. This panel is
+  /// already the details view a curious person opened, so the node counts ride
+  /// along with the wording rather than sitting behind another tap.
+  /// Information, never phrased as a problem: trackers keep working regardless.
   static String describeDht(DhtStatus dht) =>
       'dht      ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}';
 
@@ -400,18 +393,18 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// this stream on the disk.
   ///
   /// **Two different caches, and the row says which is which.** The first
-  /// number is `demuxer-cache-duration`, a few seconds of memory mpv has
-  /// read ahead, labelled `mpv` so it does not read as the server's. What
-  /// follows is the bytes on this device held unbroken behind and ahead of
-  /// the playhead: the run a scan back is served from and the run playback
-  /// has in hand, each ended by the first byte not held. Not the retention
-  /// policy's window, and there under every cache budget -- one that
-  /// covers the whole file included.
+  /// number is `demuxer-cache-duration`, a few seconds of memory mpv has read
+  /// ahead, labelled `mpv` so it does not read as the server's. What follows is
+  /// the bytes on this device held unbroken behind and ahead of the playhead:
+  /// the run a scan back is served from and the run playback has in hand, each
+  /// ended by the first byte not held. It is not the retention policy's window,
+  /// and it is there under every cache budget, one that covers the whole file
+  /// included.
   ///
-  /// The server's half is absent only where the server has no playhead for
-  /// the stream -- one it is not holding at all, or one no reader has been
-  /// inside yet -- and then the row is mpv's number alone rather than two
-  /// dashes claiming a cache of nothing was measured.
+  /// The server's half is absent only where the server has no playhead for the
+  /// stream: one it is not holding at all, or one no reader has been inside
+  /// yet. Then the row is mpv's number alone rather than two dashes claiming a
+  /// cache of nothing was measured.
   ///
   /// Each half stands without the other, so the row is null when neither
   /// was measured. mpv's is missing before its first sample, which is when
@@ -445,28 +438,27 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// Half the window: its bytes, and how much watching that is.
   ///
-  /// The time is **the server's**, not an arithmetic done here: mpv's
-  /// `video-bitrate` would rate whichever of the player's streams is worst
-  /// off by how many bits the picture takes, even when that stream is a
-  /// subtitle track, and would call a stream consuming nothing a long
-  /// runway rather than none -- mpv's read of a Matroska file's cues parks
-  /// at the tail and takes nothing further. The server measures each
-  /// head's own rate and sends the seconds with the bytes.
+  /// The time is **the server's**, not an arithmetic done here. mpv's
+  /// `video-bitrate` would rate whichever of the player's streams is worst off
+  /// by how many bits the picture takes, even when that stream is a subtitle
+  /// track. It would also call a stream consuming nothing a long runway rather
+  /// than none: mpv's read of a Matroska file's cues parks at the tail and
+  /// takes nothing further. The server measures each head's own rate and sends
+  /// the seconds with the bytes.
   ///
-  /// **No rate, no time**: the bytes go on their own rather than beside a
-  /// dash, for a stream nothing has measured yet or one that is not
-  /// reading.
+  /// **No rate, no time**: the bytes go on their own rather than beside a dash,
+  /// for a stream nothing has measured yet or one that is not reading.
   ///
-  /// Under ten seconds it is written to a tenth. That is the range where
-  /// the number is about to matter -- it is what the row says just before
-  /// the film stops -- and `2s` reads the same whether it is two seconds or
-  /// two and nine tenths. Above that a tenth is noise and the coarse shape
-  /// (`3m`) is what carries from the sofa.
+  /// Under ten seconds it is written to a tenth. That is the range where the
+  /// number is about to matter, since it is what the row says just before the
+  /// film stops, and `2s` reads the same whether it is two seconds or two and
+  /// nine tenths. Above that a tenth is noise, and the coarse shape (`3m`) is
+  /// what carries from the sofa.
   ///
-  /// The time goes in brackets after the bytes rather than behind a slash.
-  /// A slash between a size and a time is the shape a rate has, and the
-  /// panel has real ones two rows down (`speed    1.2 MB/s`); this one is
-  /// not a rate but the same quantity said again in the other unit.
+  /// The time goes in brackets after the bytes rather than behind a slash. A
+  /// slash between a size and a time is the shape a rate has, and the panel has
+  /// real ones two rows down (`speed 1.2 MB/s`). This one is not a rate but the
+  /// same quantity said again in the other unit.
   static String _span(int bytes, double? seconds) {
     if (seconds == null) return formatBytes(bytes);
     final time = seconds < 10
@@ -478,38 +470,36 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// The sharing row: what this torrent has promised the swarm and what it
   /// has moved. One row, or none at all.
   ///
-  /// **A stream with no swarm has no row here**, and that is the whole of
-  /// the rule: a proxied response is not seeded, so it has no committed
-  /// set and no ratio, and a row of zeroes would say it had shared
-  /// nothing when the truth is that there was nothing to share. The same
-  /// goes for each half on its own -- a torrent with no retention policy
-  /// has promised nothing whatever it announces, and a torrent whose
-  /// counters cannot be read (paused, checking, stopped for space, in
-  /// error) has moved whatever it moved before that, not nothing.
+  /// **A stream with no swarm has no row here**, and that is the whole of the
+  /// rule. A proxied response is not seeded, so it has no committed set and no
+  /// ratio. A row of zeroes would say it had shared nothing, when the truth is
+  /// that there was nothing to share. The same goes for each half on its own. A
+  /// torrent with no retention policy has promised nothing whatever it
+  /// announces. A torrent whose counters cannot be read (paused, checking,
+  /// stopped for space, in error) has moved whatever it moved before that, not
+  /// nothing.
   ///
-  /// **The transfer covers this torrent's current live period, and the row
-  /// says which.** These are the server's own counters and they live in
-  /// the torrent's live state (`enginefs::backend::TransferTotals`: they
-  /// start at zero when a torrent goes live and are gone -- not zero --
-  /// when it leaves that state). So a pause and resume starts them again,
-  /// and so does the idle sweep dropping the engine before a later stream
-  /// re-adds it: a torrent that shared gigabytes twenty minutes ago really
-  /// does read `↑ 0 B` here, and `this session` over that number would be
-  /// a claim about a stretch of watching these counters never covered.
-  /// They are not written down either, which is the other half and is
-  /// deliberate: every other client shows a ratio kept per torrent across
-  /// restarts, and the alternative here was storing counters something
-  /// then has to keep true, which is a claim about a past nothing watched.
+  /// **The transfer covers this torrent's current live period, and the row says
+  /// which.** These are the server's own counters, and they live in the
+  /// torrent's live state (`enginefs::backend::TransferTotals`): they start at
+  /// zero when a torrent goes live, and are gone, not zero, when it leaves that
+  /// state. So a pause and resume starts them again, and so does the idle sweep
+  /// dropping the engine before a later stream re-adds it. A torrent that
+  /// shared gigabytes twenty minutes ago really does read `↑ 0 B` here, and
+  /// `this session` over that number would be a claim about a stretch of
+  /// watching these counters never covered. They are not written down either,
+  /// and that is deliberate. Every other client shows a ratio kept per torrent
+  /// across restarts. The alternative here was storing counters something then
+  /// has to keep true, which is a claim about a past nothing watched.
   ///
-  /// So the period is said over the bytes and the ratio together, as one
-  /// part of the row rather than as a tail on the ratio. The ratio is the
-  /// half that goes missing -- a torrent resumed onto a complete file and
-  /// seeded from it has downloaded nothing, so there is no ratio to draw
-  /// -- and a period hung on the ratio alone leaves exactly that torrent
-  /// reading `↑ 2.1 GB ↓ 0 B` with nothing saying which stretch of
-  /// seeding it is. That is the one row where the number needs it most:
-  /// it is the number a viewer reads as everything this torrent has ever
-  /// given back.
+  /// So the period is said over the bytes and the ratio together, as one part
+  /// of the row rather than as a tail on the ratio. The ratio is the half that
+  /// goes missing: a torrent resumed onto a complete file and seeded from it
+  /// has downloaded nothing, so there is no ratio to draw. A period hung on the
+  /// ratio alone leaves exactly that torrent reading `↑ 2.1 GB ↓ 0 B`, with
+  /// nothing saying which stretch of seeding it is. That is the one row where
+  /// the number needs it most: it is the number a viewer reads as everything
+  /// this torrent has ever given back.
   static List<String> describeSharing(StreamNumbers? held) {
     final sharing = held?.sharing;
     if (sharing == null) return const [];
@@ -531,19 +521,18 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// vouched for, and pieces the cache asked the torrent backend to forget
   /// and was refused.
   ///
-  /// **A level, not a verdict.** The first figure is what the server
-  /// fetched less what it downloaded and checked, and the subtraction
-  /// cannot say whose bytes those are: chunks of a piece still in flight
-  /// leave the number when that piece checks, the second copy of a chunk
-  /// asked of a fast peer on purpose to get a piece out from under a
-  /// stalled one sits in it, and so does what really was thrown away. A
-  /// few per cent of what was played is that ordinary duplication; a
-  /// multiple of it, beside refusals that are never healthy above zero, is
-  /// what a phone fetching 1.6 GB to play a hundred megabytes looks like:
-  /// the cache ordering pieces its own next pass deletes, and refusing
-  /// reclaims it cannot even delete because an open stream is still
-  /// reading ahead over them. Absent rather than zero where the server has
-  /// nothing to say -- a proxied stream, or a torrent whose counters
+  /// **A level, not a verdict.** The first figure is what the server fetched
+  /// less what it downloaded and checked, and the subtraction cannot say whose
+  /// bytes those are. Chunks of a piece still in flight leave the number when
+  /// that piece checks. The second copy of a chunk, asked of a fast peer on
+  /// purpose to get a piece out from under a stalled one, sits in it, and so
+  /// does what really was thrown away. A few per cent of what was played is
+  /// that ordinary duplication. A multiple of it, beside refusals that are
+  /// never healthy above zero, is what a phone fetching 1.6 GB to play a
+  /// hundred megabytes looks like: the cache ordering pieces its own next pass
+  /// deletes, and refusing reclaims it cannot even delete because an open
+  /// stream is still reading ahead over them. Absent rather than zero where the
+  /// server has nothing to say: a proxied stream, or a torrent whose counters
   /// cannot be read.
   static List<String> describeUnverified(StreamNumbers? held) {
     final sharing = held?.sharing;

@@ -17,25 +17,24 @@ import 'time_format.dart';
 /// are a scan rather than a position the viewer named, so they go to
 /// [onStep] where there is one.
 ///
-/// The ring and not the thickening the bar already had: that is the cue a
-/// pointer gets for hovering, in the scheme's violet, which says "the
-/// pointer is here" at the one moment a remote has to be told something
-/// else -- and it is deaf to the Bold switch, being the bar's own
-/// invention rather than either mechanism the app marks focus with. So
-/// the bar wears a [FocusMarked] like every other control the floor
-/// cannot reach: it is a bare [Focus] over a [CustomPaint], with no
-/// Material anywhere in it for the floor to fill or stroke. It is drawn
-/// straight over the picture, which is what the ring is for.
+/// The ring, and not the thickening the bar already had. The thickening is the
+/// cue a pointer gets for hovering, in the scheme's violet, which says "the
+/// pointer is here" at the one moment a remote has to be told something else.
+/// It is also deaf to the Bold switch, being the bar's own invention rather
+/// than either mechanism the app marks focus with. So the bar wears a
+/// [FocusMarked] like every other control the floor cannot reach: it is a bare
+/// [Focus] over a [CustomPaint], with no Material anywhere in it for the floor
+/// to fill or stroke. It is drawn straight over the picture, which is what the
+/// ring is for.
 ///
-/// The ring and *not* Bold's dimming, which is the rest of what a
+/// The ring, and *not* Bold's dimming, which is the rest of what a
 /// [FocusMarked] carries by default. The dimming is read off a surface's
-/// neighbours going dark with it, and this bar has none: play/pause, the
-/// seek buttons, the time labels and every button on the top bar are
-/// marked by the theme floor, so they stay where they are and only the bar
-/// fades -- to 0.45, at rest and at every other stop on the control bar,
-/// which is to say for the whole time the viewer is reading how far
-/// through the film they are while pressing something else. It is a
-/// [FocusTreatment.readout] for that reason.
+/// neighbours going dark with it, and this bar has none. Play/pause, the seek
+/// buttons, the time labels and every button on the top bar are marked by the
+/// theme floor, so they stay where they are and only the bar fades, to 0.45, at
+/// rest and at every other stop on the control bar. That is the whole time the
+/// viewer is reading how far through the film they are while pressing something
+/// else. It is a [FocusTreatment.readout] for that reason.
 class SeekBar extends StatefulWidget {
   const SeekBar({
     super.key,
@@ -59,12 +58,12 @@ class SeekBar extends StatefulWidget {
   /// One left/right press while focused, as the distance it moves rather
   /// than the position it lands on: signed, and [seekStep] long.
   ///
-  /// A step is the viewer scanning -- the press says "further on", not
-  /// "this moment" -- and the two are answered differently, one landing
-  /// on a keyframe at once and the other decoding to the exact frame
-  /// asked for ([PlaybackEngine.scanBy]). A tap or a drag on the bar is
-  /// the other kind and stays with [onSeek], which is also where the
-  /// presses go for an owner that has no use for the distinction.
+  /// A step is the viewer scanning: the press says "further on", not "this
+  /// moment". The two are answered differently, one landing on a keyframe at
+  /// once and the other decoding to the exact frame asked for
+  /// ([PlaybackEngine.scanBy]). A tap or a drag on the bar is the other kind
+  /// and stays with [onSeek]. That is also where the presses go for an owner
+  /// that has no use for the distinction.
   final ValueChanged<Duration>? onStep;
 
   final VoidCallback? onScrubStart;
@@ -119,10 +118,10 @@ class _SeekBarState extends State<SeekBar> {
   double _fractionAt(Offset local, double width) =>
       (local.dx / width).clamp(0.0, 1.0);
 
-  /// Moves by [step], the signed distance a D-pad press or a screen
-  /// reader's increase/decrease gesture asks for -- the scan path
+  /// Moves by [step], the signed distance a D-pad press or a screen reader's
+  /// increase/decrease gesture asks for. That is the scan path
   /// ([SeekBar.onStep]) when the owner has one, else a named position
-  /// ([SeekBar.onSeek]) at the old position plus the step. The same
+  /// ([SeekBar.onSeek]) at the old position plus the step. It is the same
   /// choice [_onKeyEvent] made for the D-pad.
   void _step(Duration step) {
     final onStep = widget.onStep;
@@ -133,9 +132,8 @@ class _SeekBarState extends State<SeekBar> {
     }
   }
 
-  /// [value], clamped to the playable range -- what a label reads for a
-  /// step that would otherwise claim a moment before the start or past
-  /// the end.
+  /// [value], clamped to the playable range. A label reads this for a step that
+  /// would otherwise claim a moment before the start or past the end.
   Duration _clamp(Duration value) {
     if (value < Duration.zero) return Duration.zero;
     if (value > widget.duration) return widget.duration;
@@ -147,10 +145,10 @@ class _SeekBarState extends State<SeekBar> {
   String _valueLabel(Duration value) =>
       '${formatTime(_clamp(value))} of ${formatTime(widget.duration)}';
 
-  /// Left and right seek by [SeekBar.seekStep] while the bar holds focus,
-  /// on the press and on every repeat of a held key -- further with each
-  /// repeat, which is [SeekHold]'s business rather than this widget's.
-  /// Everything else (up, down, select) belongs to whoever is above us.
+  /// Left and right seek by [SeekBar.seekStep] while the bar holds focus, on
+  /// the press and on every repeat of a held key. Each repeat goes further,
+  /// which is [SeekHold]'s business rather than this widget's. Everything else
+  /// (up, down, select) belongs to whoever is above us.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (!_enabled || event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
@@ -172,20 +170,19 @@ class _SeekBarState extends State<SeekBar> {
         final width = constraints.maxWidth;
         final drag = _drag;
         final progress = drag ?? _fraction(widget.position);
-        // A slider to a screen reader: a value it reads ("15:48 of
-        // 1:48:40"), and increase/decrease in place of the raw
-        // tap/scroll semantics [GestureDetector] would otherwise expose
-        // (a TalkBack user could feel the bar but not move it). The step
-        // is [_step], the same path the ±10 s buttons seek by, so a
-        // screen reader moves the position exactly as far as they do.
-        // [ExcludeSemantics] drops that raw gesture semantics without
-        // touching the gestures themselves -- nothing here changes what a
+        // A slider to a screen reader: a value it reads ("15:48 of 1:48:40"),
+        // and increase/decrease in place of the raw tap/scroll semantics
+        // [GestureDetector] would otherwise expose (a TalkBack user could feel
+        // the bar but not move it). The step is [_step], the same path the ±10
+        // s buttons seek by, so a screen reader moves the position exactly as
+        // far as they do. [ExcludeSemantics] drops that raw gesture semantics
+        // without touching the gestures themselves: nothing here changes what a
         // tap or a drag does.
         //
-        // A node of its own ([Semantics.container]): left to merge, the
-        // slider joined the nearest node above that is one -- the whole
-        // player screen -- and a screen reader took the entire screen, the
-        // title and the bar's label run together, for the seek bar.
+        // A node of its own ([Semantics.container]). Left to merge, the slider
+        // joined the nearest node above that is one, the whole player screen,
+        // and a screen reader took the entire screen, the title and the bar's
+        // label run together, for the seek bar.
         return Semantics(
           container: true,
           slider: true,

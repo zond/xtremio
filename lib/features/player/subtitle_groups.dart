@@ -49,11 +49,11 @@ final class SubtitleOption {
   /// nothing but a URL.
   ///
   /// A derived name only earns its place by being *different* from its
-  /// neighbours, and often it is not: all three Czech files OpenSubtitles
+  /// neighbours, and often it is not. All three Czech files OpenSubtitles
   /// answers for The Godfather are `subtitleFileName: "1.srt"`, and its
-  /// Breaking Bad answer has three Romanian `101`s. Those get their
-  /// position back on the end (`1 (2)`) -- a name that says nothing is no
-  /// worse for it, and three rows reading `1` are unpickable.
+  /// Breaking Bad answer has three Romanian `101`s. Those get their position
+  /// back on the end (`1 (2)`). A name that says nothing is no worse for it,
+  /// and three rows reading `1` are unpickable.
   String get name => ambiguousName ? '$_derived ($index)' : _derived;
 
   /// Every candidate goes through [_short]: they are all addon text, and
@@ -85,9 +85,9 @@ final class SubtitleOption {
   /// already fits. Null in, null out.
   static String? _short(String? text) {
     if (text == null || text.length <= _limit) return text;
-    // Cutting a string is the one thing that can break a surrogate pair
-    // in half, and half a character is what Flutter's text layout refuses
-    // to draw -- so the cut goes back through the guard.
+    // Cutting a string is the one thing that can break a surrogate pair in
+    // half, and Flutter's text layout refuses to draw half a character. So the
+    // cut goes back through the guard.
     return '${wellFormedText(text.substring(0, _limit))!.trimRight()}\u2026';
   }
 
@@ -137,8 +137,8 @@ final class SubtitleLanguageGroup {
     orElse: () => options.first,
   );
 
-  /// Whether the file playing right now is one of these -- what keeps the
-  /// current selection visible after the list is regrouped.
+  /// Whether the file playing right now is one of these. This keeps the current
+  /// selection visible after the list is regrouped.
   bool contains(String? activeId) =>
       activeId != null && options.any((option) => option.id == activeId);
 }
@@ -147,25 +147,23 @@ final class SubtitleLanguageGroup {
 /// `<0.1-10.0>`), and with [maxSubtitleSpeed] the range a value has to
 /// fall in to be set at all.
 ///
-/// media_kit writes the property with `mpv_set_property_string` and
-/// discards its return code, so a value outside the range is refused in
-/// silence -- nothing throws, and the multiplier the *previous* file
-/// left behind stays in force while the panel claims a new one. Every
-/// path that can produce a multiplier keeps well clear of it on its own
-/// -- a calibration and a match each believe a ratio only within about
-/// a tenth of the file's own timing, where the largest real mismatch,
-/// PAL against film, is 4.3 % -- and this pair is what a stored one is
-/// checked against on the way back in
-/// (`PlayerScreen._rememberedSpeed`), since a preferences file will
-/// hold whatever somebody puts in it.
+/// media_kit writes the property with `mpv_set_property_string` and discards
+/// its return code. So a value outside the range is refused in silence: nothing
+/// throws, and the multiplier the *previous* file left behind stays in force
+/// while the panel claims a new one. Every path that can produce a multiplier
+/// keeps well clear of it on its own. A calibration and a match each believe a
+/// ratio only within about a tenth of the file's own timing, where the largest
+/// real mismatch, PAL against film, is 4.3 %. This pair is what a stored one is
+/// checked against on the way back in (`PlayerScreen._rememberedSpeed`), since
+/// a preferences file will hold whatever somebody puts in it.
 const double minSubtitleSpeed = 0.1;
 
 /// The largest multiplier libmpv's `sub-speed` accepts; see
 /// [minSubtitleSpeed] for what falling outside the range costs.
 const double maxSubtitleSpeed = 10;
 
-/// Whether the addon says [subtitle] was cut for [release] -- the video
-/// file that is playing, by the best name the player knows it by.
+/// Whether the addon says [subtitle] was cut for [release]: the video file that
+/// is playing, by the best name the player knows it by.
 ///
 /// Two of the addon's claims are compared, and both are claims about
 /// *which upload this is*: the release group (`DFN`) and the whole
@@ -175,10 +173,10 @@ const double maxSubtitleSpeed = 10;
 /// construction, where a rate is only a claim about where the upload
 /// came from.
 ///
-/// Release names are written every way there is -- dots, underscores,
-/// spaces, dashes, brackets, any case -- so both sides are cut into
-/// lower-case runs of letters and digits, and the claim has to appear in
-/// the playing file's name as a whole run of whole tokens.
+/// Release names are written every way there is (dots, underscores, spaces,
+/// dashes, brackets, any case). So both sides are cut into lower-case runs of
+/// letters and digits, and the claim has to appear in the playing file's name
+/// as a whole run of whole tokens.
 ///
 /// A false match is worse than no match: it puts a file at the head of
 /// its language, which is the file the row applies and the file the
@@ -195,9 +193,9 @@ const double maxSubtitleSpeed = 10;
 ///   name an upload, and an addon fills these fields with whatever it
 ///   managed to parse.
 ///
-/// A claim that matches *every* file of a language -- the film's title
-/// on its own -- costs nothing, since a rank keeps the addons' own order
-/// inside it, and promoting all of them promotes none of them.
+/// A claim that matches *every* file of a language (the film's title on its
+/// own) costs nothing. A rank keeps the addons' own order inside it, and
+/// promoting all of them promotes none of them.
 bool subtitleMatchesRelease(SubtitleInfo subtitle, {required String? release}) {
   if (release == null) return false;
   final playing = _withoutContainer(_releaseTokens(release));
@@ -211,18 +209,17 @@ bool subtitleMatchesRelease(SubtitleInfo subtitle, {required String? release}) {
 
 /// Whether [claim] names the upload whose filename is [playing].
 ///
-/// [wholeName] is set for a claim that is supposed to be a release name
-/// rather than a group, and holds it to one more rule: a run that starts
-/// at the front of the playing name and stops short of its end is the
-/// title and the episode, which every upload of that episode carries.
-/// `Gilmore Girls - S01E01 - Pilot` is what an addon sends when it has
-/// only the episode to go on, and eleven of the twelve OpenSubtitles
-/// answers whose claim appears in one real filename are of that shape --
-/// so taken as release matches they mark a file "same release" on no
-/// evidence and put it at the head of its language, which is the file
-/// the row applies and the file the auto-pick plays. A claim that runs
-/// to the end of the name is the whole name; one that starts inside it
-/// has already got past the title.
+/// [wholeName] is set for a claim that is supposed to be a release name rather
+/// than a group, and holds it to one more rule. A run that starts at the front
+/// of the playing name and stops short of its end is the title and the episode,
+/// which every upload of that episode carries. `Gilmore Girls - S01E01 - Pilot`
+/// is what an addon sends when it has only the episode to go on. Eleven of the
+/// twelve OpenSubtitles answers whose claim appears in one real filename are of
+/// that shape. Taken as release matches, they mark a file "same release" on no
+/// evidence and put it at the head of its language, which is the file the row
+/// applies and the file the auto-pick plays. A claim that runs to the end of
+/// the name is the whole name; one that starts inside it has already got past
+/// the title.
 bool _claims(List<String> playing, String? claim, {required bool wholeName}) {
   if (claim == null) return false;
   final tokens = _withoutContainer(_releaseTokens(claim));
@@ -275,11 +272,11 @@ int _runStart(List<String> haystack, List<String> needle) {
 
 /// [tokens] without a trailing video container extension.
 ///
-/// The extension is the one part of a filename that says nothing about
-/// which release it is, and the two sides disagree about it all the
-/// time: the addon spells its claim with the container it saw and the
-/// server opened a remux of the same release. Dropping it is also what
-/// lets "runs to the end of the name" mean the end of the name proper.
+/// The extension is the one part of a filename that says nothing about which
+/// release it is, and the two sides disagree about it all the time. The addon
+/// spells its claim with the container it saw, and the server opened a remux of
+/// the same release. Dropping it is also what lets "runs to the end of the
+/// name" mean the end of the name proper.
 ///
 /// Spelled out rather than matched as "a short trailing dot-group", for
 /// the reason [SubtitleOption._extension] is: a release name ends in
@@ -336,63 +333,59 @@ enum _ReleaseFit {
 /// that is playing first, then the ones from a group the viewer has
 /// already adjusted for [series], then the rest as the addons gave them.
 ///
-/// The declared frame rate does not order this: it is a claim about the
-/// release an upload was made for, and the evidence says that is a claim
-/// about *provenance* and not about timing -- ten English files for one
-/// film declaring six different rates all end within 1 % of the same
-/// runtime. What names a release says more, because two files cut for
-/// one release keep its time.
+/// The declared frame rate does not order this. It is a claim about the release
+/// an upload was made for, and the evidence says that is a claim about
+/// *provenance* and not about timing: ten English files for one film declaring
+/// six different rates all end within 1 % of the same runtime. What names a
+/// release says more, because two files cut for one release keep its time.
 ///
-/// [release] and [series] name what is playing (null for either -- an
-/// offline play, a torrent nothing has named the file of, a stream with
-/// no meta behind it -- simply answers nothing for that rank), and
-/// [memory] is what the viewer has already fixed. The second rank asks
-/// [memory] exactly what `PlayerScreen._resetSubtitleTiming` will ask it
-/// when the file goes on screen, so "already adjusted" means the
-/// correction really is put back and not merely stored: a shift belongs
-/// to one release, and one measured against another is not this video's.
+/// [release] and [series] name what is playing, and [memory] is what the viewer
+/// has already fixed. A null for either (an offline play, a torrent nothing has
+/// named the file of, a stream with no meta behind it) simply answers nothing
+/// for that rank. The second rank asks [memory] exactly what
+/// `PlayerScreen._resetSubtitleTiming` will ask it when the file goes on
+/// screen. So "already adjusted" means the correction really is put back and
+/// not merely stored: a shift belongs to one release, and one measured against
+/// another is not this video's.
 ///
-/// The languages themselves come out **alphabetically by the label the
-/// menu prints** ([_byLanguageLabel]), because a viewer hunting Swedish
-/// among the forty rows OpenSubtitles answers with is reading names, and
-/// the order they arrived in is a fact about which addon was quickest.
+/// The languages themselves come out **alphabetically by the label the menu
+/// prints** ([_byLanguageLabel]), because a viewer hunting Swedish among the
+/// forty rows OpenSubtitles answers with is reading names, and the order they
+/// arrived in is a fact about which addon was quickest.
 ///
-/// Nothing is pinned here. There is no "off" row to pin --
-/// `SubtitleMenu` draws Off itself, above every language, and it stays
-/// first by being drawn there rather than by any order here -- and the
-/// language that is playing is deliberately *not* lifted: this list is
-/// ordered before anything is selected (the auto-pick reads it to make
-/// the selection), and a row that jumps to the top once it is picked
-/// takes back the one thing an alphabet is for, which is finding a
-/// language where the alphabet left it. The menu marks the row that is
-/// on instead.
+/// Nothing is pinned here. There is no "off" row to pin: `SubtitleMenu` draws
+/// Off itself, above every language, and it stays first by being drawn there
+/// rather than by any order here. The language that is playing is deliberately
+/// *not* lifted either. This list is ordered before anything is selected (the
+/// auto-pick reads it to make the selection), and a row that jumps to the top
+/// once it is picked takes back the one thing an alphabet is for: finding a
+/// language where the alphabet left it. The menu marks the row that is on
+/// instead.
 ///
-/// The menu *does* lift the languages this viewer picks most often, at
-/// most two of them and ranked over what it draws rather than over this
-/// list (`SubtitleMenu.picks`), and that is deliberately not done
-/// here: it is a fact about the viewer rather than about these files,
-/// and the rule above is about a row moving in front of somebody. A pin
-/// read from stored counts cannot do that, because a count only changes
-/// on a pick and every pick closes the sheet.
+/// The menu *does* lift the languages this viewer picks most often, at most two
+/// of them, ranked over what it draws rather than over this list
+/// (`SubtitleMenu.picks`). That is deliberately not done here. It is a fact
+/// about the viewer rather than about these files, and the rule above is about
+/// a row moving in front of somebody. A pin read from stored counts cannot do
+/// that, because a count only changes on a pick and every pick closes the
+/// sheet.
 ///
-/// **The one thing this order decides rather than shows.** The auto-pick
-/// walks this list and takes the first file whose language matches the
-/// session preference (`PlayerScreen._maybeAutoPickSubtitles`). A
-/// preference that names a language therefore reads the head of *that*
-/// language's group and cannot tell what order the groups are in. A
-/// preference that is enabled and names **no** language -- which is what
-/// picking a file the addon gave no language for leaves behind, since
-/// that pick sends a null language -- matches every file, so it takes the
-/// head of the whole list: the alphabetically first language. That is not
-/// a judgement about the file either, but it picks the same one every
-/// time, where answer order does not. Every other reader of this order is
+/// **The one thing this order decides rather than shows.** The auto-pick walks
+/// this list and takes the first file whose language matches the session
+/// preference (`PlayerScreen._maybeAutoPickSubtitles`). A preference that names
+/// a language therefore reads the head of *that* language's group, and cannot
+/// tell what order the groups are in. A preference that is enabled and names
+/// **no** language matches every file, so it takes the head of the whole list:
+/// the alphabetically first language. Picking a file the addon gave no language
+/// for leaves such a preference behind, since that pick sends a null language.
+/// That is not a judgement about the file either, but it picks the same one
+/// every time, where answer order does not. Every other reader of this order is
 /// a menu.
 ///
-/// The order *inside* a language is untouched, and so is the order
-/// inside each rank, so the addon that answered first still wins a tie.
-/// That matters more than it looks: the head of a language is the file
-/// its row applies and the file the auto-pick plays. Nothing is dropped
-/// or hidden.
+/// The order *inside* a language is untouched, and so is the order inside each
+/// rank, so the addon that answered first still wins a tie. That matters more
+/// than it looks: the head of a language is the file its row applies and the
+/// file the auto-pick plays. Nothing is dropped or hidden.
 List<SubtitleSource> subtitlesByRelease(
   Iterable<SubtitleSource> sources, {
   required String? release,
@@ -463,11 +456,11 @@ _ReleaseFit _fitOf(
 /// [languageName] does not know it; `Unknown` when there is no code.
 ///
 /// Public because it is also what a remembered pick is stored as
-/// (`SubtitleShowPick.language`): the memory has to be the row the menu
-/// prints, or an addon spelling a language differently next episode would
-/// read as a different choice. Passing a label back through is harmless
-/// -- [languageName] answers an unknown code with the code -- which is
-/// what lets a stored label be compared with a fresh one.
+/// (`SubtitleShowPick.language`). The memory has to be the row the menu prints,
+/// or an addon spelling a language differently next episode would read as a
+/// different choice. Passing a label back through is harmless, since
+/// [languageName] answers an unknown code with the code. That is what lets a
+/// stored label be compared with a fresh one.
 String subtitleLanguageLabel(String lang) {
   final code = lang.trim();
   return code.isEmpty ? 'Unknown' : languageName(code);
@@ -476,14 +469,13 @@ String subtitleLanguageLabel(String lang) {
 /// Orders two language rows by the name a viewer reads them under. Both
 /// sides are the lower-cased labels [subtitlesByRelease] keys on.
 ///
-/// Compared on [_sortKey] rather than on the label itself, so an
-/// accented name lands where it is looked for. Distinct rows must never
-/// compare equal, because `List.sort` is not stable and two labels that
-/// fold alike -- one addon writing a language's own name for a code
-/// [languageName] does not know, another writing it without its accents
-/// -- would otherwise swap places from one build of the menu to the
-/// next; the label itself settles those, which also keeps the whole
-/// comparison a total order.
+/// Compared on [_sortKey] rather than on the label itself, so an accented name
+/// lands where it is looked for. Distinct rows must never compare equal,
+/// because `List.sort` is not stable. Two labels can fold alike: one addon
+/// writing a language's own name for a code [languageName] does not know,
+/// another writing it without its accents. They would otherwise swap places
+/// from one build of the menu to the next. The label itself settles those,
+/// which also keeps the whole comparison a total order.
 int _byLanguageLabel(String a, String b) {
   final folded = _sortKey(a).compareTo(_sortKey(b));
   return folded != 0 ? folded : a.compareTo(b);
@@ -491,17 +483,16 @@ int _byLanguageLabel(String a, String b) {
 
 /// [label] with its accents dropped, which is the key it sorts under.
 ///
-/// Dart ships no collator, and plain `compareTo` is code-unit order: it
-/// puts every accented letter after `z`, so a row a reader would look
-/// for between Estonian and Finnish lands under the bottom of the list
-/// instead. Every name [languageName] knows is ASCII already, so this
-/// exists for the codes it does not, which come back as whatever the
-/// addon wrote.
+/// Dart ships no collator, and plain `compareTo` is code-unit order. It puts
+/// every accented letter after `z`, so a row a reader would look for between
+/// Estonian and Finnish lands under the bottom of the list instead. Every name
+/// [languageName] knows is ASCII already, so this exists for the codes it does
+/// not, which come back as whatever the addon wrote.
 ///
-/// One letter for one letter, and nothing else: the expansions a real
-/// collation makes (`ss` for a sharp s, `ae` for an ash) depend on the
-/// language being sorted *for*, which nothing here knows, and are worth
-/// less than the accents are. A letter with no entry sorts as itself.
+/// One letter for one letter, and nothing else. The expansions a real collation
+/// makes (`ss` for a sharp s, `ae` for an ash) depend on the language being
+/// sorted *for*, which nothing here knows, and are worth less than the accents
+/// are. A letter with no entry sorts as itself.
 String _sortKey(String label) {
   final buffer = StringBuffer();
   for (var i = 0; i < label.length; i++) {
@@ -515,9 +506,8 @@ String _sortKey(String label) {
 /// the two strings below. Lower case only: what is compared is a
 /// lower-cased label.
 final Map<int, int> _unaccented = () {
-  // A letter that lost its partner does not go missing, it slides every
-  // letter after it onto the wrong plain one, which is a fold that
-  // works and answers nonsense.
+  // A letter that lost its partner does not go missing. It slides every letter
+  // after it onto the wrong plain one: a fold that works and answers nonsense.
   assert(_accented.length == _plain.length, 'one plain letter per accent');
   return {
     for (var i = 0; i < _accented.length; i++)
@@ -572,21 +562,20 @@ const String _plain =
 /// Groups deduplicated subtitle files by language, one group per language
 /// in first-seen (merge) order.
 ///
-/// Codes are grouped on what they *mean*, not on how they are spelled, so
-/// an addon answering `en` and one answering `eng` land in the same
-/// English group; a code [languageName] does not know is its own group,
-/// labelled with the code itself. [addonName] resolves a manifest URL to
-/// the addon's installed name; without it the manifest's host is used.
+/// Codes are grouped on what they *mean*, not on how they are spelled, so an
+/// addon answering `en` and one answering `eng` land in the same English group.
+/// A code [languageName] does not know is its own group, labelled with the code
+/// itself. [addonName] resolves a manifest URL to the addon's installed name;
+/// without it the manifest's host is used.
 ///
-/// The order the groups and their options come out in is the order
-/// [sources] arrived in, so the alphabet and the ranking are both
-/// [subtitlesByRelease]'s to do first.
+/// The order the groups and their options come out in is the order [sources]
+/// arrived in, so the alphabet and the ranking are both [subtitlesByRelease]'s
+/// to do first.
 ///
-/// [release] is the name the player knows the video by, and every option
-/// is asked whether the addon says it was cut for it
-/// ([subtitleMatchesRelease]); null -- an offline play, a torrent nothing
-/// has named the file of -- means nobody is marked, which is what knowing
-/// nothing has to look like.
+/// [release] is the name the player knows the video by, and every option is
+/// asked whether the addon says it was cut for it ([subtitleMatchesRelease]). A
+/// null (an offline play, a torrent nothing has named the file of) means nobody
+/// is marked, which is what knowing nothing has to look like.
 List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   Iterable<SubtitleSource> sources, {
   String Function(String manifestUrl)? addonName,

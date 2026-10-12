@@ -19,19 +19,18 @@ import 'subtitle_match.dart';
 /// else -- a distributor logo this video does not have. A **stretch**
 /// answers a rate that drifts.
 ///
-/// Nothing else writes either property, so what is in this is the whole
-/// of what mpv is playing: a declared frame rate is a claim about the
-/// release an upload was made for, and the same claim covers files that
-/// keep time and files that do not, so acting on it fixes one and breaks
-/// the other in equal measure. What the viewer *observes* is the only
-/// thing that tells those apart, and what observes it are the panel's
-/// two measurements: a match against a file they say is in sync
-/// (`SubtitleMatchClient`), and the marks they make on the file in front
-/// of them -- "this line belongs at this moment", `SubtitleCalibration`.
-/// Both solve for [calibratedSpeed] and [calibratedDelay] together, and
-/// a mark arrives here as the pair it solved rather than as presses:
-/// what it says is where the line goes, not how many tenths were needed
-/// to get it there.
+/// Nothing else writes either property, so what is in this is the whole of what
+/// mpv is playing. A declared frame rate is a claim about the release an upload
+/// was made for, and the same claim covers files that keep time and files that
+/// do not. Acting on it fixes one and breaks the other in equal measure. What
+/// the viewer *observes* is the only thing that tells those apart, and the
+/// panel's two measurements are what observe it. One is a match against a file
+/// they say is in sync (`SubtitleMatchClient`). The other is the marks they
+/// make on the file in front of them, "this line belongs at this moment"
+/// (`SubtitleCalibration`). Both solve for [calibratedSpeed] and
+/// [calibratedDelay] together. A mark arrives here as the pair it solved rather
+/// than as presses: what it says is where the line goes, not how many tenths
+/// were needed to get it there.
 ///
 /// The presses are counted as integers so that ten forward and ten back
 /// land exactly where they started; a double accumulated a tenth at a
@@ -54,10 +53,10 @@ final class SubtitleTiming {
   /// The multiplier a measurement solved for, and null for the file's
   /// own timing.
   ///
-  /// A measurement and not a menu of values: the owner's own Swedish
-  /// file wants 1.0440 where the PAL constant is 1.0427, three seconds
-  /// across an episode -- too fine a difference for a fixed choice of the
-  /// constant and its reciprocal to reach.
+  /// A measurement and not a menu of values. The owner's own Swedish file wants
+  /// 1.0440 where the PAL constant is 1.0427, three seconds across an episode.
+  /// That is too fine a difference for a fixed choice of the constant and its
+  /// reciprocal to reach.
   final double? calibratedSpeed;
 
   /// The offset a measurement solved for, in seconds, and null when none
@@ -146,12 +145,11 @@ class SubtitleTimingOverlay extends StatelessWidget {
 
   /// "This is right": the line on screen belongs at this moment.
   ///
-  /// Always drawn, unlike [onMatch], because whether it can do anything
-  /// is a property of the instant it is pressed and not of the video:
-  /// there is a cue on screen or there is not, it changes several times a
-  /// minute, and a button that came and went at that rate would take the
-  /// remote's ring with it every time. A press that finds nothing to mark
-  /// says so in [markNote].
+  /// Always drawn, unlike [onMatch], because whether it can do anything is a
+  /// property of the instant it is pressed and not of the video. There is a cue
+  /// on screen or there is not, and it changes several times a minute. A button
+  /// that came and went at that rate would take the remote's ring with it every
+  /// time. A press that finds nothing to mark says so in [markNote].
   final VoidCallback onMark;
 
   /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
@@ -159,19 +157,18 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// same thing.
   ///
   /// The marks behind those two numbers go as well
-  /// (`PlayerScreen._undoSubtitleTiming`), and so does [markNote]: what
-  /// a pair of marks put on the speed *is* the line through them, so
-  /// resetting the numbers and keeping the points undoes nothing that
-  /// the next press would not bring straight back.
+  /// (`PlayerScreen._undoSubtitleTiming`), and so does [markNote]. What a pair
+  /// of marks put on the speed *is* the line through them, so resetting the
+  /// numbers and keeping the points undoes nothing that the next press would
+  /// not bring straight back.
   final VoidCallback onReset;
   final VoidCallback onClose;
 
-  /// Opens the list of other subtitle files to measure this one against,
-  /// and **null when there is no other file on offer** -- in which case
-  /// nothing about matching is drawn at all. A control that cannot do
-  /// anything is worse than one that is not there, and here it would be
-  /// worse still: it would say the app has a way of fixing this that it
-  /// does not have for this video.
+  /// Opens the list of other subtitle files to measure this one against. It is
+  /// **null when there is no other file on offer**, and then nothing about
+  /// matching is drawn at all. A control that cannot do anything is worse than
+  /// one that is not there, and here it would be worse still: it would say the
+  /// app has a way of fixing this that it does not have for this video.
   final VoidCallback? onMatch;
 
   /// Whether a measurement is running. Two HTTP fetches, so it is worth
@@ -179,21 +176,20 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// looking like a press that did nothing.
   final bool matching;
 
-  /// What the last measurement said, and null when none has been made
-  /// against the file on screen. The score is shown whichever way it
-  /// went: it is the evidence for applying the transform, and -- with the
-  /// transform beside it -- the evidence for refusing to.
+  /// What the last measurement said, and null when none has been made against
+  /// the file on screen. The score is shown whichever way it went. It is the
+  /// evidence for applying the transform and, with the transform beside it, the
+  /// evidence for refusing to.
   final String? matchNote;
 
   /// What the last mark did, and null until one has been made against
   /// the file on screen.
   ///
-  /// A mark that set an offset and one that learned a rate look exactly
-  /// alike in the picture -- the line lands where it belongs either way
-  /// -- and only one of them still holds in ten minutes, so which
-  /// happened is not something the viewer can see. It is also where a
-  /// press that found no cue on screen is answered, since that press
-  /// changes nothing at all.
+  /// A mark that set an offset and one that learned a rate look exactly alike
+  /// in the picture: the line lands where it belongs either way. Only one of
+  /// them still holds in ten minutes, so which happened is not something the
+  /// viewer can see. This is also where a press that found no cue on screen is
+  /// answered, since that press changes nothing at all.
   final String? markNote;
 
   /// Attached to the first button: where the remote lands when the panel
@@ -217,10 +213,10 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// remote is sitting on.
   static const double width = 300;
 
-  /// The panel's ground: black at 70 %. Dark enough that white text on it
-  /// reads over a bright frame, and light enough that the picture behind
-  /// it -- which is what the viewer is judging while they press -- still
-  /// shows through.
+  /// The panel's ground: black at 70 %. Dark enough that white text on it reads
+  /// over a bright frame, and light enough that the picture behind it still
+  /// shows through. That picture is what the viewer is judging while they
+  /// press.
   static const Color background = Color(0xB3000000);
 
   /// How long the shift stepper has to be held before it starts
@@ -235,16 +231,15 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// to whole seconds, and how many times in whole seconds before it
   /// moves to five-second strides.
   ///
-  /// The offsets a viewer has to reach are three orders of magnitude
-  /// apart, so one stride cannot serve them. A tenth is the smallest
-  /// difference visible against speech; a subtitle cut for a release
-  /// that starts somewhere else is out by seconds; and a file whose
-  /// *rate* is wrong is out by minutes -- an uncorrected PAL file runs
-  /// 4.27 % short, which over a three-quarter-hour episode is nearly
-  /// two minutes by the end of it. Marking a point out there means
-  /// shifting by that much, and at a tenth a step that is eleven
-  /// hundred steps: over two minutes of holding the key down, which is
-  /// not an adjustment anybody makes.
+  /// The offsets a viewer has to reach are three orders of magnitude apart, so
+  /// one stride cannot serve them. A tenth is the smallest difference visible
+  /// against speech. A subtitle cut for a release that starts somewhere else is
+  /// out by seconds. A file whose *rate* is wrong is out by minutes: an
+  /// uncorrected PAL file runs 4.27 % short, which over a three-quarter-hour
+  /// episode is nearly two minutes by the end of it. Marking a point out there
+  /// means shifting by that much, and at a tenth a step that is eleven hundred
+  /// steps. That is over two minutes of holding the key down, which is not an
+  /// adjustment anybody makes.
   ///
   /// Ten steps of a tenth cover the first second, fifteen steps of a
   /// second cover the next fifteen, and five-second strides after that
@@ -257,35 +252,34 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// presses of [SubtitleTiming.shiftStep]: one tenth, then a whole
   /// second (ten of them), then five seconds (fifty).
   ///
-  /// [fire] is 0 for the press itself and counts up for as long as the
-  /// button is held, so **only a hold accelerates**. Every tap starts
-  /// again at the first stride, which is what keeps a tenth reachable
-  /// however large the correction before it was -- and what keeps ten
-  /// forward and ten back landing on exactly nothing, since every
-  /// stride is a whole number of presses.
+  /// [fire] is 0 for the press itself and counts up for as long as the button
+  /// is held, so **only a hold accelerates**. Every tap starts again at the
+  /// first stride. That keeps a tenth reachable however large the correction
+  /// before it was. It also keeps ten forward and ten back landing on exactly
+  /// nothing, since every stride is a whole number of presses.
   static int shiftStrideAt(int fire) {
     if (fire < tenthStrideSteps) return 1;
     if (fire < tenthStrideSteps + secondStrideSteps) return 10;
     return 50;
   }
 
-  /// The ring the panel's own buttons wear -- Reset and Close, beside the
+  /// The ring the panel's own buttons wear: Reset and Close, beside the
   /// steppers.
   ///
-  /// Material's own focus for a [TextButton] or an [IconButton] is a
-  /// 10 %-opacity overlay, and over this panel's near-black ground that
-  /// is about 1.2:1 -- gone entirely at three metres on a lit screen.
-  /// Two stops of the same panel cannot differ by that much: this is the
-  /// surface meant to be operated *after* the OSD bar has faded, so the
-  /// ring is the only thing saying what the centre key will press.
+  /// Material's own focus for a [TextButton] or an [IconButton] is a 10
+  /// %-opacity overlay. Over this panel's near-black ground that is about
+  /// 1.2:1, gone entirely at three metres on a lit screen. Two stops of the
+  /// same panel cannot differ by that much. This is the surface meant to be
+  /// operated *after* the OSD bar has faded, so the ring is the only thing
+  /// saying what the centre key will press.
   ///
-  /// The ring is the floor's stroke at the viewer's [FocusEmphasis] in
-  /// force, so the panel and the rest of the app say the same thing at
-  /// the same weight -- not a fixed [ColorScheme.primary] line, which is
-  /// the mid-luminance violet `FocusRing` refuses to draw and takes no
-  /// account of the emphasis setting. Kept as a style of its own rather
-  /// than left to `FocusTheme` because the panel is operated on a phone
-  /// and a desktop too, and the floor is a television's.
+  /// The ring is the floor's stroke at the viewer's [FocusEmphasis] in force,
+  /// so the panel and the rest of the app say the same thing at the same
+  /// weight. It is not a fixed [ColorScheme.primary] line: that is the
+  /// mid-luminance violet `FocusRing` refuses to draw, and it takes no account
+  /// of the emphasis setting. It is kept as a style of its own rather than left
+  /// to `FocusTheme`, because the panel is operated on a phone and a desktop
+  /// too, and the floor is a television's.
   static ButtonStyle focusRing(BuildContext context) => ButtonStyle(
     side: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.focused)
@@ -312,16 +306,14 @@ class SubtitleTimingOverlay extends StatelessWidget {
             color: background,
             borderRadius: BorderRadius.circular(12),
           ),
-          // Scrolls rather than overflows, because what the panel is
-          // tall enough for is not something it gets to decide: a
-          // 360 dp-tall phone held sideways leaves it under 300, and the
-          // refusal a match can come back with -- three lines of "only
-          // 44 % more overlap than chance, at 0.903x and -599.9 s, so
-          // nothing was changed" -- is exactly what does not fit.
-          // Overflowing there pushes Reset off the bottom of the screen,
-          // and Reset is the way back from the state the viewer has just
-          // landed in. Focus traversal scrolls what it moves to, so the
-          // remote still reaches every row.
+          // Scrolls rather than overflows, because the panel does not get to
+          // decide how tall it is. A 360 dp-tall phone held sideways leaves it
+          // under 300. The refusal a match can come back with is exactly what
+          // does not fit: three lines of "only 44 % more overlap than chance,
+          // at 0.903x and -599.9 s, so nothing was changed". Overflowing there
+          // pushes Reset off the bottom of the screen, and Reset is the way
+          // back from the state the viewer has just landed in. Focus traversal
+          // scrolls what it moves to, so the remote still reaches every row.
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 4, 4),
@@ -408,14 +400,13 @@ class SubtitleTimingOverlay extends StatelessWidget {
                       onPress: (fire) => onShift(shiftStrideAt(fire)),
                     ),
                   ),
-                  // Read only: nothing here presses a multiplier, and
-                  // what is on it was measured rather than judged. Still
-                  // shown, because the panel is the surface operated
-                  // after the OSD bar has faded and a stretch in force is
-                  // otherwise invisible -- a subtitle right at this
-                  // moment and wrong in ten minutes looks exactly like
-                  // one that is right. The two gaps keep the number in
-                  // the same column as the shift's.
+                  // Read only: nothing here presses a multiplier, and what is
+                  // on it was measured rather than judged. Still shown, because
+                  // the panel is the surface operated after the OSD bar has
+                  // faded, and a stretch in force is otherwise invisible. A
+                  // subtitle right at this moment and wrong in ten minutes
+                  // looks exactly like one that is right. The two gaps keep the
+                  // number in the same column as the shift's.
                   _TimingRow(
                     label: speedLabel,
                     value: timing.speedText,
@@ -456,13 +447,12 @@ class _Note extends StatelessWidget {
 
 /// One labelled row: a control, the value it is showing, and a control.
 ///
-/// Left and right along the row is the shape a remote expects, and it is
-/// what directional traversal gives for free from the geometry -- which
-/// is why the buttons are siblings in a `Row` and not something drawn
-/// inside a focusable tile. Both rows share the layout so that the value
-/// sits in one column and the buttons in two, whichever of them a row
-/// has -- the speed row has neither, and draws two [_ButtonGap]s so its
-/// number still lines up under the shift's.
+/// Left and right along the row is the shape a remote expects, and directional
+/// traversal gives it for free from the geometry. That is why the buttons are
+/// siblings in a `Row` and not something drawn inside a focusable tile. Both
+/// rows share the layout so that the value sits in one column and the buttons
+/// in two, whichever of them a row has. The speed row has neither, and draws
+/// two [_ButtonGap]s so its number still lines up under the shift's.
 class _TimingRow extends StatelessWidget {
   const _TimingRow({
     required this.label,
@@ -527,12 +517,12 @@ class _ButtonGap extends StatelessWidget {
 /// keeps firing while it is held down, by pointer or by the remote's
 /// select key.
 ///
-/// Twenty presses for a two-second offset is not an adjustment, it is a
-/// chore, so holding is the way a large shift gets made. The repeat is
-/// this widget's own timer rather than the key's auto-repeat, so it runs
-/// at the same rate on a mouse, a touch screen and a D-pad, and it stops
-/// on a release, a cancel and a lost focus alike -- a timer left running
-/// after the finger has gone would walk the value off on its own.
+/// Twenty presses for a two-second offset is not an adjustment, it is a chore,
+/// so holding is the way a large shift gets made. The repeat is this widget's
+/// own timer rather than the key's auto-repeat, so it runs at the same rate on
+/// a mouse, a touch screen and a D-pad. It stops on a release, a cancel and a
+/// lost focus alike: a timer left running after the finger has gone would walk
+/// the value off on its own.
 ///
 /// Each fire carries how many went before it in this hold, which is
 /// what lets a caller step further the longer the button is held
@@ -551,8 +541,8 @@ class _PanelButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
 
-  /// The press itself, and every repeat while the button is held, given
-  /// how many fires have gone before it -- 0 for the press.
+  /// The press itself, and every repeat while the button is held, given how
+  /// many fires have gone before it: 0 for the press.
   final ValueChanged<int> onPress;
 
   final FocusNode? focusNode;
@@ -658,12 +648,11 @@ class _PanelButtonState extends State<_PanelButton> {
         child: Semantics(
           button: true,
           label: widget.tooltip,
-          // A [Listener] rather than a [GestureDetector]: a repeat has to
-          // begin the moment the button is touched, and a tap recognizer
-          // holds its `onTapDown` back until it has won the arena. There
-          // is nothing here to compete with it anyway -- the panel is
-          // opaque, so the video's own tap and double-tap never see the
-          // pointer.
+          // A [Listener] rather than a [GestureDetector]: a repeat has to begin
+          // the moment the button is touched, and a tap recognizer holds its
+          // `onTapDown` back until it has won the arena. There is nothing here
+          // to compete with it anyway. The panel is opaque, so the video's own
+          // tap and double-tap never see the pointer.
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: (_) {
@@ -672,12 +661,12 @@ class _PanelButtonState extends State<_PanelButton> {
             },
             onPointerUp: (_) => _stop(),
             onPointerCancel: (_) => _stop(),
-            // The app's own indicator rather than a border of its own:
-            // this is the one control in the panel that is a bare [Focus]
-            // -- it has to be, because a hold has to start on the way
-            // down and no Material button offers that -- so neither the
-            // theme's floor nor anything else reaches it. A [row], since
-            // a stepper that grew would overlap the number it steps.
+            // The app's own indicator rather than a border of its own. This is
+            // the one control in the panel that is a bare [Focus], because a
+            // hold has to start on the way down and no Material button offers
+            // that. So neither the theme's floor nor anything else reaches it.
+            // A [row], since a stepper that grew would overlap the number it
+            // steps.
             child: FocusHighlight(
               focused: _focused,
               treatment: FocusTreatment.row,

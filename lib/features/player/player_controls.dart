@@ -10,13 +10,13 @@ const _gradientBlack = Color(0xCC000000);
 /// A white icon, given as a style rather than as [IconButton.color].
 ///
 /// The two are not the same thing here. `color` is handed to
-/// [IconButton.styleFrom] as the foreground, which builds an
-/// **`overlayColor` of its own** -- white at a tenth for the focused state
-/// -- on the widget's style, where it beats the [IconButtonTheme] the
-/// focus floor puts on a television. Without this, every button on the
-/// bar would wear that tint instead of `FocusTheme.lift` (written for this
-/// bar by name, and kept small so it does not wash out a white icon) -- a
-/// tenth, over video, in a lit room, is the cue nobody can see.
+/// [IconButton.styleFrom] as the foreground, which builds an **`overlayColor`
+/// of its own** (white at a tenth for the focused state) on the widget's style.
+/// There it beats the [IconButtonTheme] the focus floor puts on a television.
+/// Without this, every button on the bar would wear that tint instead of
+/// `FocusTheme.lift`, which is written for this bar by name and kept small so
+/// it does not wash out a white icon. A tenth, over video, in a lit room, is
+/// the cue nobody can see.
 ///
 /// Setting only the icon's colour leaves `overlayColor` unsaid, so the
 /// floor's is what resolves. Nothing else about these buttons changes:
@@ -29,12 +29,12 @@ const _whiteOnVideo = ButtonStyle(
 /// The bar over the top edge of the video: back, title, and the menus.
 ///
 /// Every button on the bar is an [IconButton] and takes the theme floor's
-/// stroke and fill (`FocusTheme`) rather than a ring of its own -- which
-/// is why the white is given as a style rather than as [IconButton.color]
-/// (see `_whiteOnVideo`). The bar is drawn on its own gradient, black at
-/// the panel's edge where the buttons are, so a light stroke has something
-/// to contrast with; and a button in a row of eight, a few pixels apart, is
-/// the last thing that should grow when the remote reaches it.
+/// stroke and fill (`FocusTheme`) rather than a ring of its own. That is why
+/// the white is given as a style rather than as [IconButton.color] (see
+/// `_whiteOnVideo`). The bar is drawn on its own gradient, black at the panel's
+/// edge where the buttons are, so a light stroke has something to contrast
+/// with. And a button in a row of eight, a few pixels apart, is the last thing
+/// that should grow when the remote reaches it.
 ///
 /// Every button here is focusable, so a remote reaches the menus once the
 /// player has moved focus onto the bar ([firstFocusNode] is where it lands:
@@ -62,10 +62,10 @@ class PlayerTopBar extends StatelessWidget {
 
   final String title;
 
-  /// What the arrow does. It is an explicit "leave the player", not a
-  /// back gesture: a `Navigator.maybePop` here would spend the press on
-  /// the Back ladder's top rung -- dismissing the very OSD the arrow is
-  /// drawn on -- and leave the viewer where they were.
+  /// What the arrow does. It is an explicit "leave the player", not a back
+  /// gesture. A `Navigator.maybePop` here would spend the press on the Back
+  /// ladder's top rung, dismissing the very OSD the arrow is drawn on, and
+  /// leave the viewer where they were.
   final VoidCallback onBack;
 
   final bool subtitlesOn;

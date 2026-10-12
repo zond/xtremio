@@ -11,11 +11,10 @@ export '../../src/rust/api/subtitles.dart' show SubtitleMatch;
 ///
 /// [TorrentStatsClient]: torrent_stats.dart
 abstract interface class SubtitleMatchClient {
-  /// Fetches both files, reads when each of them has text on screen and
-  /// solves for the line between them. Throws only when a file cannot be
-  /// read; two files that do not describe the same recording come back as
-  /// a measurement with `convincing: false` and the score and transform
-  /// that say so.
+  /// Fetches both files, reads when each of them has text on screen and solves
+  /// for the line between them. Throws only when a file cannot be read. Two
+  /// files that do not describe the same recording come back as a measurement
+  /// with `convincing: false`, and the score and transform that say so.
   Future<rust.SubtitleMatch> match({
     required Uri playing,
     required Uri reference,
@@ -45,18 +44,17 @@ class RustSubtitleMatchClient implements SubtitleMatchClient {
 /// cue count without changing the subtitle. See docs/ARCHITECTURE.md,
 /// "Matching against another subtitle".
 ///
-/// **A refusal names the transform as well as the score.** A reference
-/// that wants a plausible speed and a small shift and still scores badly
-/// is a file that disagrees; one that wants stretching a tenth and a
-/// four-minute shift is the wrong episode. Without the transform, a
-/// viewer told only a fraction might go looking for a different reference
-/// when the one they picked was fine.
+/// **A refusal names the transform as well as the score.** A reference that
+/// wants a plausible speed and a small shift and still scores badly is a file
+/// that disagrees. One that wants stretching a tenth and a four-minute shift is
+/// the wrong episode. Without the transform, a viewer told only a fraction
+/// might go looking for a different reference when the one they picked was
+/// fine.
 ///
 /// **Nothing to measure is a different answer, and names both files' cue
-/// counts.** Too few cues to be evidence -- an ASS file, an addon
-/// answering with an error page, a forced track of a dozen signs -- is not
-/// the same failure as two files that disagree, so it is not read as a
-/// score of zero.
+/// counts.** Too few cues to be evidence (an ASS file, an addon answering with
+/// an error page, a forced track of a dozen signs) is not the same failure as
+/// two files that disagree. So it is not read as a score of zero.
 ///
 /// No line names a file: the panel is drawn over the picture the viewer is
 /// watching, and the two files involved are the one playing and the one
@@ -85,10 +83,10 @@ String subtitleMatchNote(rust.SubtitleMatch match) {
 
 /// What it says when a file could not be read at all.
 ///
-/// One sentence for every such failure -- a fetch that timed out, a 404,
-/// something that was not a subtitle file -- because the reason lives in
-/// a URL and an addon's subtitle URL can carry a debrid API key, which
-/// this repository never writes down or puts on a screen.
+/// One sentence for every such failure (a fetch that timed out, a 404,
+/// something that was not a subtitle file), because the reason lives in a URL.
+/// An addon's subtitle URL can carry a debrid API key, which this repository
+/// never writes down or puts on a screen.
 const String subtitleMatchFailureNote = 'Could not read both subtitle files';
 
 /// What it says while the measurement is running.
