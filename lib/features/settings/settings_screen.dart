@@ -319,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.sd_storage_outlined),
             title: const Text('Server storage'),
             subtitle: const Text(
-              'Where torrent data lives, what it costs, and a clean-now',
+              'Where torrent data is kept, and how to free space',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
@@ -372,15 +372,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // a torrent can be played, and unrar-rs asks that a binary
             // reproduce its licence. See lib/core/bundled_licenses.dart.
             subtitle: const Text(
-              'The source is MIT; a built Xtremio is GPL-3.0-or-later',
+              'The code is MIT. The app you install is GPL-3.0-or-later.',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showLicensePage(
               context: context,
               applicationName: 'Xtremio',
               applicationLegalese:
-                  'Source MIT. Binaries GPL-3.0-or-later, through unrar-rs '
-                  'in the embedded streaming server.',
+                  'The code is MIT. The app you install is '
+                  'GPL-3.0-or-later, because its streaming server '
+                  'includes unrar-rs.',
             ),
           ),
           const _SectionHeader('Developer'),
@@ -391,7 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.bug_report_outlined),
             title: const Text('Diagnostics'),
-            subtitle: const Text('Recent logs, and a copy button for them'),
+            subtitle: const Text('Recent logs, ready to copy'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(

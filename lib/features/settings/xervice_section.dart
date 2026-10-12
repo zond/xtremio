@@ -24,28 +24,28 @@ class XerviceSection extends StatefulWidget {
   static const String forgetLikesQuestion =
       'Forget every like, dislike and "Not interested" on every device '
       'signed in to this account? This cannot be undone.';
-  static const String forgetDriveTitle = 'Forget my Drive grants everywhere';
+  static const String forgetDriveTitle = 'Forget my Drive access everywhere';
   static const String forgetDriveSubtitle =
-      'The Google Drive grant kept for this account, which a device with '
-      'none of its own takes at start.';
+      'The Google Drive access saved with this account. A device that has '
+      'none of its own picks it up when it starts.';
   static const String forgetDriveQuestion =
-      'Forget the Google Drive grant kept for this account? Devices that '
-      'already have one keep it, and no device takes it from xtremio-xervice '
-      'again until the next pairing.';
+      'Forget the Google Drive access saved with this account? Devices that '
+      'already have it keep it. No other device gets it until you link '
+      'Drive again.';
 
   /// Where a Google account's grants to apps are revoked.
   static const String googlePermissions =
       'https://myaccount.google.com/permissions';
   static const String revokeThere =
-      'xtremio-xervice no longer keeps your Drive grant. The grant itself '
-      'lives with Google until you remove this app at '
-      'myaccount.google.com/permissions -- that is where it is revoked, for '
+      'Your Drive access is no longer saved with your account. Google still '
+      'lets this app in until you remove it at '
+      'myaccount.google.com/permissions. Removing it there ends access on '
       'every device at once.';
   static const String openPermissions = 'Open Google permissions';
 
   static const String forgotten = 'Forgotten on every device.';
   static const String notReached =
-      'xtremio-xervice could not be reached. Nothing was forgotten.';
+      "Xtremio's service could not be reached. Nothing was forgotten.";
 
   @override
   State<XerviceSection> createState() => _XerviceSectionState();

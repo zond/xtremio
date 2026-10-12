@@ -60,7 +60,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(
-      find.text('The source is MIT; a built Xtremio is GPL-3.0-or-later'),
+      find.text('The code is MIT. The app you install is GPL-3.0-or-later.'),
       findsOneWidget,
     );
 

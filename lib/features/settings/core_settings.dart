@@ -93,7 +93,7 @@ class PlayerSettingsSection extends StatelessWidget {
           title: 'Up-next countdown',
           subtitle:
               'How long the up-next card counts down before the next '
-              'episode starts; turn off Binge watching to stop it starting',
+              'episode starts. Turn off Binge watching to stop it.',
           value: settings.nextVideoNotificationDuration,
           options: nextVideoDurations,
           label: upNextLabel,
@@ -464,7 +464,7 @@ class InterfaceSettingsSection extends StatelessWidget {
             secondary: const Icon(Icons.close),
             title: const Text('Quit when the window closes'),
             subtitle: const Text(
-              'Stored for later: closing the window always quits for now',
+              'Not used yet. Closing the window always quits.',
             ),
             value: settings.quitOnClose,
             onChanged: (value) =>
@@ -483,8 +483,7 @@ class InterfaceSettingsSection extends StatelessWidget {
           secondary: const Icon(Icons.visibility_off_outlined),
           title: const Text('Hide spoilers'),
           subtitle: const Text(
-            'Stored for later: episode thumbnails and summaries are '
-            'still shown',
+            'Not used yet. Episode thumbnails and summaries still show.',
           ),
           value: settings.hideSpoilers,
           onChanged: (value) =>

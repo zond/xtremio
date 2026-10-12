@@ -279,7 +279,7 @@ void main() {
         // switch that stops it is named on the tile instead.
         expect(find.text('None (play at once)'), findsOneWidget);
         expect(find.text('Disabled'), findsNothing);
-        expect(find.textContaining('turn off Binge watching'), findsOneWidget);
+        expect(find.textContaining('Turn off Binge watching'), findsOneWidget);
       },
     );
     testWidgets('a synonym code outside the list is labelled with the code', (

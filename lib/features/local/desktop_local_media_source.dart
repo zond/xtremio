@@ -60,7 +60,7 @@ class DesktopLocalMediaSource implements LocalMediaSource {
 
   @override
   String get setupDetail =>
-      'Choose the folders your videos are in, in Settings under Local.';
+      'Choose the folders with your videos in Settings, under Local.';
 
   @override
   Future<LocalMediaAccess> access() async => prefs.localFolders.isEmpty

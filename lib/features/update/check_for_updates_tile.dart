@@ -44,7 +44,7 @@ class _CheckForUpdatesTileState extends State<CheckForUpdatesTile> {
       UpdateUpToDate(:final release) =>
         current == null || current == release.version
             ? CheckForUpdatesTile.upToDate('${release.version}')
-            : 'This is xtremio $current; the latest release is '
+            : 'This is xtremio $current. The latest release is '
                   '${release.version}.',
       UpdateUnversioned(:final release) =>
         'This build carries no version to compare. The latest release is '

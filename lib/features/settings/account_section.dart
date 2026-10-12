@@ -464,9 +464,9 @@ class _AccountSectionState extends State<AccountSection> {
             key: AccountSection.addonsLockedBannerKey,
             icon: Icons.lock_outline,
             message:
-                'Your addon collection could not be fetched, so the '
-                'official addons are in use and addon changes are locked '
-                'until it is.',
+                'Your addons could not be loaded from your account. '
+                'Xtremio uses the official addons until they load, and '
+                'you cannot change addons until then.',
             actionLabel: 'Retry',
             onAction: _retryAddons,
           ),
@@ -475,8 +475,8 @@ class _AccountSectionState extends State<AccountSection> {
             key: AccountSection.libraryMissingBannerKey,
             icon: Icons.cloud_off_outlined,
             message:
-                "Your account's library could not be fetched; this device "
-                'shows an empty library until a sync succeeds.',
+                'Your library could not be loaded from your account. '
+                'It shows as empty here until a sync works.',
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

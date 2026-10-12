@@ -72,9 +72,8 @@ enum BufferAhead {
     BufferAhead.normal => 'Keeps about 90 seconds ahead. Least data used.',
     BufferAhead.large => 'Keeps about 4 minutes ahead. Uses more data.',
     BufferAhead.maximum =>
-      'Keeps as much of the film as fits, which may be all of it. '
-          'Downloads the whole thing over your connection, mobile data '
-          'included, and frees it when you stop.',
+      'Keeps as much of the film as fits, up to all of it. '
+          'That can use mobile data too. It is cleared when you stop.',
     BufferAhead.wholeFile =>
       'Downloads and stores the whole file while you watch. '
           'It appears in Downloads, where you can delete it.',

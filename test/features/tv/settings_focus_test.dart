@@ -213,10 +213,7 @@ void main() {
     // it rather than a ring drawn round both.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusIn<Readout>(), isTrue);
-    expect(
-      focusedLabel(tester),
-      startsWith('Your addon collection could not be fetched'),
-    );
+    expect(focusedLabel(tester), startsWith('Your addons could not be loaded'));
     expect(focusMarks(), {FocusMark.ring});
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), 'Retry');
