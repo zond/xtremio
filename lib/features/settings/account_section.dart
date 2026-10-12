@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/external_link.dart';
 import '../../shell/tv_text_entry.dart';
 import '../../widgets/explained.dart';
 import '../../widgets/focusable_tile.dart';
@@ -28,8 +29,8 @@ import '../../widgets/tv_text_field.dart';
 /// "authenticating" status, so the pending spinner is local state cleared by
 /// `UserAuthenticated` or the `Error` whose source is that event, whose
 /// `error.message` is shown inline. Signed in it shows the account, "Sync now"
-/// (`SyncLibraryWithAPI`, `PullAddonsFromAPI`, `PullNotifications`) and "Log
-/// out". It shows banners when `profile.addonsLocked` is set (the addon
+/// (`SyncLibraryWithAPI`, `PullAddonsFromAPI`, `PullNotifications`), "Log
+/// out" and "Change password" ([changePasswordUrl]). It shows banners when `profile.addonsLocked` is set (the addon
 /// collection could not be fetched after login) and when the library fetch
 /// failed. That failure is `UserLibraryMissing{true}`, delivered wrapped in an
 /// `Error` event, and is cleared by the plain `UserLibraryMissing{false}` a
@@ -47,6 +48,22 @@ class AccountSection extends StatefulWidget {
 
   static const String libraryNote =
       "Signing in replaces the library on this device with your account's.";
+
+  /// The third button signed in. Stremio has no password change of its own
+  /// for an app to call, only its reset page, which mails a link to the
+  /// address in the path.
+  static const String changePasswordLabel = 'Change password';
+  static const String changePasswordExplanation =
+      "Opens Stremio's password reset page for your account, in your browser.";
+
+  /// Stremio's password reset page for [email], which is the one path
+  /// segment: encoded, so a `+` or a `/` in an address stays in it.
+  ///
+  /// It carries the viewer's address, so it is never logged. It goes to
+  /// the browser through [openInBrowser], which logs nothing and names
+  /// only the host when nothing opens it.
+  static String changePasswordUrl(String email) =>
+      'https://www.strem.io/reset-password/${Uri.encodeComponent(email)}';
 
   /// What the signed-in row means. Its "Signed in" line is state and stays.
   static const String accountExplanation =
@@ -294,10 +311,14 @@ class _AccountSectionState extends State<AccountSection> {
   /// Wrapped, both are their own width at the left of the row, and down lands
   /// on whichever of them the field's middle is nearer, which is the second
   /// one.
+  ///
+  /// Signed in there can be a third, [third], after the other two in either
+  /// layout.
   Widget _actions(
     BuildContext context, {
     required Widget primary,
     required Widget secondary,
+    Widget? third,
     bool wide = false,
   }) {
     if (DeviceScope.isTv(context)) {
@@ -306,6 +327,7 @@ class _AccountSectionState extends State<AccountSection> {
           if (wide) Expanded(child: primary) else primary,
           const SizedBox(width: 12),
           secondary,
+          if (third != null) ...[const SizedBox(width: 12), third],
         ],
       );
     }
@@ -313,7 +335,7 @@ class _AccountSectionState extends State<AccountSection> {
       spacing: 12,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [primary, secondary],
+      children: [primary, secondary, ?third],
     );
   }
 
@@ -512,11 +534,53 @@ class _AccountSectionState extends State<AccountSection> {
               icon: const Icon(Icons.logout),
               label: const Text('Log out'),
             ),
+            third: user.email.isEmpty
+                ? null
+                : _ChangePasswordButton(email: user.email),
           ),
         ),
       ],
     );
   }
+}
+
+/// "Change password": Stremio's reset page for the signed-in address, in the
+/// browser ([AccountSection.changePasswordUrl]).
+///
+/// It is a button beside two others, not a row, so its icon cannot be a
+/// button of its own: a button inside a button is not one. Its explanation
+/// opens from a long press instead, which is a held OK on a television
+/// ([Explained]), and from the same named action a screen reader offers on
+/// every row.
+class _ChangePasswordButton extends StatelessWidget {
+  const _ChangePasswordButton({required this.email});
+
+  final String email;
+
+  @override
+  Widget build(BuildContext context) => Explained(
+    title: AccountSection.changePasswordLabel,
+    explanation: AccountSection.changePasswordExplanation,
+    child: Builder(
+      builder: (context) {
+        void explain() => Explained.show(
+          context,
+          title: AccountSection.changePasswordLabel,
+          explanation: AccountSection.changePasswordExplanation,
+        );
+        return Semantics(
+          customSemanticsActions: {Explained.action: explain},
+          child: OutlinedButton.icon(
+            onPressed: () =>
+                openInBrowser(context, AccountSection.changePasswordUrl(email)),
+            onLongPress: explain,
+            icon: const Icon(Icons.password),
+            label: const Text(AccountSection.changePasswordLabel),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 class _Banner extends StatelessWidget {

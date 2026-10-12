@@ -298,6 +298,8 @@ Each installed addon carries a verdict on how it has been answering
 ## Settings
 
 - **Account**: sign in, create an account, sync, log out; signed in,
+  **Change password** (opens Stremio's reset page for the account's address
+  in the browser; the address is never logged),
   **Forget my likes everywhere** (asks first, then empties the faces on
   xtremio-xervice and on this device, and says if the service could not be
   reached) and **Forget my Drive access everywhere** (the copy kept for the

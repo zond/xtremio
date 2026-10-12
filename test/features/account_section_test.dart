@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/account_section.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/external_link.dart';
+import 'package:xtremio/widgets/explained.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
+import '../support/diagnostics_capture.dart';
+import '../support/explained.dart';
 import '../support/fake_core_client.dart';
+import '../support/fake_link_opener.dart';
 import '../support/fixtures.dart';
 import '../support/text_entry.dart';
 import '../support/tv.dart';
@@ -17,16 +23,20 @@ Future<void> pumpSettings(
   WidgetTester tester,
   FakeCoreClient core, {
   DeviceProfile device = DeviceProfile.fallback,
+  ExternalLinkOpener? opener,
 }) async {
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  const app = MaterialApp(home: SettingsScreen());
   await tester.pumpWidget(
     DeviceScope(
       profile: device,
       child: CoreScope(
         client: core,
-        child: const MaterialApp(home: SettingsScreen()),
+        child: opener == null
+            ? app
+            : ExternalLinkScope(opener: opener, child: app),
       ),
     ),
   );
@@ -405,6 +415,126 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(AccountSection.emailFieldKey), findsOneWidget);
       expect(find.text('Log out'), findsNothing);
+    });
+
+    group('Change password', () {
+      const label = AccountSection.changePasswordLabel;
+
+      test('is the reset page for the address, encoded', () {
+        expect(
+          AccountSection.changePasswordUrl('user@example.com'),
+          'https://www.strem.io/reset-password/user%40example.com',
+        );
+        // A `+` and a `/` are where an address unencoded would go wrong:
+        // the first is a space to some servers, the second a new segment.
+        expect(
+          AccountSection.changePasswordUrl('a+b/c@example.com'),
+          'https://www.strem.io/reset-password/a%2Bb%2Fc%40example.com',
+        );
+      });
+
+      testWidgets('is offered signed in, beside Sync now and Log out', (
+        tester,
+      ) async {
+        await pumpSettings(tester, loggedInCore());
+        expect(find.widgetWithText(OutlinedButton, label), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text(label)).dy,
+          tester.getTopLeft(find.text('Log out')).dy,
+          reason: 'on the same strip',
+        );
+      });
+
+      testWidgets('is not offered signed out, nor for an account with no '
+          'address', (tester) async {
+        await pumpSettings(tester, loggedOutCore());
+        expect(find.text(label), findsNothing);
+
+        final ctx = loadCtxLoggedInFixture();
+        ((ctx['profile'] as Map<String, dynamic>)['auth']
+                as Map<String, dynamic>)['user']['email'] =
+            '';
+        await pumpSettings(tester, FakeCoreClient(state: {CoreField.ctx: ctx}));
+        expect(find.text('Log out'), findsOneWidget, reason: 'signed in');
+        expect(find.text(label), findsNothing);
+      });
+
+      testWidgets('opens the reset page in the browser, and logs nothing of '
+          'it', (tester) async {
+        final lines = captureDiagnostics();
+        final printed = <String>[];
+        final print = debugPrint;
+        debugPrint = (message, {wrapWidth}) => printed.add('$message');
+        final opener = FakeLinkOpener();
+        try {
+          await pumpSettings(tester, loggedInCore(), opener: opener);
+          await tester.tap(find.text(label));
+          await tester.pumpAndSettle();
+        } finally {
+          // Put back inside the test: the binding checks it before any
+          // tear-down runs.
+          debugPrint = print;
+        }
+        expect(opener.opened, [
+          Uri.parse('https://www.strem.io/reset-password/user%40example.com'),
+        ]);
+        for (final line in [...lines, ...printed]) {
+          expect(line, isNot(contains('user@example.com')));
+          expect(line, isNot(contains('user%40example.com')));
+          expect(line, isNot(contains('reset-password')));
+        }
+      });
+
+      testWidgets('a browser that does not open says so without the address', (
+        tester,
+      ) async {
+        final lines = captureDiagnostics();
+        await pumpSettings(
+          tester,
+          loggedInCore(),
+          opener: FakeLinkOpener(result: false),
+        );
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        expect(find.text('Could not open www.strem.io'), findsOneWidget);
+        expect(lines, isEmpty);
+      });
+
+      testWidgets('says what it does on a long press, and opens nothing', (
+        tester,
+      ) async {
+        final opener = FakeLinkOpener();
+        await pumpSettings(tester, loggedInCore(), opener: opener);
+        await tester.longPress(find.text(label));
+        await tester.pumpAndSettle();
+        expect(
+          inExplanation(
+            "Opens Stremio's password reset page for your account, in your "
+            'browser.',
+          ),
+          findsOneWidget,
+        );
+        await closeExplanation(tester);
+        expect(opener.opened, isEmpty);
+      });
+
+      testWidgets('on a television: OK opens the page, a held OK says what '
+          'it does', (tester) async {
+        final opener = FakeLinkOpener();
+        await pumpSettings(tester, loggedInCore(), device: tv, opener: opener);
+        await holdOkOn(tester, label);
+        expect(
+          inExplanation(AccountSection.changePasswordExplanation),
+          findsOneWidget,
+        );
+        expect(opener.opened, isEmpty);
+        await systemBack(tester);
+        expect(find.byType(ExplanationDialog), findsNothing);
+        expect(focusedLabel(tester), label);
+
+        await press(tester, LogicalKeyboardKey.select);
+        expect(opener.opened, hasLength(1));
+      });
     });
 
     testWidgets('Sync now pulls library, addons and notifications', (
