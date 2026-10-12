@@ -75,6 +75,8 @@ final class ForYouSource {
 
   /// What it counted for, as the long-press sheet keeps it.
   ForYouContribution get contribution => (
+    id: id,
+    type: type,
     name: name,
     watched: watched,
     saved: saved,
@@ -261,9 +263,12 @@ List<ForYouCandidate> rankForYou(
   return ranked;
 }
 
-/// One source's part in a suggestion: its name, which listings it is in,
-/// whether it is liked, and the weight that comes to.
+/// One source's part in a suggestion: which title it is (what its line in
+/// the sheet opens), its name, which listings it is in, whether it is liked,
+/// and the weight that comes to.
 typedef ForYouContribution = ({
+  String id,
+  String type,
   String name,
   bool watched,
   bool saved,
@@ -335,6 +340,8 @@ final class ForYouTitle {
     'sources': [
       for (final source in sources)
         {
+          'id': source.id,
+          'type': source.type,
           'name': source.name,
           'watched': source.watched,
           'saved': source.saved,
@@ -359,9 +366,13 @@ final class ForYouTitle {
         if (json['sources'] case final List sources)
           for (final source in sources)
             if (source is Map &&
+                source['id'] is String &&
+                source['type'] is String &&
                 source['name'] is String &&
                 source['weight'] is int)
               (
+                id: source['id'] as String,
+                type: source['type'] as String,
                 name: source['name'] as String,
                 watched: source['watched'] == true,
                 saved: source['saved'] == true,

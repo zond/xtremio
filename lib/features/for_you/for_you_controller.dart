@@ -132,6 +132,11 @@ class ForYouController extends ChangeNotifier {
   final ForYouAsk ask;
   final DateTime Function() now;
 
+  /// The shape of what is kept, part of its signature: a row kept by a
+  /// build that stored less about its sources (before each line of the
+  /// long-press sheet opened its title) is worked out again once.
+  static const String keptShape = 'v2';
+
   /// The most questions out at once.
   static const int concurrency = 4;
 
@@ -279,7 +284,10 @@ class ForYouController extends ChangeNotifier {
       for (final source in all)
         if (latest.contains(source)) source,
     ];
-    final signature = [for (final s in sources) s.signature].join(',');
+    final signature = [
+      keptShape,
+      for (final s in sources) s.signature,
+    ].join(',');
     final kept = _kept();
     if (kept != null &&
         kept.signature == signature &&

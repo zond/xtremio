@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/catalog_rows.dart';
 import 'package:xtremio/features/for_you/for_you_controller.dart';
 import 'package:xtremio/shell/device_profile.dart';
@@ -561,6 +562,141 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.suggested, contains('movie/tt900'));
     expect(tiles(tester), ['Next. Because you watched Seen It']);
+  });
+
+  /// Three sources of weights 2, 1 and 1 behind one title, "Shared".
+  Future<void> mountThreeSources(
+    WidgetTester tester, {
+    DeviceProfile device = DeviceProfile.fallback,
+  }) async {
+    fake
+      ..knows('Shared', 'tt100')
+      ..suggests('tt-both', ['Shared'])
+      ..suggests('tt-watched', ['Shared'])
+      ..suggests('tt-saved', ['Shared']);
+    await mount(
+      tester,
+      device: device,
+      library: [
+        libraryItemJson('tt-saved', name: 'Saved Film'),
+        libraryItemJson(
+          'tt-watched',
+          name: 'Watched Film',
+          temp: true,
+          removed: true,
+          timesWatched: 1,
+          lastWatched: '2026-05-01T00:00:00Z',
+        ),
+        libraryItemJson('tt-both', name: 'Both Film', timesWatched: 1),
+      ],
+    );
+  }
+
+  /// The pushed details screen, if one is up.
+  MetaDetailsScreen? details(WidgetTester tester) {
+    final found = find.byType(MetaDetailsScreen, skipOffstage: false);
+    return found.evaluate().isEmpty
+        ? null
+        : tester.widget<MetaDetailsScreen>(found);
+  }
+
+  testWidgets('each source line of the sheet opens that title\'s details, '
+      'and the sheet is gone', (tester) async {
+    await mountThreeSources(tester);
+    await tester.longPress(find.bySemanticsLabel(RegExp(r'^Shared\.')));
+    await tester.pumpAndSettle();
+    final semantics = tester.ensureSemantics();
+    expect(find.bySemanticsLabel(RegExp('Opens ')), findsNWidgets(3));
+    expect(find.bySemanticsLabel(RegExp('Opens Watched Film')), findsOneWidget);
+    semantics.dispose();
+
+    await tester.tap(find.text('Watched: Watched Film'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(BottomSheet), findsNothing);
+    final opened = details(tester)!;
+    expect((opened.type, opened.id), ('movie', 'tt-watched'));
+  });
+
+  testWidgets('on a television the source lines are stops between the title '
+      'and the choices, and select opens one', (tester) async {
+    await mountThreeSources(tester, device: tv);
+    await tester.pumpAndSettle();
+    expect(focusedTileName(tester), 'Shared');
+    await hold(tester, LogicalKeyboardKey.select, const Duration(seconds: 1));
+    expect(find.byType(BottomSheet), findsOneWidget);
+
+    String? focused() {
+      final context = FocusManager.instance.primaryFocus?.context;
+      final tile =
+          context?.findAncestorWidgetOfExactType<ListTile>() ??
+          (context?.widget is ListTile ? context!.widget as ListTile : null);
+      final title = tile?.title;
+      return title is Text ? title.data : null;
+    }
+
+    expect(focused(), 'Cancel', reason: 'the remote starts on Cancel');
+    final upward = <String?>[];
+    for (var i = 0; i < 6; i++) {
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      upward.add(focused());
+    }
+    expect(upward, [
+      CatalogRows.notInterestedLabel,
+      CatalogRows.markWatchedLabel,
+      'Saved: Saved Film',
+      'Watched: Watched Film',
+      'Watched and saved: Both Film (×2)',
+      'Watched and saved: Both Film (×2)',
+    ]);
+    final downward = <String?>[];
+    for (var i = 0; i < 3; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      downward.add(focused());
+    }
+    expect(downward, [
+      'Watched: Watched Film',
+      'Saved: Saved Film',
+      CatalogRows.markWatchedLabel,
+    ]);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused(), 'Saved: Saved Film');
+    // Not `press`: the details screen it opens spins on a fake core, which
+    // a settle would wait for forever.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(BottomSheet), findsNothing);
+    final opened = details(tester)!;
+    expect((opened.type, opened.id), ('movie', 'tt-saved'));
+  });
+
+  testWidgets('a single source is one line that opens it', (tester) async {
+    fake
+      ..knows('Pick', 'tt200')
+      ..suggests('tt-saved', ['Pick']);
+    await mount(tester, library: [libraryItemJson('tt-saved', name: 'S')]);
+    await tester.longPress(find.bySemanticsLabel(RegExp(r'^Pick\.')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+  });
+
+  testWidgets('a row kept by a build that stored less about its sources is '
+      'worked out again once', (tester) async {
+    fake
+      ..knows('Pick', 'tt600')
+      ..suggests('tt-saved', ['Pick']);
+    final library = [libraryItemJson('tt-saved', name: 'S')];
+    await mount(tester, library: library);
+    final kept = Map<String, dynamic>.from(prefs.forYou!);
+    final signature = kept['signature'] as String;
+    expect(signature, startsWith('${ForYouController.keptShape},'));
+    kept['signature'] = signature.substring(
+      ForYouController.keptShape.length + 1,
+    );
+    fake.suggested.clear();
+    await mount(tester, library: library, stored: {AppPrefs.forYouKey: kept});
+    expect(fake.suggested, ['movie/tt-saved']);
   });
 
   group('the controller', () {

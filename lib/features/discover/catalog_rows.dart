@@ -396,7 +396,7 @@ class _CatalogRowsState extends State<CatalogRows> {
   Future<void> _forYouLongPress(ForYouTitle title) async {
     final focused = FocusManager.instance.primaryFocus;
     final at = _boardFocus.hasFocus ? focused?.rect : null;
-    final choice = await showModalBottomSheet<_ForYouChoice>(
+    final choice = await showModalBottomSheet<Object>(
       context: context,
       builder: (_) => _NotInterestedSheet(title: title),
     );
@@ -405,6 +405,9 @@ class _CatalogRowsState extends State<CatalogRows> {
     switch (choice) {
       case _ForYouChoice.notInterested:
         await markFace(context, prefs, title.item.id, Face.dismissed);
+      case _OpenSource(:final source):
+        _openDetails(source.type, source.id);
+        return;
       case _ForYouChoice.markWatched:
         // Seen elsewhere: watched as a finished film is, in the engine's own
         // library state, which also makes it a source of the row.
@@ -412,7 +415,7 @@ class _CatalogRowsState extends State<CatalogRows> {
           _client?.dispatch(CoreActions.metaItemMarkAsWatched(title.item.json)),
         );
         _forYou?.hide(title.item.id);
-      case null:
+      default:
         return;
     }
     if (at == null || !mounted) return;
@@ -1097,13 +1100,22 @@ class _ForYouPoster extends StatelessWidget {
   }
 }
 
-/// What the For you sheet was left with; null is Cancel.
+/// What the For you sheet was left with; null is Cancel, and an
+/// [_OpenSource] is one of its source lines.
 enum _ForYouChoice { markWatched, notInterested }
+
+/// A source line of the For you sheet was pressed: open that title.
+final class _OpenSource {
+  const _OpenSource(this.source);
+
+  final ForYouContribution source;
+}
 
 /// The For you long press (a held OK on a television, through the same
 /// `RemotePress` path as Continue watching): the title, then every source
 /// that suggested it, strongest first, each with what it counted for --
-/// `Watched and saved: Heat (×2)` -- and the total that ranked it; then,
+/// `Watched and saved: Heat (×2)` -- each a stop that closes the sheet and
+/// opens that title's details page, and the total that ranked it; then,
 /// for a film, "Mark as watched" (seen elsewhere; a series' watched state
 /// is which episodes, the details page's to say), "Not interested", or
 /// Cancel, where a television's remote starts, so a
@@ -1134,25 +1146,31 @@ class _NotInterestedSheet extends StatelessWidget {
               style: theme.textTheme.titleMedium,
             ),
           ),
-          // Text, not stops: the remote goes from the title straight to
-          // the two choices, however many sources there are.
+          // Stops, in reading order between the title and the choices: a
+          // press on one closes the sheet and opens that title. The remote
+          // still starts on Cancel.
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (final source in title.sources)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        forYouContributionLine(source),
-                        style: theme.textTheme.bodyMedium,
+                    Semantics(
+                      label: 'Opens ${source.name}',
+                      child: ListTile(
+                        dense: true,
+                        title: Text(
+                          forYouContributionLine(source),
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            Navigator.of(context).pop(_OpenSource(source)),
                       ),
                     ),
                   if (title.sources.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
                       child: Text(forYouPoints(title.points), style: muted),
                     ),
                 ],

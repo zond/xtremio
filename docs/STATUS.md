@@ -38,7 +38,8 @@ Android TV layout are all built. What is not is in the README's
   leaves out anything in the library in any sense, on Continue watching,
   disliked or dismissed. A long press (a held select) shows why: every
   title that suggested it, strongest first, with what it counted for in
-  words ("Watched and saved: Heat (×2)"), and the points that ranked it;
+  words ("Watched and saved: Heat (×2)") -- each a link to that title's
+  details page -- and the points that ranked it;
   then, for a film, **Mark as watched** (seen elsewhere: the film is
   watched as one finished in the player is, in Stremio's own library
   state, without being added to the library, and becomes a source of the

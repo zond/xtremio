@@ -1137,8 +1137,12 @@ heading is "For you" alone: a tile never had room for why. Why is the long
 press (a held select on a television, through the same `RemotePress` path
 as Continue watching): the title, every source that suggested it, one line
 each, strongest first, with what it counted for in words -- "Watched and
-saved: Heat (×2)", "Watched: Drive" -- and the total ("5 points"), all
-from the kept result, so nothing is fetched to draw it. Under them, for a
+saved: Heat (×2)", "Watched: Drive" -- each a stop that closes the sheet
+and opens that title's details page (on a television between the title and
+the choices; the remote still starts on Cancel), and the total ("5
+points"), all from the kept result, so nothing is fetched to draw it. Each
+kept source carries its id and type for that; a row kept before they were
+is worked out again once (`ForYouController.keptShape`). Under them, for a
 film only, **Mark as watched**: stremio-core's own
 `MetaItemMarkAsWatched` (`CoreActions.metaItemMarkAsWatched`), which for a
 title the library has never seen makes a temporary item -- `temp` and

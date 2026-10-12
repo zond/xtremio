@@ -228,6 +228,8 @@ void main() {
 
   test('a source line says in words what it counted for', () {
     ForYouContribution c(bool w, bool s, bool l) => (
+      id: 'tt0113277',
+      type: 'movie',
       name: 'Heat',
       watched: w,
       saved: s,
