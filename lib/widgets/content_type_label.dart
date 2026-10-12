@@ -19,7 +19,7 @@ String contentTypeLabel(String type) => switch (type) {
 ///
 /// The first *character* is upper-cased, not the first code unit: a type
 /// this client does not know is a string from an addon's manifest, and
-/// `word[0]` on one that starts with an emoji is half a surrogate pair --
+/// `word[0]` on one that starts with an emoji is half a surrogate pair,
 /// which Flutter's text layout refuses to draw at all.
 String capitalise(String word) {
   if (word.isEmpty) return word;

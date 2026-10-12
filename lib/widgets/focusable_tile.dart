@@ -13,18 +13,18 @@ import 'remote_press.dart';
 /// Off a television it is the plain [InkWell] those tiles always had. On a
 /// TV ([DeviceScope.isTv]) the D-pad moves focus from tile to tile, so the
 /// tile has to show that it holds focus and has to be on screen when it
-/// does: a [FocusHighlight] marks the child while focused, and gaining
-/// focus scrolls every enclosing scrollable (the row, then the rows) so the
-/// tile sits in the middle of the viewport, which keeps the next tile in
-/// each direction built and reachable. The remote's keys go through a
-/// [RemotePress]: select taps on release, a held select or the menu key is
-/// the tile's long press (or, failing that, its secondary tap: the two mean
-/// "more options" on a phone and a desktop).
+/// does. A [FocusHighlight] marks the child while focused. Gaining focus
+/// scrolls every enclosing scrollable (the row, then the rows) so the tile
+/// sits in the middle of the viewport, which keeps the next tile in each
+/// direction built and reachable. The remote's keys go through a
+/// [RemotePress]. Select taps on release. A held select or the menu key is
+/// the tile's long press, or failing that its secondary tap: the two mean
+/// "more options" on a phone and a desktop.
 ///
 /// A TV also needs somewhere for focus to start. Under a [FocusMemory] the
 /// tile remembers itself (by [memoryId]) as the last focused tile of that
 /// memory whenever it gains focus, and autofocuses when it is built as
-/// that remembered tile; with nothing remembered yet, the tile built with
+/// that remembered tile. With nothing remembered yet, the tile built with
 /// [defaultFocus] (a screen's first tile) autofocuses instead. The shell
 /// keeps one memory per tab, so a tab rebuilt after a switch puts focus
 /// back where it was. Without a memory above it, [defaultFocus] alone
@@ -51,15 +51,15 @@ class FocusableTile extends StatefulWidget {
 
   /// The remote has come to rest on this tile (a television only).
   ///
-  /// For a tile that is also a choice of what the row below it shows -- a
-  /// season, an episode, a group of sources -- so that walking the row
+  /// For a tile that is also a choice of what the row below it shows (a
+  /// season, an episode, a group of sources), so that walking the row
   /// updates what is under it and select is kept for going deeper. It is
   /// beside [onTap], never instead of it.
   ///
   /// **The autofocus that puts the remote here on arrival does not call
-  /// it.** Where focus starts is the screen's choice, not the viewer's, and
-  /// a card that answered it by opening its row would have every arrival
-  /// open a row nobody asked for -- which Back then spends a press closing
+  /// it.** Where focus starts is the screen's choice, not the viewer's. A
+  /// card that answered it by opening its row would have every arrival open
+  /// a row nobody asked for. Back would then spend a press closing that row
   /// before it will leave the screen.
   final VoidCallback? onFocused;
 
@@ -75,10 +75,10 @@ class FocusableTile extends StatefulWidget {
 
   /// How much of the focus indicator this one wears ([FocusTreatment]).
   /// [FocusTreatment.tile] is what a poster-like tile is, and the default
-  /// because that is what nearly every caller is; a line the width of the
-  /// panel -- a collapsing ladder's rung header -- asks for
-  /// [FocusTreatment.row] instead, because a zoom on something that wide
-  /// lifts it over its neighbours rather than out of them.
+  /// because that is what nearly every caller is. A line the width of the
+  /// panel, such as a collapsing ladder's rung header, asks for
+  /// [FocusTreatment.row] instead. A zoom on something that wide lifts it
+  /// over its neighbours rather than out of them.
   final FocusTreatment treatment;
 
   /// Clips the ink and rounds the ring; every tile uses 8 px.
@@ -98,9 +98,9 @@ class _FocusableTileState extends State<FocusableTile> {
   /// autofocuses on appearing as the remembered (or default) tile, not on
   /// later becoming it. A list that rebuilds an existing tile with another
   /// item's id (an unkeyed strip whose rows shift when one is inserted
-  /// above them) must not pull focus off wherever the user has it; and
-  /// [Focus] re-applies autofocus whenever the flag turns true, so it has
-  /// to stay whatever it was.
+  /// above them) must not pull focus off wherever the user has it.
+  /// [Focus] re-applies autofocus whenever the flag turns true, so the flag
+  /// has to stay whatever it was.
   late final bool _autofocus = _decideAutofocus(FocusMemory.maybeOf(context));
 
   bool _decideAutofocus(FocusMemoryStore? memory) {
@@ -159,7 +159,7 @@ class _FocusableTileState extends State<FocusableTile> {
         // with no focus colour of its own falls through to
         // `ThemeData.focusColor`, which `FocusTheme` raised to a
         // near-white 0.28 (0.44 bold) for the controls that can wear
-        // nothing else -- a list row, a menu entry, a chip. Over a poster
+        // nothing else (a list row, a menu entry, a chip). Over a poster
         // that is a wash across the art under a ring that had already
         // said everything, on the one family of surfaces whose focus
         // treatment nobody asked to change.
@@ -171,10 +171,10 @@ class _FocusableTileState extends State<FocusableTile> {
           // Nothing drawn inside a tile is a focus stop. The tile takes
           // focus as a whole and the [RemotePress] above takes select, so
           // a control in here is one the remote can land on and cannot
-          // press -- and the ring, which follows the tile's whole subtree,
-          // says the tile is focused while the D-pad is really sitting on
-          // a dead button inside it (an addon's ⋮ menu, say), with no way
-          // to walk past it to whatever is below. Something that must be
+          // press. The ring follows the tile's whole subtree, so it says the
+          // tile is focused while the D-pad is really sitting on a dead
+          // button inside it (an addon's ⋮ menu, say). There is no way to
+          // walk past that button to whatever is below. Something that must be
           // pressed goes beside the tile.
           child: ExcludeFocus(child: widget.child),
         ),
@@ -213,17 +213,17 @@ class FocusMemory extends InheritedWidget {
 /// The zoom and the shadow mean something on what is drawn as an object: a
 /// poster lifted a twentieth out of its row reads as picked up, from three
 /// metres, on a display that cannot deliver contrast. A settings row lifted
-/// the same amount reads as a mistake -- [AnimatedScale] is a paint
+/// the same amount reads as a mistake. [AnimatedScale] is a paint
 /// transform, so nothing moves aside for it and the row overlaps the two it
 /// sits between, on every step of the walk down a list.
 ///
 /// The dimming ([FocusEmphasis.bold]'s) is a comparison rather than a mark:
 /// it is drawn on everything the remote is *not* on, so it is read off the
 /// neighbours going dark. That works where the neighbours wear this same
-/// indicator -- a grid of posters dims as one and the focused one is the
-/// one left bright. Where a surface is the only thing on its bar wearing
-/// one, and its neighbours are marked by the theme floor instead, there is
-/// no such company: it is the single element that fades, which reads as
+/// indicator: a grid of posters dims as one, and the focused one is the one
+/// left bright. A surface may be the only thing on its bar wearing one,
+/// with its neighbours marked by the theme floor instead. Then there is no
+/// such company. It is the single element that fades, which reads as
 /// something that has gone away rather than as something the remote is not
 /// on. That is [readout].
 ///
@@ -244,7 +244,7 @@ enum FocusTreatment {
   /// Something the viewer reads while the remote is somewhere else, drawn
   /// among neighbours that are not marked this way: the player's seek bar,
   /// on a control bar of icon buttons the theme floor marks. The ring
-  /// alone -- no zoom, no shadow, and no dimming, because there is nothing
+  /// alone: no zoom, no shadow, and no dimming, because there is nothing
   /// dimming beside it for the dimming to be read against.
   readout;
 
@@ -257,15 +257,15 @@ enum FocusTreatment {
 }
 
 /// The whole focus indicator on a television: the two-stroke [FocusRing],
-/// a slight zoom and a shadow under what is focused, and -- in
-/// [FocusEmphasis.bold] -- this dimmed while something else is focused. How
-/// much of that a surface gets is [treatment]'s to say, and the dimming is
-/// the member of the three easiest to reach for by accident: it is drawn on
-/// the *unfocused* surface, so what a treatment turns on is one surface
-/// fading, and only a family of them fading together is a cue.
+/// a slight zoom and a shadow under what is focused, and, in
+/// [FocusEmphasis.bold], this dimmed while something else is focused.
+/// [treatment] says how much of that a surface gets. The dimming is the
+/// member of the three easiest to reach for by accident. It is drawn on the
+/// *unfocused* surface, so what a treatment turns on is one surface fading.
+/// Only a family of them fading together is a cue.
 ///
 /// One colour cannot carry this on its own. The indicator is drawn over
-/// poster art, on a display the app knows nothing about; the owner's is a
+/// poster art, on a display the app knows nothing about. The owner's is a
 /// projector in a room that is not always dark, where a mid-luminance line
 /// over a busy poster is the first thing to disappear. So there are three
 /// separate cues, and each survives what the others do not: two strokes of
@@ -302,7 +302,7 @@ class FocusHighlight extends StatelessWidget {
   /// What everything that is not focused is drawn at, in
   /// [FocusEmphasis.bold] only. Dimming the surroundings is the strongest
   /// cue there is when the display itself cannot deliver contrast, and far
-  /// too heavy for a dark room -- hence a choice rather than the default.
+  /// too heavy for a dark room. Hence a choice rather than the default.
   static const double dimmedOpacity = 0.45;
 
   /// The shadow under the focused tile.
@@ -353,7 +353,7 @@ class FocusHighlight extends StatelessWidget {
   }
 }
 
-/// A control that takes focus itself -- a [ChoiceChip], say -- wearing the
+/// A control that takes focus itself (a [ChoiceChip], say) wearing the
 /// same indicator a [FocusableTile] does, rather than growing a ring of its
 /// own. [builder] is handed the [FocusNode] to give the control, and the
 /// highlight follows it.
@@ -453,20 +453,20 @@ class _FocusHighlightedState extends State<FocusHighlighted> {
 }
 
 /// The same indicator around a control that keeps its own focus node to
-/// itself -- a [ListTile], a [ChoiceChip], an [IconButton] built somewhere
+/// itself: a [ListTile], a [ChoiceChip], an [IconButton] built somewhere
 /// this code cannot reach a node into.
 ///
-/// [FocusHighlighted] hands a node out for the control to take; most of
+/// [FocusHighlighted] hands a node out for the control to take. Most of
 /// Material's controls will not take one, and the ones that will are
-/// scattered across every screen. So this one watches instead: a [Focus]
+/// scattered across every screen. So this one watches instead. A [Focus]
 /// that cannot be focused and is skipped by traversal still reports
 /// `hasFocus` for everything below it, and traversal is exactly what it
-/// was -- the same trick [RemotePress] plays a layer up.
+/// was. It is the same trick [RemotePress] plays a layer up.
 ///
 /// **Wrap one focus stop.** The ring follows the whole subtree, so a row
 /// of three buttons under one of these lights all three whenever any one
-/// of them is focused, which says "focus is somewhere in here" and is the
-/// fault this widget exists to fix rather than a smaller version of it.
+/// of them is focused. That says "focus is somewhere in here", which is
+/// the fault this widget exists to fix, not a smaller version of it.
 ///
 /// Off a television it is its child and nothing else, like
 /// [FocusHighlighted]: focus there follows a pointer or Tab, and the
@@ -491,9 +491,9 @@ class FocusMarked extends StatefulWidget {
   /// the painter clamps a corner to half the box it is drawn on and never
   /// grows one. What the chips wear, whose theme shape is a
   /// [StadiumBorder] (`XtremioApp.themeFor`). Far past any chip's height on
-  /// purpose: 24 was a stadium for a phone's 48-pixel target and not for a
-  /// television's 52, nor for a chip under a larger text size, and a ring
-  /// with corners tighter than the pill inside it draws its ends square.
+  /// purpose. 24 was a stadium for a phone's 48-pixel target, but not for a
+  /// television's 52, nor for a chip under a larger text size. A ring with
+  /// corners tighter than the pill inside it draws its ends square.
   static const BorderRadius stadium = BorderRadius.all(Radius.circular(999));
 
   @override
@@ -528,7 +528,7 @@ class _FocusMarkedState extends State<FocusMarked> {
 /// The ring drawn over a focused child: a dark outer stroke and a light
 /// inner one, each half of the ring's width.
 ///
-/// Two strokes rather than one because the background is unknown -- poster
+/// Two strokes rather than one because the background is unknown: poster
 /// art, on a washed-out projector image. Whatever is underneath, it
 /// contrasts with one of them, which is what WCAG's focus-appearance
 /// guidance asks of an indicator drawn over arbitrary content. Neither
@@ -553,7 +553,8 @@ class FocusRing extends StatelessWidget {
 
   /// Both strokes together, in logical pixels: wide enough to read from
   /// the two or three metres a television is watched from, not the forty
-  /// centimetres a phone is -- on a 320 dpi box, two physical pixels each.
+  /// centimetres a phone is. On a 320 dpi box that is two physical pixels
+  /// each.
   static const double width = 4;
 
   /// Both strokes together in [FocusEmphasis.bold].
@@ -562,10 +563,9 @@ class FocusRing extends StatelessWidget {
   /// How far text inside a focusable has to be held off its edges.
   ///
   /// The ring is drawn on the tile's own bounds and over whatever is under
-  /// them, and under [FocusEmphasis.bold] that is eight logical pixels of
-  /// it -- the first letter of a caption, or the bottom of the line under
-  /// it. A picture can carry a ring across its edge and still read; a line
-  /// of text cannot.
+  /// them. Under [FocusEmphasis.bold] that is eight logical pixels of it: the
+  /// first letter of a caption, or the bottom of the line under it. A picture
+  /// can carry a ring across its edge and still read; a line of text cannot.
   ///
   /// Always the bold width, whatever the setting currently says, so that
   /// flipping it re-paints the ring without reflowing the screen under it.

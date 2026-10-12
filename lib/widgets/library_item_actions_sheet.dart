@@ -37,11 +37,11 @@ List<CoreAction> libraryItemActionsFor(
 };
 
 /// The long-press menu of one library item: mark watched, rewind, toggle
-/// notifications, remove. Shared by the Library screen and, for an item
-/// the Continue-watching row shows that is also in the library, the
-/// Discover screen (see [showContinueWatchingActions]) -- the same menu
-/// either way, so opening it from Discover loses none of what opening it
-/// from the Library screen offers.
+/// notifications, remove. Shared by the Library screen and the Discover
+/// screen, which opens it for a Continue-watching item that is also in the
+/// library (see [showContinueWatchingActions]). It is the same menu either
+/// way, so opening it from Discover loses none of what opening it from the
+/// Library screen offers.
 class LibraryItemActionsSheet extends StatelessWidget {
   const LibraryItemActionsSheet({
     super.key,
@@ -130,12 +130,12 @@ class LibraryItemActionsSheet extends StatelessWidget {
 ///
 /// `LibraryItem::is_in_continue_watching` (the pinned stremio-core,
 /// `src/types/library/library_item.rs`) is `type != "other" && (!removed
-/// || temp) && state.time_offset > 0` -- membership turns on
+/// || temp) && state.time_offset > 0`. So membership turns on
 /// `time_offset` alone once `temp` is set, which a title never added to
 /// the library always has. `RewindLibraryItem` (`ActionCtx::
 /// RewindLibraryItem`, `src/models/ctx/update_library.rs`) sets exactly
-/// that field to zero and touches nothing else -- not `removed`, not
-/// `temp`, not `timesWatched` -- so it drops the title out of Continue
+/// that field to zero and touches nothing else (not `removed`, not
+/// `temp`, not `timesWatched`). So it drops the title out of Continue
 /// watching without adding it to the library or marking it watched. It is
 /// also what [LibraryItemActionsSheet]'s own "Rewind" sends. A series is
 /// kept on the row by new-episode notifications as well, so the
@@ -178,12 +178,12 @@ class ContinueWatchingRemoveSheet extends StatelessWidget {
 }
 
 /// Opens the long-press menu for a Continue-watching tile and dispatches
-/// whatever it picks: [LibraryItemActionsSheet] -- the full library menu,
-/// with "Remove from Continue watching" added -- when [item] is actually in
-/// the library, so opening it from Discover offers nothing less than
-/// opening it from the Library screen would; [ContinueWatchingRemoveSheet]
-/// otherwise. Removing from Continue watching is confirmed on
-/// [ContinueWatchingRemoveSheet] either way (see its doc for why it takes
+/// whatever it picks. When [item] is actually in the library, the menu is
+/// [LibraryItemActionsSheet]: the full library menu, with "Remove from Continue
+/// watching" added. So opening it from Discover offers nothing less than
+/// opening it from the Library screen would. Otherwise the menu is
+/// [ContinueWatchingRemoveSheet]. Removing from Continue watching is confirmed
+/// on [ContinueWatchingRemoveSheet] either way (see its doc for why it takes
 /// the title off the row without touching the library).
 ///
 /// Answers whether the item was taken off the row.

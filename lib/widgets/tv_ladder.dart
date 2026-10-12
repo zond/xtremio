@@ -9,8 +9,8 @@ import 'remote_press.dart';
 /// Vertical navigation on a television, by level rather than by distance.
 ///
 /// Flutter's directional focus takes the nearest node in the direction
-/// pressed, and "nearest" is a question about where things happen to be
-/// drawn: the rightmost season pill has no episode card below *it*, so a
+/// pressed. "Nearest" is a question about where things happen to be drawn.
+/// The rightmost season pill has no episode card below *it*, so a
 /// press down leaves the episode row entirely and lands on whatever spans
 /// the width further down. Coming back up is worse, because the row that
 /// was skipped is skipped again in reverse, and a screen built of rows
@@ -19,18 +19,18 @@ import 'remote_press.dart';
 /// So the rows of a screen say what order they are in, and a press up or
 /// down moves to the next row that will take it. **Each row remembers the
 /// card it was last on** and hands the remote back there, defaulting to
-/// its first: walking away from the third episode and coming back lands on
+/// its first. Walking away from the third episode and coming back lands on
 /// the third episode, which is what a viewer means by going back up.
 ///
 /// **A row can name a home instead** ([TvLadderHome]): the card the remote
 /// lands on whenever it arrives, whatever the memory says. It is for the
-/// rows whose cards choose on focus -- the season pills, the episodes --
-/// where the chosen card is the one to come back to, and landing anywhere
+/// rows whose cards choose on focus (the season pills, the episodes).
+/// There the chosen card is the one to come back to, and landing anywhere
 /// else would choose that instead: a press down onto the first season
 /// pill switches the list to season 1.
 ///
-/// A row that cannot take the remote -- one with no cards, a season with no
-/// episodes -- is passed over, and a press nothing can answer is **left
+/// A row that cannot take the remote (one with no cards, a season with no
+/// episodes) is passed over. A press nothing can answer is **left
 /// alone** rather than swallowed, so directional focus still gets its go.
 /// Swallowing it is a dead D-pad, which is the one outcome worse than
 /// landing somewhere unexpected.
@@ -38,7 +38,7 @@ import 'remote_press.dart';
 /// **On a row where landing already chooses, select moves on**
 /// ([TvLadderRow.advanceOnSelect]). A season pill switches the season when
 /// the remote lands on it, an episode loads its streams, a source group
-/// opens: by the time select is pressed there is nothing left for it to
+/// opens. By the time select is pressed there is nothing left for it to
 /// do, and a press that visibly does nothing reads as broken. On those
 /// rows select still does what the card does, and then what down does.
 ///
@@ -51,9 +51,9 @@ import 'remote_press.dart';
 /// open at once is a wall: the details screen's seasons, episodes, two
 /// rows of chips, last-used source, and groups and their sources would
 /// fill about twice what a 720p television has room for. So each rung can
-/// be a header line instead -- what it is called and what it holds --
-/// with one of them open at a time. What is open is the screen's to
-/// decide, not this widget's: which rung a title is *for* is a question
+/// be a header line instead, saying what it is called and what it holds,
+/// with one of them open at a time. The screen decides what is open, not
+/// this widget: which rung a title is *for* is a question
 /// about the title.
 class TvLadder extends StatefulWidget {
   const TvLadder({
@@ -113,9 +113,9 @@ class TvLadderController {
   ///
   /// A row that is on screen keeps this itself. A rung that collapses
   /// takes its rows out of the tree entirely ([TvLadderRung]), so a
-  /// disposed row's own memory would not survive it: keeping it only there
-  /// would land back on the season's first episode, not the one whose
-  /// sources those were, after walking into the sources and back. The
+  /// disposed row's own memory would not survive it. Kept only there,
+  /// walking into the sources and back would land on the season's first
+  /// episode, not the one whose sources those were. The
   /// level is the row's identity across that, which is what it already is
   /// for the walk itself.
   final Map<int, int> _remembered = {};
@@ -144,8 +144,8 @@ class TvLadderController {
 
   /// Where [node] is on this ladder: the level of the row it is a stop
   /// of, its place in that row's walk, and the [TvLadderStopId] it was
-  /// drawn under. Null for a node that is no row's stop -- the app bar, a
-  /// screen pushed over this one.
+  /// drawn under. Null for a node that is no row's stop, such as the app
+  /// bar or a screen pushed over this one.
   ({int level, int index, String? id})? locate(FocusNode node) {
     for (final MapEntry(key: level, value: row) in _rows.entries) {
       final index = row._stops.indexOf(node);
@@ -155,7 +155,7 @@ class TvLadderController {
   }
 
   /// Puts the remote on a stop of the row at [level]: the one drawn under
-  /// [id] when there is one, else the one at [index] -- clamped to the
+  /// [id] when there is one, else the one at [index], clamped to the
   /// row, or the row's home when it names one ([TvLadderHome]). False when
   /// no row is at [level], it has no stops, or [id] names none of them,
   /// so the caller can wait for the stop to arrive or settle for another.
@@ -195,20 +195,20 @@ class TvLadderRow extends StatefulWidget {
   });
 
   /// Moves the remote out of the row enclosing [context], up or down, and
-  /// says whether a row took it -- for a control that has to ask on the
+  /// says whether a row took it. For a control that has to ask on the
   /// row's behalf.
   ///
-  /// A row answers up and down in its own key handler, which runs after
-  /// every handler *deeper* in the tree has declined the press. A control
-  /// that installs its own arrow-key shortcuts around itself -- a
-  /// [MenuAnchor] does, and keeps them installed while it is shut -- turns
-  /// the press into a directional-focus move before the row sees it, and
-  /// the remote lands wherever geometry says rather than on the next rung
-  /// (measured: down from the library's sort menu skipped the filters row's
-  /// first chip). Such a control calls this from a key handler of its own,
-  /// placed inside the shortcuts, and returns handled when it answers true.
-  /// Off a television, or outside a ladder, it answers false and the press
-  /// falls through as it always did.
+  /// A row answers up and down in its own key handler, which runs after every
+  /// handler *deeper* in the tree has declined the press. Some controls install
+  /// their own arrow-key shortcuts around themselves; a [MenuAnchor] does, and
+  /// keeps them installed while it is shut. Such a control turns the press into
+  /// a directional-focus move before the row sees it. The remote then lands
+  /// wherever geometry says rather than on the next rung (measured: down from
+  /// the library's sort menu skipped the filters row's first chip). Such a
+  /// control calls this from a key handler of its own, placed inside the
+  /// shortcuts, and returns handled when it answers true. Off a television, or
+  /// outside a ladder, it answers false and the press falls through as it
+  /// always did.
   static bool moveFrom(BuildContext context, {required bool up}) {
     final row = context.getInheritedWidgetOfExactType<_TvLadderRowScope>()?.row;
     return row?._moveOut(up: up) ?? false;
@@ -220,7 +220,7 @@ class TvLadderRow extends StatefulWidget {
   final int level;
 
   /// Whether select, once the card has done what it does, also moves the
-  /// remote down a row. For rows whose cards act on focus -- see [TvLadder].
+  /// remote down a row. For rows whose cards act on focus (see [TvLadder]).
   /// Not for a row whose select is the point: a button, a sort chip, a
   /// source that plays.
   final bool advanceOnSelect;
@@ -289,7 +289,7 @@ class TvLadderRowState extends State<TvLadderRow> {
   /// attached at layout is attached after everything beside it that was
   /// attached at build. Left to that, the row's first stop would be the
   /// bookmark drawn to the description's right, and a press down out of
-  /// the app bar would land there -- a stop three metres away is read left
+  /// the app bar would land there. A stop three metres away is read left
   /// to right, not in the order the frame happened to be assembled in.
   ///
   /// A row that knows better declares its order with [FocusTraversalOrder],
@@ -325,16 +325,16 @@ class TvLadderRowState extends State<TvLadderRow> {
   }
 
   /// Puts the remote back where it was in this row, or on its first card.
-  /// False when the row has nothing to take it -- a season with no
-  /// episodes, a group whose sources have not arrived -- so the press can
-  /// be offered to the row beyond it.
+  /// False when the row has nothing to take it (a season with no episodes,
+  /// a group whose sources have not arrived), so the press can be offered
+  /// to the row beyond it.
   ///
   /// And brings it on screen, if it is not already. A card built on
   /// [FocusableTile] scrolls itself into view when it takes focus, but a
-  /// plain control -- the layout and order chips -- does not, so a press
-  /// down onto a row below the fold moved the remote somewhere the viewer
-  /// could not see until the next press scrolled the page. Only as far as
-  /// needed, from the side the remote came from, so a row already on
+  /// plain control (the layout and order chips) does not. So a press down
+  /// onto a row below the fold moved the remote somewhere the viewer could
+  /// not see until the next press scrolled the page. It scrolls only as far
+  /// as needed, from the side the remote came from, so a row already on
   /// screen does not move.
   bool focusRemembered({bool up = false}) {
     final stops = _stops;
@@ -418,8 +418,8 @@ class TvLadderRowState extends State<TvLadderRow> {
   }
 
   /// What an up or down press made in this row does: remember where it was
-  /// made from -- the focus change on the way out arrives after this --
-  /// and hand the remote to the next row that will take it.
+  /// made from, and hand the remote to the next row that will take it. The
+  /// focus change on the way out arrives after this.
   bool _moveOut({required bool up}) {
     _onFocusChange(true);
     return _ladder?.move(widget.level, up: up) ?? false;
@@ -466,7 +466,7 @@ class TvLadderRowState extends State<TvLadderRow> {
 }
 
 /// Marks the card of a [TvLadderRow] the remote lands on whenever it
-/// arrives in the row -- see [TvLadder].
+/// arrives in the row (see [TvLadder]).
 ///
 /// Wrap every card of such a row and turn [isHome] on for one, rather than
 /// wrapping only the one: a marker that moved from card to card would
@@ -483,8 +483,8 @@ class TvLadderHome extends InheritedWidget {
 
 /// Names the stop below it within its [TvLadderRow], so a screen can find
 /// the same card again when the row is rebuilt in another order or with
-/// cards added -- a source by its release, a group by its label -- where
-/// a place in the row would name whatever card is there now
+/// cards added: a source by its release, a group by its label. A place in
+/// the row would name whatever card is there now
 /// ([TvLadderController.locate], [TvLadderController.focusStop]).
 ///
 /// Wrap every card of a row the same way, with a null [id] for one that
@@ -511,8 +511,8 @@ class _TvLadderRowScope extends InheritedWidget {
 /// panel, and what the rung holds, drawn only while it is open.
 ///
 /// The header is the walk's stop for this rung, so a rung that holds
-/// nothing the remote can reach -- the sources while every addon is still
-/// answering -- is still a line a press down lands on and a press down
+/// nothing the remote can reach (the sources while every addon is still
+/// answering) is still a line a press down lands on and a press down
 /// leaves, rather than a hole. A rung with nothing to *say* at all is not
 /// drawn by its screen, and the walk steps over it the way it steps over
 /// any row that is not registered.
@@ -520,17 +520,17 @@ class _TvLadderRowScope extends InheritedWidget {
 /// **Select opens, and select again shuts.** Landing on a header does not
 /// open it: a walk down the ladder would otherwise open every rung it
 /// passed and leave a stack of them out. So this is one of the rows
-/// [TvLadderRow.advanceOnSelect] is explicitly not for -- select here is
-/// the point rather than a leftover -- and the press that opens a rung
+/// [TvLadderRow.advanceOnSelect] is explicitly not for: select here is
+/// the point rather than a leftover. The press that opens a rung
 /// leaves the remote on the header, one press above what it opened. The
 /// press that shuts one leaves it there too: the header is what everything
 /// that goes away was underneath.
 ///
 /// Which rung is open is the screen's: [open] is read, never kept here,
 /// and [onSelect] is the press being reported rather than an instruction.
-/// Opening one is the same act as closing the one that was open, and what
-/// select on the open one means -- there being no other rung to fall back
-/// to -- is a question about the screen rather than about this line.
+/// Opening one is the same act as closing the one that was open. What
+/// select on the open one means, with no other rung to fall back to, is a
+/// question about the screen rather than about this line.
 class TvLadderRung extends StatelessWidget {
   const TvLadderRung({
     super.key,
@@ -555,7 +555,7 @@ class TvLadderRung extends StatelessWidget {
   /// carries counts rather than an invitation.
   final String summary;
 
-  /// Drawn between the label and the summary -- the spinner, while the
+  /// Drawn between the label and the summary: the spinner, while the
   /// rung is still filling up.
   final Widget? trailing;
 

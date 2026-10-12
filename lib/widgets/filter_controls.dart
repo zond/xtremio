@@ -35,8 +35,8 @@ final class FilterOption<R> {
   /// a profile of a dozen addons offers a list nobody can read and two
   /// addons may both call a catalog `Popular`.
   ///
-  /// Null in a menu that does not group, and options that share one are
-  /// expected to arrive together -- a header is drawn wherever this changes
+  /// Null in a menu that does not group. Options that share one are
+  /// expected to arrive together: a header is drawn wherever this changes
   /// from the option before, so an interleaved list would repeat it.
   final String? group;
 }
@@ -93,15 +93,14 @@ class FilterSegments<R> extends StatelessWidget {
 
 /// The options as choice chips (narrow layouts).
 ///
-/// Each chip is wrapped as well as left to the theme's focus floor. The
-/// floor's *fill* does reach a chip -- `RawChip` builds an `InkWell` with
-/// no focus colour of its own, so it falls through to
-/// `ThemeData.focusColor` like any list row -- but its *stroke* cannot:
-/// a `ChipThemeData` does take a per-state side, and `ChipThemeData.lerp`
-/// then resolves it for the empty state and dereferences it, so a border
-/// that exists only while focused throws the first time the emphasis is
-/// changed. A fill alone is what a chip on a busy row of chips has, and
-/// the ring is the outline it cannot be given. See `FocusTheme`.
+/// Each chip is wrapped as well as left to the theme's focus floor. The floor's
+/// *fill* does reach a chip: `RawChip` builds an `InkWell` with no focus colour
+/// of its own, so it falls through to `ThemeData.focusColor` like any list row.
+/// Its *stroke* cannot. A `ChipThemeData` does take a per-state side, but
+/// `ChipThemeData.lerp` then resolves it for the empty state and dereferences
+/// it. So a border that exists only while focused throws the first time the
+/// emphasis is changed. A fill alone is what a chip on a busy row of chips has,
+/// and the ring is the outline it cannot be given. See `FocusTheme`.
 class FilterChips<R> extends StatelessWidget {
   const FilterChips({super.key, required this.options, required this.onSelect});
 
@@ -138,9 +137,9 @@ bool _headsGroup<R>(List<FilterOption<R>> options, int index) {
 /// engine flagged, so a new state moves the selection without local state.
 ///
 /// On a TV ([DeviceScope.isTv]) it is a button that opens a menu instead
-/// ([_FilterMenuButton]): a [DropdownMenu] that cannot take focus itself
-/// is a text field whose only focusable part is its trailing arrow, and
-/// the menu it opens highlights entries in step with the arrow keys but
+/// ([_FilterMenuButton]). A [DropdownMenu] that cannot take focus itself
+/// is a text field whose only focusable part is its trailing arrow. The
+/// menu it opens highlights entries in step with the arrow keys but
 /// picks one only on Enter, which a remote does not send.
 class FilterMenu<R> extends StatelessWidget {
   const FilterMenu({
@@ -155,10 +154,10 @@ class FilterMenu<R> extends StatelessWidget {
   final List<FilterOption<R>> options;
   final ValueChanged<R> onSelect;
 
-  /// On a television, draws the button as this icon alone, its words
-  /// ("Label: selected") its tooltip and its name for a screen reader, and
-  /// marks the selected entry in the open menu with a check: for a band
-  /// with no room for the words. Off a television it changes nothing.
+  /// On a television, draws the button as this icon alone, for a band with
+  /// no room for the words. The words ("Label: selected") become its
+  /// tooltip and its name for a screen reader, and the open menu marks the
+  /// selected entry with a check. Off a television it changes nothing.
   final IconData? icon;
 
   @override
@@ -221,11 +220,11 @@ class FilterMenu<R> extends StatelessWidget {
 /// a [MenuAnchor] of one focusable [MenuItemButton] per option.
 ///
 /// Opening puts focus on the selected entry (the first, when none is), so
-/// up and down start from where the engine is; the menu keeps the D-pad
-/// inside itself, select picks the focused entry (or just closes, on the
+/// up and down start from where the engine is. The menu keeps the D-pad
+/// inside itself. Select picks the focused entry (or just closes, on the
 /// one already selected) and hands focus back to the button. The remote's
 /// BACK is a route pop, which would leave the screen with the menu still
-/// drawn: while open, a [PopScope] turns it into closing the menu.
+/// drawn. While the menu is open, a [PopScope] turns BACK into closing it.
 class _FilterMenuButton<R> extends StatefulWidget {
   const _FilterMenuButton({
     required this.label,
