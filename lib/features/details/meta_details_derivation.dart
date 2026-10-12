@@ -4,10 +4,10 @@ part of 'meta_details_screen.dart';
 // is not a subclass, so the analyzer flags their `setState` calls.
 // ignore_for_file: invalid_use_of_protected_member
 
-/// The sources list as derived from one state of the field, one `ctx` and
-/// the two layout preferences: everything `_streamSlivers` needs that costs
-/// anything to compute, with the inputs it was computed from, so a build
-/// whose inputs are the same objects reuses it (see `_deriveStreams`).
+/// The sources list as derived from one state of the field, one `ctx` and the
+/// two layout preferences. It holds everything `_streamSlivers` needs that
+/// costs anything to compute, with the inputs it was computed from, so a
+/// build whose inputs are the same objects reuses it (see `_deriveStreams`).
 final class _StreamDerivation {
   const _StreamDerivation({
     required this.state,
@@ -32,9 +32,9 @@ final class _StreamDerivation {
   /// The linked Drive files this was derived from, and the rows they became.
   ///
   /// The files are an input and are kept to be compared against the next
-  /// build's ([isFor]); the rows are the output, kept because the two
-  /// layouts and the television all want to know how many there are without
-  /// walking the sections again.
+  /// build's ([isFor]). The rows are the output, kept because the two layouts
+  /// and the television all want to know how many there are without walking
+  /// the sections again.
   final List<LinkedDriveFile> driveFiles;
   final List<SourceRow> driveRows;
 
@@ -79,8 +79,8 @@ final class _StreamDerivation {
 }
 
 /// What an addon is called in a list that has lost its headings: the
-/// installed addon's own name, else the host its manifest URL names --
-/// the same fallback the failed-addon rows use.
+/// installed addon's own name, else the host its manifest URL names. The
+/// failed-addon rows use the same fallback.
 String _addonNameOf(ProfileState? profile, StreamGroup group) =>
     profile?.installedAddon(group.request.base)?.manifest.name ??
     group.addonLabel;
@@ -113,22 +113,22 @@ SourceRow _rowOf(ProfileState? profile, StreamGroup group, StreamInfo stream) =>
 
 /// One linked file as a row of the sources list.
 ///
-/// The reading is [StreamFacts.of], the same parser every addon's stream
-/// goes through, over the name Drive gave the file -- so a file whose
-/// name happens to carry `1080p` is sectioned and badged like anything
-/// else, and one named `holiday video 2.avi` draws no pills, which is
-/// the honest rendering of a file nothing is known about.
+/// The reading is [StreamFacts.of], the same parser every addon's stream goes
+/// through, run over the name Drive gave the file. So a file whose name
+/// happens to carry `1080p` is sectioned and badged like anything else. One
+/// named `holiday video 2.avi` draws no pills, which is the honest rendering
+/// of a file nothing is known about.
 ///
-/// `addonName` is [driveSourceLabel]: that slot is "where this row came
-/// from", which is the sectioned layout's provenance line and the grouped
-/// layout's heading, and `Google Drive` is the true answer to it.
+/// `addonName` is [driveSourceLabel]. That slot is "where this row came
+/// from": the sectioned layout's provenance line and the grouped layout's
+/// heading. `Google Drive` is the true answer to it.
 ///
-/// The one thing a Drive row knows that no addon's row does is how tall
-/// the video actually is: Drive measures an upload once it has processed
-/// it, and [LinkedDriveFile.height] is that measurement. Where it exists
-/// it decides the section and the pill, over anything the name claims —
-/// see [StreamFacts.of]. Where it does not, which is the ordinary case,
-/// the name is read exactly as every other row's is.
+/// The one thing a Drive row knows that no addon's row does is how tall the
+/// video actually is. Drive measures an upload once it has processed it, and
+/// [LinkedDriveFile.height] is that measurement. It decides the section and
+/// the pill wherever it exists, over anything the name claims (see
+/// [StreamFacts.of]). Where it does not, which is the ordinary case, the name
+/// is read exactly as every other row's is.
 SourceRow _driveRow(LinkedDriveFile file) {
   final stream = driveSourceStream(file);
   return (
@@ -164,12 +164,12 @@ SourceRow _localRow(LocalMediaFile file) {
   );
 }
 
-/// [rows] with every source listed once: the first row naming a source
-/// stays and the later ones go, which after a sort is the best-ranked
-/// instance. What survives carries the union of every listing's trackers
-/// and the other addons that offered it, so the collapse hides an
-/// option from nobody -- and when one addon simply repeated itself there
-/// is no other addon to name and the row says nothing.
+/// [rows] with every source listed once: the first row naming a source stays
+/// and the later ones go, which after a sort is the best-ranked instance.
+/// What survives carries the union of every listing's trackers and the other
+/// addons that offered it, so the collapse hides an option from nobody. When
+/// one addon simply repeated itself, there is no other addon to name and the
+/// row says nothing.
 ///
 /// A stream with no source key at all (an unknown variant) is never
 /// folded into anything; it is its own row, however many there are.
@@ -198,20 +198,19 @@ List<SourceRow> _collapse(
 extension _MetaDetailsDerivation on _MetaDetailsScreenState {
   /// The sources list derived from [state]: which groups answered with
   /// nothing and which failed, the source index every layout collapses on,
-  /// and the sectioned and the grouped rows -- computed once per distinct
+  /// and the sectioned and the grouped rows. It is computed once per distinct
   /// set of inputs and kept ([_derived]).
   ///
   /// Deriving is a handful of regexes per stream ([StreamFacts.of]), a sort
-  /// and a sectioning: a few milliseconds for three addons' worth of
-  /// streams on a desktop, several times that on the box this runs on --
-  /// worth caching, since this screen is rebuilt by things that change
-  /// none of its inputs, such as a download's progress tick once a second
-  /// for as long as anything is downloading while the screen sits under
-  /// the player. The inputs are the field's state (one object per pull),
-  /// the `ctx` behind the profile (the same) and the two layout
-  /// preferences; what else a build reads -- the open sections, the pins
-  /// in flight, the last-used source's merged trackers -- is cheap and
-  /// stays in [_streamSlivers].
+  /// and a sectioning. That is a few milliseconds for three addons' worth of
+  /// streams on a desktop, and several times that on the box this runs on. It
+  /// is worth caching, since this screen is rebuilt by things that change
+  /// none of its inputs. One is a download's progress tick, once a second for
+  /// as long as anything is downloading while the screen sits under the
+  /// player. The inputs are the field's state (one object per pull), the
+  /// `ctx` behind the profile (the same) and the two layout preferences. What
+  /// else a build reads (the open sections, the pins in flight, the last-used
+  /// source's merged trackers) is cheap and stays in [_streamSlivers].
   _StreamDerivation _deriveStreams(
     MetaDetailsState state, {
     required bool isSectioned,
@@ -236,11 +235,11 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     final profile = ctx == null ? null : ProfileState.fromCtx(ctx);
     final groups = state.allStreamGroups;
     // Only the addons that answered with something are listed. One that
-    // failed has nothing to list, and one that answered with nothing is
-    // not a section either: most stream addons have nothing for most
-    // episodes. Neither is accounted for anywhere on this screen -- a row
-    // about other people's servers under every title was noise (zond,
-    // 2026-09-29) -- and a dead addon shows on the Addons screen instead.
+    // failed has nothing to list, and one that answered with nothing is not a
+    // section either: most stream addons have nothing for most episodes.
+    // Neither is accounted for anywhere on this screen. A row about other
+    // people's servers under every title was noise (zond, 2026-09-29), and a
+    // dead addon shows on the Addons screen instead.
     final listed = [
       for (final g in groups)
         if (!_hasFailed(g) && !_answeredEmpty(g)) g,
@@ -259,30 +258,30 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
     // **Read after the addons' answers are settled, and deliberately so.**
     // [listed] and [sources] are built out of [groups] alone, so a linked
     // file does not count as one more thing an addon offered. It is not an
-    // addon result; it is one more source, which is a different sentence.
+    // addon result. It is one more source, which is a different sentence.
     final driveRows = [for (final file in driveFiles) _driveRow(file)];
     final localRows = [for (final file in localFiles) _localRow(file)];
-    // The sectioned layout: every listed addon's streams together, put in
-    // the chosen order ([StreamOrder], the same one for every section) and
-    // then split into a collapsible section per resolution. Each row names
-    // the addon it came from, since it has no heading to sit under any
-    // more. Built only for the layout that shows it -- parsing every
-    // stream costs a handful of regexes each.
+    // The sectioned layout: every listed addon's streams together, put in the
+    // chosen order ([StreamOrder], the same one for every section) and then
+    // split into a collapsible section per resolution. Each row names the
+    // addon it came from, since it has no heading to sit under any more. It
+    // is built only for the layout that shows it, since parsing every stream
+    // costs a handful of regexes each.
     //
-    // Sorted, then collapsed, then sectioned, in that order and for a
-    // reason each: the instance of a duplicate that survives is the
-    // best-ranked one rather than whichever addon was asked first, the
-    // collapse is across the whole list so a source two addons described
-    // differently cannot appear in two sections, and sectioning keeps the
-    // order it is handed, so each section is already sorted.
+    // Sorted, then collapsed, then sectioned, in that order and for a reason
+    // each. Sorting first makes the instance of a duplicate that survives the
+    // best-ranked one, rather than whichever addon was asked first. The
+    // collapse is across the whole list, so a source two addons described
+    // differently cannot appear in two sections. Sectioning keeps the order
+    // it is handed, so each section is already sorted.
     //
-    // A linked Drive file is one more row in that run and nothing more: it
+    // A linked Drive file is one more row in that run and nothing more. It
     // lands in the section its own name reads a resolution out of (the
-    // unknown one, for a file named like a holiday video), and it takes
-    // its place in the chosen order along with everything else. It is not
-    // pinned to the top of its section -- the order is the chip the viewer
-    // pressed, and a row that ignored it would be the list disobeying the
-    // control that claims to set it.
+    // unknown one, for a file named like a holiday video), and it takes its
+    // place in the chosen order along with everything else. It is not pinned
+    // to the top of its section. The order is the chip the viewer pressed,
+    // and a row that ignored it would be the list disobeying the control that
+    // claims to set it.
     final sections = isSectioned
         ? sectionsByResolution(
             _collapse(
@@ -305,19 +304,19 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
         : const <StreamSection<SourceRow>>[];
     // The grouped layout: each addon's own ranking, with the addon's own
     // repeats collapsed. A source two addons both offered stays in both
-    // groups -- the groups are the point of this layout -- and each row
+    // groups, because the groups are the point of this layout, and each row
     // says the other addon has it too.
     //
     // The linked Drive files are a group of their own, **first**. Their
-    // heading is [driveSourceLabel] -- `Google Drive`, the same three words
-    // the Remote list and the player's own description use -- because the
-    // headings in this layout are display names and that is the true
-    // display name of where these files are. It is not an addon and is not
-    // dressed as one: it has no manifest, no host, and nothing below ever
-    // resolves this heading against the profile. First, and not somewhere
-    // among the addons, because the run below is the *profile's* order --
-    // the order the viewer arranged their addons in -- and a thing that is
-    // not an addon has no place inside it.
+    // heading is [driveSourceLabel], `Google Drive`, the same three words the
+    // Remote list and the player's own description use. The headings in this
+    // layout are display names, and that is the true display name of where
+    // these files are. It is not an addon and is not dressed as one: it has
+    // no manifest, no host, and nothing below ever resolves this heading
+    // against the profile. It comes first, not somewhere among the addons,
+    // because the run below is the *profile's* order (the order the viewer
+    // arranged their addons in), and a thing that is not an addon has no
+    // place inside it.
     final grouped = isSectioned
         ? const <SourceGroup>[]
         : [
@@ -350,14 +349,14 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
                 isLoading: group.isLoading,
                 rows: _collapse(
                   [
-                    // Read the same way the sectioned layout reads, even
-                    // though this list does not *rank* by what is in a
-                    // stream -- it keeps each addon's own order -- so a
-                    // row shows the same badges and text whichever layout
-                    // drew it. The television already pays for this read
-                    // per card ([_tvSource]); paying for it once here is
-                    // what makes one row look the same whichever way the
-                    // list is grouped.
+                    // Read the same way the sectioned layout reads, so a row
+                    // shows the same badges and text whichever layout drew
+                    // it, even though this list does not *rank* by what is in
+                    // a stream: it keeps each addon's own order. The
+                    // television already pays for this read per card
+                    // ([_tvSource]). Paying for it once here is what makes
+                    // one row look the same whichever way the list is
+                    // grouped.
                     for (final stream in group.streams)
                       _rowOf(profile, group, stream),
                   ],
@@ -393,8 +392,8 @@ extension _MetaDetailsDerivation on _MetaDetailsScreenState {
   /// reads a film's video id as its meta id, so passing the meta id for a
   /// film and `tt0903747:1:1` for an episode is the same question asked
   /// twice. A series with no episode chosen yet asks with the meta id and
-  /// matches nothing, which is right -- no episode is selected, so no
-  /// episode's file is offered.
+  /// matches nothing, which is right: no episode is selected, so no episode's
+  /// file is offered.
   ///
   /// Empty with no pairing above this screen, and empty for a title nothing
   /// is linked to. Both draw nothing at all.

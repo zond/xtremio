@@ -26,39 +26,38 @@ import 'title_scores.dart';
 /// ways, and each is a ten-foot reason rather than a matter of taste:
 ///
 /// - **No poster.** The artwork is already behind the whole screen as the
-///   backdrop; a poster beside the text would be the same picture twice
-///   and, at this size, a third of the layout.
-/// - **The logo stands in for the name.** Most titles ship one, it is the
-///   lettering the film is actually known by, and it reads across a room
-///   in a way a text heading does not. There is a name behind it for the
-///   titles that ship none, for a logo that will not load, and for a
-///   screen reader ([Image.semanticLabel]) -- a missing image may never
-///   disturb the layout.
+///   backdrop. A poster beside the text would be the same picture twice and,
+///   at this size, a third of the layout.
+/// - **The logo stands in for the name.** Most titles ship one. It is the
+///   lettering the film is actually known by, and it reads across a room in a
+///   way a text heading does not. There is a name behind it for the titles
+///   that ship none, for a logo that will not load, and for a screen reader
+///   ([Image.semanticLabel]): a missing image may never disturb the layout.
 /// - **The facts are one line, the scores another, and the description a
-///   couple.** Year, runtime and genres are one glance and the scores
-///   ([tvScoresLine]) a second; the genres and the scores are text rather
-///   than the phone's chips and IMDb link because a chip or a link is a
-///   focus stop, and a remote spends presses walking past every stop
-///   between it and the rows. The couple of lines are what is *shown*: a description with
-///   more to say is a control the remote can press to unfold
-///   ([TvDescription]), because an ellipsis with no way past it is a plot
-///   the viewer cannot reach.
+///   couple.** Year, runtime and genres are one glance, and the scores
+///   ([tvScoresLine]) a second. The genres and the scores are text rather
+///   than the phone's chips and IMDb link, because a chip or a link is a
+///   focus stop, and a remote spends presses walking past every stop between
+///   it and the rows. The couple of lines are what is *shown*. A description
+///   with more to say is a control the remote can press to unfold
+///   ([TvDescription]), because an ellipsis with no way past it is a plot the
+///   viewer cannot reach.
 ///
 /// The bookmark stays: it is the one thing on this screen that is about
 /// the title rather than about what to play, and the remote has to be
 /// able to reach it.
 ///
-/// **The header says which of its stops comes first**, because nothing
-/// else here can be trusted to. The description is built inside a
-/// [LayoutBuilder] -- it measures the words against the width it is given
-/// -- so its focus node attaches at layout, after the bookmark beside it.
-/// Left to that attachment order, both the ladder's walk and reading order
-/// would make the bookmark the header's first stop -- the narrow button in
-/// the corner rather than the block spanning the panel -- so a viewer
-/// coming down out of the app bar would land on the bookmark and have to
-/// walk back for the plot. So the order is declared
-/// ([FocusTraversalOrder]) and both walks read the declaration: the
-/// [OrderedTraversalPolicy] here for Tab, [TvLadderRow] for the D-pad.
+/// **The header says which of its stops comes first**, because nothing else
+/// here can be trusted to. The description is built inside a [LayoutBuilder],
+/// since it measures the words against the width it is given. So its focus
+/// node attaches at layout, after the bookmark beside it. Left to that
+/// attachment order, both the ladder's walk and reading order would make the
+/// bookmark the header's first stop: the narrow button in the corner rather
+/// than the block spanning the panel. A viewer coming down out of the app bar
+/// would land on the bookmark and have to walk back for the plot. So the
+/// order is declared ([FocusTraversalOrder]), and both walks read the
+/// declaration: the [OrderedTraversalPolicy] here for Tab, [TvLadderRow] for
+/// the D-pad.
 class TvMetaHeader extends StatelessWidget {
   const TvMetaHeader({
     super.key,
@@ -124,10 +123,9 @@ class TvMetaHeader extends StatelessWidget {
   /// width is left rather than overflowing it.
   static const double logoHeight = 88;
 
-  /// How much of the description is shown before it is unfolded. Two lines
-  /// is what says which film this is; the rest is a synopsis nobody reads
-  /// from a sofa -- until they want to, which is what [TvDescription] is
-  /// for.
+  /// How much of the description is shown before it is unfolded. Two lines is
+  /// what says which film this is. The rest is a synopsis nobody reads from a
+  /// sofa until they want to, which is what [TvDescription] is for.
   static const int descriptionLines = 2;
 
   /// The one compact line: year, runtime, genres. Empty parts are left
@@ -320,19 +318,19 @@ class TvMetaHeader extends StatelessWidget {
   }
 
   /// Moves the remote up or down between the stops of the header's text
-  /// column -- the plot and the trailer drawn under it -- and declines a
-  /// press with no stop beyond it in the column, which the ladder row above
-  /// then answers by leaving the header. A press right is
+  /// column: the plot and the trailer drawn under it. A press with no stop
+  /// beyond it in the column is declined, and the ladder row above then
+  /// answers it by leaving the header. A press right is
   /// [_crossToTheBookmark]'s.
   ///
-  /// **Without this the trailer is unreachable whenever the plot is a
-  /// stop.** The ladder takes up and down for itself, a rung per press, and
-  /// left and right go by geometry: from the plot right is the bookmark,
-  /// and from the bookmark left is the plot, level with it, never the
-  /// trailer under it. Arriving lands on the plot, the header's first stop,
-  /// so there was no D-pad path to the button at all -- only Tab, which a
-  /// remote does not have. Down from the plot is where a viewer looks for
-  /// the button drawn under it.
+  /// **Without this the trailer is unreachable whenever the plot is a stop.**
+  /// The ladder takes up and down for itself, a rung per press, and left and
+  /// right go by geometry: from the plot right is the bookmark, and from the
+  /// bookmark left is the plot, level with it, never the trailer under it.
+  /// Arriving lands on the plot, the header's first stop, so there was no
+  /// D-pad path to the button at all, only Tab, which a remote does not have.
+  /// Down from the plot is where a viewer looks for the button drawn under
+  /// it.
   ///
   /// The column's stops are walked by where they are drawn, top first, not
   /// by the order they attach in (the plot attaches at layout, after the
@@ -373,20 +371,19 @@ class TvMetaHeader extends StatelessWidget {
     return KeyEventResult.handled;
   }
 
-  /// Moves the remote right from a stop of the text column -- the plot, the
-  /// trailer -- to the bookmark; [_crossBack] takes it left again, to the
-  /// stop it came from.
+  /// Moves the remote right from a stop of the text column (the plot, the
+  /// trailer) to the bookmark. [_crossBack] takes it left again, to the stop
+  /// it came from.
   ///
-  /// **Without these the bookmark had no press that reached it** whenever
-  /// the remote was on the trailer. Left and right go by geometry, and the
+  /// **Without these the bookmark had no press that reached it** whenever the
+  /// remote was on the trailer. Left and right go by geometry, and the
   /// bookmark is drawn in the top corner, level with the logo rather than
-  /// with any stop beside it: a press right takes the nearest thing whose
-  /// middle is right of the trailer, which is the plot above it when the
-  /// plot is a stop, and the first rung's header below it when it is not
-  /// -- a short plot, or none. Up from the trailer leaves the header for the
-  /// app bar, and down from the bar comes back to the trailer, so the
-  /// bookmark was out of reach entirely. Right from beside it is where a
-  /// viewer looks for it.
+  /// with any stop beside it. A press right takes the nearest thing whose
+  /// middle is right of the trailer. That is the plot above it when the plot
+  /// is a stop, and the first rung's header below it when it is not (a short
+  /// plot, or none). Up from the trailer leaves the header for the app bar,
+  /// and down from the bar comes back to the trailer, so the bookmark was out
+  /// of reach entirely. Right from beside it is where a viewer looks for it.
   static KeyEventResult _crossToTheBookmark(FocusNode column) {
     final focused = FocusManager.instance.primaryFocus;
     final bookmark = column.parent?.traversalDescendants
@@ -421,14 +418,14 @@ class TvMetaHeader extends StatelessWidget {
     };
   }
 
-  /// Moves the remote one stop along the top corner -- the bookmark, then
-  /// the two faces -- by where they are drawn, and keeps a press right of
-  /// the last one in the corner.
+  /// Moves the remote one stop along the top corner (the bookmark, then the
+  /// two faces) by where they are drawn. A press right of the last one stays
+  /// in the corner.
   ///
-  /// By hand rather than by geometry, because geometry remembers: Flutter's
-  /// directional walk undoes its last move when the opposite key follows,
-  /// so a remote put back on a face some other way and pressed right went
-  /// to wherever the last left came from rather than to the face beside
+  /// It is done by hand rather than by geometry, because geometry remembers.
+  /// Flutter's directional walk undoes its last move when the opposite key
+  /// follows. So a remote put back on a face some other way and pressed right
+  /// went to wherever the last left came from, rather than to the face beside
   /// it. A header with only the bookmark leaves the press alone.
   static KeyEventResult _walkCorner(FocusNode node, {required bool right}) {
     final focused = FocusManager.instance.primaryFocus;
@@ -468,8 +465,8 @@ class TvMetaHeader extends StatelessWidget {
   /// Which column stop the remote crossed to each bookmark from.
   static final Expando<FocusNode> _cameFrom = Expando('came from');
 
-  /// Whether [stop] is in the top corner -- the bookmark or a face -- by
-  /// the order it declares: not a stop of the text column.
+  /// Whether [stop] is in the top corner (the bookmark or a face), by the
+  /// order it declares: not a stop of the text column.
   static bool _isCorner(FocusNode stop) {
     final context = stop.context;
     final order = context == null ? null : FocusTraversalOrder.maybeOf(context);
@@ -484,13 +481,13 @@ class TvMetaHeader extends StatelessWidget {
   }
 
   /// Focuses [stop] and brings it on screen from the side the remote came
-  /// from, only as far as needed: the bookmark is above everything in the
-  /// column, and an unfolded plot can have scrolled it off the top; back
-  /// down from it, the trailer under that plot can be below the bottom.
+  /// from, only as far as needed. The bookmark is above everything in the
+  /// column, and an unfolded plot can have scrolled it off the top. Back down
+  /// from it, the trailer under that plot can be below the bottom.
   ///
-  /// A stop taller than the screen -- an unfolded plot -- is revealed by its
-  /// first line either way, never its last: reading starts at the top of a
-  /// paragraph ([ReadableBlock.revealBlock] says why).
+  /// A stop taller than the screen, such as an unfolded plot, is revealed by
+  /// its first line either way, never its last: reading starts at the top of
+  /// a paragraph ([ReadableBlock.revealBlock] says why).
   static void _reveal(FocusNode stop, {required bool up}) {
     stop.requestFocus();
     final target = stop.context;
@@ -516,23 +513,23 @@ class TvMetaHeader extends StatelessWidget {
   /// The logo, or the name when there is none and when the logo will not
   /// load, in a box [logoHeight] tall either way.
   ///
-  /// The height is the whole point of the box. An [Image] given
-  /// only a height occupies exactly that from its first frame, before a
-  /// byte has arrived; the name that replaces it when the fetch fails is
-  /// about half as tall. Without a floor under it the header, the season
-  /// pills, the episode row and both rows of sources all jump up some
-  /// forty pixels the moment a slow metahub answers 404 -- seconds after
-  /// the screen settled, under a focus ring the viewer is already using.
-  /// A missing image may never disturb the layout, and a *late* missing
-  /// image is the case that rule is really about.
+  /// The height is the whole point of the box. An [Image] given only a height
+  /// occupies exactly that from its first frame, before a byte has arrived.
+  /// The name that replaces it when the fetch fails is about half as tall.
+  /// Without a floor under it, the header, the season pills, the episode row
+  /// and both rows of sources all jump up some forty pixels the moment a slow
+  /// metahub answers 404. That happens seconds after the screen settled,
+  /// under a focus ring the viewer is already using. A missing image may
+  /// never disturb the layout, and a *late* missing image is the case that
+  /// rule is really about.
   ///
-  /// The height is also what the decode is bounded to. Metahub serves a
-  /// logo at the artwork's own scale, and one decoded at that scale is
-  /// megabytes of texture for a strip [logoHeight] tall on a television
-  /// with two gigabytes for the whole system. The height is the dimension
-  /// to give, because it is the one the logo is drawn at -- the width
-  /// follows it and the lettering keeps its shape. `cacheHeight` counts
-  /// physical pixels, which is why the device's ratio is in it.
+  /// The height is also what the decode is bounded to. Metahub serves a logo
+  /// at the artwork's own scale, and one decoded at that scale is megabytes
+  /// of texture for a strip [logoHeight] tall on a television with two
+  /// gigabytes for the whole system. The height is the dimension to give,
+  /// because it is the one the logo is drawn at. The width follows it, and
+  /// the lettering keeps its shape. `cacheHeight` counts physical pixels,
+  /// which is why the device's ratio is in it.
   Widget _title(BuildContext context) {
     final logo = meta.logo;
     final name = ConstrainedBox(
@@ -568,49 +565,49 @@ class TvMetaHeader extends StatelessWidget {
 /// press to see the rest.
 ///
 /// **The words are the control, because there is no other pointer.** Plain
-/// text clipped to [TvMetaHeader.descriptionLines] takes no focus and
-/// answers no key, so without this the rest of a plot longer than two
-/// lines is unreachable on a television, whose only pointer is the D-pad.
-/// A phone already has a way past its own clamp (`ExpandableText`, in
-/// `details_header.dart`, with a More button under the words); this is
-/// the same idea for a remote: the words themselves are the control, and
-/// select unfolds them and folds them back.
+/// text clipped to [TvMetaHeader.descriptionLines] takes no focus and answers
+/// no key. So without this, the rest of a plot longer than two lines is
+/// unreachable on a television, whose only pointer is the D-pad. A phone
+/// already has a way past its own clamp (`ExpandableText`, in
+/// `details_header.dart`, with a More button under the words). This is the
+/// same idea for a remote: the words themselves are the control, and select
+/// unfolds them and folds them back.
 ///
-/// **A stop only where there is something behind the ellipsis.** The text
-/// is measured against the collapsed clamp exactly as the phone's is, and
-/// a description that already fits is left as words -- not a stop. A ring
-/// on a block whose select does nothing is the lie this widget exists to
-/// avoid, and on a remote it also costs a press to walk past.
+/// **A stop only where there is something behind the ellipsis.** The text is
+/// measured against the collapsed clamp exactly as the phone's is, and a
+/// description that already fits is left as words, not a stop. A ring on a
+/// block whose select does nothing is the lie this widget exists to avoid,
+/// and on a remote it also costs a press to walk past.
 ///
 /// **Pressable, so dressed as something pressable.** [Readout] is the
-/// neighbouring case and wears [FocusTreatment.readout] -- the ring alone,
-/// no ink -- precisely because select on it does nothing. This is the
-/// opposite, so it takes what this app gives a control: the ring at
-/// [FocusTreatment.row], since a block the width of the panel zoomed five
-/// per cent would lift over the facts above it, and Material's own ink
-/// under it, which the floor (`FocusTheme`) fills in near-white. The fill
-/// is the difference a viewer reads: words that light up are words that
-/// can be pressed.
+/// neighbouring case and wears [FocusTreatment.readout], the ring alone with
+/// no ink, precisely because select on it does nothing. This is the opposite,
+/// so it takes what this app gives a control. It wears the ring at
+/// [FocusTreatment.row], since a block the width of the panel zoomed five per
+/// cent would lift over the facts above it. Under it is Material's own ink,
+/// which the floor (`FocusTheme`) fills in near-white. The fill is the
+/// difference a viewer reads: words that light up are words that can be
+/// pressed.
 ///
 /// **What expanding must not cost is the remote's place.** The stop is one
-/// [InkWell] whose node outlives the toggle -- the tree is the same shape
-/// unfolded and folded -- so focus neither moves on the press nor is left
-/// on something no longer drawn. The press is a [RemotePress], so select
-/// acts when the key comes *up*, the way Android activates a control and
-/// the way every other stop in this app does; Material's own shortcut
-/// fires on the way down and again on every repeat, which on a held key is
-/// a plot flapping open and shut.
+/// [InkWell] whose node outlives the toggle, since the tree is the same shape
+/// unfolded and folded. So focus neither moves on the press nor is left on
+/// something no longer drawn. The press is a [RemotePress], so select acts
+/// when the key comes *up*, the way Android activates a control and the way
+/// every other stop in this app does. Material's own shortcut fires on the
+/// way down and again on every repeat, which on a held key is a plot flapping
+/// open and shut.
 ///
 /// **An unfolded plot can be longer than the panel**, which is the bug in a
-/// new place. [ReadableBlock] is both halves of that: [walkBlock] answers
-/// the D-pad while there is any of the block off the screen, a
-/// part-screenful per press, and [revealBlockAfterFrame] puts the block
-/// back in front of the viewer when it folds -- the page is scrolled
-/// wherever the walk left it, and a fold that only made the words short
-/// would leave the remote standing above the fold. Arriving needs nothing
-/// of its own: the ladder reveals this row from the side the press came
-/// from, and traversal's own reveal puts a leading edge against a leading
-/// edge, which for this block is its first line either way.
+/// new place. [ReadableBlock] is both halves of that. [walkBlock] answers the
+/// D-pad while there is any of the block off the screen, a part-screenful per
+/// press. [revealBlockAfterFrame] puts the block back in front of the viewer
+/// when it folds. The page is scrolled wherever the walk left it, and a fold
+/// that only made the words short would leave the remote standing above the
+/// fold. Arriving needs nothing of its own: the ladder reveals this row from
+/// the side the press came from, and traversal's own reveal puts a leading
+/// edge against a leading edge, which for this block is its first line either
+/// way.
 ///
 /// **A phone is left alone.** It has its own More button, and a second
 /// mechanism for the same idea is two things to keep right. Off a
@@ -639,11 +636,11 @@ class _TvDescriptionState extends State<TvDescription>
   /// Unfolds, or folds back, and then puts what is now drawn in front of
   /// the viewer.
   ///
-  /// The reveal is the half that is easy to leave out: unfolding a plot at
+  /// The reveal is the half that is easy to leave out. Unfolding a plot at
   /// the bottom of the panel grows it off the screen, and folding one the
-  /// remote has walked down through leaves the header above the fold with
-  /// the remote still standing on it. Both are the same question --
-  /// where are these words now -- and [ReadableBlock] answers it once.
+  /// remote has walked down through leaves the header above the fold with the
+  /// remote still standing on it. Both are the same question, where these
+  /// words are now, and [ReadableBlock] answers it once.
   void _toggle() {
     setState(() => _expanded = !_expanded);
     revealBlockAfterFrame();
@@ -674,11 +671,11 @@ class _TvDescriptionState extends State<TvDescription>
         // The padding is there either way, so a title whose plot happens
         // to fit is laid out exactly where a title whose plot does not is.
         if (!overflows) return padded;
-        // The [Focus] above the stop rather than the stop itself: it
-        // cannot be focused and is skipped by traversal, so the walk is
-        // exactly what it was, and a key event from the node below still
-        // passes through it on the way up -- the same trick [FocusMarked]
-        // and [RemotePress] play either side of it.
+        // The [Focus] above the stop rather than the stop itself. It cannot
+        // be focused and is skipped by traversal, so the walk is exactly what
+        // it was. A key event from the node below still passes through it on
+        // the way up, the same trick [FocusMarked] and [RemotePress] play
+        // either side of it.
         return Focus(
           canRequestFocus: false,
           skipTraversal: true,
@@ -688,10 +685,10 @@ class _TvDescriptionState extends State<TvDescription>
             onTap: _toggle,
             child: FocusMarked(
               borderRadius: TvDescription.radius,
-              // A button to a screen reader: what it is called is the
-              // plot, and what can be done is press it. A [Readout] is
-              // the other half of that sentence -- focusable, and
-              // explicitly not a button.
+              // A button to a screen reader: what it is called is the plot,
+              // and what can be done is press it. A [Readout] is the other
+              // half of that sentence: focusable, and explicitly not a
+              // button.
               child: Semantics(
                 button: true,
                 child: InkWell(

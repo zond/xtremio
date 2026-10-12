@@ -12,29 +12,29 @@ import 'tv_source_row.dart';
 
 /// What [AppPrefs.openStreamAddons] stores the Drive group under.
 ///
-/// Every other label there is a transport URL ([addonStorageLabel]), and
-/// this one deliberately is not: there is no addon to name, and inventing a
-/// URL-shaped one would put an addon that does not exist into the
-/// preferences file. Nothing resolves a label back to an addon -- the set is
-/// compared string to string and nothing else -- so a plain word is enough,
-/// and it cannot collide with a URL or with a `meta:` prefixed one.
+/// Every other label there is a transport URL ([addonStorageLabel]), and this
+/// one deliberately is not: there is no addon to name, and inventing a
+/// URL-shaped one would put an addon that does not exist into the preferences
+/// file. Nothing resolves a label back to an addon, since the set is compared
+/// string to string and nothing else. So a plain word is enough, and it
+/// cannot collide with a URL or with a `meta:` prefixed one.
 const String driveSourceStorageLabel = 'drive';
 
 /// The same, for the group of this device's own videos in the grouped
 /// layout.
 const String localSourceStorageLabel = 'local';
 
-/// The downloads binding for one source group: an addon's, recorded
-/// against its request, or -- for the group with no addon behind it, the
-/// linked Drive files -- one that pins with no request at all.
+/// The downloads binding for one source group. An addon's is recorded against
+/// its request. The group with no addon behind it, the linked Drive files,
+/// gets one that pins with no request at all.
 StreamDownloads? downloadsFor(StreamDownloads? downloads, StreamGroup? group) =>
     group == null ? downloads?.forDrive() : downloads?.forGroup(group);
 
 /// Every stream addon has answered and none of them had anything to play.
-/// With the addons xtremio installs itself that is what a series episode
-/// usually looks like -- none of them serves torrents -- so the section
-/// says so in as many words and offers the screen that fixes it, rather
-/// than leaving a heading over nothing.
+/// That is what a series episode usually looks like with the addons xtremio
+/// installs itself, since none of them serves torrents. So the section says
+/// so in as many words and offers the screen that fixes it, rather than
+/// leaving a heading over nothing.
 class NoStreamsNotice extends StatelessWidget {
   const NoStreamsNotice({
     super.key,
@@ -46,13 +46,13 @@ class NoStreamsNotice extends StatelessWidget {
   /// Names what came up empty: an episode of a series, or the title.
   final bool isEpisode;
 
-  /// Whether an installed addon offers the `stream` resource for this
-  /// title's type at all. False is the fresh-install case this notice was
-  /// written for; true means an addon that could have answered (Torrentio,
-  /// say) simply had nothing for *this* title, which is a different and
-  /// much narrower thing to say -- naming it is wrong on a Swedish series
-  /// no addon covers, with a torrent addon installed and working fine on
-  /// everything else.
+  /// Whether an installed addon offers the `stream` resource for this title's
+  /// type at all. False is the fresh-install case this notice was written
+  /// for. True means an addon that could have answered (Torrentio, say)
+  /// simply had nothing for *this* title. That is a different and much
+  /// narrower thing to say. Naming it is wrong on a Swedish series no addon
+  /// covers, with a torrent addon installed and working fine on everything
+  /// else.
   final bool hasStreamAddon;
 
   final VoidCallback onAddons;
@@ -66,9 +66,9 @@ class NoStreamsNotice extends StatelessWidget {
       'torrent addon, so add one and its streams show up here.';
 
   /// The sentence this notice says, which only claims there is no torrent
-  /// addon when that is true ([hasStreamAddon] false); otherwise it says
-  /// the narrower, true thing -- an installed addon answered and had
-  /// nothing for this one title.
+  /// addon when that is true ([hasStreamAddon] false). Otherwise it says the
+  /// narrower, true thing: an installed addon answered and had nothing for
+  /// this one title.
   static String explanationOf({
     required bool isEpisode,
     required bool hasStreamAddon,
@@ -168,18 +168,18 @@ Key streamSectionKey(StreamResolution? resolution) =>
 /// addon's transport URL, which is the identity the profile, the
 /// failed-addon rows and a pin all key on already.
 ///
-/// Not the heading: that is a name, and a name is neither unique (two
-/// addons may call themselves the same thing) nor stable (a manifest
-/// renames itself and the group a viewer opened would come back shut). The
-/// streams a *meta* addon attached to the video are a group of their own,
-/// under a heading of their own ("From ..."), and get a label of their own
-/// -- the same addon can answer both as the meta addon and as a stream
-/// addon, and the two groups open and close separately.
+/// Not the heading: that is a name, and a name is neither unique (two addons
+/// may call themselves the same thing) nor stable (a manifest renames itself
+/// and the group a viewer opened would come back shut). The streams a *meta*
+/// addon attached to the video are a group of their own, under a heading of
+/// their own ("From ..."), and get a label of their own. The same addon can
+/// answer both as the meta addon and as a stream addon, and the two groups
+/// open and close separately.
 String addonStorageLabel(StreamGroup group) =>
     group.isFromMeta ? 'meta:${group.request.base}' : group.request.base;
 
 /// The key on one addon group's header, where [storageLabel] is what
-/// [addonStorageLabel] made of the group -- the addon's transport URL.
+/// [addonStorageLabel] made of the group: the addon's transport URL.
 ///
 /// By the stored label and not by the heading, for the reason that label
 /// exists: a heading is a name, two addons may share one, and a test that
@@ -245,9 +245,9 @@ class StreamsHeader extends StatelessWidget {
   final ValueChanged<bool>? onSectionedChanged;
 
   /// What order the streams inside each section are in. Only the sectioned
-  /// layout has such an order to choose -- the grouped one is the addons'
-  /// own ranking, which is the whole point of it -- so the chips are drawn
-  /// only there.
+  /// layout has such an order to choose, so the chips are drawn only there.
+  /// The grouped one is the addons' own ranking, which is the whole point of
+  /// it.
   final StreamOrder order;
 
   /// Picks that order; null draws no chips.
@@ -305,10 +305,10 @@ class StreamsHeader extends StatelessWidget {
               ],
             ),
           // How the list is cut, as a choice rather than as a switch: two
-          // chips reading the two layouts, the selected one being what is
-          // on screen. Above the order chips because it is the larger
-          // decision of the two -- an order only exists inside the
-          // sectioned layout -- and packed left like every other row here.
+          // chips reading the two layouts, the selected one being what is on
+          // screen. It sits above the order chips because it is the larger
+          // decision of the two (an order only exists inside the sectioned
+          // layout), and it is packed left like every other row here.
           if (onSectionedChanged != null)
             _rung(
               layoutLevel,
@@ -359,15 +359,15 @@ class StreamsHeader extends StatelessWidget {
 /// linked Drive files, which are not an addon's answer and cannot be
 /// described as one.
 ///
-/// A record and not just a [StreamGroup] paired with its rows, because a
-/// group with no addon behind it -- the linked Drive files -- has no
-/// [StreamGroup] to read its name, its storage label or whether it is
-/// still answering off of; the record supplies each of those directly.
+/// A record and not just a [StreamGroup] paired with its rows. A group with
+/// no addon behind it, the linked Drive files, has no [StreamGroup] to read
+/// its name, its storage label or whether it is still answering off of. The
+/// record supplies each of those directly.
 typedef SourceGroup = ({
   /// The addon group, or null for the linked Drive files. Null is what says
-  /// there is no addon request to record a pin against and no addon health
-  /// to be affected by; a Drive file downloads all the same, with none
-  /// recorded ([downloadsFor]).
+  /// there is no addon request to record a pin against and no addon health to
+  /// be affected by. A Drive file downloads all the same, with none recorded
+  /// ([downloadsFor]).
   StreamGroup? group,
 
   /// The heading, as a viewer reads it: the addon's own name, or
@@ -375,11 +375,11 @@ typedef SourceGroup = ({
   String name,
 
   /// What [AppPrefs.openStreamAddons] remembers this group's open state
-  /// under -- the addon's transport URL, or [driveSourceStorageLabel].
+  /// under: the addon's transport URL, or [driveSourceStorageLabel].
   String storageLabel,
 
-  /// Whether the heading says "From ..." -- streams a *meta* addon attached
-  /// to the video itself. Never true of the Drive group.
+  /// Whether the heading says "From ...": streams a *meta* addon attached to
+  /// the video itself. Never true of the Drive group.
   bool isFromMeta,
 
   /// Whether the answer is still on its way, which is what a group with no
@@ -390,16 +390,17 @@ typedef SourceGroup = ({
 });
 
 /// One row of the sources list, in either layout: the stream as it will be
-/// played -- with the trackers every listing of it named -- the addon group
-/// it came from (a download records the request its stream came from, so
-/// the group has to travel with it), what could be read out of it -- in
-/// either layout, so one row looks the same whichever way the list is
-/// grouped -- and the other addons that offered the same source.
+/// played, with the trackers every listing of it named; the addon group it
+/// came from; what could be read out of it; and the other addons that offered
+/// the same source. The group travels with the row because a download records
+/// the request its stream came from. The reading is there in either layout,
+/// so one row looks the same whichever way the list is grouped.
+///
 /// A row with no [group] is a linked Google Drive file and carries [drive]
-/// instead: the two are exactly the two kinds of row, which is why a null
+/// instead. The two are exactly the two kinds of row, which is why a null
 /// check on either settles it. [stream] is then the placeholder
-/// [driveSourceStream] builds -- enough to read, section and draw the row,
-/// and never something a player is handed; the press goes through
+/// [driveSourceStream] builds: enough to read, section and draw the row, and
+/// never something a player is handed. The press goes through
 /// [_MetaDetailsScreenState._playRow] to the real open.
 typedef SourceRow = ({
   StreamGroup? group,
@@ -493,15 +494,15 @@ final class StreamDownloads {
   /// What a hold on the source [stream] is drawn on does about the copy on
   /// the device, for a remote that cannot press the button.
   ///
-  /// Directional traversal skips a node inside the focused one's rect, and
-  /// the button is inside the row or the card the remote activates as a
-  /// whole, so on a television it can be looked at and never reached. A
-  /// long press -- hold select, or the remote's menu key -- is the "more
-  /// options" gesture everywhere else in the app, and here there is
-  /// exactly one option: whatever the button beside the play arrow would
-  /// do. Null while there is nothing to do (a stream the server cannot
-  /// keep, a pin in flight, a download still arriving), which leaves a
-  /// hold meaning what it meant before -- a tap on release.
+  /// Directional traversal skips a node inside the focused one's rect. The
+  /// button is inside the row or the card the remote activates as a whole, so
+  /// on a television it can be looked at and never reached. A long press
+  /// (hold select, or the remote's menu key) is the "more options" gesture
+  /// everywhere else in the app. Here there is exactly one option: whatever
+  /// the button beside the play arrow would do. Null while there is nothing
+  /// to do (a stream the server cannot keep, a pin in flight, a download
+  /// still arriving), which leaves a hold meaning what it meant before: a tap
+  /// on release.
   VoidCallback? remoteAction(StreamInfo stream) {
     if (isPending(stream)) return null;
     final entry = entryOf(stream);
@@ -518,12 +519,12 @@ final class StreamDownloads {
 /// holds whether or not it is open, and the streams under it when it is.
 ///
 /// A collapsed header is not a placeholder: it says how many streams are
-/// folded away and the best swarm among them ([StreamSection.summary]), so
-/// a 2160p section with one dead torrent in it is told from a healthy one
+/// folded away and the best swarm among them ([StreamSection.summary]), so a
+/// 2160p section with one dead torrent in it is told from a healthy one
 /// without opening either. It is an ordinary [ListTile] with an `onTap`,
-/// which is what makes a remote able to reach it and open it: a television
-/// walks the pane by focusable nodes, and a header that could not take
-/// focus would put every section below the first one out of reach.
+/// which is what lets a remote reach it and open it. A television walks the
+/// pane by focusable nodes, and a header that could not take focus would put
+/// every section below the first one out of reach.
 class ResolutionSectionSliver extends StatelessWidget {
   const ResolutionSectionSliver({
     super.key,
@@ -597,11 +598,11 @@ class ResolutionSectionSliver extends StatelessWidget {
 ///
 /// Collapsible for the reason the resolution sections are: with several
 /// addons installed the open groups ran one after another for screens, and
-/// what a viewer wanted was the one addon they trust. A closed header
-/// still says how many streams are folded away -- not how healthy they
-/// are, the way [ResolutionSectionSliver] does: this list is each addon's
-/// own ranking, and a summary of what is inside would be summarising an
-/// order the addon chose rather than one this screen did.
+/// what a viewer wanted was the one addon they trust. A closed header still
+/// says how many streams are folded away, but not how healthy they are, as
+/// [ResolutionSectionSliver] does. This list is each addon's own ranking, and
+/// a summary of what is inside would be summarising an order the addon chose
+/// rather than one this screen did.
 ///
 /// Only groups with something to show reach here: an addon that failed or
 /// answered with nothing is not listed at all.
@@ -619,20 +620,19 @@ class StreamGroupSliver extends StatelessWidget {
   /// The group and everything drawing it needs: its heading, the label its
   /// open state is stored under, and its rows.
   ///
-  /// The heading is a **name** -- the addon's own, out of its manifest, or
+  /// The heading is a **name**: the addon's own, out of its manifest, or
   /// `Google Drive` for the viewer's own linked files. `group.addonLabel`,
-  /// the host of the manifest URL, would read a list of "Torrentio",
-  /// "Comet" and "MediaFusion" as "torrentio.strem.fun",
-  /// "comet.elfhosted.com" and "mediafusion.elfhosted.com" instead: the
-  /// hosting arrangement rather than the addon, with three of them sharing
-  /// a domain looking like one thing. That is also why the Drive group is
-  /// headed with three words a viewer reads rather than with anything
-  /// URL-shaped: there is no addon here at all, and the heading has to say
-  /// what is true.
+  /// the host of the manifest URL, would read a list of "Torrentio", "Comet"
+  /// and "MediaFusion" as "torrentio.strem.fun", "comet.elfhosted.com" and
+  /// "mediafusion.elfhosted.com" instead. That is the hosting arrangement
+  /// rather than the addon, and three of them sharing a domain look like one
+  /// thing. That is also why the Drive group is headed with three words a
+  /// viewer reads rather than with anything URL-shaped: there is no addon
+  /// here at all, and the heading has to say what is true.
   final SourceGroup group;
 
-  /// Whether the rows are on screen. Remembered across titles and restarts
-  /// in [AppPrefs.openStreamAddons]; with nothing remembered every group is
+  /// Whether the rows are on screen. Remembered across titles and restarts in
+  /// [AppPrefs.openStreamAddons]. With nothing remembered, every group is
   /// closed.
   final bool expanded;
   final VoidCallback onExpand;
@@ -721,12 +721,11 @@ class StreamGroupSliver extends StatelessWidget {
 /// affordance for a torrent, and a play affordance (or the kind of source
 /// when the player cannot open it).
 ///
-/// **The row carries the addon's text entire.** The lines beyond the
-/// headline are lines of their own, in the order the addon wrote them
-/// ([StreamPresentation.rest]) -- a pack's collection line, the `⚙️` it was
-/// indexed on, the flags saying which dubs are on it -- and the only thing
-/// taken out of them is what the line the row is headed with has already
-/// said.
+/// **The row carries the addon's text entire.** The lines beyond the headline
+/// are lines of their own, in the order the addon wrote them
+/// ([StreamPresentation.rest]): a pack's collection line, the `⚙️` it was
+/// indexed on, the flags saying which dubs are on it. The only thing taken
+/// out of them is what the line the row is headed with has already said.
 ///
 /// **And none of it is cut.** Not the release, not the addon's lines, not
 /// the addon's name: the list scrolls, so a row is as tall as what is on
@@ -752,11 +751,11 @@ class StreamTile extends StatelessWidget {
 
   final StreamInfo stream;
 
-  /// The other addons that offered this very source, when more than one
-  /// did. The row is one of them (the best-ranked, or the one whose group
-  /// this is), and this is how it says the others are not missing but the
-  /// same thing again. Empty says nothing at all -- including for a source
-  /// one addon listed twice, which is the addon repeating itself.
+  /// The other addons that offered this very source, when more than one did.
+  /// The row is one of them (the best-ranked, or the one whose group this
+  /// is), and this is how it says the others are not missing but the same
+  /// thing again. Empty says nothing at all, including for a source one addon
+  /// listed twice, which is the addon repeating itself.
   final List<String> alsoFrom;
 
   /// What was read out of the stream: a badge for each thing that is
@@ -773,9 +772,9 @@ class StreamTile extends StatelessWidget {
   /// The two lists show the same row from the same reading, and differ in
   /// exactly one thing: which fact the heading has already said. The
   /// sectioned list is headed by a resolution, so the row names the addon
-  /// under the release; the grouped list is headed by the addon, so it
-  /// does not say it twice. Everything else -- the release, the badges --
-  /// is the same either way, and that is the point of the flag.
+  /// under the release. The grouped list is headed by the addon, so the row
+  /// does not say it twice. Everything else (the release, the badges) is the
+  /// same either way, and that is the point of the flag.
   final bool headedByAddon;
   final VoidCallback? onTap;
   final bool highlighted;
@@ -791,19 +790,18 @@ class StreamTile extends StatelessWidget {
     final facts = this.facts;
     // The release, not the addon. `stream.title` is `name ?? description`,
     // which for the addons people actually install is their own name and a
-    // quality -- "Torrentio 4k" -- so a phone showed the release nowhere in
-    // the flat list and only as a subtitle in the grouped one. The
-    // television was given [releaseNameOf] when its cards were rebuilt;
-    // this is the same derivation, in the list the phone draws.
+    // quality ("Torrentio 4k"). So a phone showed the release nowhere in the
+    // flat list and only as a subtitle in the grouped one. The television was
+    // given [releaseNameOf] when its cards were rebuilt; this is the same
+    // derivation, in the list the phone draws.
     final shown = StreamPresentation.of(stream, addonName: facts?.addonName);
     final title = titleOverride ?? shown.lead;
-    // A row whose whole name is the hint ("1080p", which is all some
-    // addons call a stream) needs no badge saying it again. The badges
-    // come from [StreamFacts.pills], or [StreamHints.chips] when there are
-    // no facts, so this is checked against what the row is actually
-    // headed with -- either source can repeat the title just as readily,
-    // and a row reading "1080p / 1080p / 2 GB" is what it looks like when
-    // nobody checks.
+    // A row whose whole name is the hint ("1080p", which is all some addons
+    // call a stream) needs no badge saying it again. The badges come from
+    // [StreamFacts.pills], or [StreamHints.chips] when there are no facts, so
+    // this is checked against what the row is actually headed with. Either
+    // source can repeat the title just as readily, and a row reading "1080p /
+    // 1080p / 2 GB" is what it looks like when nobody checks.
     // The kept release says so where the row is read, not only in the
     // trailing button: a picker with five releases and one bin icon was a
     // puzzle ("which one is the download?").
@@ -835,12 +833,12 @@ class StreamTile extends StatelessWidget {
       selected: highlighted,
       leading: Icon(leadingIcon ?? iconFor(stream.kind)),
       // Nothing on this row is cut short. A release name is read token by
-      // token -- the resolution, the source, the codec, the group -- and
-      // `The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATIN…` says less
-      // about which file it is than the whole of it does. The list scrolls
-      // and a row may be any height, so the text wraps and the row grows;
-      // the television, whose row is a strip of fixed-height cards with no
-      // scroll to grow into, keeps its caps ([TvSourceCard]).
+      // token (the resolution, the source, the codec, the group), and
+      // `The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATIN…` says less about
+      // which file it is than the whole of it does. The list scrolls and a
+      // row may be any height, so the text wraps and the row grows. The
+      // television keeps its caps ([TvSourceCard]), since its row is a strip
+      // of fixed-height cards with no scroll to grow into.
       title: Text(title),
       isThreeLine: lines > 1,
       subtitle: lines == 0

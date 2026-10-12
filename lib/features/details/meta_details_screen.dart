@@ -58,9 +58,9 @@ part 'meta_details_tv_sources.dart';
 /// The rungs of the television ladder that collapse: one of them is open
 /// and the rest are a header line each (see [TvLadderRung]).
 ///
-/// The title's own block is not among them -- it is what the screen is
-/// about, and it is always on the panel -- and neither is anything a
-/// viewer cannot be left standing in front of with nothing to press.
+/// The title's own block is not among them, since it is what the screen is
+/// about and it is always on the panel. Neither is anything a viewer cannot
+/// be left standing in front of with nothing to press.
 enum _DetailsRung {
   /// The one card that carries on from where the viewer left off.
   continueWatching,
@@ -86,24 +86,24 @@ enum _DetailsRung {
 }
 
 /// The rungs of this screen's [TvLadder], numbered in the order they are
-/// drawn down the panel, not the order they are declared: the title and
-/// episodes come from [_infoSlivers] and everything from the last-used
-/// source down from [_tvSourceSlivers], and the panel lays them out
+/// drawn down the panel, not the order they are declared. The title and
+/// episodes come from [_infoSlivers], and everything from the last-used
+/// source down comes from [_tvSourceSlivers]. The panel lays them out
 /// info-then-sources, so a number out of that order is a rung the D-pad
 /// cannot reach from its neighbour.
 ///
-/// Numbered with gaps because most rungs are conditional -- a film has no
-/// seasons or episodes, a title nobody has played has no last-used
-/// source, a sources row only exists while a group is open -- and only
-/// what is drawn registers, so a press walks past the rest. On a
-/// television most rungs sit inside a [TvLadderRung], whose header is a
-/// rung of its own: the walk goes header, header, header down the screen,
-/// and only the open rung puts its own rows between two of them.
+/// Numbered with gaps because most rungs are conditional: a film has no
+/// seasons or episodes, a title nobody has played has no last-used source,
+/// and a sources row only exists while a group is open. Only what is drawn
+/// registers, so a press walks past the rest. On a television most rungs sit
+/// inside a [TvLadderRung], whose header is a rung of its own. The walk goes
+/// header, header, header down the screen, and only the open rung puts its
+/// own rows between two of them.
 ///
-/// [_ladderAppBar] has no row of its own: the app bar's Back and actions
-/// sit in the bar's own slots, which no widget here wraps, but a press
-/// down out of one still has to land on the ladder, and this is the level
-/// it enters from ([_AboveTheLadder]).
+/// [_ladderAppBar] has no row of its own. The app bar's Back and actions sit
+/// in the bar's own slots, which no widget here wraps. But a press down out
+/// of one still has to land on the ladder, and this is the level it enters
+/// from ([_AboveTheLadder]).
 const int _ladderAppBar = -10;
 
 /// The block above the pills: on a television the title, its facts and
@@ -175,66 +175,64 @@ enum DetailsOpenedFrom {
 /// installed addons return for the selected video. Tapping a playable
 /// stream opens the player.
 ///
-/// The engine guesses the video to show streams for when it can (a movie,
-/// or a `defaultVideoId`); for a series without one this screen picks the
-/// first sensible episode itself, and every episode tap re-`Load`s the
-/// field with that video's stream path. Below
-/// [MetaDetailsScreen.wideBreakpoint] the streams sit far below the
-/// episodes in one scroll view, so a tap is answered where it happened:
-/// the tile goes selected at once and the stream section scrolls into
-/// view while it waits for the engine's answer.
+/// The engine guesses the video to show streams for when it can (a movie, or
+/// a `defaultVideoId`). For a series without one, this screen picks the first
+/// sensible episode itself, and every episode tap re-`Load`s the field with
+/// that video's stream path. Below [MetaDetailsScreen.wideBreakpoint] the
+/// streams sit far below the episodes in one scroll view, so a tap is
+/// answered where it happened: the tile goes selected at once and the stream
+/// section scrolls into view while it waits for the engine's answer.
 ///
-/// A torrent stream can be taken offline: the download button pins it
-/// through the [DownloadsClient] with the play path's stream and addon
-/// requests plus a meta snapshot, so Details and the Downloads screen
-/// render with no network. The title is *not* put into the library --
-/// that would put it in the library of every device on the account,
-/// neither downloaded nor linked there. The library screen draws it
-/// because it is downloaded, and the player records progress offline
-/// because the Rust side answers the failed meta fetch from the snapshot
-/// (`downloads::kept_meta`). Playing that release again plays the file on
-/// the device rather than streaming it (`offline_play.dart`).
+/// A torrent stream can be taken offline: the download button pins it through
+/// the [DownloadsClient] with the play path's stream and addon requests plus
+/// a meta snapshot, so Details and the Downloads screen render with no
+/// network. The title is *not* put into the library: that would put it in the
+/// library of every device on the account, where it is neither downloaded nor
+/// linked. The library screen draws it because it is downloaded, and the
+/// player records progress offline because the Rust side answers the failed
+/// meta fetch from the snapshot (`downloads::kept_meta`). Playing that
+/// release again plays the file on the device rather than streaming it
+/// (`offline_play.dart`).
 ///
 /// The sources list has two layouts, chosen by the global
-/// [AppPrefs.streamsSectioned] rather than a per-title setting.
-/// **Sectioned** (the default) groups every addon's answers by
-/// **resolution**, highest rung first, unreadable streams in a section of
-/// their own at the bottom; inside a section the order is [StreamOrder]
-/// and each row names its addon. **Grouped** is a section per addon, in
-/// profile order, each addon's own ranking intact. Every section or group
-/// starts collapsed until opened; which ones are open is remembered
-/// globally ([AppPrefs.openStreamSections], [AppPrefs.openStreamAddons] --
-/// two keys, because an addon may share a name with a resolution), and a
-/// closed header still shows a count and, sectioned, the best swarm
-/// ([StreamSection.summary]).
+/// [AppPrefs.streamsSectioned] rather than a per-title setting. **Sectioned**
+/// (the default) groups every addon's answers by **resolution**, highest rung
+/// first, with unreadable streams in a section of their own at the bottom.
+/// Inside a section the order is [StreamOrder], and each row names its addon.
+/// **Grouped** is a section per addon, in profile order, each addon's own
+/// ranking intact. Every section or group starts collapsed until opened.
+/// Which ones are open is remembered globally, under two keys because an
+/// addon may share a name with a resolution ([AppPrefs.openStreamSections],
+/// [AppPrefs.openStreamAddons]). A closed header still shows a count and,
+/// when sectioned, the best swarm ([StreamSection.summary]).
 ///
-/// One release is one row: two listings of the same *content*
-/// ([StreamInfo.sourceKey] -- an info hash and file index, or a URL, the
-/// identity a pin is already keyed by) collapse into one, carrying the
-/// *union* of every listing's trackers ([StreamSourceIndex]) so playback,
-/// a download and the stats poll ask every tracker anybody named. The
-/// sectioned list collapses a source across the whole list and says "Also
-/// from ..." when another addon had it too; the grouped list keeps one
-/// copy per addon and collapses only that addon's own repeats.
+/// One release is one row. Two listings of the same *content* collapse into
+/// one, by [StreamInfo.sourceKey]: an info hash and file index, or a URL, the
+/// identity a pin is already keyed by. The row carries the *union* of every
+/// listing's trackers ([StreamSourceIndex]), so playback, a download and the
+/// stats poll ask every tracker anybody named. The sectioned list collapses a
+/// source across the whole list and says "Also from ..." when another addon
+/// had it too. The grouped list keeps one copy per addon and collapses only
+/// that addon's own repeats.
 ///
-/// An addon that errors is collected below the working streams, named
-/// from the profile and offering to open its details or uninstall it;
-/// several at once collapse into one summary row. An addon that answers
-/// with *nothing* becomes one quiet line below the streams rather than
-/// its own empty section; a still-waiting addon keeps its label and a
-/// spinner. The three states never mix.
+/// An addon that errors is collected below the working streams, named from
+/// the profile and offering to open its details or uninstall it. Several at
+/// once collapse into one summary row. An addon that answers with *nothing*
+/// becomes one quiet line below the streams rather than its own empty
+/// section. A still-waiting addon keeps its label and a spinner. The three
+/// states never mix.
 ///
 /// On a TV the artwork fills the screen ([TvBackdrop]) behind a header of
-/// logo, one fact line and two of description ([TvMetaHeader]); episodes
-/// are a row ([TvEpisodeRow]) and sources are rows too ([TvSourceRows]) --
-/// a card per group and, under whichever is chosen, a row of its sources
-/// -- so the whole screen is one column the remote walks with four keys,
-/// and Back comes down a ladder: the open row of sources first, the
-/// screen second. The remote starts on the header the first time a title
-/// is visited, where it was left every time after ([DetailsVisit]), and
-/// on the last-used source from a Continue watching tile ([openedFrom]);
-/// the remote's menu key or a held select on an episode toggles watched,
-/// and a long season list is picked from a [FilterMenu].
+/// logo, one fact line and two of description ([TvMetaHeader]). Episodes are
+/// a row ([TvEpisodeRow]), and sources are rows too ([TvSourceRows]): a card
+/// per group and, under whichever is chosen, a row of its sources. So the
+/// whole screen is one column the remote walks with four keys. Back comes
+/// down a ladder: the open row of sources first, the screen second. The
+/// remote starts on the header the first time a title is visited, where it
+/// was left every time after ([DetailsVisit]), and on the last-used source
+/// from a Continue watching tile ([openedFrom]). The remote's menu key or a
+/// held select on an episode toggles watched, and a long season list is
+/// picked from a [FilterMenu].
 class MetaDetailsScreen extends StatefulWidget {
   const MetaDetailsScreen({
     super.key,
@@ -248,14 +246,14 @@ class MetaDetailsScreen extends StatefulWidget {
   final String type;
   final String id;
 
-  /// What the screen was opened from. On a television a title opens with
-  /// the remote on the header the first time it is visited, back where it
-  /// was left every time after, and -- from a Continue watching tile --
-  /// on the card that carries on.
+  /// What the screen was opened from. On a television a title opens with the
+  /// remote on the header the first time it is visited, back where it was
+  /// left every time after, and on the card that carries on when it is opened
+  /// from a Continue watching tile.
   final DetailsOpenedFrom openedFrom;
 
-  /// The video to show streams for straight away (the continue-watching
-  /// row knows it); without it the engine guesses, or the screen picks.
+  /// The video to show streams for straight away (the continue-watching row
+  /// knows it). Without it, the engine guesses, or the screen picks.
   final String? videoId;
 
   /// How a linked Drive file listed among the sources is turned into
@@ -267,10 +265,10 @@ class MetaDetailsScreen extends StatefulWidget {
   static const double wideBreakpoint = 720;
 
   /// How many times any details screen has derived its sources list from
-  /// scratch (see `_StreamDerivation`). A derivation is a handful of
-  /// regexes per stream, a sort and a sectioning; the tests pin that a
-  /// rebuild which changed none of its inputs -- a download's progress
-  /// tick, once a second -- does not pay for it again.
+  /// scratch (see `_StreamDerivation`). A derivation is a handful of regexes
+  /// per stream, a sort and a sectioning. The tests pin that a rebuild which
+  /// changed none of its inputs, such as a download's progress tick once a
+  /// second, does not pay for it again.
   @visibleForTesting
   static int debugStreamDerivations = 0;
 
@@ -279,9 +277,9 @@ class MetaDetailsScreen extends StatefulWidget {
 }
 
 /// The sources a details screen offers right now, as [SourcesProbe] reads
-/// them: the title, the rows of the list in the order it draws them --
-/// every row, including the ones a collapsed section or a lazy list has
-/// not built -- and what is still on its way.
+/// them: the title, the rows of the list in the order it draws them, and what
+/// is still on its way. The rows are every row, including the ones a
+/// collapsed section or a lazy list has not built.
 typedef SourcesOnScreen = ({
   /// The title's name; null while its meta has not arrived.
   String? title,
@@ -402,9 +400,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   _StreamDerivation? _derived;
 
   /// This device's Google Drive pairing, when the app put one above this
-  /// screen. Null leaves the linked files out of the sources list
-  /// entirely -- which is also what a paired account with nothing matched
-  /// to this title draws.
+  /// screen. Null leaves the linked files out of the sources list entirely.
+  /// That is also what a paired account with nothing matched to this title
+  /// draws.
   DriveAccount? _driveAccount;
 
   /// This device's own videos, when the app put them above this screen:
@@ -412,15 +410,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   LocalMedia? _localMedia;
 
   /// The app's preferences, for the sources list's layout. From the
-  /// [PrefsScope] the app puts above every screen; a screen mounted
-  /// without one (a widget test that does not care where the choice goes)
-  /// gets [_ownPrefs] instead, which persists nothing.
+  /// [PrefsScope] the app puts above every screen. A screen mounted without
+  /// one (a widget test that does not care where the choice goes) gets
+  /// [_ownPrefs] instead, which persists nothing.
   AppPrefs? _prefs;
   AppPrefs? _ownPrefs;
 
-  /// The streams whose pin is in flight, by [_streamKey]. `add` blocks
-  /// until the server takes the pin -- for a magnet, until its metadata
-  /// resolves -- so a tapped tile has to say it is working.
+  /// The streams whose pin is in flight, by [_streamKey]. `add` blocks until
+  /// the server takes the pin (for a magnet, until its metadata resolves), so
+  /// a tapped tile has to say it is working.
   final Set<String> _pending = {};
 
   /// A play is between its tap and its player route. Held over the whole
@@ -450,11 +448,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// see [_rememberVisit].
   Timer? _visitWrite;
 
-  /// When the season or episode on screen was chosen, which is what a
-  /// visit's [DetailsVisit.at] says: the last visit's time until something
-  /// is chosen here, and the epoch for a title never visited -- so leaving
-  /// the screen, which writes the visit again, never makes an episode
-  /// chosen before a binge look newer than the library's.
+  /// When the season or episode on screen was chosen, which is what a visit's
+  /// [DetailsVisit.at] says: the last visit's time until something is chosen
+  /// here, and the epoch for a title never visited. So leaving the screen,
+  /// which writes the visit again, never makes an episode chosen before a
+  /// binge look newer than the library's.
   late DateTime _visitAt =
       _lastVisit?.at ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
@@ -561,48 +559,46 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The group whose row Back has just put away, which the card it was
   /// opened from must not reopen when focus lands back on it.
   ///
-  /// Closing the row takes the card the remote was on off the screen, and
-  /// the scope hands focus back to the group card above -- a gain of
-  /// focus like any other, which would otherwise reopen the very row the
-  /// press had just closed and leave Back looking broken. It is cleared
-  /// the moment focus reaches any other card, or the viewer presses this
-  /// one again.
+  /// Closing the row takes the card the remote was on off the screen, and the
+  /// scope hands focus back to the group card above. That is a gain of focus
+  /// like any other, which would otherwise reopen the very row the press had
+  /// just closed and leave Back looking broken. It is cleared the moment
+  /// focus reaches any other card, or the viewer presses this one again.
   String? _reopenSuppressed;
 
   /// Whether the build now in progress has actually drawn a row for
   /// [_openSourceGroup]: a rung the last state offered and this one does
   /// not leaves the label naming nothing, and the row went with it.
   ///
-  /// Back has to ask this rather than whether the label is set, or a
-  /// stale one swallows a whole press with nothing happening on screen --
-  /// which happens whenever the streams are re-fetched, a dead addon
-  /// comes back, or an episode is picked from the row above while a
-  /// resolution is open.
+  /// Back has to ask this rather than whether the label is set, or a stale
+  /// one swallows a whole press with nothing happening on screen. A label
+  /// goes stale whenever the streams are re-fetched, a dead addon comes back,
+  /// or an episode is picked from the row above while a resolution is open.
   bool _openSourceRowDrawn = false;
 
-  /// The rung the viewer has settled on: the one they pressed select on,
-  /// or -- when they have walked away without choosing -- whichever was
-  /// open when they first moved the remote. Null while the screen is still
-  /// the one deciding (see [_rungToOpen]).
+  /// The rung the viewer has settled on: the one they pressed select on, or,
+  /// when they have walked away without choosing, whichever was open when
+  /// they first moved the remote. Null while the screen is still the one
+  /// deciding (see [_rungToOpen]).
   _DetailsRung? _chosenRung;
 
   /// Whether the viewer has shut the rung they had open, leaving the
   /// ladder a stack of header lines with nothing out.
   ///
-  /// **What closing the chosen rung means, since it had to mean
-  /// something.** The rungs are one at a time, so shutting the open one
-  /// leaves no other rung for the press to fall back to -- and reopening
-  /// the next one down would be answering select with a rung the viewer
-  /// did not ask for. So it shuts the ladder: the title block and the
-  /// header lines, which is the contents page this ladder collapses into
-  /// and a perfectly good thing to be looking at. The remote is not moved,
-  /// because the header that was pressed is one of those lines and is
-  /// still on the panel: what goes away is entirely below it.
+  /// **What closing the chosen rung means, since it had to mean something.**
+  /// The rungs are one at a time, so shutting the open one leaves no other
+  /// rung for the press to fall back to. Reopening the next one down would be
+  /// answering select with a rung the viewer did not ask for. So it shuts the
+  /// ladder: the title block and the header lines, which is the contents page
+  /// this ladder collapses into and a perfectly good thing to be looking at.
+  /// The remote is not moved, because the header that was pressed is one of
+  /// those lines and is still on the panel: what goes away is entirely below
+  /// it.
   ///
   /// Kept apart from [_chosenRung] rather than folded into it as a null,
-  /// because null there means the screen has not been told yet and falls
-  /// back to the arrival order ([_rungToOpen]) -- which would open again,
-  /// on the same frame, the rung the press had just shut.
+  /// because null there means the screen has not been told yet and falls back
+  /// to the arrival order ([_rungToOpen]). That would open again, on the same
+  /// frame, the rung the press had just shut.
   bool _rungsShut = false;
 
   /// The rung the last build drew open, so a move of the remote can freeze
@@ -628,11 +624,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// is never asked about and draws none ([_maybeAskSimilar]).
   bool _similarAsked = false;
 
-  /// What came back: the titles a catalogue confirmed, in the model's
-  /// order. Null while the ask is out -- which is where the header says it
-  /// is looking -- and empty when the server had nothing, could not be
-  /// asked, or the guard dropped all of it, which takes the rung away
-  /// again.
+  /// What came back: the titles a catalogue confirmed, in the model's order.
+  /// Null while the ask is out, which is when the header says it is looking.
+  /// Empty when the server had nothing, could not be asked, or the guard
+  /// dropped all of it, which takes the rung away again.
   List<SimilarTitle>? _similar;
 
   /// Whether there is a "More like this" rung on the panel at all.
@@ -666,8 +661,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void _watchTheRemote() {
     final node = FocusManager.instance.primaryFocus;
     // A scope is what holds focus between one tile losing it and the next
-    // taking it -- a row closing, a sliver rebuilt -- and is nowhere the
-    // viewer can have moved the remote to.
+    // taking it (a row closing, a sliver rebuilt). It is nowhere the viewer
+    // can have moved the remote to.
     if (node == null || node is FocusScopeNode) return;
     if (_startedOn == null) {
       _startedOn = node;
@@ -686,31 +681,31 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (_arrival == null) _noteTheRemote(node);
   }
 
-  /// Writes down where [node] is on the ladder, when it is a stop of it --
-  /// not a control of the app bar, nor a screen pushed over this one.
+  /// Writes down where [node] is on the ladder, when it is a stop of it: not
+  /// a control of the app bar, nor a screen pushed over this one.
   void _noteTheRemote(FocusNode node) {
     final at = _ladder.locate(node);
     if (at != null) _remoteAt = at;
   }
 
-  /// Puts the remote on the header -- the plot, or the header's first
-  /// stop -- once the header is drawn, so a title opens at the top of its
-  /// page: what it is, before what to play it from.
+  /// Puts the remote on the header (the plot, or the header's first stop)
+  /// once the header is drawn, so a title opens at the top of its page: what
+  /// it is, before what to play it from.
   ///
   /// **Every opening of the screen starts here**, a title played before
-  /// included. The remote used to start on the rung the title is for --
-  /// the last-used source, the episode row, the first group of sources --
-  /// and a card taking focus scrolls itself to the middle of the panel
-  /// ([FocusableTile]), so the screen opened scrolled past its own title
-  /// and plot. Which rung is *open* is still the title's choice
-  /// ([_rungToOpen]): it is drawn right under the header, a press or two
-  /// down. Coming back to the screen -- from the player, from a screen
-  /// pushed over it -- is not an opening: the state is the one the viewer
-  /// left, and the route hands the remote back to the card it was on.
+  /// included. The remote used to start on the rung the title is for: the
+  /// last-used source, the episode row, the first group of sources. A card
+  /// taking focus scrolls itself to the middle of the panel
+  /// ([FocusableTile]), so the screen opened scrolled past its own title and
+  /// plot. Which rung is *open* is still the title's choice ([_rungToOpen]):
+  /// it is drawn right under the header, a press or two down. Coming back to
+  /// the screen, from the player or from a screen pushed over it, is not an
+  /// opening. The state is the one the viewer left, and the route hands the
+  /// remote back to the card it was on.
   ///
-  /// Nothing in the rungs asks for the remote on arrival, so nothing that
-  /// arrives late -- streams, the last-used source the engine reports
-  /// seconds after them -- can take it off the header and move the page.
+  /// Nothing in the rungs asks for the remote on arrival. So nothing that
+  /// arrives late (streams, or the last-used source the engine reports
+  /// seconds after them) can take it off the header and move the page.
   ///
   /// Once, after the frame that first draws the header: its stops attach
   /// at layout, so the build is too early to ask the row for them.
@@ -781,14 +776,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Puts the remote on [_arrival]'s stop if it is drawn, and says whether
   /// it did.
   ///
-  /// A stop not drawn yet is waited for -- a source turns up when its
-  /// addon answers, the last-used source with the streams -- while the
-  /// remote waits on the header. Once whatever the stop depends on has
-  /// all arrived and it is still not there, the nearest stop of the same
-  /// rung takes its place: the same row, then the rows above it in the
-  /// rung, then the header. Either way the arrival is over, and nothing
-  /// drawn later moves the remote; nor does anything once the viewer has
-  /// moved it themselves ([_watchTheRemote]).
+  /// A stop not drawn yet is waited for while the remote waits on the header.
+  /// A source turns up when its addon answers, and the last-used source with
+  /// the streams. Once whatever the stop depends on has all arrived and it is
+  /// still not there, the nearest stop of the same rung takes its place: the
+  /// same row, then the rows above it in the rung, then the header. Either
+  /// way the arrival is over, and nothing drawn later moves the remote. Nor
+  /// does anything once the viewer has moved it themselves
+  /// ([_watchTheRemote]).
   bool _tryArrival() {
     final arrival = _arrival;
     final state = ownState;
@@ -808,11 +803,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Puts the remote on a stop of the row at [level]
   /// ([TvLadderController.focusStop]), when that stop is drawn.
   ///
-  /// The page follows the stop: a card that takes focus scrolls itself to
-  /// the middle of the panel ([FocusableTile]), which is where it was when
-  /// the page was left -- that is how a television's page got scrolled in
-  /// the first place -- so the stop brings the offset back with it and no
-  /// stored offset is laid over it.
+  /// The page follows the stop. A card that takes focus scrolls itself to the
+  /// middle of the panel ([FocusableTile]), which is where it was when the
+  /// page was left; that is how a television's page got scrolled in the first
+  /// place. So the stop brings the offset back with it, and no stored offset
+  /// is laid over it.
   bool _placeRemote(int level, {String? id, int index = 0}) {
     if (!_ladder.hasStop(level, id: id)) return false;
     _arrival = null;
@@ -831,9 +826,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return _streamsSettled(state);
   }
 
-  /// Whether every addon asked for the selected video's sources has
-  /// answered -- and so the engine's last-used source has been decided
-  /// too, since it is read out of those answers.
+  /// Whether every addon asked for the selected video's sources has answered.
+  /// Then the engine's last-used source has been decided too, since it is
+  /// read out of those answers.
   bool _streamsSettled(MetaDetailsState state) {
     return state.allStreamGroups.isNotEmpty && !state.isLoadingStreams;
   }
@@ -906,12 +901,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// have not played is a choice of episode; a film they have not played is
   /// a choice of source. Rung zero would be right for none of them.
   ///
-  /// Once the viewer has chosen -- select on a header, or simply walking
-  /// the remote off where the screen put it ([_watchTheRemote]) -- that
-  /// choice stands, and a rung arriving late does not move it. The
-  /// last-used source is written down by the player and comes back seconds
-  /// after the streams do; that is the same bug as leaving the remote where
-  /// it was, wearing a different hat.
+  /// Once the viewer has chosen, that choice stands, and a rung arriving late
+  /// does not move it. Choosing is select on a header, or simply walking the
+  /// remote off where the screen put it ([_watchTheRemote]). The last-used
+  /// source is written down by the player and comes back seconds after the
+  /// streams do. That is the same bug as leaving the remote where it was,
+  /// wearing a different hat.
   ///
   /// A rung that is not drawn cannot be open, so a choice the next state
   /// has nothing for falls back to the arrival order rather than leaving
@@ -949,9 +944,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return null;
   }
 
-  /// Select on a rung's header: this one opens, and whichever was open
-  /// closes with it -- unless this *is* the one that was open, in which
-  /// case it closes and the ladder is left shut ([_rungsShut]).
+  /// Select on a rung's header: this one opens, and whichever was open closes
+  /// with it. If this *is* the one that was open, it closes instead and the
+  /// ladder is left shut ([_rungsShut]).
   ///
   /// A header that only ever opens is a control that lies about being a
   /// toggle, and on a television it is worse than on a phone: there is no
@@ -1024,11 +1019,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
     trackRoute();
     // A key can arrive after the title has: the preferences are read
-    // asynchronously at start-up, and the settings screen where one is
-    // pasted in is a few presses from here. [PrefsScope] is an
-    // `InheritedNotifier`, so a key written anywhere runs this again --
-    // which is the only moment a screen already on the stack has to
-    // notice one.
+    // asynchronously at start-up, and the settings screen where one is pasted
+    // in is a few presses from here. [PrefsScope] is an `InheritedNotifier`,
+    // so a key written anywhere runs this again. That is the only moment a
+    // screen already on the stack has to notice one.
     final state = ownState;
     if (state != null) _maybeAskSimilar(state);
   }
@@ -1037,9 +1031,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// title's* rows is drawn here: the ticker reports every row that moved,
   /// once a second, for as long as anything is downloading, and a screen
   /// sitting under the player while another title comes in has nothing to
-  /// redraw for it. Rows are compared by the map behind each view -- a
-  /// progress tick replaces the maps of the rows it moved and keeps the
-  /// others, so identity is the whole test.
+  /// redraw for it. Rows are compared by the map behind each view. A progress
+  /// tick replaces the maps of the rows it moved and keeps the others, so
+  /// identity is the whole test.
   void _onDownloadsChanged() {
     final downloads = _downloads;
     if (!mounted || downloads == null) return;
@@ -1126,10 +1120,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Nothing waits on it. The remembered scores are assigned without a
   /// `setState` because the one caller is followed by a build:
   /// `onFieldChanged` has already marked the screen for the new own state.
-  /// The preferences are always in hand by then -- they are read in
-  /// `didChangeDependencies`, before the field's first state can arrive.
-  /// A server answer arrives whenever it does and only adds to the header;
-  /// a failure leaves whatever was shown.
+  /// The preferences are always in hand by then: they are read in
+  /// `didChangeDependencies`, before the field's first state can arrive. A
+  /// server answer arrives whenever it does and only adds to the header. A
+  /// failure leaves whatever was shown.
   void _maybeAskRatings(MetaDetailsState state) {
     final prefs = _prefs;
     if (!mounted || _ratingsAsked || state.meta == null || prefs == null) {
@@ -1151,17 +1145,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   }
 
   /// Asks what this title is like, once, as soon as the title itself is
-  /// known -- which is when the rest of the ladder is drawn, so the rung's
+  /// known. That is when the rest of the ladder is drawn, so the rung's
   /// header arrives with it rather than after.
   ///
-  /// **Every film and series is asked about.** There is no setting to
-  /// wait for: the server holds the key and answers everybody. So the
-  /// rung appears saying it is looking on every such title, and on one the
-  /// server has nothing for -- no answer, a failure, or a list the guard
-  /// emptied -- it goes away again when that empty answer lands
-  /// ([_hasSimilar]). Any other type is not asked about at all, because
-  /// the server answers only these two and the header would be a promise
-  /// the screen already knows it cannot keep.
+  /// **Every film and series is asked about.** There is no setting to wait
+  /// for: the server holds the key and answers everybody. So the rung appears
+  /// saying it is looking on every such title. It goes away again when an
+  /// empty answer lands ([_hasSimilar]): no answer, a failure, or a list the
+  /// guard emptied. Any other type is not asked about at all, because the
+  /// server answers only these two and the header would be a promise the
+  /// screen already knows it cannot keep.
   void _maybeAskSimilar(MetaDetailsState state) {
     final meta = state.meta;
     final prefs = _prefs;
@@ -1173,23 +1166,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 
   Future<void> _similarFor(AppPrefs prefs) async {
     final titles = await _askSimilar(prefs)(type: widget.type, id: widget.id);
-    // Late by design -- a remembered answer is quick, and the first ask of
-    // a title anywhere waits on the model behind the server. Everything
-    // about what this must not disturb on the way in is in [_tvSimilarRung].
+    // Late by design: a remembered answer is quick, and the first ask of a
+    // title anywhere waits on the model behind the server. Everything about
+    // what this must not disturb on the way in is in [_tvSimilarRung].
     if (mounted) setState(() => _similar = titles);
   }
 
   /// The last visit to resume from ([_lastVisit]), or null to start the
   /// way a title never visited here does.
   ///
-  /// Null when the screen was told which episode to open -- the
-  /// continue-watching row and the player's next episode know better --
-  /// and when the library has watched something since the visit: the
-  /// player moves on to the next episode by itself, and a viewer back from
-  /// a binge wants the episode they stopped on, not the one they chose
-  /// before it. Otherwise the visit wins, because it is the newer of the
-  /// two: the library's episode is what was watched, the visit is where
-  /// the viewer went after.
+  /// Null when the screen was told which episode to open, since the
+  /// continue-watching row and the player's next episode know better. Also
+  /// null when the library has watched something since the visit: the player
+  /// moves on to the next episode by itself, and a viewer back from a binge
+  /// wants the episode they stopped on, not the one they chose before it.
+  /// Otherwise the visit wins, because it is the newer of the two: the
+  /// library's episode is what was watched, the visit is where the viewer
+  /// went after.
   DetailsVisit? _visitToResume(MetaDetailsState state) {
     final visit = _lastVisit;
     if (visit == null || widget.videoId != null) return null;
@@ -1205,16 +1198,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   String? _preferredVideoId(MetaDetailsState state) =>
       widget.videoId ?? _visitToResume(state)?.videoId;
 
-  /// The season to open on before the viewer or the selection chooses
-  /// one: the last visit's, which need not be its episode's -- walking
-  /// the pills changes the season without choosing an episode.
+  /// The season to open on before the viewer or the selection chooses one:
+  /// the last visit's, which need not be its episode's, since walking the
+  /// pills changes the season without choosing an episode.
   int? _resumedSeason(MetaDetailsState state, List<int> seasons) {
     final season = _visitToResume(state)?.season;
     return season != null && seasons.contains(season) ? season : null;
   }
 
   /// Writes down the season or episode the viewer is on, once they have
-  /// stayed there for [_visitWriteDelay] -- see [DetailsVisitMemory].
+  /// stayed there for [_visitWriteDelay]. See [DetailsVisitMemory].
   void _rememberVisit() {
     _visitAt = DateTime.now().toUtc();
     _visitWrite?.cancel();
@@ -1262,12 +1255,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
-  /// The viewer is leaving -- the screen is going, the player is going over
-  /// it, the app is going to the background -- so where they are is
-  /// written now, a season change still waiting included. Before the
-  /// field is let go, which is what the visit is read from;
-  /// [AppPrefs.setDetailsVisits] tells no listener, so writing while the
-  /// tree comes down asks nothing of it.
+  /// The viewer is leaving (the screen is going, the player is going over it,
+  /// the app is going to the background), so where they are is written now, a
+  /// season change still waiting included. It runs before the field is let
+  /// go, since the field is what the visit is read from.
+  /// [AppPrefs.setDetailsVisits] tells no listener, so writing while the tree
+  /// comes down asks nothing of it.
   void _leaveVisit() {
     _visitWrite?.cancel();
     _writeVisit();
@@ -1288,10 +1281,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// when it says nothing about this episode.
   ///
   /// The engine keeps one resume point per title (`libraryItem.state`), so
-  /// this answers for at most one episode of a series -- the last one
-  /// played -- and null for every other. That is the whole of what is
-  /// known: there is no per-episode progress to read, and inventing one
-  /// from the watched list would draw a bar nobody's viewing produced.
+  /// this answers for at most one episode of a series (the last one played)
+  /// and null for every other. That is the whole of what is known: there is
+  /// no per-episode progress to read, and inventing one from the watched list
+  /// would draw a bar nobody's viewing produced.
   double? _resumeProgress(MetaDetailsState state, VideoInfo video) {
     final item = state.libraryItem;
     if (item == null || item.videoId != video.id) return null;
@@ -1337,8 +1330,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (video == null) return;
     _pickedInitialVideo = true;
     _selectVideo(video);
-    // A visit left on a season other than its episode's -- the pills were
-    // walked after the episode was chosen -- opens on that season still.
+    // A visit left on a season other than its episode's opens on that season
+    // still: the pills were walked after the episode was chosen.
     final season = _resumedSeason(state, state.meta?.seasons ?? const []);
     if (season != null && season != video.season && mounted) {
       setState(() => _season = season);
@@ -1384,9 +1377,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// sources, once it has stood there for [_focusSelectDelay].
   ///
   /// The highlight is what says which episode the rows below are about, so
-  /// walking the row updates them and select is left to mean "play this",
-  /// one press deeper. Nothing is asked for an episode already loaded --
-  /// walking away and back costs nothing.
+  /// walking the row updates them and select is left to mean "play this", one
+  /// press deeper. Nothing is asked for an episode already loaded, so walking
+  /// away and back costs nothing.
   void _focusVideo(VideoInfo video) {
     // Nothing has been chosen: this is the episode whose sources are
     // already on screen, which the remote passes back over on its way
@@ -1406,13 +1399,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// nothing happened.
   ///
   /// It takes two goes, one per moment the user gets an answer, and they
-  /// scroll differently because of what the viewport has laid out. On the
-  /// tap the section is still below the fold: its header is in the tree but
-  /// has no place in the viewport yet, so `ensureVisible` has nothing to
-  /// measure and the scroll is to the end of the page instead -- which is
-  /// the section, everything it holds while it waits fitting on a screen.
-  /// Once the streams are in, the header is on screen and a real target:
-  /// it goes to the top and the list fills the screen under it.
+  /// scroll differently because of what the viewport has laid out. On the tap
+  /// the section is still below the fold: its header is in the tree but has
+  /// no place in the viewport yet. So `ensureVisible` has nothing to measure,
+  /// and the scroll is to the end of the page instead. That is the section,
+  /// since everything it holds while it waits fits on a screen. Once the
+  /// streams are in, the header is on screen and a real target: it goes to
+  /// the top and the list fills the screen under it.
   ///
   /// Always after the frame the state change schedules, so it measures the
   /// section that is on its way in rather than the one going out.
@@ -1454,11 +1447,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     unawaited(markFace(context, prefs, id, face));
   }
 
-  /// Whether a film is watched, for the check beside the bookmark; null for
-  /// a series, which shows none. Watched is the library item's
-  /// `timesWatched` (stremio-core's own `LibraryItem::watched`), which is
-  /// what marking and unmarking move; a film the library has never seen is
-  /// not watched.
+  /// Whether a film is watched, for the check beside the bookmark; null for a
+  /// series, which shows none. Watched is the library item's `timesWatched`
+  /// (stremio-core's own `LibraryItem::watched`), which is what marking and
+  /// unmarking move. A film the library has never seen is not watched.
   bool? _filmWatched(MetaDetailsState state, MetaItem meta) =>
       meta.type == 'movie' ? state.libraryItem?.isWatched ?? false : null;
 
@@ -1526,8 +1518,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 
   /// Opens a linked Drive file and pushes the player at it: the same route
   /// the library's Remote list takes, by the same two calls, with this
-  /// title's meta and subtitles attached -- which is the whole of what
-  /// being on a details page adds.
+  /// title's meta and subtitles attached. That is the whole of what being on
+  /// a details page adds.
   ///
   /// **With [driveStreamRequest] for the video on screen**, because the
   /// engine keeps a resume position, a watched mark and an up-next only for
@@ -1536,10 +1528,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// it never offered; see [driveStreamRequest] for what that address
   /// answers.
   ///
-  /// What this knows about the credential is that it does not have it:
+  /// What this knows about the credential is that it does not have it.
   /// [openLinkedDriveFile] asks the account, which is the only thing that
-  /// holds one, and writes a dead pairing down on the way past -- so a
-  /// refusal here is a line to read and never a state to manage.
+  /// holds one, and writes a dead pairing down on the way past. So a refusal
+  /// here is a line to read and never a state to manage.
   Future<void> _playDrive(MetaDetailsState state, LinkedDriveFile file) async {
     final account = _driveAccount;
     if (account == null || _playing) return;
@@ -1578,15 +1570,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
   }
 
-  /// Opens the player on [stream] -- or on the file this device already
-  /// holds of it.
+  /// Opens the player on [stream], or on the file this device already holds
+  /// of it.
   ///
-  /// A finished download of *this* release is played from the disk even
-  /// with a connection: there is nothing the server can add to a whole
-  /// file. Only that release, though -- picking another stream tile is a
-  /// request for that source, not for the copy on disk. The addon requests
-  /// are the ones the picker has either way, which is what keeps
-  /// continue-watching moving offline.
+  /// A finished download of *this* release is played from the disk even with
+  /// a connection: there is nothing the server can add to a whole file. Only
+  /// that release, though. Picking another stream tile is a request for that
+  /// source, not for the copy on disk. The addon requests are the ones the
+  /// picker has either way, which is what keeps continue-watching moving
+  /// offline.
   ///
   /// A download whose file went away since it finished (an unplugged
   /// volume, a deletion from outside the app) streams instead,
@@ -1597,9 +1589,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// pushing a second player, each of which would load the shared `player`
   /// field and start an engine of its own.
   ///
-  /// A YouTube stream -- a trailer, a channel's video -- is not played
-  /// here at all: it opens in the YouTube app, or a browser where there is
-  /// none ([StreamInfo.youtubeUrl]).
+  /// A YouTube stream (a trailer, a channel's video) is not played here at
+  /// all. It opens in the YouTube app, or a browser where there is none
+  /// ([StreamInfo.youtubeUrl]).
   Future<void> _play(
     MetaDetailsState state,
     StreamGroup group,
@@ -1735,10 +1727,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _isTv = isTv;
     if (isTv) _startAtTheTop();
     // Built here rather than inside the [LayoutBuilder] below because the
-    // sources are the same list at every width, and because building them
-    // is what answers [_openSourceRowDrawn] -- which the `PopScope` a few
-    // lines down reads. A `LayoutBuilder` runs at layout, after the widget
-    // above it was built, so the answer would be a frame old there.
+    // sources are the same list at every width, and because building them is
+    // what answers [_openSourceRowDrawn], which the `PopScope` a few lines
+    // down reads. A `LayoutBuilder` runs at layout, after the widget above it
+    // was built, so the answer would be a frame old there.
     final streams = _streamSlivers(state, meta);
     final body = LayoutBuilder(
       builder: (context, constraints) {
@@ -1820,23 +1812,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 /// An app bar control on a television, handing a press down to the ladder
 /// drawn below the bar.
 ///
-/// The bar is not on the ladder and cannot easily be put on it -- Back and
-/// the actions are separate slots of the bar, and one [TvLadderRow] wraps
-/// one subtree -- so a press down out of one of them falls to Flutter's
-/// directional traversal, which takes the nearest node in the pressed
-/// direction. That geometry is wrong here: the downloads button sits far
-/// right of the bar with the bookmark directly under it, while the
-/// description block stops well short of both, so without this, down from
-/// downloads lands on the bookmark and reading the plot from the downloads
-/// button means going left to Back first.
+/// The bar is not on the ladder and cannot easily be put on it: Back and the
+/// actions are separate slots of the bar, and one [TvLadderRow] wraps one
+/// subtree. So a press down out of one of them falls to Flutter's directional
+/// traversal, which takes the nearest node in the pressed direction. That
+/// geometry is wrong here. The downloads button sits far right of the bar
+/// with the bookmark directly under it, while the description block stops
+/// well short of both. Without this, down from downloads lands on the
+/// bookmark, and reading the plot from the downloads button means going left
+/// to Back first.
 ///
 /// Distance is the wrong question here for the same reason it is wrong
 /// between the rows ([TvLadder]): what is under the bar is the header,
 /// whatever each control happens to line up with. So the press enters the
-/// ladder at [_ladderAppBar] and the header row
-/// says where in itself the remote lands -- the plot on a first arrival,
-/// and afterwards whichever of its two stops the viewer left it on, the
-/// way every other row of the ladder hands the remote back.
+/// ladder at [_ladderAppBar], and the header row says where in itself the
+/// remote lands: the plot on a first arrival, and afterwards whichever of its
+/// two stops the viewer left it on, the way every other row of the ladder
+/// hands the remote back.
 ///
 /// A press the ladder cannot answer is **left alone** rather than
 /// swallowed, so directional focus still gets its go: the bar of a screen

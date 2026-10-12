@@ -1,31 +1,29 @@
 /// What a model said this title is like, drawn as a row of posters: the
 /// one place in the app that shows a suggestion.
 ///
-/// Everything behind it is `features/similar/` -- the ask, the guard that
+/// Everything behind it is in `features/similar/`: the ask, the guard that
 /// drops titles no catalogue confirms, the memory. This file is what the
-/// viewer sees of it, and it is deliberately the least it can be: a
-/// poster, the name and the year.
+/// viewer sees of it, and it is deliberately the least it can be: a poster,
+/// the name and the year.
 ///
 /// **The name is not optional.** Every other poster in the app stands for
-/// something the viewer already chose -- a board row they installed, a
-/// search they typed, a title in their library -- and the artwork alone
-/// identifies it. These are films they have not seen, which is the whole
-/// point of the row, so a poster with no name under it is a picture of a
-/// stranger. That is what the 120x180 poster buys: room for two lines of
-/// text under it and seven of them across a 720p panel.
+/// something the viewer already chose: a board row they installed, a search
+/// they typed, a title in their library. The artwork alone identifies it.
+/// These are films they have not seen, which is the whole point of the row,
+/// so a poster with no name under it is a picture of a stranger. That is what
+/// the 120x180 poster buys: room for two lines of text under it and seven of
+/// them across a 720p panel.
 ///
-/// **The model's reason is not drawn.** A [SimilarTitle] carries one -- a
-/// dozen words about why this film is here -- and a 120 px column has
-/// nowhere to put it. It is the row's semantics label instead, so a
-/// screen reader has it and the layout does not have to grow a line for
-/// it.
+/// **The model's reason is not drawn.** A [SimilarTitle] carries one, a dozen
+/// words about why this film is here, and a 120 px column has nowhere to put
+/// it. It is the row's semantics label instead, so a screen reader has it and
+/// the layout does not have to grow a line for it.
 ///
-/// The row draws the same on a television and on a phone but for the
-/// poster's size: a television's posters are its one size everywhere
+/// The row draws the same on a television and on a phone except for the
+/// poster's size. A television's posters are its one size everywhere
 /// ([PosterTile.tvImageHeight]), these included. [FocusableTile] is an
 /// [InkWell] off a television and [TvCardStrip] is a plain sideways scroll
-/// there, so the other difference is the remote, which is where it
-/// belongs.
+/// there, so the other difference is the remote, which is where it belongs.
 library;
 
 import 'dart:math' as math;
@@ -44,8 +42,8 @@ import 'tv_source_row.dart';
 /// What the rung and the phone section are called.
 const String kMoreLikeThisLabel = 'More like this';
 
-/// What the header says while the answer is still out -- which is most of
-/// the time the viewer is looking at it, since the ask takes seconds.
+/// What the header says while the answer is still out. That is most of the
+/// time the viewer is looking at it, since the ask takes seconds.
 const String kLookingForSimilar = 'Looking for titles…';
 
 /// How a title's suggestions are asked for: [MoreLikeThis.forItem]'s own
@@ -57,20 +55,20 @@ typedef SimilarAsk = Future<List<SimilarTitle>> Function({
 
 /// How that asker is built once the preferences are known.
 ///
-/// A factory over the preferences rather than an asker because the real
-/// one needs them -- the answers already asked for are remembered there
-/// ([MoreLikeThis.prefs]) -- and the preferences are the screen's
-/// [PrefsScope], which a scope above the app cannot hold ready-made.
+/// It is a factory over the preferences rather than an asker, because the
+/// real one needs them: the answers already asked for are remembered there
+/// ([MoreLikeThis.prefs]). The preferences are the screen's [PrefsScope],
+/// which a scope above the app cannot hold ready-made.
 typedef SimilarAskBuilder = SimilarAsk Function(AppPrefs prefs);
 
-/// Supplies how "More like this" is asked, for the details screen -- the
-/// same seam, and for the same reason, as `PlaybackScope.dhtStatus`: a
-/// test answers what the server would without a network or a wait.
+/// Supplies how the details screen asks for "More like this". It is the same
+/// seam as `PlaybackScope.dhtStatus`, for the same reason: a test answers
+/// what the server would without a network or a wait.
 ///
-/// Absent, the screen builds a [MoreLikeThis] of its own. One per screen
-/// rather than one per app, which costs a catalogue search per title per
-/// visit and nothing else: what the server answered is remembered in the
-/// preferences file and is not asked twice either way.
+/// Without one, the screen builds a [MoreLikeThis] of its own. That is one
+/// per screen rather than one per app, which costs a catalogue search per
+/// title per visit and nothing else. What the server answered is remembered
+/// in the preferences file and is not asked twice either way.
 class SimilarScope extends InheritedWidget {
   const SimilarScope({super.key, required this.askFor, required super.child});
 
@@ -87,8 +85,8 @@ class SimilarScope extends InheritedWidget {
   bool updateShouldNotify(SimilarScope oldWidget) => askFor != oldWidget.askFor;
 }
 
-/// The row itself: [titles] as posters, or -- while the answer is still
-/// out (null) -- a spinner in a box exactly the row's own size.
+/// The row itself: [titles] as posters, or a spinner in a box exactly the
+/// row's own size while the answer is still out (null).
 ///
 /// **The box is reserved, not fitted.** The answer arrives seconds
 /// in, sometimes never, and by then the viewer is reading the screen. A
@@ -101,9 +99,9 @@ class SimilarTitlesRow extends StatelessWidget {
     required this.onOpen,
   });
 
-  /// What survived the guard, in the model's own order; null while the
-  /// ask is still out. Empty never reaches here -- a row with nothing in
-  /// it is not drawn at all, and the details screen is what decides that.
+  /// What survived the guard, in the model's own order; null while the ask is
+  /// still out. Empty never reaches here: a row with nothing in it is not
+  /// drawn at all, and the details screen decides that.
   final List<SimilarTitle>? titles;
 
   /// Open that title's own details screen.
@@ -125,8 +123,8 @@ class SimilarTitlesRow extends StatelessWidget {
   /// Two lines, the gap above them and the inset the focus ring needs.
   static const double captionHeight = 48;
 
-  /// How much bigger text is here than at the size that box was picked
-  /// for, never below 1 -- the same rule the source cards are measured by.
+  /// How much bigger text is here than at the size that box was picked for,
+  /// never below 1. The source cards are measured by the same rule.
   static double _textFactor(BuildContext context) =>
       math.max(1, TvDensity.textFactorOf(context));
 
@@ -206,9 +204,9 @@ class _SimilarPoster extends StatelessWidget {
               SizedBox(
                 height: SimilarTitlesRow._captionBoxOf(context),
                 child: Padding(
-                  // Held off the tile's edges because the ring is drawn
-                  // on them and the bold one lands on the words; the same
-                  // inset [PosterTile] gives its caption.
+                  // Held off the tile's edges because the ring is drawn on
+                  // them, and the bold one lands on the words. [PosterTile]
+                  // gives its caption the same inset.
                   padding: EdgeInsets.fromLTRB(
                     FocusRing.textInset,
                     isTv ? PosterTile.tvCaptionGap : 6,

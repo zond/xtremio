@@ -21,15 +21,15 @@ import 'tv_meta_header.dart';
 /// with the title's logo standing on it.
 ///
 /// Both decodes are bounded to the boxes they are drawn in, for the reason
-/// [TvBackdrop] gives: this artwork is never drawn wider than the bar, so
-/// decoding it wider only costs memory, and a metahub background decoded
-/// at its own size is several megabytes of texture. The bar is not the
-/// screen, though -- the wide layout gives it what is left beside the
-/// sources pane -- so the width comes from the bar's own constraints
-/// rather than from [MediaQuery]. The logo is the other way round: its
-/// height is the one dimension it is drawn at, so its height is what is
-/// bounded and the width follows, keeping the lettering's shape. Both
-/// counts are physical pixels, which is why the device's ratio is in them.
+/// [TvBackdrop] gives. This artwork is never drawn wider than the bar, so
+/// decoding it wider only costs memory, and a metahub background decoded at
+/// its own size is several megabytes of texture. The bar is not the screen,
+/// though: the wide layout gives it what is left beside the sources pane. So
+/// the width comes from the bar's own constraints rather than from
+/// [MediaQuery]. The logo is the other way round. Its height is the one
+/// dimension it is drawn at, so its height is what is bounded, and the width
+/// follows to keep the lettering's shape. Both counts are physical pixels,
+/// which is why the device's ratio is in them.
 class DetailsBackdrop extends StatelessWidget {
   const DetailsBackdrop({super.key, required this.url, required this.logo});
 
@@ -105,8 +105,8 @@ class DetailsBackdrop extends StatelessWidget {
 
 /// The IMDb rating, and the way to the page it came from.
 ///
-/// A link only when the addon sent the rating with an address
-/// ([MetaItem.imdbLink]); without one the rating is the plain line it has
+/// It is a link only when the addon sent the rating with an address
+/// ([MetaItem.imdbLink]). Without one, the rating is the plain line it has
 /// always been, since the address is never built here out of an id.
 ///
 /// The television has none of this. This is the phone's and the desktop's
@@ -154,9 +154,9 @@ class ImdbRating extends StatelessWidget {
         child: line,
       );
     }
-    // Hugging the words rather than the column's width -- [DetailsScores]
-    // lays it out in a [Wrap], which sizes it to them -- so a tap lands
-    // where the thing it opens is drawn.
+    // Hugging the words rather than the column's width, so a tap lands where
+    // the thing it opens is drawn. [DetailsScores] lays it out in a [Wrap],
+    // which sizes it to them.
     return InkWell(
       onTap: () => openInBrowser(context, url),
       borderRadius: BorderRadius.circular(6),
@@ -274,13 +274,12 @@ class DetailsMetaHeader extends StatelessWidget {
             spacing: 6,
             runSpacing: -8,
             children: [
-              // Wrapped for the same reason the filter chips are: the
-              // floor fills a chip and cannot outline one. This header is
-              // the phone's and the desktop's -- a television gets
-              // [TvMetaHeader] instead -- so [FocusMarked] is its child
-              // and nothing else here today. It is on every chip in the
-              // app all the same, so which chips are marked is something
-              // to read rather than to trace.
+              // Wrapped for the same reason the filter chips are: the floor
+              // fills a chip and cannot outline one. This header is the
+              // phone's and the desktop's (a television gets [TvMetaHeader]
+              // instead), so [FocusMarked] is its child and nothing else here
+              // today. It is on every chip in the app all the same, so which
+              // chips are marked is something to read rather than to trace.
               for (final genre in genres)
                 FocusMarked(
                   borderRadius: FocusMarked.stadium,
@@ -340,10 +339,10 @@ class DetailsMetaHeader extends StatelessWidget {
   }
 }
 
-/// The title's trailer, under its description: a YouTube video the meta
-/// addon listed, opened in the YouTube app (a browser where there is none)
-/// -- the embedded server has no YouTube resolver, so the player could only
-/// fail on it. One button for both layouts; a television wraps it in the
+/// The title's trailer, under its description: a YouTube video the meta addon
+/// listed, opened in the YouTube app (a browser where there is none). Not the
+/// player: the embedded server has no YouTube resolver, so the player could
+/// only fail on it. One button for both layouts; a television wraps it in the
 /// ring its header's stops wear.
 class TrailerButton extends StatelessWidget {
   const TrailerButton({super.key, required this.onPressed, this.focusNode});
@@ -418,12 +417,12 @@ class _ExpandableTextState extends State<ExpandableText> {
 /// the current one filled. Season 0 is `Specials`; every other pill is the
 /// bare number, beside a "Season" label so that a lone `3` says what it is.
 ///
-/// One shape on every device, because a season is a single short token and
-/// a row of them is readable at a glance. A segmented control where there
-/// is room, a menu on a television, a dropdown everywhere else -- each
-/// would spend a press on opening and another on choosing, and the two
-/// that open a list would open it as a very narrow, very tall column of
-/// digits, which on a remote is a long vertical crawl.
+/// One shape on every device, because a season is a single short token and a
+/// row of them is readable at a glance. A segmented control where there is
+/// room, a menu on a television, a dropdown everywhere else: each would spend
+/// a press on opening and another on choosing. The two that open a list would
+/// open it as a very narrow, very tall column of digits, which on a remote is
+/// a long vertical crawl.
 ///
 /// Three things it has to do that a plain row would not:
 ///
@@ -432,16 +431,16 @@ class _ExpandableTextState extends State<ExpandableText> {
 ///   directional traversal only considers widgets that have been built, so
 ///   a lazily built row silently stops the D-pad at the last realised pill
 ///   however many seasons the series has.
-/// - **A pill is as wide as it needs to be**, up to an even share of the
-///   row. Two seasons stretched across a television read as two buttons
-///   for something else entirely, so the even share is a ceiling now and
-///   [SeasonSelector._maxPillWidth] is the other one; the row is packed
-///   at the left like every other row on the screen. What that costs is
-///   that directional focus, which prefers whatever overlaps the press
+/// - **A pill is as wide as it needs to be**, up to an even share of the row.
+///   Two seasons stretched across a television read as two buttons for
+///   something else entirely. So the even share is a ceiling now, and
+///   [SeasonSelector._maxPillWidth] is the other one. The row is packed at
+///   the left like every other row on the screen. The cost is that
+///   directional focus, which prefers whatever overlaps the press
 ///   horizontally, no longer finds the pills from anywhere along the row
-///   below. That is [TvLadder]'s job on this screen and not geometry's:
-///   the pills are a rung, and an up press from the episodes reaches them
-///   from anywhere along the row.
+///   below. That is [TvLadder]'s job on this screen and not geometry's: the
+///   pills are a rung, and an up press from the episodes reaches them from
+///   anywhere along the row.
 /// - **The selected pill is scrolled into view** when the season changes or
 ///   the row is built for another title, so season 12 does not open with
 ///   the row parked at 1. Only the row moves: [ScrollPosition.ensureVisible]
@@ -484,10 +483,10 @@ class _SeasonSelectorState extends State<SeasonSelector> {
 
   /// One focus node per season, kept for as long as this row is on screen.
   ///
-  /// A node per *season* rather than one for "the selected pill": focusing
-  /// a pill is what changes the season here, so a node that followed the
-  /// selection would be taken off the chip the remote had just landed on
-  /// and handed to another, which is focus disappearing mid-press.
+  /// A node per *season* rather than one for "the selected pill". Focusing a
+  /// pill is what changes the season here, so a node that followed the
+  /// selection would be taken off the chip the remote had just landed on and
+  /// handed to another. That is focus disappearing mid-press.
   final Map<int, FocusNode> _nodes = {};
 
   FocusNode _nodeFor(int season) =>
@@ -596,12 +595,12 @@ class _SeasonSelectorState extends State<SeasonSelector> {
                             // follow the highlight, and select is left to
                             // mean the press that goes down into them.
                             onFocused: () => widget.onChanged(season),
-                            // The chip itself is as wide as its slot. A
-                            // chip centres its body in whatever room it is
-                            // given and never stretches it, so a slot wider
-                            // than the label drew a small pill in the middle
-                            // of a wide focus ring; at its intrinsic width
-                            // tightened to the slot the body fills it, and
+                            // The chip itself is as wide as its slot. A chip
+                            // centres its body in whatever room it is given
+                            // and never stretches it, so a slot wider than
+                            // the label drew a small pill in the middle of a
+                            // wide focus ring. At its intrinsic width,
+                            // tightened to the slot, the body fills it, and
                             // the label is centred in the body.
                             builder: (context, node) => IntrinsicWidth(
                               child: ChoiceChip(
@@ -664,10 +663,10 @@ class EpisodeTile extends StatelessWidget {
   /// badge in front of it when this episode is kept on the device.
   ///
   /// The badge deletes the download once the file is whole. Not with a
-  /// remote, though: a button inside a tile the remote activates as a whole
-  /// cannot be focused, and this row's long press already means "watched",
-  /// so on a television the episode's copy is removed from its stream tile
-  /// -- select the episode, hold select on the release that is kept.
+  /// remote, though. A button inside a tile the remote activates as a whole
+  /// cannot be focused, and this row's long press already means "watched". So
+  /// on a television the episode's copy is removed from its stream tile:
+  /// select the episode, then hold select on the release that is kept.
   Widget? _trailing(ThemeData theme) {
     final download = this.download;
     final state = isWatched

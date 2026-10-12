@@ -33,14 +33,14 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// from ([TvSourceRows]), in place of the column of collapsible sections
   /// a phone and a desktop scroll.
   ///
-  /// The groups are the same two the preference already chooses between --
-  /// a card per resolution rung, or a card per addon -- so nothing new is
-  /// stored and the order chips in the header still order inside one. What
-  /// is not shared is *which* group is open: the phone remembers a set of
+  /// The groups are the same two the preference already chooses between: a
+  /// card per resolution rung, or a card per addon. So nothing new is stored,
+  /// and the order chips in the header still order inside one. What is not
+  /// shared is *which* group is open. The phone remembers a set of
   /// resolutions across restarts, and this is one row at a time that Back
   /// puts away (see [_openSourceGroup]).
   ///
-  /// Below them, only when no addon had anything for this title: the
+  /// Below them, only when no addon had anything for this title, is the
   /// notice that says so ([_tvNothingFound]). What each addon did besides
   /// answer is not drawn.
   List<Widget> _tvSourceSlivers(
@@ -66,7 +66,7 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     required StreamDownloads? downloads,
 
     /// Whether an installed addon offers `stream` for this title's type at
-    /// all -- see [NoStreamsNotice.hasStreamAddon].
+    /// all. See [NoStreamsNotice.hasStreamAddon].
     required bool hasStreamAddon,
   }) {
     TvSource source(SourceRow row) => _tvSource(
@@ -101,9 +101,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
           ),
     ];
     // Every addon is still answering and there is not a pill to draw yet.
-    // [TvSourceRows] draws nothing for no groups, which would leave an
-    // open sources rung with nothing under its header at all; the row the
-    // pills will fill gets a spinner in its middle instead.
+    // [TvSourceRows] draws nothing for no groups, which would leave an open
+    // sources rung with nothing under its header at all. So the row the pills
+    // will fill gets a spinner in its middle instead.
     final waiting = groups.isEmpty && state.isLoadingStreams;
     final nothing = foundNothing
         ? _tvNothingFound(
@@ -122,10 +122,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
       hasAddons: nothing != null,
     );
     final sourcesOpen = rung == _DetailsRung.sources;
-    // What Back has to put away, which is the row [TvSourceRows] will
-    // actually draw rather than the label on its own (see
-    // [_openSourceRowDrawn]) -- and only while the rung holding that row
-    // is the one that is open, or a shut rung would swallow the press.
+    // What Back has to put away: the row [TvSourceRows] will actually draw,
+    // rather than the label on its own (see [_openSourceRowDrawn]). It counts
+    // only while the rung holding that row is the one that is open, or a shut
+    // rung would swallow the press.
     _openSourceRowDrawn =
         sourcesOpen && groups.any((g) => g.label == _openSourceGroup);
     return [
@@ -134,14 +134,14 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
       // source the viewer is most likely to want, which is why it is drawn
       // at all.
       //
-      // Keyed, and so is the rung below it, because this one *appears*:
-      // the engine writes the last-used source down while the player is
-      // up, so the first thing a title is ever played from comes back to
-      // a sliver list one longer than it left. Unkeyed, the rungs below
-      // would be matched against this one's adapter, torn down and
-      // rebuilt -- taking the focus node the remote was on with them, and
-      // then this card, freshly built and asking for focus, would answer
-      // the D-pad instead of the card the viewer left.
+      // Keyed, and so is the rung below it, because this one *appears*. The
+      // engine writes the last-used source down while the player is up, so
+      // the first thing a title is ever played from comes back to a sliver
+      // list one longer than it left. Unkeyed, the rungs below would be
+      // matched against this one's adapter, torn down and rebuilt, taking the
+      // focus node the remote was on with them. Then this card, freshly built
+      // and asking for focus, would answer the D-pad instead of the card the
+      // viewer left.
       if (lastUsedStream != null)
         SliverToBoxAdapter(
           key: const ValueKey('tv-last-used'),
@@ -275,19 +275,19 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// What a model says this title is like, as a rung below the sources.
   ///
   /// **Everything here is about a row that arrives late.** The answer
-  /// takes seconds when it comes at all, by which time the viewer has read
-  /// the screen and moved the remote, and something appearing under a
-  /// viewer who is using the screen breaks it (see
-  /// [_startAtTheTop] and [FocusableTile._autofocus]). Three
-  /// things keep it still, and none of them is optional:
+  /// takes seconds when it comes at all, and by then the viewer has read
+  /// the screen and moved the remote. Something appearing under a viewer
+  /// who is using the screen breaks it (see [_startAtTheTop] and
+  /// [FocusableTile._autofocus]). Three things keep it still, and none of
+  /// them is optional:
   ///
   ///  * **The header is there from the first frame.** Whether there is a
   ///    rung at all is decided by whether the title is a film or a
-  ///    series, which is known before the title is drawn -- so the line appears with the
-  ///    rest of the ladder and says it is looking, and the answer landing
-  ///    changes the words on it and nothing else. A rung that appeared
-  ///    when the answer did would push everything below it down the panel
-  ///    at a moment nobody chose.
+  ///    series, which is known before the title is drawn. So the line
+  ///    appears with the rest of the ladder and says it is looking, and
+  ///    the answer landing changes the words on it and nothing else. A
+  ///    rung that appeared when the answer did would push everything below
+  ///    it down the panel at a moment nobody chose.
   ///  * **Nothing in it asks for the remote.** No rung does: the remote
   ///    starts on the header ([_startAtTheTop]) and gets here by being
   ///    walked here.
@@ -295,9 +295,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   ///    so even a viewer standing inside the open rung when the answer
   ///    lands sees posters replace a spinner and nothing move.
   ///
-  /// And when the answer is nothing -- a model with nothing to say, or a
-  /// row the guard emptied -- the rung goes away rather than standing
-  /// there as a header over an empty strip.
+  /// The rung goes away when the answer is nothing, rather than standing
+  /// there as a header over an empty strip. Nothing is a model with
+  /// nothing to say, or a row the guard emptied.
   Widget _tvSimilarRung({required bool open}) {
     final titles = _similar;
     return TvLadderRung(
@@ -356,10 +356,10 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
         .length;
     final from = addons == 1 ? '1 addon' : '$addons addons';
     // The linked files are counted apart rather than added in. "4 from 2
-    // addons" over a row holding three addon sources and one Drive file is
-    // a lie in whichever direction it is told -- either the count is short
-    // of what the row holds, or two addons are credited with a file that
-    // came off the viewer's own Drive.
+    // addons" over a row holding three addon sources and one Drive file is a
+    // lie in whichever direction it is told. Either the count is short of
+    // what the row holds, or two addons are credited with a file that came
+    // off the viewer's own Drive.
     return [
       '$sources from $from',
       if (drive > 0) '$drive from $driveSourceLabel',
@@ -367,15 +367,15 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
     ].join(' · ');
   }
 
-  /// No addon had anything for this title: a rung of its own at the foot
-  /// of the ladder, named for it, whose one card opens the addons -- on a
-  /// fresh profile it is the answer to the screen, and a card to press is
-  /// how the remote gets anywhere from it.
+  /// No addon had anything for this title: a rung of its own at the foot of
+  /// the ladder, named for it, whose one card opens the addons. On a fresh
+  /// profile it is the answer to the screen, and a card to press is how the
+  /// remote gets anywhere from it.
   ///
   /// It is the only thing said about the addons. Which of them failed and
   /// which had nothing used to be a rung here of its own, one card each,
-  /// under every title -- a row about other people's servers at the foot
-  /// of every screen, where a viewer looking for something to watch did
+  /// under every title. That was a row about other people's servers at the
+  /// foot of every screen, where a viewer looking for something to watch did
   /// not want it (zond, 2026-09-29). An addon that is down shows on the
   /// Addons screen's health verdict instead.
   ({String label, List<TvSource> sources}) _tvNothingFound({
@@ -410,12 +410,12 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// of what the addon sent, the parse of it as pills, and a quiet line of
   /// provenance under both.
   ///
-  /// **The release leads.** The engine has no field for it -- the
-  /// stream's `name` is the addon and the quality, so four Torrentio
-  /// cards would otherwise read "Torrentio" four times with nothing to
-  /// tell them apart. [StreamPresentation.lead] derives it instead, and
-  /// [StreamPresentation.rest] is everything else the addon wrote, kept
-  /// on the card rather than dropped.
+  /// **The release leads.** The engine has no field for it. The stream's
+  /// `name` is the addon and the quality, so four Torrentio cards would
+  /// otherwise read "Torrentio" four times with nothing to tell them apart.
+  /// [StreamPresentation.lead] derives it instead, and
+  /// [StreamPresentation.rest] is everything else the addon wrote, kept on
+  /// the card rather than dropped.
   ///
   /// **Nothing is dropped to save room.** The card carries every tag and
   /// note itself, with no separate readout under the row: that would
@@ -428,8 +428,8 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
   /// where the group does not.
   ///
   /// A source the player cannot open leads the notes with which kind it is
-  /// instead of taking a press, so it is not a focus stop and the remote
-  /// steps over it -- the disabled row, in the shape a card has.
+  /// instead of taking a press. So it is not a focus stop, and the remote
+  /// steps over it: the disabled row, in the shape a card has.
   TvSource _tvSource(
     MetaDetailsState state,
     SourceRow row, {
@@ -452,9 +452,9 @@ extension _MetaDetailsTvSources on _MetaDetailsScreenState {
       lines: shown.rest,
       pills: read.pills,
       notes: [
-        // What kind of source it is, which a playable card says with an
-        // icon and nothing else -- an icon is a glyph a viewer has to
-        // have learnt.
+        // What kind of source it is. A playable card says that with an icon
+        // and nothing else, and an icon is a glyph a viewer has to have
+        // learnt.
         stream.kind.label,
         // The release tags. Not pills: they are what a release calls
         // itself rather than a value anything is sorted or sectioned by,

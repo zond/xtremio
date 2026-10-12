@@ -4,8 +4,8 @@ import '../../core/core.dart';
 
 /// `yyyy-MM-dd` of the air date, when the addon knows it.
 ///
-/// Next to the still because both layouts put it under the same picture:
-/// it is the second line of a row on a phone and of a card on a
+/// It sits next to the still because both layouts put it under the same
+/// picture. It is the second line of a row on a phone and of a card on a
 /// television, and the two must not drift apart.
 String? episodeDateLabel(VideoInfo video) {
   final date = video.releasedAt;
@@ -16,12 +16,12 @@ String? episodeDateLabel(VideoInfo video) {
 
 /// One episode's still, with the episode number over it.
 ///
-/// The picture is the addon's `thumbnail`; a neutral box stands in when
-/// there is none and when the one there is will not load, so a missing
-/// image never disturbs the layout around it. The number is drawn on the
-/// picture rather than beside it because it belongs to the still whatever
-/// size the still is given -- a 96 dp leading image in the phone's episode
-/// list, a whole card's width on a television.
+/// The picture is the addon's `thumbnail`. A neutral box stands in when there
+/// is none and when the one there is will not load, so a missing image never
+/// disturbs the layout around it. The number is drawn on the picture, not
+/// beside it, because it belongs to the still at whatever size the still is
+/// given: a 96 dp leading image in the phone's episode list, a whole card's
+/// width on a television.
 ///
 /// The decode is bounded to the box the still is drawn in. A television
 /// builds a whole season of these at once so that the D-pad can reach the

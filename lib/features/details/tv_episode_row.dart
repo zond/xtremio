@@ -13,32 +13,31 @@ import 'episode_thumbnail.dart';
 /// A season's episodes as one row of cards, scrolled sideways: what the
 /// phone and desktop layouts show as a vertical list of rows.
 ///
-/// A remote walks a row with two keys and a list with a hundred, and a
-/// television has width to spare and no height at all once the backdrop,
-/// the header and the sources are on the panel. So an episode becomes a
-/// card carrying exactly what its row carried -- the still with its number
-/// on it, the title, the air date, whether it has been watched, whatever
-/// of it is on the device -- plus the one thing the list had nowhere to
-/// put: how far into this episode the viewer got.
+/// A remote walks a row with two keys and a list with a hundred. A television
+/// has width to spare and no height at all once the backdrop, the header and
+/// the sources are on the panel. So an episode becomes a card carrying
+/// exactly what its row carried: the still with its number on it, the title,
+/// the air date, whether it has been watched, whatever of it is on the
+/// device. It adds the one thing the list had nowhere to put: how far into
+/// this episode the viewer got.
 ///
 /// Two things about it are not cosmetic:
 ///
 /// - **Every card is built, always.** Directional focus only considers
-///   widgets that have been built, so a lazily built row hands the D-pad
-///   back at the last realised card and the rest of the season is
-///   unreachable. This is a [SingleChildScrollView] over a [Row] -- the
-///   same shape the season pills above it use -- and not a
-///   `ListView.builder`. What that costs is bounded instead by decoding
-///   each still no larger than the card it is drawn in
-///   ([EpisodeThumbnail]), because a season of full-size stills on the
-///   Chromecast this is used on is real memory.
+///   widgets that have been built, so a lazily built row hands the D-pad back
+///   at the last realised card and the rest of the season is unreachable.
+///   This is a [SingleChildScrollView] over a [Row], the same shape the
+///   season pills above it use, and not a `ListView.builder`. The cost is
+///   bounded instead by decoding each still no larger than the card it is
+///   drawn in ([EpisodeThumbnail]), because a season of full-size stills on
+///   the Chromecast this is used on is real memory.
 /// - **The row opens where the viewer left off.** The selected episode is
 ///   scrolled to the middle when the row is built and whenever the
 ///   selection moves, so resuming a series at episode 19 does not start
 ///   the remote at episode 1.
 ///
 /// An episode that has not aired is drawn but takes no press and no focus,
-/// exactly as its list row is disabled today; the remote steps over it.
+/// exactly as its list row is disabled today. The remote steps over it.
 class TvEpisodeRow extends StatefulWidget {
   const TvEpisodeRow({
     super.key,
@@ -116,12 +115,12 @@ class TvEpisodeRow extends StatefulWidget {
 
   /// What the caption is held clear of the card's own edges by.
   ///
-  /// The focus ring is drawn on the tile's bounds and over whatever is
-  /// under them ([FocusRing]), and in [FocusEmphasis.bold] it is eight
-  /// logical pixels of it -- which is the bottom of the air date and the
-  /// first letter of the title. The picture can carry a ring across its
-  /// edge; a line of text cannot, so the words are inset by the widest the
-  /// ring ever is and the card is that much taller for it.
+  /// The focus ring is drawn on the tile's bounds and over whatever is under
+  /// them ([FocusRing]). In [FocusEmphasis.bold] it is eight logical pixels
+  /// wide, which covers the bottom of the air date and the first letter of
+  /// the title. The picture can carry a ring across its edge, but a line of
+  /// text cannot. So the words are inset by the widest the ring ever is, and
+  /// the card is that much taller for it.
   static const double captionInset = FocusRing.textInset;
 
   /// The box the title and the date are drawn in, at text scale 1: two
@@ -133,12 +132,11 @@ class TvEpisodeRow extends StatefulWidget {
 
   /// What the row measures, including the room a focused card grows into.
   ///
-  /// The caption is the only part that grows with the text scale: the
-  /// still keeps its size, so the row grows by exactly what the words
-  /// gained rather than squeezing the picture ([TvDensity.textFactorOf],
-  /// never below 1 -- the box is an exact fit at 1 and the padding in it
-  /// is fixed, so a smaller system font would overflow it rather than
-  /// shrink it).
+  /// The caption is the only part that grows with the text scale. The still
+  /// keeps its size, so the row grows by exactly what the words gained rather
+  /// than squeezing the picture ([TvDensity.textFactorOf]). The factor is
+  /// never below 1: the box is an exact fit at 1 and the padding in it is
+  /// fixed, so a smaller system font would overflow it rather than shrink it.
   static double heightOf(BuildContext context) =>
       focusSlack * 2 +
       thumbnailHeight +
@@ -203,9 +201,8 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
     final ids = _ids.toSet();
     _cards.removeWhere((id, _) => !ids.contains(id));
     // Which card the remote lands on whenever it arrives ([TvLadderHome]):
-    // the selected
-    // episode when it is in this season, else the first one that has
-    // aired, since a card that takes no press cannot take the focus.
+    // the selected episode when it is in this season, else the first one that
+    // has aired, since a card that takes no press cannot take the focus.
     final home = widget.homeVideoId ?? widget.selectedVideoId;
     final selected = ids.contains(home) ? home : null;
     final landsOn =
@@ -301,9 +298,9 @@ class TvEpisodeCard extends StatelessWidget {
   /// Rounds the still, the card's ink and its focus ring.
   static const BorderRadius radius = BorderRadius.all(Radius.circular(8));
 
-  /// What the second line reads: the air date, and "Upcoming" for an
-  /// episode that has not aired -- the same line the phone's list row
-  /// carries, and the only thing saying why a card takes no press.
+  /// What the second line reads: the air date, and "Upcoming" for an episode
+  /// that has not aired. It is the same line the phone's list row carries,
+  /// and the only thing saying why a card takes no press.
   static String subtitle(VideoInfo video, {required bool isReleased}) =>
       [?episodeDateLabel(video), if (!isReleased) 'Upcoming'].join(' · ');
 

@@ -5,37 +5,37 @@ import '../../core/image_disk_cache.dart';
 /// The title's own artwork behind everything on a television, with the
 /// scrim that keeps white text and a focus ring readable over it.
 ///
-/// The image fills the panel, overscan band included -- the band is what
-/// the *content* keeps clear of, not the picture, so a set that crops the
-/// edges crops artwork rather than showing a strip of ground. That is why
-/// this is not wrapped in a `SafeArea` and why the details screen does not
-/// put it inside `TvSafeArea`, whose band is filled with the scaffold's
-/// own colour and would paint over it.
+/// The image fills the panel, overscan band included. The band is what the
+/// *content* keeps clear of, not the picture, so a set that crops the edges
+/// crops artwork rather than showing a strip of ground. That is why this is
+/// not wrapped in a `SafeArea`. It is also why the details screen does not
+/// put it inside `TvSafeArea`, whose band is filled with the scaffold's own
+/// colour and would paint over it.
 ///
 /// Three things it has to get right:
 ///
 /// - **The darkening is a scrim over the picture, never opacity on the
 ///   text.** Dimmed text over a busy frame is unreadable in a way a dimmed
-///   picture behind solid text is not, and the picture is the part that may
-///   be anything -- a snow field, a white title card. So the whole image is
+///   picture behind solid text is not. The picture is the part that may be
+///   anything: a snow field, a white title card. So the whole image is
 ///   covered by [scrim] and everything above it is drawn at full strength.
 /// - **The scrim is a gradient and never a blur.** On the Mali GPU in the
 ///   Chromecast this app is used on, a full-screen `BackdropFilter` costs
-///   frames on every one of them; a gradient is drawn by the same shader
-///   that would have filled a flat colour.
-/// - **A missing image may never disturb the layout.** [background], then
-///   [poster], then the brand ground, and a URL that *fails to load* falls
-///   through exactly like one that was never there -- the fallback is the
-///   `errorBuilder`, so an image that 404s is answered without a rebuild
-///   and without the layout moving under whatever is on top.
+///   frames on every one of them. A gradient is drawn by the same shader that
+///   would have filled a flat colour.
+/// - **A missing image may never disturb the layout.** The order is
+///   [background], then [poster], then the brand ground. A URL that *fails to
+///   load* falls through exactly like one that was never there. The fallback
+///   is the `errorBuilder`, so an image that 404s is answered without a
+///   rebuild and without the layout moving under whatever is on top.
 ///
-/// The size asked for is [imageSize]: metahub serves one URL per size and
+/// The size asked for is [imageSize]. metahub serves one URL per size and
 /// Cinemeta's `poster` is the small one, so a fallback to the poster would
 /// otherwise stretch a thumbnail across the whole panel. Only a metahub URL
 /// is rewritten ([atSize]); every other addon's URL is passed on untouched.
-/// The decode is bounded to the panel's own pixels on top of that, because
-/// a backdrop decoded at its native size is several megabytes of texture on
-/// a device that has already been seen complaining about buffer formats.
+/// The decode is also bounded to the panel's own pixels, because a backdrop
+/// decoded at its native size is several megabytes of texture on a device
+/// that has already been seen complaining about buffer formats.
 class TvBackdrop extends StatelessWidget {
   const TvBackdrop({
     super.key,
@@ -71,9 +71,9 @@ class TvBackdrop extends StatelessWidget {
   /// rather than a photograph anybody reads. So it is the one image whose
   /// decode may be smaller than its box, and it upscales into the panel.
   ///
-  /// A backdrop decoded at panel width costs 8.3 MB resident against
-  /// 2.1 MB at half -- worth taking on a device whose low-memory killer
-  /// takes this app at 147 MB.
+  /// A backdrop decoded at panel width costs 8.3 MB resident against 2.1 MB
+  /// at half. That is worth taking on a device whose low-memory killer takes
+  /// this app at 147 MB.
   ///
   /// Half rather than a quarter deliberately: a quarter saves another
   /// 1.6 MB and is a four-fold upscale, which is where a gradient in a
@@ -112,10 +112,10 @@ class TvBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final urls = [?atSize(background, imageSize), ?atSize(poster, imageSize)];
-    // Half the panel's pixels, upscaled to fill it -- see
-    // [decodeFraction] for why a backdrop is the one picture here that
-    // may be decoded smaller than it is drawn. `cacheWidth` counts
-    // physical pixels, which is why the ratio is in here.
+    // Half the panel's pixels, upscaled to fill it. [decodeFraction] says why
+    // a backdrop is the one picture here that may be decoded smaller than it
+    // is drawn. `cacheWidth` counts physical pixels, which is why the ratio
+    // is in here.
     final media = MediaQuery.of(context);
     final decodeWidth =
         (media.size.width * media.devicePixelRatio * decodeFraction).round();
@@ -131,7 +131,7 @@ class TvBackdrop extends StatelessWidget {
   }
 
   /// The [index]th URL, falling through to the next one when it will not
-  /// load and to nothing at all -- the ground below -- once they run out.
+  /// load, and to nothing at all (the ground below) once they run out.
   static Widget _image(List<String> urls, int index, int? cacheWidth) =>
       index >= urls.length
       ? const SizedBox.shrink()

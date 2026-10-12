@@ -3,11 +3,10 @@ import '../../core/core.dart';
 /// What the addons between them offered, indexed by source.
 ///
 /// Two listings are the same source when they are the same *content*, not
-/// when they look alike: [StreamInfo.sourceKey] — an info hash and a file
-/// index for a torrent, the URL for a direct one — which is the same
-/// identity the download path already keys a pin by. Two different releases
-/// with the same resolution and the same size are two sources and stay two
-/// rows.
+/// when they look alike. The key is [StreamInfo.sourceKey]: an info hash and
+/// a file index for a torrent, the URL for a direct one. The download path
+/// already keys a pin by the same identity. Two different releases with the
+/// same resolution and the same size are two sources and stay two rows.
 ///
 /// A source several listings name is worth collapsing for two reasons:
 ///
@@ -19,14 +18,14 @@ import '../../core/core.dart';
 ///
 /// Which addons offered it is kept too ([alsoFrom]), because a row that
 /// silently swallowed another addon's answer would be hiding an option.
-/// Addons are held by the name the list shows, so an addon installed twice
-/// (two configurations of one Torrentio) is one name and collapses without
-/// a word — that is the addon repeating itself, not two answers.
+/// Addons are held by the name the list shows. So an addon installed twice
+/// (two configurations of one Torrentio) is one name and collapses without a
+/// word: that is the addon repeating itself, not two answers.
 final class StreamSourceIndex {
   const StreamSourceIndex._(this._sources);
 
-  /// Reads every listing in list order; the order they come in is the order
-  /// [alsoFrom] names them in and the order the trackers are merged in.
+  /// Reads every listing in list order. [alsoFrom] names them in that order,
+  /// and the trackers are merged in it.
   factory StreamSourceIndex.of(
     Iterable<({String addon, StreamInfo stream})> listings,
   ) {
@@ -53,9 +52,9 @@ final class StreamSourceIndex {
     return source == null ? stream : stream.withTrackers(source.trackers);
   }
 
-  /// The other addons that offered this source, in listing order. Empty
-  /// when [addon] is the only one that did — including when it offered it
-  /// more than once.
+  /// The other addons that offered this source, in listing order. Empty when
+  /// [addon] is the only one that did, even when it offered it more than
+  /// once.
   List<String> alsoFrom(String addon, StreamInfo stream) => [
     for (final name in _sourceOf(stream)?.addons ?? const <String>[])
       if (name != addon) name,
