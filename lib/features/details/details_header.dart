@@ -12,6 +12,7 @@ import '../../widgets/text_overflow.dart';
 import '../../widgets/remote_press.dart';
 import 'episode_thumbnail.dart';
 import 'face_buttons.dart';
+import 'watched_button.dart';
 import 'title_scores.dart';
 import 'tv_backdrop.dart';
 import 'tv_meta_header.dart';
@@ -183,6 +184,8 @@ class DetailsMetaHeader extends StatelessWidget {
     this.ratings,
     this.face,
     this.onFace,
+    this.watched,
+    this.onWatched,
   });
 
   final MetaItem meta;
@@ -190,6 +193,11 @@ class DetailsMetaHeader extends StatelessWidget {
 
   /// What the viewer said about this title; null for nothing.
   final Face? face;
+
+  /// Whether the film is watched ([WatchedButton]); null draws no button,
+  /// which is what a series gets.
+  final bool? watched;
+  final ValueChanged<bool>? onWatched;
 
   /// The happy or sad face was pressed: the face the title has now. Null
   /// draws neither button.
@@ -242,6 +250,8 @@ class DetailsMetaHeader extends StatelessWidget {
               selectedIcon: const Icon(Icons.bookmark),
               onPressed: onToggleLibrary,
             ),
+            if ((watched, onWatched) case (final watched?, final onWatched?))
+              WatchedButton.of(watched: watched, onWatched: onWatched),
             if (onFace case final onFace?) ...[
               if (FaceButtons.showsLike(face))
                 FaceButtons.like(current: face, onFace: onFace),

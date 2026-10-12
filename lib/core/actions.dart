@@ -358,8 +358,14 @@ abstract final class CoreActions {
   /// not is made a temporary item -- `temp` and `removed`, so not a saved
   /// title -- watched once, the state a finished playback leaves a film it
   /// was never added for. [meta] is the `MetaItemPreview` JSON.
-  static CoreAction metaItemMarkAsWatched(Map<String, dynamic> meta) =>
-      _ctx('MetaItemMarkAsWatched', {'meta_item': meta, 'is_watched': true});
+  ///
+  /// [watched] false takes the mark off again (`timesWatched` back to 0); for
+  /// a title the library does not hold, that changes nothing.
+  static CoreAction metaItemMarkAsWatched(
+    Map<String, dynamic> meta, {
+    bool watched = true,
+  }) =>
+      _ctx('MetaItemMarkAsWatched', {'meta_item': meta, 'is_watched': watched});
 
   /// Mutes ([disabled] true, `state.noNotif`) or unmutes new-episode
   /// notifications for the item; muting dismisses its pending ones. A

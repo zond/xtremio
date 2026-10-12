@@ -10,6 +10,7 @@ import '../../widgets/remote_press.dart';
 import '../../widgets/text_overflow.dart';
 import 'details_header.dart' show TrailerButton;
 import 'face_buttons.dart';
+import 'watched_button.dart';
 import 'title_scores.dart';
 
 /// What a title says about itself on a television: the logo, one line of
@@ -69,12 +70,19 @@ class TvMetaHeader extends StatelessWidget {
     this.ratings,
     this.face,
     this.onFace,
+    this.watched,
+    this.onWatched,
   });
 
   final MetaItem meta;
 
   /// What the viewer said about this title; null for nothing.
   final Face? face;
+
+  /// Whether the film is watched ([WatchedButton]); null draws no button,
+  /// which is what a series gets.
+  final bool? watched;
+  final ValueChanged<bool>? onWatched;
 
   /// The happy or sad face was pressed: the face the title has now (null
   /// for none). Null draws neither button.
@@ -108,6 +116,7 @@ class TvMetaHeader extends StatelessWidget {
   /// The two faces, right of the bookmark: the corner's other stops. A
   /// press right from the bookmark reaches them by where they are drawn,
   /// and left from them comes back to it the same way.
+  static const double stopOrderWatched = 2.05;
   static const double stopOrderLike = 2.1;
   static const double stopOrderDislike = 2.2;
 
@@ -246,6 +255,24 @@ class TvMetaHeader extends StatelessWidget {
             // the floor's fill.
             // Keyed, because one comes and goes beside the other: the face
             // pressed keeps its element, its focus node and so the remote.
+            if ((watched, onWatched) case (final watched?, final onWatched?))
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(stopOrderWatched),
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  includeSemantics: false,
+                  onKeyEvent: _onFaceKey,
+                  child: FocusHighlighted(
+                    borderRadius: const BorderRadius.all(Radius.circular(24)),
+                    builder: (context, node) => WatchedButton.of(
+                      watched: watched,
+                      onWatched: onWatched,
+                      focusNode: node,
+                    ),
+                  ),
+                ),
+              ),
             if (onFace case final onFace?) ...[
               if (FaceButtons.showsLike(face))
                 FocusTraversalOrder(

@@ -358,7 +358,13 @@ void main() {
       core.setState(CoreField.metaDetails, played);
       await tester.pumpAndSettle();
 
-      expect(find.text('Continue with last source'), findsOneWidget);
+      // Built, below the fold of an 800-high phone since the header's row
+      // gained the watched check; what this holds is that it did not move
+      // the page.
+      expect(
+        find.text('Continue with last source', skipOffstage: false),
+        findsOneWidget,
+      );
       expect(offset(), 0);
     });
 

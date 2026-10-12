@@ -1454,6 +1454,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     unawaited(markFace(context, prefs, id, face));
   }
 
+  /// Whether a film is watched, for the check beside the bookmark; null for
+  /// a series, which shows none. Watched is the library item's
+  /// `timesWatched` (stremio-core's own `LibraryItem::watched`), which is
+  /// what marking and unmarking move; a film the library has never seen is
+  /// not watched.
+  bool? _filmWatched(MetaDetailsState state, MetaItem meta) =>
+      meta.type == 'movie' ? state.libraryItem?.isWatched ?? false : null;
+
+  /// The check pressed: `MetaItemMarkAsWatched` with [watched], which for a
+  /// film the library has never seen makes the temporary item a finished
+  /// playback would.
+  void _markFilmWatched(MetaItem meta, bool watched) {
+    _client?.dispatch(
+      CoreActions.metaItemMarkAsWatched(meta.json, watched: watched),
+    );
+  }
+
   void _toggleWatched(MetaDetailsState state, VideoInfo video) {
     _client?.dispatch(
       CoreActions.markVideoAsWatched(

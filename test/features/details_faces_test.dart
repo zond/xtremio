@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/face_buttons.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_meta_header.dart';
+import 'package:xtremio/features/details/watched_button.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_density.dart';
@@ -194,6 +195,9 @@ void main() {
     }
     expect(focusedTooltip(), TvMetaHeader.addTooltip);
 
+    // The watched check stands between the bookmark and the faces.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedTooltip(), WatchedButton.markTooltip);
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), FaceButtons.likeTooltip);
     await press(tester, LogicalKeyboardKey.arrowRight);
@@ -204,9 +208,9 @@ void main() {
     expect(prefs.faces.of(movieId), Face.dislike);
     expect(button(FaceButtons.likeTooltip), findsNothing);
     expect(focusedTooltip(), FaceButtons.dislikedTooltip);
-    // The corner is the bookmark and the one face now.
+    // The corner is the bookmark, the check and the one face now.
     await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedTooltip(), TvMetaHeader.addTooltip);
+    expect(focusedTooltip(), WatchedButton.markTooltip);
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), FaceButtons.dislikedTooltip);
 
@@ -224,6 +228,8 @@ void main() {
     await press(tester, LogicalKeyboardKey.select);
     expect(focusedTooltip(), FaceButtons.likeTooltip);
 
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedTooltip(), WatchedButton.markTooltip);
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedTooltip(), TvMetaHeader.addTooltip);
     // And left again is the text column, as it always was.

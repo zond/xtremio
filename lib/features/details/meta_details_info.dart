@@ -107,6 +107,8 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                   ratings: _ratings,
                   face: _prefs?.faces.of(meta.id),
                   onFace: (face) => _setFace(meta.id, face),
+                  watched: _filmWatched(state, meta),
+                  onWatched: (watched) => _markFilmWatched(meta, watched),
                 ),
               )
             : DetailsMetaHeader(
@@ -120,6 +122,8 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
                 ratings: _ratings,
                 face: _prefs?.faces.of(meta.id),
                 onFace: (face) => _setFace(meta.id, face),
+                watched: _filmWatched(state, meta),
+                onWatched: (watched) => _markFilmWatched(meta, watched),
               ),
       ),
       if (state.hasVideos) ...[

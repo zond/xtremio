@@ -973,6 +973,17 @@ per screen (`DriveMatchRun`). Tests: `test/features/library_merge_test.dart`,
 `library_remote_test.dart`, `library_local_test.dart`,
 `library_screen_test.dart`.
 
+
+**A film's watched state on its details page** is a check beside the
+bookmark (`watched_button.dart`): watched is the library item's
+`timesWatched` -- stremio-core's own `LibraryItem::watched`, and what
+marking and clearing move (`flaggedWatched` is left by a playback and not
+cleared by a mark) -- and pressing it sends `MetaItemMarkAsWatched` with
+the other value, which for a film the library has never seen makes the
+temporary item a finished playback would (`temp`, `removed`: watched, not
+saved). Films only: a series' watched state is per episode, in its episode
+list. On a television it is the stop between the bookmark and the faces.
+Tests: `test/features/details_watched_test.dart`.
 ## Local videos
 
 The device's own videos are the Drive arrangement without an account: a

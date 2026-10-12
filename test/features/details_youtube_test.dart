@@ -297,8 +297,10 @@ void main() {
       expect(header, findsOneWidget);
       expect(
         all,
-        hasLength(5),
-        reason: 'the plot, the trailer, the bookmark, the two faces',
+        hasLength(6),
+        reason:
+            'the plot, the trailer, the bookmark, the watched check, the '
+            'two faces',
       );
 
       for (var i = 0; i < 12 && !focusIn<TvMetaHeader>(); i++) {

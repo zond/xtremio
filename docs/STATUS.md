@@ -56,7 +56,10 @@ Android TV layout are all built. What is not is in the README's
 
 Facts and genres; for a series a season picker and episode list with
 watched state (picking an episode loads its streams); a bookmark to add or
-remove the title from the library, and beside it a happy face and a sad
+remove the title from the library; for a film, a check beside it that
+says whether it is watched and marks or clears it (as a finished playback
+would, in Stremio's own library state, added to the library or not; a
+series' watched state is its episode list's); and beside those a happy face and a sad
 one -- both at rest; pressing one marks the title, draws that face filled
 in the accent colour and takes the other away, and pressing it again
 clears the mark and brings both back (on a television both are stops
