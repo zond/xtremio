@@ -57,16 +57,16 @@ For both:
 ## Verification, with real exit codes
 
 **`make check` runs every gate below, in order, and stops at the first
-that fails** -- run it before every commit and read its exit code, not the
-tail of its output. The commands it runs, for running one on its own:
-never pipe a test command into `tail`/`head`/`grep` before an `&&`-gated
-commit (the pipe's exit code is the filter's); redirect to a log and
-`echo EXIT=$?`.
+that fails.** Run it before every commit and read its exit code, not the
+tail of its output. The block below is the commands it runs, for running
+one on its own. Never pipe a test command into `tail`/`head`/`grep` before
+an `&&`-gated commit, since the pipe's exit code is the filter's. Redirect
+to a log and `echo EXIT=$?`.
 
 ```bash
-# Rust first: the closing `cargo build` leaves the debug library
-# (rust/target/debug/libxtremio_core.*) that the FFI-backed Dart tests load;
-# skip it after touching rust/src and they run against a stale library.
+# Rust first. The closing `cargo build` leaves the debug library
+# (rust/target/debug/libxtremio_core.*) that the FFI-backed Dart tests load.
+# Skip it after touching rust/src and they run against a stale library.
 (cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps && RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --document-private-items && cargo test && cargo build); echo EXIT=$?
 dart format --output=none --set-exit-if-changed lib test; echo EXIT=$?
 flutter analyze; echo EXIT=$?
@@ -92,10 +92,10 @@ stashing the `lib/` (or `rust/src`) change and running the new test
 
 ## Tests and fixtures
 
-- **No fixed sleeps.** A test waits for the thing it is about -- a
+- **No fixed sleeps.** A test waits for the thing it is about: a
   `Completer` it holds, a fake clock (`fakeAsync`, `tester.pump(duration)`),
-  `pumpEventQueue`, a poll with a deadline -- never a `sleep` or a
-  `Future.delayed` long enough on this machine. A timing bound written on a
+  `pumpEventQueue`, a poll with a deadline. It never waits on a `sleep` or
+  a `Future.delayed` that is long enough on this machine. A timing bound written on a
   fast machine is a flake on a slow runner.
 - **Every assertion must be able to fail.** One that holds whatever the code
   does (a widget that is never built, a list that is always empty) is not a
@@ -104,19 +104,20 @@ stashing the `lib/` (or `rust/src`) change and running the new test
   sentence of on-screen copy holds that wording; changing the copy means
   changing the test in the same commit, not loosening it to a fragment.
 - Widget tests run against `FakeCoreClient`, `FakePlaybackEngine` and the
-  other fakes in `test/support/`; nothing in `test/features` touches FFI or
-  libmpv. The FFI tests load the library through `test/support/rust_lib.dart`
-  (`test/bridge/`, `test/core/core_client_test.dart` and a few others under
-  `test/core/`); `rust/tests/` holds the Rust side's, `core.rs` the engine's.
+  other fakes in `test/support/`. Nothing in `test/features` touches FFI or
+  libmpv. The FFI tests (`test/bridge/`, `test/core/core_client_test.dart`
+  and a few others under `test/core/`) load the library through
+  `test/support/rust_lib.dart`. `rust/tests/` holds the Rust side's tests,
+  `core.rs` the engine's.
 - Model-field states come from fixtures under `rust/tests/fixtures/`,
   recorded by the `#[ignore]` tests in `rust/tests/` (the commands are in
   [docs/OPERATIONS.md](docs/OPERATIONS.md#re-recording-fixtures)) and loaded
   through `test/support/fixtures.dart`. Refresh a fixture by re-running its
-  recorder, never by hand-editing recorded JSON; trim large catalogs. The
+  recorder, never by hand-editing recorded JSON. Trim large catalogs. The
   downloads recorder is idempotent on purpose (it fixes the tmp path and the
-  timestamps the Dart tests quote); keep it that way.
+  timestamps the Dart tests quote). Keep it that way.
 - `ctx_logged_in.json` is hand-authored with a fake account. Never commit a
-  recorded session; redact `auth.key`, `_id` and `email` from anything
+  recorded session. Redact `auth.key`, `_id` and `email` from anything
   captured against a real account.
 
 ## Never log auth material
@@ -126,9 +127,9 @@ bug report or the text of a logged exception (log the exception's *type*):
 
 - **The Stremio password and session key.** `Authenticate` actions and the
   `UserAuthenticated` / `Error{source}` events carry the password;
-  `ctx.profile.auth.key` is the session key. Log event names and
-  `source.event` only -- never `RuntimeCoreEvent.args`, a `Ctx` action's
-  args, or the `ctx` JSON.
+  `ctx.profile.auth.key` is the session key. Log only event names and
+  `source.event`. Never log `RuntimeCoreEvent.args`, a `Ctx` action's args,
+  or the `ctx` JSON.
 - **The embedded server's bearer token** (`ServerHandle::auth_token`, read
   by `server::token_for` in `rust/src/server.rs`, which `Env::fetch` in
   `rust/src/env.rs` asks). It never crosses FFI and
@@ -136,13 +137,14 @@ bug report or the text of a logged exception (log the exception's *type*):
 - **The Google Drive refresh token.** It does not expire and reaches every
   file the account ever picked through this OAuth client. It lives in
   `SecretStore` (`lib/core/secret_store.dart`), reached only through
-  `DriveAccount`; never in `xtremio_prefs.json`. The one copy outside it is
-  Rust memory while linked (`DriveAccount.grantSink` →
-  `server_drive_grant`, `null` on unlink and `pairAgain`), for the Drive
-  pins nobody presses a button for and the Drive media ids the player
-  resolves. Rust writes it nowhere. Signed in, a pairing also sends it to
-  the account's vault on xtremio-xervice (`DriveVault`), sealed there and
-  handed only to a device that proved it is the account's; it crosses in
+  `DriveAccount`, and never in `xtremio_prefs.json`. The one copy outside
+  it is in Rust memory while the account is linked
+  (`DriveAccount.grantSink` → `server_drive_grant`, `null` on unlink and
+  `pairAgain`). That copy serves the Drive pins nobody presses a button for
+  and the Drive media ids the player resolves. Rust writes it nowhere.
+  When the user is signed in, a pairing also sends it to the account's
+  vault on xtremio-xervice (`DriveVault`). The vault keeps it sealed and
+  hands it only to a device that proved it is the account's. It crosses in
   one request body and one answer and is never logged
   (`test/core/drive_vault_test.dart`).
 - **A published cast token** (`media_publish`, `media_publish_rendition`):
@@ -154,13 +156,13 @@ bug report or the text of a logged exception (log the exception's *type*):
 - **Addon, debrid and subtitle URLs**, which carry keys in the path as well
   as the query. `DiagnosticsLog.write` (`lib/core/diagnostics_log.dart`)
   rewrites every `http(s)` URL through `DiagnosticsLog.url` before the line
-  is stored -- nothing below FFI redacts, and `rust/src/logging.rs` re-emits
+  is stored. Nothing below FFI redacts, and `rust/src/logging.rs` re-emits
   every line to logcat. `redactSecrets` is the second lock on the copied
   report. **Verbose logging is the one deliberate exception: it redacts
   nothing, so while it is on the log includes credentials** (addon and
-  debrid keys, anything else a line carries). Do not add redaction to it --
-  a redacted line is where the problem being chased hides -- and do not
-  soften its tile: `DiagnosticsTraceSync.description` says "credentials" in
+  debrid keys, anything else a line carries). Do not add redaction to it: a
+  redacted line is where the problem being chased hides. Do not soften its
+  tile either. `DiagnosticsTraceSync.description` says "credentials" in
   that word, and `test/features/core_settings_test.dart` holds it.
   A fetch error is stripped of its URL (`without_url`, `rust/src/env.rs`)
   before it becomes a message.
@@ -173,22 +175,21 @@ Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
 ## The app never speaks HTTP to the embedded server
 
 libmpv reads every stream by media id through the `xtremio://` protocol
-(`rust/src/mpv_stream.rs`), which is no HTTP at all -- the player registers
-what it plays over FFI (`rust/src/api/media.rs`) -- and fetches a media
+(`rust/src/mpv_stream.rs`), which is no HTTP at all. The player registers
+what it plays over FFI (`rust/src/api/media.rs`). libmpv fetches a media
 route only for a link the server reads forward (`/proxy`) or a route it
-names no id for; a cast receiver fetches a published token on the LAN
-listener. stremio-core's `StreamingServer`
-model calls its handful of control routes through `Env::fetch`, which adds
-the bearer token. Everything the app itself asks of the server -- settings,
-stats, storage, downloads, Drive, media ids, publishing a cast, the LAN
-listener, the lean background footprint -- is an FFI function over
+names no id for. A cast receiver fetches a published token on the LAN
+listener. stremio-core's `StreamingServer` model calls its handful of
+control routes through `Env::fetch`, which adds the bearer token.
+Everything the app itself asks of the server is an FFI function over
 `ServerHandle` in `rust/src/api/server.rs`, `rust/src/api/media.rs` or
-`rust/src/api/downloads.rs`. A new need is a new Rust function there: never
+`rust/src/api/downloads.rs`. That covers settings, stats, storage,
+downloads, Drive, media ids, publishing a cast, the LAN listener and the
+lean background footprint. A new need is a new Rust function there: never
 a `dart:io` `HttpClient` call, and never a new route on the server
 (stream-server's `AGENTS.md`, "Routes"). The Dart side makes no HTTP
-request to the server at all. The player
-keeps no disk cache of its own (`cache-on-disk=no`); every storage question
-is `server_storage_report`. See
+request to the server at all. The player keeps no disk cache of its own
+(`cache-on-disk=no`). Every storage question is `server_storage_report`. See
 [The embedded server](docs/ARCHITECTURE.md#the-embedded-server).
 
 The server's lean background footprint (`server_set_background`) is set
@@ -209,16 +210,16 @@ Tests: `rust/tests/downloads.rs`, the unit tests in `rust/src/downloads.rs`,
   `downloaded`/`size`/`path`/`state` are merged from the server's
   `downloads()` and cached in the file. Never compute progress locally or
   add a field the server could answer. A tick that moved only `downloaded`
-  does not rewrite the file, and a tick pushes the narrow `progress` row,
-  never a whole entry.
-- **The file is forgiving and additive.** camelCase, unknown keys survive a
-  round trip, an entry this build cannot parse is written back verbatim, a
-  new field is optional with a default. A file that is not the shape this
+  does not rewrite the file. A tick pushes the narrow `progress` row, never
+  a whole entry.
+- **The file is forgiving and additive.** Keys are camelCase. Unknown keys
+  survive a round trip, an entry this build cannot parse is written back
+  verbatim, and a new field is optional with a default. A file that is not the shape this
   build writes is an error, never an empty registry (empty is the pin set
   that sweeps every download).
 - **The row leads the server in and follows it out.** `add` writes the row
-  (with `replaces`) before the pin; `remove` marks `pendingRemoval` before
-  the unpin and drops the row after; `reconcile_pins_in` finishes either at
+  (with `replaces`) before the pin. `remove` marks `pendingRemoval` before
+  the unpin and drops the row after. `reconcile_pins_in` finishes either at
   boot. Keep every new server call on that side of its write.
 - **One client, one sink.** One `DownloadsClient`, built in `XtremioApp` and
   handed down through `DownloadsScope`; widget tests put
@@ -228,28 +229,28 @@ Tests: `rust/tests/downloads.rs`, the unit tests in `rust/src/downloads.rs`,
   records no destination. The only write the app makes to `cacheRoot` on
   its own is `moveOffPurgeableRoot` (`lib/main.dart`).
 - **A kept download is not a file.** `downloads_open` answers what the
-  download is of -- the server's media route for a torrent, the link or
-  `xtremio-drive:<fileId>` otherwise -- which the player plays by media id
-  and the server resolves off the disk; never `entry.path`.
+  download is of: the server's media route for a torrent, otherwise the
+  link or `xtremio-drive:<fileId>`. The player plays that by media id and
+  the server resolves it off the disk. Never play `entry.path`.
 - **The row is not evidence; ask the server.** `downloads_open` hands back a
   URL only when the server also says it holds the file whole, and refuses
   with `notHeld` otherwise (a URL for a hash the session lacks would start
   a magnet add). At boot a finished row the server does not hold becomes
   `gone` and is never re-pinned by itself.
 - **A row's source is its stream, keyed by the server.** A torrent row is
-  `(infoHash, fileIdx)`; a link or Drive row is the server's 64-hex key and
-  `0` (`is_proxy_key`), asked for before the row is written
-  (`proxy_download_key`).
+  `(infoHash, fileIdx)`. A link or Drive row is the server's 64-hex key and
+  `0` (`is_proxy_key`). The key is asked for (`proxy_download_key`) before
+  the row is written.
 
 ## Deep links open an addon; they never install one
 
 A `stremio://host/manifest.json` link opens that addon's details screen and
-stops. `lib/shell/deep_link.dart` decides, `XtremioApp` acts; tests in
-`test/app_deep_link_test.dart` through `FakeDeepLinks`. See
+stops. `lib/shell/deep_link.dart` decides and `XtremioApp` acts. The tests
+are in `test/app_deep_link_test.dart`, through `FakeDeepLinks`. See
 [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md).
 
-- **Nothing is dispatched but the `Load`**; no path reaches `InstallAddon`.
-- **The URL is passed on unmodified**; stremio-core's `AddonDetails` does
+- **Nothing is dispatched but the `Load`.** No path reaches `InstallAddon`.
+- **The URL is passed on unmodified.** stremio-core's `AddonDetails` does
   the scheme rewrite on the whole string. Do not parse and rebuild it.
 - **A link never logs the URL**, only the scheme.
 - **A host-less link is dropped**, including the Drive pairing's
@@ -262,7 +263,7 @@ so it decides nothing about a subtitle. `sub-speed` and `sub-delay` are
 written only through the "Adjust timing" panel's state (`SubtitleTiming`,
 `lib/features/player/subtitle_timing.dart`). The behaviour and the
 measurements behind each rule are in
-[Subtitles](docs/ARCHITECTURE.md#subtitles); tests are
+[Subtitles](docs/ARCHITECTURE.md#subtitles). The tests are
 `test/features/player/subtitle_*_test.dart`,
 `test/features/player/player_subtitle_*_test.dart`, `rust/src/subtitles.rs`
 and `rust/tests/subtitle_threshold.rs`.
@@ -270,56 +271,56 @@ and `rust/tests/subtitle_threshold.rs`.
 - **A multiplier is measured, never judged or declared**: from a match
   against another file (`subtitles_match`) or from two marks
   (`SubtitleCalibration`). Never derive one from a rate an addon or a
-  container claims, and never read `PlaybackEngine.videoFrameRate` for a
-  subtitle -- its one consumer is `DisplayFrameRate`.
+  container claims. Never read `PlaybackEngine.videoFrameRate` for a
+  subtitle: its one consumer is `DisplayFrameRate`.
 - **A mark pairs the cue's raw time with where it is drawn**, never with the
-  instant of the press. `sub-start` is the raw time in the file; that was
-  measured against a running libmpv, is written down at
-  `MediaKitEngine.subtitleCueStart` (the only reader), and is the one rule
-  no test can reach.
+  instant of the press. `sub-start` is the raw time in the file. That was
+  measured against a running libmpv and is written down at
+  `MediaKitEngine.subtitleCueStart`, its only reader. It is the one rule no
+  test can reach.
 - **The panel shows the multiplier and cannot press it.** The shift
-  accelerates only under a hold (`shiftStrideAt`); every tap is a tenth.
+  accelerates only under a hold (`shiftStrideAt`). Every tap is a tenth.
 - **Every path that changes what is shown goes through
   `PlayerScreen._resetSubtitleTiming`**, which replaces the whole
   `SubtitleTiming`. A new path gets its reset and its test.
 - **Only a press on the panel is remembered** (`_adjustTiming`), and the
   write waits (`_pendingSync`) until the adjusting ends. The flush in
   `dispose` runs after the preferences listener is removed.
-- **Memory keys** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`): a
-  speed on the series and the lower-cased `releaseGroup` (never `g`, a
-  per-answer index); a shift on those plus the video release
-  (`castFilename`). A key part nobody can name means nothing is remembered;
-  Reset forgets rather than storing zero. `_rememberedSpeed` refuses a
+- **Memory keys** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`). A
+  speed is keyed on the series and the lower-cased `releaseGroup` (never
+  `g`, a per-answer index). A shift is keyed on those plus the video
+  release (`castFilename`). Nothing is remembered when nobody can name a
+  key part. Reset forgets rather than storing zero. `_rememberedSpeed` refuses a
   stored multiplier outside mpv's `0.1-10.0`.
 - **A re-open restores the addon file before the timing**
   (`_restoreExternalSubtitle` then `_applySubtitleTiming`).
 - **A pick or a press by hand stops the auto-pick** for that media
-  (`_subtitlesChosenByHand`); a late auto-pick revert undoes only its own
+  (`_subtitlesChosenByHand`). A late auto-pick revert undoes only its own
   id and moves `_timing` inside a `setState`.
-- **The panel is not the OSD**: drawn outside the fade, its own focus scope
-  and Back rung, and it scrolls in whatever height it gets.
+- **The panel is not the OSD.** It is drawn outside the fade, has its own
+  focus scope and Back rung, and scrolls in whatever height it gets.
 - **The match** (`rust/src/subtitles.rs`) compares on-screen bitmaps from
   both timestamps of every cue, scores overlap above chance, and applies
-  only at `CONVINCING` (0.45). That number was measured; do not move it
+  only at `CONVINCING` (0.45). That number was measured. Do not move it
   without re-running `cargo test --release --test subtitle_threshold --
   --ignored`. The reference is always the viewer's pick, and a subtitle URL
   is never quoted back.
 - **Ordering**: every consumer goes through `PlayerScreen._offeredSubtitles`.
   `subtitlesByRelease` ranks files cut for the playing release, then a group
-  already adjusted for; `subtitleMatchesRelease` matches whole contiguous
-  tokens only. Language rows are alphabetical; the menu lifts at most two
+  already adjusted for. `subtitleMatchesRelease` matches whole contiguous
+  tokens only. Language rows are alphabetical. The menu lifts at most two
   most-picked languages (`SubtitlePickMemory.pinned`) and never hands an
   unused slot down. A row names the addon and why it is first, never a rate.
 - **Pick memory** (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`):
-  only a pick by hand writes, nothing is preselected that the episode does
-  not offer, Off is a value, and a synthesized preference is never
+  only a pick by hand writes, nothing the episode does not offer is
+  preselected, Off is a value, and a synthesized preference is never
   dispatched as `SubtitlePreferenceChanged`.
 
 ## The stats panel draws a reading or nothing at all
 
-`lib/features/player/playback_stats_overlay.dart`, and its cast twin
-`cast_stats_overlay.dart`: a number that does not exist takes its row (or
-its half of one) away, never a dash. Tests:
+A number that does not exist takes its row (or its half of one) away,
+never a dash. That holds in `lib/features/player/playback_stats_overlay.dart`
+and its cast twin `cast_stats_overlay.dart`. Tests:
 `test/features/player/player_stats_osd*_test.dart`,
 `test/features/player/playback_stats_test.dart`,
 `test/features/player/player_cast_stats_test.dart`. What each row means is in
@@ -329,28 +330,29 @@ its half of one) away, never a dash. Tests:
   no sharing row. mpv's `collecting…` holds back only mpv's readings.
 - The transfer counters cover the torrent's current live period and the row
   says `since it last went live`. Label them; never persist them.
-- The server is asked about what the engine was handed: the stream's media
-  id (`_registeredMediaId` from the moment it is registered, else
-  `_playingMediaId`), or the URL (`_heldStreamUrl`) only when that URL
-  is on the embedded server --
-  any loopback URL (`isEmbeddedServerHost`: there is no other server on
-  this device) in a build that started one. The torrent stats poll asks about every torrent (all of them are the
-  embedded server's, `core::pin_to_embedded`), and asks nothing in a build
-  with no embedded server, since a stats call creates the engine it asks
-  about.
-- Nothing outlives its poll (`_stopStreamNumbers`); a late answer for
-  another video is dropped. One unit ladder (`formatBitrate`, `formatAge`,
-  `TorrentProgressCard.formatSpeed`, and for bytes the app's one byte
-  formatter, `formatBytes` in `lib/core/units.dart`, which every byte count
-  on every screen goes through): decimal, binary only for piece lengths.
+- The server is asked about what the engine was handed. That is the
+  stream's media id (`_registeredMediaId` from the moment it is registered,
+  else `_playingMediaId`). It is the URL (`_heldStreamUrl`) only when that
+  URL is on the embedded server: any loopback URL in a build that started
+  one (`isEmbeddedServerHost`: there is no other server on this device).
+  The torrent stats poll asks about every torrent, since all of them are
+  the embedded server's (`core::pin_to_embedded`). It asks nothing in a
+  build with no embedded server, because a stats call creates the engine it
+  asks about.
+- Nothing outlives its poll (`_stopStreamNumbers`), and a late answer for
+  another video is dropped. There is one unit ladder, decimal, and binary
+  only for piece lengths: `formatBitrate`, `formatAge`,
+  `TorrentProgressCard.formatSpeed`, and for bytes `formatBytes` in
+  `lib/core/units.dart`. That is the app's one byte formatter, and every
+  byte count on every screen goes through it.
   Stream pills follow the addon's 1024-based size text (`StreamFacts`),
   because they repeat what the addon wrote.
 
 ## A cast is judged by what mpv read, and nothing else
 
 `CastCompatibility.of` (`lib/features/cast/cast_compatibility.dart`) decides
-from mpv's report -- the reader that opened the file, the codecs, the pixel
-format -- and from the model name the receiver announces
+from two things: mpv's report (the reader that opened the file, the codecs,
+the pixel format) and the model name the receiver announces
 (`ReceiverTable.of`, `lib/features/cast/receiver_table.dart`). See
 [What can be cast](docs/CASTING.md#what-can-be-cast). Tests:
 `test/features/cast/cast_compatibility_test.dart`,
@@ -358,11 +360,11 @@ format -- and from the model name the receiver announces
 
 - **No name is read.** Not a file name, a URL's extension, a
   server-resolved name or a release title (`x265`, `DDP5.1`): they are
-  often absent and sometimes wrong. A test that a `.mp4` mpv calls Matroska
-  is a Matroska holds it.
-- **Before mpv has reported, the answer is "not yet"** (`CastRefusal.pending`),
-  never a guess, and a report is dropped when the screen moves to another
-  stream.
+  often absent and sometimes wrong. A test holds it: a `.mp4` that mpv
+  calls Matroska is a Matroska.
+- **The answer is "not yet" until mpv has reported**
+  (`CastRefusal.pending`), never a guess. A report is dropped when the
+  screen moves to another stream.
 - **A picture no receiver decodes is refused up front**
   (`ReceiverTable.deepestPicture`; 10-bit H.264 among them), whether the
   film would go as it is or repackaged: a rendition copies the picture.
@@ -372,9 +374,9 @@ format -- and from the model name the receiver announces
 `rust/src/addon_health.rs` keys every record by `key_for`: `host[:port]#`
 plus 12 hex of `sha256(transport URL)`. The URL, its query, the resource
 id, request timestamps and error strings are never stored.
-`lib/features/addons/addon_health.dart` mirrors `key_for`; the two are
-pinned by `the_key_is_the_digest_the_app_computes` and "is the digest the
-Rust side computes" -- change one only with the other. Rust counts, Dart
+`lib/features/addons/addon_health.dart` mirrors `key_for`. The tests
+`the_key_is_the_digest_the_app_computes` and "is the digest the Rust side
+computes" pin the two together, so change one only with the other. Rust counts, Dart
 judges (`AddonHealth.verdict`, a pure function). See
 [docs/ADDONS.md](docs/ADDONS.md).
 
@@ -384,7 +386,7 @@ Each is easy to write again, and each has a test in `test/features/tv/`
 unless it says otherwise.
 
 - **Nothing vetoes the OSD's fade on a focus.** `PlayerScreen._canAutoHide`
-  does not list "a control has focus"; `_hideControls` hides the bar and
+  does not list "a control has focus". `_hideControls` hides the bar and
   hands the remote back to the video as one act.
 - **A direction key never leaves a layer**, and Back comes down a ladder,
   most transient first. A rung exists only while it visibly does something,
@@ -412,7 +414,7 @@ unless it says otherwise.
   `details_sources_row_test.dart`, `catalog_rows_focus_test.dart`).
 - **What is left of a held key after its long press is nobody's.** The
   long press opens something that takes focus while the key is still
-  down, and Android repeats the key until it comes up; Flutter's
+  down. Android repeats the key until it comes up, and Flutter's
   shortcuts activate on repeats, so the first repeat pressed the new
   sheet's Cancel. `RemotePress` swallows the key's repeats and release
   app-wide once the long press fires (`_SpentHold`). A widget test that
@@ -421,16 +423,16 @@ unless it says otherwise.
 - **A sideways press at the end of a row stays in the row**
   (`TvCardStrip`; `RootShell._onRailKey` for the rail).
 - **Anything the remote can land on wears the app's own focus indicator.**
-  Two ways: `FocusTheme`, the floor derived into `ThemeData`, and the ring
-  put on by hand (`FocusHighlighted`, `FocusMarked`, with `FocusTreatment`
-  saying how much of it a surface family wears). **Prefer the floor**; wrap
-  only what it cannot reach or what sits over video or poster art, and say
-  which in a comment. A ring turns the floor's fill off only where the
-  surface owns the ink (`FocusableTile`); two or three marks is normal. A
-  television pins `AlwaysShowFocus`. `focus_reach_test.dart` walks every
-  screen through its `drawn`, `opened` and `unopened` tables, and fails on a
-  `*_screen.dart` in neither; an `unopened` entry is driven by
-  `proveNothingOpens`, not trusted.
+  It comes two ways: `FocusTheme`, the floor derived into `ThemeData`, and
+  the ring put on by hand (`FocusHighlighted`, `FocusMarked`, with
+  `FocusTreatment` saying how much of it a surface family wears). **Prefer
+  the floor.** Wrap only what it cannot reach or what sits over video or
+  poster art, and say which in a comment. A ring turns the floor's fill off
+  only where the surface owns the ink (`FocusableTile`). Two or three marks
+  is normal. A television pins `AlwaysShowFocus`. `focus_reach_test.dart`
+  walks every screen through its `drawn`, `opened` and `unopened` tables,
+  and fails on a `*_screen.dart` in neither. An `unopened` entry is driven
+  by `proveNothingOpens`, not trusted.
 - **An image holds its box before it arrives**: pending, failed and loaded
   are one size (`TvBackdrop`, `EpisodeThumbnail`, `TvMetaHeader`).
 - **A sliver that comes and goes is keyed**, or focus is lost when it
@@ -443,27 +445,27 @@ unless it says otherwise.
 
 Every icon, the Android TV banner, the splash mark and the README logo come
 from `tool/generate_branding.sh` (ImageMagick 7, Cantarell Extra Bold).
-Change a colour or a coordinate there and re-run it; never touch the PNGs,
+Change a colour or a coordinate there and re-run it. Never touch the PNGs,
 the `ic_launcher_*` XML or `values*/ic_launcher_background.xml`. The
 adaptive icon's foreground keeps the mark inside the circle every launcher
-mask leaves; widening the X means checking that.
+mask leaves. Widening the X means checking that.
 
 ## Driving the app on a device
 
 `tool/drive-start` runs a profile build of `lib/main_driver.dart` on a
 phone as the separate `com.zond.xtremio.debug` app, and `tool/drive`
 reads the screen and acts on it through the semantics tree and the app's
-own navigator -- see [docs/DRIVING.md](docs/DRIVING.md). Never install a
+own navigator ([docs/DRIVING.md](docs/DRIVING.md)). Never install a
 debug or profile build in a way that touches the release app
 (`com.zond.xtremio`): never uninstall it, `pm clear` it or install over
 it. Nothing outside `lib/main_driver.dart` imports `lib/dev/driver/`, and
-`lib/main.dart` never imports `flutter_driver`; no test holds those two,
+`lib/main.dart` never imports `flutter_driver`. No test holds those two,
 so `git grep dev/driver lib` is the check. The driver's commands are
 tested in `test/dev/app_driver_test.dart`.
 
 ## Use cheaper models for mechanical work
 
-When an agent delegates, mechanical subtasks (formatting, renames, moving
-code, re-recording fixtures, running the checks above) go to a smaller
-model; keep the larger one for design and for reading stremio-core to
+When an agent delegates, mechanical subtasks go to a smaller model:
+formatting, renames, moving code, re-recording fixtures, running the checks
+above. Keep the larger one for design and for reading stremio-core to
 decide a wire shape.
