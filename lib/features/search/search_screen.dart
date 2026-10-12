@@ -16,16 +16,15 @@ import '../discover/catalog_rows.dart';
 /// (`search`, a `CatalogsWithExtra` like the board).
 ///
 /// The query is debounced ([debounce]) because every `Load` also pushes the
-/// query to the profile's search history; Enter searches at once. A `Load`
-/// only plans one catalog per addon, so as soon as the engine reports the
-/// planned catalogs for the current query a `LoadRange` over all of them is
-/// dispatched, exactly once per query. Results are one poster grid per
-/// catalog that answered, labelled from `catalogLabels`; catalogs that
-/// answered with nothing are skipped, and the ones that failed are gathered
-/// into one line at the end ([failedAddonsLabel]) rather than dropped —
-/// this screen promises results from every addon that supports search, so
-/// the ones it could not ask are part of the answer. An empty query unloads
-/// the field, as does leaving the screen.
+/// query to the profile's search history. Enter searches at once. A `Load` only
+/// plans one catalog per addon, so as soon as the engine reports the planned
+/// catalogs for the current query, a `LoadRange` over all of them is
+/// dispatched, exactly once per query. Results are one poster grid per catalog
+/// that answered, labelled from `catalogLabels`. Catalogs that answered with
+/// nothing are skipped. The ones that failed are gathered into one line at the
+/// end ([failedAddonsLabel]) rather than dropped: this screen promises results
+/// from every addon that supports search, so the ones it could not ask are part
+/// of the answer. An empty query unloads the field, as does leaving the screen.
 ///
 /// A television lays it out as Discover: no app bar, the field the top of
 /// the screen where Discover has its types, and the results as Discover's
@@ -65,7 +64,7 @@ class _SearchScreenState extends State<SearchScreen> {
   /// addon with a name that can be checked or uninstalled.
   ///
   /// Subscribed to only once a search has actually failed, by
-  /// [_watchProfileForFailures] -- the same lazy pattern as
+  /// [_watchProfileForFailures]. That is the same lazy pattern as
   /// `CatalogRows._ctx`: every event on `ctx` costs an FFI serialize and a
   /// decode, not worth paying before there is a name to show.
   CoreFieldNotifier? _ctx;
@@ -349,11 +348,11 @@ class _SearchField extends StatelessWidget {
 /// One grid per catalog that returned items, then the account of the addons
 /// that could not answer.
 ///
-/// Catalogs with no hits are left out and stay unmentioned; the ones whose
+/// Catalogs with no hits are left out and stay unmentioned. The ones whose
 /// addon could not answer ([CatalogRow.hasFailed], via
-/// [CatalogsWithExtraState.visibleRows]) are left out too — a header over
-/// "failed to fetch: HTTP 404" is not a search result — but they are named
-/// at the end, because a search that quietly skipped half the addons looks
+/// [CatalogsWithExtraState.visibleRows]) are left out too, since a header over
+/// "failed to fetch: HTTP 404" is not a search result. They are named at the
+/// end, though, because a search that quietly skipped half the addons looks
 /// exactly like a title nobody has.
 class _Results extends StatelessWidget {
   const _Results({

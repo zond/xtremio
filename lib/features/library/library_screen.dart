@@ -32,15 +32,15 @@ import '../similar/similar_resolver.dart';
 /// title added or followed, filtered by type and sorted.
 ///
 /// On mount it dispatches `Load LibraryWithFilters` for every type sorted by
-/// last watched; the engine answers with `selectable` (the types present,
-/// the six sorts, the next page) where every entry carries the request that
+/// last watched. The engine answers with `selectable` (the types present, the
+/// six sorts, the next page), where every entry carries the request that
 /// selects it, and the filter row dispatches those verbatim. `catalog` is
-/// cumulative — `LoadNextPage` makes the engine publish a longer list, so
-/// the grid replaces its items rather than appending. Item actions (remove,
-/// mark watched, rewind, notifications) are `Ctx` actions; the engine
-/// refreshes this field on its own after each. The field is unloaded on
-/// dispose; the anonymous library is shown with a hint to sign in, and a
-/// signed-in profile gets a "Sync now" button.
+/// cumulative: `LoadNextPage` makes the engine publish a longer list, so the
+/// grid replaces its items rather than appending. Item actions (remove, mark
+/// watched, rewind, notifications) are `Ctx` actions, and the engine refreshes
+/// this field on its own after each. The field is unloaded on dispose. The
+/// anonymous library is shown with a hint to sign in, and a signed-in profile
+/// gets a "Sync now" button.
 ///
 /// The app bar also carries the way to the [DownloadsScreen] ("Manage
 /// downloads", while anything is downloaded): what is kept on the device is
@@ -73,21 +73,20 @@ import '../similar/similar_resolver.dart';
 /// long press does on a phone), and the sheet puts focus on its first
 /// action so the D-pad can walk it.
 ///
-/// **A [TvLadder] over the bar and the filter rows.** The screen went
-/// without one while its controls were a single row spanning the width
-/// under the bar: "the nearest node in that direction" and "the next region
-/// down" were the same answer, and geometry got it right on its own. They
-/// are two rows now -- the types with the sort, and the app's own filters
-/// -- each left-aligned and shorter than the width, and nothing under the
-/// bar's right-hand buttons is in their vertical band, so a press down out
-/// of the bar re-sorted every node on the page by distance and landed on
-/// the filters row (measured: `Downloaded`, past the types and the sort).
-/// So the bar's actions are rung 0 and the rows rungs 1 and 2, and up and
-/// down walk them in order; the grid below is not a rung, since it spans
-/// the width and geometry reaches it from the last row and comes back to
-/// it from the grid. The stop index a rung remembers can name at worst the
-/// control beside the one the remote left. `library_focus_test.dart` walks
-/// every step of it.
+/// **A [TvLadder] over the bar and the filter rows.** The screen went without
+/// one while its controls were a single row spanning the width under the bar.
+/// "The nearest node in that direction" and "the next region down" were then
+/// the same answer, and geometry got it right on its own. They are two rows now
+/// (the types with the sort, and the app's own filters), each left-aligned and
+/// shorter than the width. Nothing under the bar's right-hand buttons is in
+/// their vertical band, so a press down out of the bar re-sorted every node on
+/// the page by distance and landed on the filters row (measured: `Downloaded`,
+/// past the types and the sort). So the bar's actions are rung 0 and the rows
+/// rungs 1 and 2, and up and down walk them in order. The grid below is not a
+/// rung, since it spans the width: geometry reaches it from the last row and
+/// comes back to it from the grid. The stop index a rung remembers can name at
+/// worst the control beside the one the remote left. `library_focus_test.dart`
+/// walks every step of it.
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
@@ -102,15 +101,15 @@ class LibraryScreen extends StatefulWidget {
   /// at the deployed server.
   final DriveFileOpener driveOpener;
 
-  /// How the catalogue is asked when a linked Drive file is matched to a
-  /// title, for the same reason: a widget test answers it with a list rather
-  /// than reaching Cinemeta. This screen owns that pass -- see
-  /// [_LibraryScreenState._matching] -- so the seam is here.
+  /// How the catalogue is asked when a linked Drive file is matched to a title,
+  /// for the same reason: a widget test answers it with a list rather than
+  /// reaching Cinemeta. This screen owns that pass
+  /// ([_LibraryScreenState._matching]), so the seam is here.
   final CatalogueSearch driveSearch;
 
-  /// How Drive is asked what the linked files are called now, for **Reload**
-  /// -- and for the same reason again: the real one goes to the pairing
-  /// service and to Google, and a widget test goes to neither.
+  /// How Drive is asked what the linked files are called now, for **Reload**.
+  /// It is a parameter for the same reason again: the real one goes to the
+  /// pairing service and to Google, and a widget test goes to neither.
   final DriveFileLister driveLister;
 
   /// The initial request: every type, last watched first, page 1.
@@ -141,15 +140,14 @@ class LibraryScreen extends StatefulWidget {
   /// files.
   static const String localLabel = 'Local';
 
-  /// Tooltip of the reload button drawn just before the Remote pill while
-  /// it is on: fetch the linked files again. An icon and not a chip, so
-  /// the pill beside it keeps its one job -- on and off, the way
-  /// Downloaded works -- and the button costs no row of its own. A chip on
-  /// a row under the filters would move the grid every time Remote is
-  /// toggled, and making the pill's second press the reload would take
-  /// away the only way to turn it off. "Reload", not refresh: what it does
-  /// is fetch the list again, and refresh is what a television does sixty
-  /// times a second.
+  /// Tooltip of the reload button drawn just before the Remote pill while it is
+  /// on: fetch the linked files again. An icon and not a chip, so the pill
+  /// beside it keeps its one job (on and off, the way Downloaded works), and
+  /// the button costs no row of its own. A chip on a row under the filters
+  /// would move the grid every time Remote is toggled, and making the pill's
+  /// second press the reload would take away the only way to turn it off.
+  /// "Reload", not refresh: what it does is fetch the list again, and refresh
+  /// is what a television does sixty times a second.
   static const String reloadLabel = 'Reload';
 
   /// The button beside Local while Android lets the app see only the videos
@@ -218,16 +216,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The **Remote** filter is on: the body is narrowed to what has a linked
   /// Drive file, under whatever type and sort the engine has selected.
   ///
-  /// **A filter over the engine's list, the way Downloaded is one.** The
-  /// type pills are not the app's: they come from `selectable.types`, each
-  /// one carries the request that selects it, and pressing one dispatches
-  /// that request verbatim and then re-renders from the `selected` flags the
-  /// engine sends back. The engine has never heard of Google Drive and is
-  /// never going to, so Remote cannot be one of them -- a synthetic entry
-  /// with a sentinel request would need a branch at the dispatch and a
-  /// second, local notion of which entry is current. So it is a
-  /// [FilterChip] on the row under the types, and it narrows what the
-  /// engine answered:
+  /// **A filter over the engine's list, the way Downloaded is one.** The type
+  /// pills are not the app's: they come from `selectable.types`, each one
+  /// carries the request that selects it, and pressing one dispatches that
+  /// request verbatim and then re-renders from the `selected` flags the engine
+  /// sends back. The engine has never heard of Google Drive and is never going
+  /// to, so Remote cannot be one of them. A synthetic entry with a sentinel
+  /// request would need a branch at the dispatch and a second, local notion of
+  /// which entry is current. So it is a [FilterChip] on the row under the
+  /// types, and it narrows what the engine answered:
   ///
   ///  * the engine's cards that have a linked file ([_shown]);
   ///  * the matched titles the engine has no card for, of the selected
@@ -236,11 +233,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ///    since a file with no title has no type to be a movie or a series
   ///    by ([_unmatched]) -- the same as without the filter.
   ///
-  /// It dispatches nothing, and the engine's controls never turn it off: a
-  /// type or a sort pressed under Remote is the same filter over a different
-  /// list -- swapping the whole body for Remote instead of filtering it
-  /// would make this, the one local filter that cannot combine with a type,
-  /// look as if it could.
+  /// It dispatches nothing, and the engine's controls never turn it off: a type
+  /// or a sort pressed under Remote is the same filter over a different list.
+  /// Swapping the whole body for Remote instead of filtering it would make
+  /// this, the one local filter that cannot combine with a type, look as if it
+  /// could.
   ///
   /// A core reload cannot take it away, because it is not in the field:
   /// `selectable` arriving again republishes the engine's pills, and this
@@ -250,12 +247,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   /// Whether the body is filtered down to what is on this device's disk.
   ///
-  /// A filter over the engine's own items and not a body of its own, which
-  /// is what tells it from [_remote]: a downloaded title *is* a library
-  /// title, so it belongs in the engine's list with the rest, while a
-  /// linked Drive file is not one and is merged in beside it. Nothing is
-  /// dispatched for either -- the engine knows nothing about downloads or
-  /// Drive.
+  /// A filter over the engine's own items and not a body of its own, which is
+  /// what tells it from [_remote]: a downloaded title *is* a library title, so
+  /// it belongs in the engine's list with the rest, while a linked Drive file
+  /// is not one and is merged in beside it. Nothing is dispatched for either,
+  /// since the engine knows nothing about downloads or Drive.
   bool _downloadedOnly = false;
 
   /// Whether the body is the videos on this device ([LocalMedia]): the
@@ -263,10 +259,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// card for, and the files nothing matched. The third local filter, and
   /// an alternative to the other two like they are to each other.
   ///
-  /// **The unmatched files are drawn only here**, where the unmatched Drive
-  /// files are drawn in "All" too: a Drive file was linked by hand, and a
-  /// video on this device was not chosen by anybody -- a phone's Download
-  /// folder is not a list of films.
+  /// **The unmatched files are drawn only here**, while the unmatched Drive
+  /// files are drawn in "All" too. A Drive file was linked by hand, and a video
+  /// on this device was not chosen by anybody: a phone's Download folder is not
+  /// a list of films.
   bool _local = false;
 
   /// This device's videos, as the scope last gave them.
@@ -295,13 +291,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// anybody presses Remote, so a film linked and never looked at under
   /// Remote still has its card.
   ///
-  /// **One run, so one notion of "already asked".** [DriveMatchRun] claims
-  /// each file in its own `_asked` set before it awaits, and that is the
-  /// whole of what stops a file being searched for twice; a second run
-  /// beside it would be a second set that knew nothing of the first, and
-  /// two passes walking the same files. So this is the only [DriveMatchRun]
-  /// the app builds, and **Reload** clears this one
-  /// ([DriveMatchRun.askAgain]).
+  /// **One run, so one notion of "already asked".** [DriveMatchRun] claims each
+  /// file in its own `_asked` set before it awaits, and that is the whole of
+  /// what stops a file being searched for twice. A second run beside it would
+  /// be a second set that knew nothing of the first, and two passes walking the
+  /// same files. So this is the only [DriveMatchRun] the app builds, and
+  /// **Reload** clears this one ([DriveMatchRun.askAgain]).
   DriveMatchRun? _matching;
 
   @override
@@ -319,11 +314,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _nextPageRequestedAt = -1;
       client.dispatch(CoreActions.loadLibrary(LibraryScreen.initialRequest));
     }
-    // What is on disk, for the Downloaded pill and the button that cleans
-    // it up. `maybeOf`, not `of`: a screen that can be drawn without a
-    // downloads client -- a widget test, a build with the service off --
-    // answers "nothing is downloaded", which is true and draws neither
-    // control, rather than throwing on the way to a library.
+    // What is on disk, for the Downloaded pill and the button that cleans it
+    // up. `maybeOf`, not `of`: a screen that can be drawn without a downloads
+    // client (a widget test, a build with the service off) answers "nothing is
+    // downloaded", which is true and draws neither control, rather than
+    // throwing on the way to a library.
     final downloadsClient = DownloadsScope.maybeOf(context);
     if (_downloadsClient != downloadsClient) {
       _downloads
@@ -338,14 +333,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ..addListener(_onDownloadsChanged));
     }
     // The Drive account is depended on *here* and not only inside the build
-    // that merges its matches, and that is what makes this method the
-    // driver. [DriveAccountScope] is an [InheritedNotifier], so the
-    // dependency registered here outlives every rebuild: the account
-    // notifying -- a pairing screen linking a file, a Reload renaming one,
-    // a match being written down -- brings this method round again, which
-    // is exactly the list of occasions on which there might be something
-    // new to ask Cinemeta about. Nothing waits for a build to be the trigger
-    // and nothing runs per frame.
+    // that merges its matches, and that is what makes this method the driver.
+    // [DriveAccountScope] is an [InheritedNotifier], so the dependency
+    // registered here outlives every rebuild. The account notifying brings this
+    // method round again: a pairing screen linking a file, a Reload renaming
+    // one, a match being written down. That is exactly the list of occasions on
+    // which there might be something new to ask Cinemeta about. Nothing waits
+    // for a build to be the trigger and nothing runs per frame.
     final drive = DriveAccountScope.maybeOf(context);
     if (_drive != drive) {
       _drive = drive;
@@ -354,10 +348,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : DriveMatchRun(account: drive, search: widget.driveSearch);
     }
     // The filter cannot outlive the pill that works it. A reload that finds
-    // every file gone -- the grant revoked, the files deleted -- takes the
-    // Remote pill with it, and a grid still narrowed to linked files with no
-    // control on screen to widen it again is a page a viewer cannot leave.
-    // The same rule [_onDownloadsChanged] keeps for the other local filter.
+    // every file gone (the grant revoked, the files deleted) takes the Remote
+    // pill with it. A grid still narrowed to linked files with no control on
+    // screen to widen it again is a page a viewer cannot leave. The same rule
+    // [_onDownloadsChanged] keeps for the other local filter.
     if (_remote && (drive?.files.entries.isEmpty ?? true)) {
       _remote = false;
     }
@@ -373,11 +367,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ///
   /// **This is where a lost pairing gets found.** A finished pairing sits on
   /// the service for about ten minutes and is handed over exactly once, to
-  /// whoever asks; the id of one that has not been collected is written down
-  /// (`PrefsClient.drivePendingSessionKey`), so if the app is killed, or the
-  /// network drops at the wrong second, the next library asks for it.
-  /// Without this, a Google sign-in and consent that already produced a
-  /// list of files is lost with no error anywhere, because nothing failed.
+  /// whoever asks. The id of one that has not been collected is written down
+  /// (`PrefsClient.drivePendingSessionKey`). So if the app is killed, or the
+  /// network drops at the wrong second, the next library asks for it. Without
+  /// this, a Google sign-in and consent that already produced a list of files
+  /// is lost with no error anywhere, because nothing failed.
   ///
   /// Nothing waits for it and nothing is drawn from it: the files simply
   /// appear, which is what the viewer expected when they picked them.
@@ -392,14 +386,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Asks about every linked file that has no match yet, without being
   /// waited for.
   ///
-  /// `unawaited` and sequential, because the grid is not allowed to wait on
-  /// a catalogue: it draws the engine's own cards, and a linked file as its
-  /// raw name, long before Cinemeta has answered about anybody's Drive.
-  /// Each answer is written to the account, which notifies, which redraws
-  /// the one card it was about -- and brings [didChangeDependencies] round
-  /// again,
-  /// where a pass with nothing left to ask about is a walk over the files
-  /// and no request at all.
+  /// `unawaited` and sequential, because the grid is not allowed to wait on a
+  /// catalogue: it draws the engine's own cards, and a linked file as its raw
+  /// name, long before Cinemeta has answered about anybody's Drive. Each answer
+  /// is written to the account. Its notification redraws the one card it was
+  /// about, and brings [didChangeDependencies] round again. There a pass with
+  /// nothing left to ask about is a walk over the files and no request at all.
   void _matchLinkedFiles() {
     final matching = _matching;
     if (matching != null) unawaited(matching.run());
@@ -421,9 +413,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// screen draws about downloads are derived from that list, and one of
   /// them can appear or vanish on it, so the row is rebuilt.
   ///
-  /// Only when an entry came or went. The feed ticks about once a second
-  /// while anything is arriving, and a tick moves bytes -- nothing this
-  /// screen draws -- so it rebuilds nothing.
+  /// Only when an entry came or went. The feed ticks about once a second while
+  /// anything is arriving, and a tick moves bytes, which this screen does not
+  /// draw, so it rebuilds nothing.
   void _onDownloadsChanged() {
     if (!mounted) return;
     final items = _downloads?.registry.items ?? const {};
@@ -476,8 +468,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  /// Turning Local on is also when the device is asked: a scan, and on
-  /// Android the permission the first time -- here, where the viewer asked
+  /// Turning Local on is also when the device is asked: a scan, and on Android
+  /// the permission the first time. That happens here, where the viewer asked
   /// to see their videos, and not at start-up.
   void _showLocal({required bool local}) {
     if (_local == local) return;
@@ -516,13 +508,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Asks Drive what the linked files are called now, and says what came of
   /// it in one line.
   ///
-  /// **Every outcome is a sentence and none of them is a state.** A reload
-  /// that reconciled nothing, one that could not reach Google, and one that
-  /// found the grant revoked are all a snack bar -- the same register as a
-  /// file that would not play ([driveFailureMessage]) -- because there is
-  /// nothing on this screen for a viewer to clear, retry or dismiss. The
-  /// one that says "nothing has changed" is not padding: a button that
-  /// answers with silence is a button pressed again.
+  /// **Every outcome is a sentence and none of them is a state.** A reload that
+  /// reconciled nothing, one that could not reach Google, and one that found
+  /// the grant revoked are all a snack bar, the same register as a file that
+  /// would not play ([driveFailureMessage]). There is nothing on this screen
+  /// for a viewer to clear, retry or dismiss. The one that says "nothing has
+  /// changed" is not padding: a button that answers with silence is a button
+  /// pressed again.
   ///
   /// No scope above this is the same picture as a device nobody has paired.
   /// It is a build of the app that cannot link anything, so the line it
@@ -548,12 +540,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // Only a whole listing counts: a refusal changed nothing, so there is
     // nothing new for the matching pass to be told about either.
     //
-    // Whatever the reload renamed has already lost its match and will be
-    // asked about on its own; [DriveMatchRun.askAgain] is the other half,
-    // the files that matched nothing and kept their names, which the run
-    // would otherwise remember as hopeless for the rest of the session.
-    // Said straight to the run, because the run is this screen's -- there
-    // is no count handed down to a view to mean this.
+    // Whatever the reload renamed has already lost its match and will be asked
+    // about on its own. [DriveMatchRun.askAgain] is the other half: the files
+    // that matched nothing and kept their names, which the run would otherwise
+    // remember as hopeless for the rest of the session. It is said straight to
+    // the run, because the run is this screen's. There is no count handed down
+    // to a view to mean this.
     if (outcome is DriveReloadDone) {
       _matching?.askAgain();
       _matchLinkedFiles();
@@ -567,13 +559,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   /// Asks for the engine's next page while a pill narrows the grid.
   ///
-  /// **A narrowed grid cannot page by scrolling.** Remote, Local and
-  /// Downloaded keep a few of the engine's cards, which fit on one screen,
-  /// so [_onScroll] never fires -- and the merged cards ([_appended],
-  /// [_kept]) wait for the last page, so a matched title the library does
-  /// not hold never appeared under its own pill until something else had
-  /// paged the library through. The pages are the engine's own, cumulative
-  /// and cheap; one is asked for per length, as [_onScroll] asks.
+  /// **A narrowed grid cannot page by scrolling.** Remote, Local and Downloaded
+  /// keep a few of the engine's cards, which fit on one screen, so [_onScroll]
+  /// never fires. The merged cards ([_appended], [_kept]) wait for the last
+  /// page, so a matched title the library does not hold never appeared under
+  /// its own pill until something else had paged the library through. The pages
+  /// are the engine's own, cumulative and cheap. One is asked for per length,
+  /// as [_onScroll] asks.
   void _pageThroughUnderAPill(LibraryState? state) {
     if (state == null || !state.isLoaded || !state.hasNextPage) return;
     if (!_remote && !_local && !_downloadedOnly) return;
@@ -606,10 +598,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   /// What is on this device's disk, for the two controls that are about it.
   ///
-  /// One per screen, from the shared client, which is what the details
-  /// screen and the downloads screen already do. The engine knows nothing
-  /// about downloads -- they are this device's, not the account's -- so
-  /// there is nowhere else this could come from.
+  /// One per screen, from the shared client, which is what the details screen
+  /// and the downloads screen already do. The engine knows nothing about
+  /// downloads, which are this device's and not the account's, so there is
+  /// nowhere else this could come from.
   DownloadsController? _downloads;
   DownloadsClient? _downloadsClient;
 
@@ -621,7 +613,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Whether anything is on disk at all, finished or still arriving.
   ///
   /// **In progress counts.** A download that is still running is the one a
-  /// viewer most needs to reach -- to watch it land, or to stop it -- and a
+  /// viewer most needs to reach (to watch it land, or to stop it), and a
   /// control that appeared only once it finished would hide the running one
   /// behind a screen with no way to it.
   bool get _hasDownloads => _downloads?.registry.items.isNotEmpty ?? false;
@@ -629,9 +621,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Whether [metaId] is one of them.
   bool _isDownloaded(String metaId) => _downloadedMeta.contains(metaId);
 
-  /// The details screen for a linked file's [match], reached the way a
-  /// search result reaches it: the type, the meta id and -- for an episode
-  /// -- the video id, and no flag for the details screen to read.
+  /// The details screen for a linked file's [match], reached the way a search
+  /// result reaches it: the type, the meta id, the video id for an episode, and
+  /// no flag for the details screen to read.
   void _openDriveMatch(LinkedDriveMatch match) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -695,10 +687,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  /// Takes every linked Drive file matched to [match]'s title off Remote,
-  /// after asking, with an undo -- the long press of a merged card, which
-  /// is the only way off the list a file that matched has. The files stay
-  /// in Drive, and picking them again links them again.
+  /// Takes every linked Drive file matched to [match]'s title off Remote, after
+  /// asking, with an undo. This is the long press of a merged card, the only
+  /// way off the list for a file that matched. The files stay in Drive, and
+  /// picking them again links them again.
   Future<void> _removeRemoteTitle(LinkedDriveMatch match) async {
     final account = _drive;
     if (account == null) return;
@@ -788,13 +780,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The matched linked files that belong in the body being drawn, after the
   /// engine's own items.
   ///
-  /// **A merge of the list, and nothing else.** The engine answers with a
-  /// page of cards; each matched linked file asks whether the card it
-  /// belongs to is among them, and only the ones with no card there are
-  /// drawn. Nothing is dispatched, nothing is written to the engine's
-  /// library, and [LibrarySelectable.types] is untouched -- so there is no
-  /// second opinion anywhere about which option is current, which is the
-  /// one thing an arrangement like this has to avoid.
+  /// **A merge of the list, and nothing else.** The engine answers with a page
+  /// of cards. Each matched linked file asks whether the card it belongs to is
+  /// among them, and only the ones with no card there are drawn. Nothing is
+  /// dispatched, nothing is written to the engine's library, and
+  /// [LibrarySelectable.types] is untouched. So there is no second opinion
+  /// anywhere about which option is current, which is the one thing an
+  /// arrangement like this has to avoid.
   ///
   /// [LinkedDriveFiles.unlistedMatches] holds the rule: the card and not the
   /// file, one card per title, and the engine's own `selected.request.type`
@@ -809,16 +801,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// matched title whose card [_shown] kept is not added twice, and one the
   /// engine has no card for is added under its own type.
   ///
-  /// **What a merged card does not get** is everything the engine derives
-  /// from its own library: no continue-watching row, no notifications, no
-  /// place in a sync, and none of the library item's long-press actions --
-  /// "remove from library" on a title the library does not hold is an offer
-  /// that cannot be kept. A Drive match's long press is "Remove from Remote"
-  /// instead ([_removeRemoteTitle]), which forgets the linked files.
-  /// That is the accepted price of not writing, and the alternative was
-  /// worse: a write syncs to a Stremio account and puts a title on a phone
-  /// that cannot play it, and makes "remove from library" and "unlink" two
-  /// acts a viewer expects to be one.
+  /// **What a merged card does not get** is everything the engine derives from
+  /// its own library: no continue-watching row, no notifications, no place in a
+  /// sync, and none of the library item's long-press actions, since "remove
+  /// from library" on a title the library does not hold is an offer that cannot
+  /// be kept. A Drive match's long press is "Remove from Remote" instead
+  /// ([_removeRemoteTitle]), which forgets the linked files. That is the
+  /// accepted price of not writing, and the alternative was worse: a write
+  /// syncs to a Stremio account and puts a title on a phone that cannot play
+  /// it, and makes "remove from library" and "unlink" two acts a viewer expects
+  /// to be one.
   ///
   /// [context] is the one being built rather than the screen's own, so that
   /// the [DriveAccountScope] dependency is registered where it is read: the
@@ -838,11 +830,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // coming, and one appended now would be drawn twice when that page
     // arrives. This is drawn after the last page anyway.
     if (state.hasNextPage) return const [];
-    // Downloaded is a filter on what is on this device, and a linked file
-    // is by definition not: a matched title with no download has no card
-    // under it, and one with a download is already in the grid. Without
-    // this the pill narrowed the engine's list and this merge put every
-    // matched remote title straight back -- Downloaded read as Remote.
+    // Downloaded is a filter on what is on this device, and a linked file is by
+    // definition not: a matched title with no download has no card under it,
+    // and one with a download is already in the grid. Without this the pill
+    // narrowed the engine's list and this merge put every matched remote title
+    // straight back. Downloaded read as Remote.
     if (_downloadedOnly) return const [];
     // What is *drawn*, not what the engine sent: under Remote the grid is
     // already narrowed to titles that have a linked file, so a match whose
@@ -853,9 +845,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       for (final view in kept) view.metaId,
     };
     final type = state.selected!.type;
-    // Drive's matches, then this device's -- each only where its own pill
-    // or no pill is on. A build that cannot link anything has nothing of
-    // the one kind to merge, which is not a failure to report.
+    // Drive's matches, then this device's, each only where its own pill or no
+    // pill is on. A build that cannot link anything has nothing of the one kind
+    // to merge, which is not a failure to report.
     final drive = _local
         ? null
         : DriveAccountScope.maybeOf(context)?.files
@@ -1069,11 +1061,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The engine's items as this screen draws them: all of them, or only
   /// the ones this device has on disk.
   ///
-  /// The walk is over the page the engine has already handed over, not over
-  /// a library -- the engine pages as the grid is scrolled -- so this costs
-  /// a pass over what is in memory and nothing more. There is no way to ask
-  /// the engine for it: downloads are this device's and the engine has
-  /// never heard of them.
+  /// The walk is over the page the engine has already handed over, not over a
+  /// library (the engine pages as the grid is scrolled), so this costs a pass
+  /// over what is in memory and nothing more. There is no way to ask the engine
+  /// for it: downloads are this device's and the engine has never heard of
+  /// them.
   List<LibraryItemView> _shown(LibraryState state) {
     if (_downloadedOnly) {
       return [
@@ -1136,19 +1128,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The downloaded titles the grid has no card for, one card per title, of
   /// the engine's selected type.
   ///
-  /// **A title with a source on this device is in the library**, whether or
-  /// not anybody added it: the player's "keep whole file" pins a download
-  /// without adding the title, and removing a title -- here or on another
-  /// device -- leaves its download in place. Without this such a film is on
-  /// disk and reachable only from the Downloads screen. It is a merge of the
-  /// list, like [_appended] and for the same reasons: nothing is written to
-  /// the engine's library, so nothing syncs to an account.
+  /// **A title with a source on this device is in the library**, whether or not
+  /// anybody added it: the player's "keep whole file" pins a download without
+  /// adding the title, and removing a title (here or on another device) leaves
+  /// its download in place. Without this such a film is on disk and reachable
+  /// only from the Downloads screen. It is a merge of the list, like
+  /// [_appended] and for the same reasons: nothing is written to the engine's
+  /// library, so nothing syncs to an account.
   ///
-  /// Not under Remote, which is the files in Drive. Only once the engine has
-  /// no page left to send: a downloaded title in the library but on a page
-  /// not loaded yet has a card coming, and one appended now would be drawn
-  /// twice when that page arrives -- the grid is scrolled to its end by the
-  /// time this matters anyway, since this is drawn after the last page.
+  /// Not under Remote, which is the files in Drive. Only once the engine has no
+  /// page left to send: a downloaded title in the library but on a page not
+  /// loaded yet has a card coming, and one appended now would be drawn twice
+  /// when that page arrives. The grid is scrolled to its end by the time this
+  /// matters anyway, since this is drawn after the last page.
   List<DownloadView> _kept(LibraryState? state, List<LibraryItemView> shown) {
     if (state == null || !state.isLoaded || _remote || _local) {
       return const [];
@@ -1164,9 +1156,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
-  /// A downloaded title with no card of its own, pressed: its details page
-  /// when the download kept the title's meta, which is what that page is
-  /// drawn from offline; played straight off the device when it did not,
+  /// A downloaded title with no card of its own, pressed. It opens its details
+  /// page when the download kept the title's meta, which is what that page is
+  /// drawn from offline. It is played straight off the device when it did not,
   /// since a page about a title nothing describes would be empty.
   Future<void> _openKept(DownloadView view) async {
     if (view.meta != null) {
@@ -1186,14 +1178,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The linked files nothing matched, which have no title to filter by and
   /// so have no card of their own anywhere else.
   ///
-  /// Drawn in the library like every other linked file, under Remote or
-  /// not -- a file with a source in Drive is in the library -- but not under
-  /// Downloaded, which is what is on this device. They are drawn as
-  /// themselves -- the raw name, no poster -- because that is all that is
-  /// known about them, and pressing one plays it: there is no details page
-  /// to send anybody to. Without this a file whose name Cinemeta cannot
-  /// read would be linked, would have cost a grant, and would be reachable
-  /// from nowhere in the app.
+  /// Drawn in the library like every other linked file, under Remote or not,
+  /// since a file with a source in Drive is in the library. Not under
+  /// Downloaded, which is what is on this device. They are drawn as themselves
+  /// (the raw name, no poster), because that is all that is known about them,
+  /// and pressing one plays it: there is no details page to send anybody to.
+  /// Without this a file whose name Cinemeta cannot read would be linked, would
+  /// have cost a grant, and would be reachable from nowhere in the app.
   List<LinkedDriveFile> _unmatched(LibraryState state) {
     if (_downloadedOnly || _local) return const [];
     // No title, so no type to be a movie or a series by: drawn under "All"
@@ -1206,8 +1197,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
-  /// The local videos nothing matched: drawn under Local only, and there
-  /// under "All" and "Other" -- no title, so no type -- like Drive's.
+  /// The local videos nothing matched: drawn under Local only, and there under
+  /// "All" and "Other" (no title, so no type), like Drive's.
   List<LocalMediaFile> _unmatchedLocal(LibraryState state) {
     if (!_local) return const [];
     final type = state.selected?.type;
@@ -1218,11 +1209,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ];
   }
 
-  /// The engine's items, then [appended] -- one lazy grid and not two, so
-  /// that merging a card does not cost a page of tiles that nobody has
-  /// scrolled to. The count grows by what was appended and the builder
-  /// picks the list by index; nothing walks the engine's items to build
-  /// them.
+  /// The engine's items, then [appended]: one lazy grid and not two, so that
+  /// merging a card does not cost a page of tiles that nobody has scrolled to.
+  /// The count grows by what was appended and the builder picks the list by
+  /// index. Nothing walks the engine's items to build them.
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,
@@ -1283,10 +1273,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 }
                 if (index >= afterKept) {
                   final match = appended[index - afterKept];
-                  // Not the library item's sheet -- every action in it is a
-                  // `Ctx` action about a library item, and this title is not
-                  // one -- but what an unmatched file's card offers: off
-                  // Remote. A match among this device's files has none yet.
+                  // Not the library item's sheet: every action in it is a `Ctx`
+                  // action about a library item, and this title is not one.
+                  // Instead, what an unmatched file's card offers: off Remote.
+                  // A match among this device's files has none yet.
                   final fromDrive =
                       _drive?.files.matching(match.cinemetaId).isNotEmpty ??
                       false;
@@ -1304,8 +1294,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   return LibraryItemTile(
                     item: _cardForDownload(view),
                     onTap: () => unawaited(_openKept(view)),
-                    // Not the library item's sheet -- its actions are about a
-                    // library item, and this is not one -- but the one thing
+                    // Not the library item's sheet, whose actions are about a
+                    // library item, and this is not one. Instead, the one thing
                     // there is to do about a download: delete it.
                     onLongPress: () => unawaited(_deleteKept(view)),
                     memoryId: 'kept-${view.metaId}',
@@ -1346,8 +1336,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   });
 
   /// A downloaded title as its card: the title's own meta when the download
-  /// kept it -- a series download names the episode, the card is the show
-  /// -- and the row's own name and poster when it did not.
+  /// kept it (a series download names the episode, but the card is the show),
+  /// and the row's own name and poster when it did not.
   static LibraryItemView _cardForDownload(DownloadView view) {
     final meta = view.meta;
     final poster = meta?['poster'] as String? ?? view.poster;
@@ -1367,12 +1357,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// second copy of them. The poster is [LinkedDriveMatch.posterUrl], which
   /// is the id and not a stored string.
   ///
-  /// **What is deliberately absent is everything that would be invented.**
-  /// No `state`: no progress bar, no watched mark, no notification badge and
-  /// no episode caption -- the card is the *show*, and three linked episodes
-  /// of it are one card, so naming one of them under the poster would be a
-  /// claim about the card that the card cannot make. The press still opens
-  /// the episode, because that is what the file is.
+  /// **What is deliberately absent is everything that would be invented.** No
+  /// `state`: no progress bar, no watched mark, no notification badge and no
+  /// episode caption. The card is the *show*, and three linked episodes of it
+  /// are one card, so naming one of them under the poster would be a claim
+  /// about the card that the card cannot make. The press still opens the
+  /// episode, because that is what the file is.
   static LibraryItemView _cardFor(LinkedDriveMatch match) => LibraryItemView({
     '_id': match.cinemetaId,
     'type': match.type,
@@ -1408,15 +1398,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// [LibrarySelectable] draws neither), and the app's own are always there.
 ///
 /// **Two rows, in the order a viewer narrows things down.** The engine's
-/// controls first -- the types, and the sort beside them, wrapping under
-/// them only where the width forces it, so a wide screen spends one line on
-/// the engine's half and a phone two; then the app's own filters, Remote
-/// and Downloaded, with the reload button just before Remote while Remote
-/// is on. One wrapped row holding all of them would make which control a
-/// press lands on depend on how the wrap happens to break at that width --
-/// on a television, where the remote walks the rows, that is a layout that
-/// has to be learned per screen size. A row that has nothing to draw is
-/// left out rather than left empty.
+/// controls come first: the types, and the sort beside them, wrapping under
+/// them only where the width forces it. So a wide screen spends one line on the
+/// engine's half and a phone two. Then come the app's own filters, Remote and
+/// Downloaded, with the reload button just before Remote while Remote is on.
+/// With one wrapped row holding all of them, which control a press lands on
+/// would depend on how the wrap happens to break at that width. On a
+/// television, where the remote walks the rows, that is a layout that has to be
+/// learned per screen size. A row that has nothing to draw is left out rather
+/// than left empty.
 class _FilterRow extends StatelessWidget {
   const _FilterRow({
     required this.selectable,
@@ -1435,11 +1425,11 @@ class _FilterRow extends StatelessWidget {
     this.barButtons,
   });
 
-  /// The app bar's buttons, on a television, which has no app bar here:
-  /// drawn at the right end of the first row, which is then the screen's
-  /// top band -- the types and the sort, at the edge of the overscan band,
-  /// as Discover's types are -- and clear of the status light the shell
-  /// puts at the band's end ([TvDensity.lightRoom]).
+  /// The app bar's buttons on a television, which has no app bar here. They are
+  /// drawn at the right end of the first row, clear of the status light the
+  /// shell puts at the band's end ([TvDensity.lightRoom]). That row is then the
+  /// screen's top band: the types and the sort, at the edge of the overscan
+  /// band, as Discover's types are.
   final Widget? barButtons;
 
   /// Opens the system's picker for more videos; null while there is no
@@ -1452,8 +1442,8 @@ class _FilterRow extends StatelessWidget {
 
   final LibrarySelectable selectable;
 
-  /// The local option is the one showing, so none of the engine's is drawn
-  /// as current -- without anything having been dispatched to make that so.
+  /// The local option is the one showing, so none of the engine's is drawn as
+  /// current, without anything having been dispatched to make that so.
   final bool remote;
 
   final ValueChanged<LibraryRequest> onSelect;
@@ -1528,11 +1518,11 @@ class _FilterRow extends StatelessWidget {
     );
     final rows = <Widget>[
       if (barButtons != null)
-        // The top band, one rung: the engine's controls, then the bar's
-        // buttons at its right end. Nothing is above it, and an up press
-        // there stays: left to directional traversal, up from the buttons
-        // at its end found nothing above, gave up to the shell's scope,
-        // and came back down on the row under the band.
+        // The top band, one rung: the engine's controls, then the bar's buttons
+        // at its right end. Nothing is above it, and an up press there stays.
+        // Left to directional traversal, up from the buttons at its end found
+        // nothing above, gave up to the shell's scope, and came back down on
+        // the row under the band.
         Focus(
           canRequestFocus: false,
           skipTraversal: true,
@@ -1576,11 +1566,11 @@ class _FilterRow extends StatelessWidget {
             // pill keeps its one job. Its order puts it first on the rung,
             // where it is drawn.
             //
-            // Keyed, all three: the button is inserted *in front of* the
-            // pill the moment the pill is selected, and unkeyed siblings of
-            // one type are matched by position -- the pill's element went to
-            // the button, the pill was built afresh, and the focus a remote
-            // had just used to select it went with the old one, to "All".
+            // Keyed, all three: the button is inserted *in front of* the pill
+            // the moment the pill is selected, and unkeyed siblings of one type
+            // are matched by position. Unkeyed, the pill's element went to the
+            // button, the pill was built afresh, and the focus a remote had
+            // just used to select it went with the old one, to "All".
             if (hasRemote && remote)
               FocusTraversalOrder(
                 key: const ValueKey('reload'),
@@ -1632,12 +1622,12 @@ class _FilterRow extends StatelessWidget {
                   ),
                 ),
               ),
-            // A pill, like Remote, and for the same reason: it says what
-            // the body is showing. The way to the downloads screen is an
-            // icon in the app bar instead: a chip that also navigated there
-            // would make one control mean two things -- "show me these" and
-            // "let me delete these" -- and would leave Remote and Downloaded
-            // looking alike while behaving differently.
+            // A pill, like Remote, and for the same reason: it says what the
+            // body is showing. The way to the downloads screen is an icon in
+            // the app bar instead. A chip that also navigated there would make
+            // one control mean two things ("show me these" and "let me delete
+            // these"), and would leave Remote and Downloaded looking alike
+            // while behaving differently.
             if (hasDownloads)
               FocusTraversalOrder(
                 key: const ValueKey('downloaded'),
@@ -1663,10 +1653,10 @@ class _FilterRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Each row is a rung of the screen's ladder, in this order, so a
-          // press down out of the bar walks them one at a time on a
-          // television (see [LibraryScreen]'s class comment); off one, a
-          // [TvLadderRow] is its child and nothing else. Levels count from
-          // 1 and skip nothing: a row that is not drawn is not registered.
+          // press down out of the bar walks them one at a time on a television
+          // (see [LibraryScreen]'s class comment). Off one, a [TvLadderRow] is
+          // its child and nothing else. Levels count from 1 and skip nothing: a
+          // row that is not drawn is not registered.
           for (final (index, row) in rows.indexed)
             Padding(
               padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
@@ -1781,9 +1771,9 @@ class _EmptyFilter extends StatelessWidget {
   );
 }
 
-/// A local filter -- Remote or Downloaded -- that left nothing under the
-/// engine's current type. Not [_EmptyFilter]'s "No movies in your library":
-/// the library may be full of them, just none linked or none on this device.
+/// A local filter (Remote or Downloaded) that left nothing under the engine's
+/// current type. Not [_EmptyFilter]'s "No movies in your library": the library
+/// may be full of them, just none linked or none on this device.
 class _EmptyLocal extends StatelessWidget {
   const _EmptyLocal({required this.type, required this.remote});
 
@@ -1813,8 +1803,8 @@ class _EmptyLocal extends StatelessWidget {
   );
 }
 
-/// What Local shows with no video to draw: why, and the one thing that
-/// would change it -- the permission on Android, a folder on a desktop.
+/// What Local shows with no video to draw: why, and the one thing that would
+/// change it (the permission on Android, a folder on a desktop).
 class _LocalEmpty extends StatelessWidget {
   const _LocalEmpty({required this.media, required this.type});
 
@@ -1906,12 +1896,11 @@ class _EmptyLibrary extends StatelessWidget {
 /// How a linked file gets a title, said where the linked files are.
 ///
 /// Worth its place because the answer is not guessable: nothing about a row
-/// suggests that the *name in Drive* is what was looked up, or that renaming
-/// it and pressing reload is how to try again. The examples are shown rather
-/// than described -- somebody skimming copies one and does not read the
-/// sentence -- and `drive_match_test.dart` walks both, so a parser change
-/// that stopped either parsing fails there rather than leaving this telling
-/// a lie.
+/// suggests that the *name in Drive* is what was looked up, or that renaming it
+/// and pressing reload is how to try again. The examples are shown rather than
+/// described, because somebody skimming copies one and does not read the
+/// sentence. `drive_match_test.dart` walks both, so a parser change that
+/// stopped either parsing fails there rather than leaving this telling a lie.
 class _NamingNote extends StatelessWidget {
   const _NamingNote();
 

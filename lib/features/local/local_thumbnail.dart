@@ -9,10 +9,10 @@ import 'local_media.dart';
 /// source's [LocalMediaSource.thumbnail] answers, decoded.
 ///
 /// **Asked for, not stored.** Android keeps a thumbnail of every video it
-/// indexes, so a card asks for it each time it is decoded and the image
-/// cache holds it while it is on screen; nothing of it is written by this
-/// app. A source with no thumbnails (a desktop, today) answers null, and
-/// the card falls back to its icon as it would for a missing poster.
+/// indexes, so a card asks for it each time it is decoded, and the image cache
+/// holds it while it is on screen. Nothing of it is written by this app. A
+/// source with no thumbnails (a desktop, today) answers null, and the card
+/// falls back to its icon as it would for a missing poster.
 @immutable
 class LocalThumbnail extends ImageProvider<LocalThumbnail> {
   const LocalThumbnail(this.uri, {required this.source});

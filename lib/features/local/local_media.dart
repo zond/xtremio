@@ -193,9 +193,9 @@ class LocalMedia extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Asks for access again whatever it is now -- with only picked videos
-  /// allowed, that is the system's picker, which is how more are chosen --
-  /// and then looks again.
+  /// Asks for access again whatever it is now, and then looks again. With only
+  /// picked videos allowed, that is the system's picker, which is how more are
+  /// chosen.
   Future<void> chooseMore() async {
     _setAccess(await _safely(source.requestAccess, _access));
     await refresh();

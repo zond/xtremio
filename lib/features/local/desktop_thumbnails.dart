@@ -15,9 +15,9 @@ typedef FrameGrabber = Future<Uint8List?> Function(String path, int size);
 /// disk, since a desktop has no system thumbnailer the app can ask the way
 /// Android's media index is asked.
 ///
-/// **One at a time.** A frame costs a file opened and a frame decoded -- a
-/// second or so for a large film -- so a grid of cards asks in turn, and a
-/// card scrolled past has usually been answered by the time it comes back.
+/// **One at a time.** A frame costs a file opened and a frame decoded (a second
+/// or so for a large film), so a grid of cards asks in turn, and a card
+/// scrolled past has usually been answered by the time it comes back.
 ///
 /// **Kept by what the file is.** The cache name is the path, the file's
 /// modification time and its length, hashed: a file replaced under the same
@@ -92,10 +92,10 @@ class DesktopThumbnails {
 /// [FrameGrabber] over a hidden, muted libmpv player, made on first use and
 /// let go after [idle] with nothing asked.
 ///
-/// A player with no video view has video decoding off (media_kit's
-/// `vid=no`), which is why it is turned on here; the frame is scaled inside
-/// mpv, so what comes back is already card-sized. The start is a tenth of
-/// the way in: past the logos and the black of a film's opening.
+/// A player with no video view has video decoding off (media_kit's `vid=no`),
+/// which is why it is turned on here. The frame is scaled inside mpv, so what
+/// comes back is already card-sized. The start is a tenth of the way in: past
+/// the logos and the black of a film's opening.
 class MpvFrameGrabber {
   MpvFrameGrabber({this.idle = const Duration(seconds: 20)});
 

@@ -11,20 +11,21 @@ const String localSourceLabel = 'Local';
 /// Files addon (`org.stremio.local`), at the loopback address every
 /// Stremio profile gives it.
 ///
-/// **stremio-core keeps progress only for a play with a stream request**,
-/// and the request names the addon a stream came from -- which it writes
-/// down and asks for the next episode's streams. The Local Files addon is
-/// the honest name for "a file on this device"; the Rust side answers it
-/// itself, with no streams (`local_addon_answer` in `rust/src/env.rs`), so
-/// the next-episode fetch costs nothing and finds nothing, and the file for
-/// the next episode is found by the app itself. See `driveStreamRequest` for the same arrangement.
+/// **stremio-core keeps progress only for a play with a stream request**, and
+/// the request names the addon a stream came from. The core writes that addon
+/// down and asks it for the next episode's streams. The Local Files addon is
+/// the honest name for "a file on this device". The Rust side answers it
+/// itself, with no streams (`local_addon_answer` in `rust/src/env.rs`), so the
+/// next-episode fetch costs nothing and finds nothing. The file for the next
+/// episode is found by the app itself. See `driveStreamRequest` for the same
+/// arrangement.
 const String localTrackingManifestUrl =
     'http://127.0.0.1:11470/local-addon/manifest.json';
 
-/// The stream JSON the player is handed for [file]: its own address, which
-/// the player registers with the embedded server as a media id -- a
-/// `file://` one by its path, a `content://` one by a descriptor the
-/// platform opens for it -- and the server reads where it is.
+/// The stream JSON the player is handed for [file]: its own address. The player
+/// registers it with the embedded server as a media id (a `file://` one by its
+/// path, a `content://` one by a descriptor the platform opens for it), and the
+/// server reads it where it is.
 ///
 /// `behaviorHints.filename` carries the extension, which is how a cast
 /// check reads the container off a stream.
