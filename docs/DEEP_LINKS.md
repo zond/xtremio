@@ -1,12 +1,11 @@
 # Installing an addon from the web (`stremio://` links)
 
 What a `stremio://` link may and may not do, and how the scheme is
-registered on each platform. What the app *is* is in the
-[README](../README.md); which addons are worth keeping is in
-[docs/ADDONS.md](ADDONS.md).
+registered on each platform. The [README](../README.md) says what the app
+*is*, and [docs/ADDONS.md](ADDONS.md) which addons are worth keeping.
 
-Addon directories — [stremio-addons.net](https://stremio-addons.net) above
-all — install an addon by taking its own manifest URL and swapping the
+Addon directories, [stremio-addons.net](https://stremio-addons.net) above
+all, install an addon by taking its own manifest URL and swapping the
 scheme: `https://host/manifest.json` becomes `stremio://host/manifest.json`,
 handed to the OS as a link. Xtremio registers that scheme and treats such a
 link as **one thing only: open this addon's details screen**.
@@ -20,16 +19,16 @@ The contract, in full:
   and drops the port and the query doing it).
 - **A link never installs anything.** It lands on the details screen with the
   manifest fetched and the Install button waiting. Visiting a page cannot add
-  an addon; a press does. There is no code path from a link to `InstallAddon`,
+  an addon. A press does. There is no code path from a link to `InstallAddon`,
   and a test pins that.
 - **A link replaces a details screen already open** rather than stacking a
-  second one, because `addon_details` is one field holding one addon, and
+  second one, because `addon_details` is one field holding one addon. It
   does nothing at all when that screen is already showing that addon.
-- **A host-less link (`stremio:///addons`) is dropped** silently: a debug
-  build prints a console line naming only the link's scheme, never the URL —
-  a manifest URL can carry a debrid API key — and a release build says
-  nothing, not even in the Diagnostics log. Those are the official clients'
-  own in-app routes, not manifest URLs.
+- **A host-less link (`stremio:///addons`) is dropped** silently. A debug
+  build prints a console line naming only the link's scheme, never the URL,
+  because a manifest URL can carry a debrid API key. A release build says
+  nothing, not even in the Diagnostics log. Host-less links are the official
+  clients' own in-app routes, not manifest URLs.
 
 One host-less link is sent to this app deliberately, and being dropped is the
 whole of what it does. When a **phone** pairs with a Google Drive, the app
@@ -37,10 +36,10 @@ opens the pick page in the system browser itself, and the page ends by
 navigating to `stremio:///pair` (`drivePairingHandBackLink`,
 `lib/core/drive_pairing.dart`; `HAND_BACK_LINK` in
 `xtremio-xervice/functions/index.js`, which is the end that sends it). The
-platform brings the app forward, `MainActivity` being `singleTop`, and the
-link itself is dropped by the rule above. Nothing navigates, nothing is
+platform brings the app forward, since `MainActivity` is `singleTop`, and
+the link itself is dropped by the rule above. Nothing navigates, nothing is
 dispatched, and nothing changes on a cold start, where `app_links` replays
-the launch link — a hand-back that *did* act would be a dead pairing reopened
+the launch link. A hand-back that *did* act would be a dead pairing reopened
 days later by a link from last week. A television asks for no hand-back, and
 neither does a desktop, where the registration below is installed by hand or
 not at all.
@@ -48,11 +47,11 @@ not at all.
 The pieces: `lib/shell/deep_link.dart` (the source, over
 [`app_links`](https://pub.dev/packages/app_links), and
 `deepLinkAddonManifestUrl`, which decides what a link means), the listener in
-`XtremioApp` next to the lifecycle one, and the app's `navigatorKey` — a link
-arrives from the platform with no `BuildContext` to navigate with. The same
+`XtremioApp` next to the lifecycle one, and the app's `navigatorKey`, since
+a link arrives from the platform with no `BuildContext` to navigate with. The same
 listener takes the one other link the app answers, the Drive pairing
 `https://xtremio-xervice.web.app/link` App Link a television draws as a QR
-code; `drivePairingSessionOfLink` (`lib/core/drive_pairing.dart`) is asked
+code. `drivePairingSessionOfLink` (`lib/core/drive_pairing.dart`) is asked
 first, and only what it turns down is read as a `stremio://` link
 ([ARCHITECTURE.md](ARCHITECTURE.md#google-drive)).
 
@@ -70,17 +69,17 @@ running, `./build/linux/x64/debug/bundle/xtremio
 "stremio://v3-cinemeta.strem.io/manifest.json"` exits immediately without
 starting a second copy, and the running instance pushes the addon-details
 route (a second, different link replaces it). Android was not run against a
-device here; the `adb` line for it is in
+device here. The `adb` line for it is in
 [ANDROID.md](ANDROID.md#manifest-and-platform-channels).
 
-No App Links / Universal Links verification is possible for any of these
-(the Drive pairing link above verifies because its host is this project's): the
-host in a `stremio://` URL is the *addon's* domain, which could be anyone's,
+No App Links / Universal Links verification is possible for any of these.
+(The Drive pairing link above verifies because its host is this project's.)
+The host in a `stremio://` URL is the *addon's* domain, which could be anyone's,
 so there is no domain this app could claim with an `assetlinks.json` or an
 `apple-app-site-association`. A custom scheme is all this can be, which is
 what the official Stremio clients register too.
 
-**On a television**, where a remote cannot work a browser, the route is the
+**On a television** a remote cannot work a browser, so the route is the
 other one on the Addons screen: install the addon on the website *into your
 Stremio account* from a phone or a laptop, then press "Refresh addons from
 account" (`PullAddonsFromAPI`) on the TV.

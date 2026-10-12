@@ -1,23 +1,23 @@
 # Driving the app on a device
 
-How an agent (or a person at a terminal) drives a running Xtremio on an
-Android phone without coordinates or screenshots: Flutter's own driver
-extension, a handful of JSON commands, and the semantics tree as the
-description of what is on screen. Building and installing in general are
-in [ANDROID.md](ANDROID.md).
+An agent, or a person at a terminal, can drive a running Xtremio on an
+Android phone without coordinates or screenshots. It takes Flutter's own
+driver extension, a handful of JSON commands, and the semantics tree as the
+description of what is on screen. [ANDROID.md](ANDROID.md) covers building
+and installing in general.
 
 ## The second app
 
 Debug and profile builds are a separate package, `com.zond.xtremio.debug`,
 labelled "Xtremio debug" (`android/app/build.gradle.kts`). They install
-beside the release app and never over it: a debug-signed build cannot
+beside the release app and never over it. A debug-signed build cannot
 update the release install anyway, and the only other way onto the device
 would be to uninstall the release app and lose its login, settings and
 downloads. The debug app is a fresh install with data of its own: no
 login, no addons beyond the defaults until somebody signs in.
 
-What does not work in it, because it is keyed on the release package and
-certificate rather than on anything in this repository:
+Two things do not work in it, because they are keyed on the release
+package and certificate rather than on anything in this repository:
 
 - the Drive pairing app link (`https://xtremio-xervice.web.app/link`) never
   verifies, so it opens the browser;
@@ -32,19 +32,20 @@ tool/drive-start --stop           # ends the session; the app stays installed
 ```
 
 `tool/drive-start` runs `flutter run --profile -t lib/main_driver.dart` in
-the background and returns once the app's VM service URL is written to
-`build/drive/vmservice-url`; Flutter's output is in
-`build/drive/flutter-run.log` (both under `$XTREMIO_DRIVE_DIR` when it is
-set; `$XTREMIO_DRIVE_DEVICE` stands in for `-d`). It gives up after thirty
-minutes without a URL, or as soon as `flutter run` exits. A profile build compiles the Rust crate as a
-cargo `--release` build (cargokit maps profile to release), so the first one
-takes a few minutes and a rebuild with the crate cached about half a minute.
-A session survives the app being backgrounded; it ends when the app process
-does, and `tool/drive-start` again is the restart.
+the background. It returns once the app's VM service URL is written to
+`build/drive/vmservice-url`, and Flutter's output goes to
+`build/drive/flutter-run.log`. Both are under `$XTREMIO_DRIVE_DIR` when it
+is set, and `$XTREMIO_DRIVE_DEVICE` stands in for `-d`. It gives up after
+thirty minutes without a URL, or as soon as `flutter run` exits. A profile
+build compiles the Rust crate as a cargo `--release` build (cargokit maps
+profile to release). The first one takes a few minutes, and a rebuild with
+the crate cached about half a minute. A session survives the app being
+backgrounded. It ends when the app process does, and running
+`tool/drive-start` again restarts it.
 
 `lib/main_driver.dart` installs the extension and then runs the app's own
 `main`. It and `lib/dev/driver/` are the only code that imports
-`flutter_driver` (a dev dependency); `lib/main.dart` never reaches them, so
+`flutter_driver` (a dev dependency). `lib/main.dart` never reaches them, so
 a release build does not carry the driver.
 
 ## Commands
@@ -70,37 +71,37 @@ tool/drive --json screen                 # the raw answer
 label, value, hint and tooltip, the actions it takes in braces and its rect
 in logical pixels, grouped under the nearest header. Ids are semantics node
 ids: stable while the node lives, so read a fresh `screen` after a
-navigation. A node marked `hidden` is built but scrolled out of view; a
+navigation. A node marked `hidden` is built but scrolled out of view. A
 list builds only what is near the viewport, so scroll (`act <id>
-scrollUp`) to reach rows further down -- or, for a title's sources, read
-them all with `streams`. `act`, `tap`, `go` and `play` wait for the
+scrollUp`) to reach rows further down. For a title's sources, `streams`
+reads them all instead. `act`, `tap`, `go` and `play` wait for the
 screen to settle (at most three seconds, so a spinner does not hang them)
 and answer the new screen. `find`, `tap` and `wait` match every word given,
-ignoring case, against a node's label, value, hint and tooltip; `wait`
+ignoring case, against a node's label, value, hint and tooltip. `wait`
 polls for twenty seconds unless told `--timeout`.
 
 `streams [<text>...] [--not <text>]` lists every source the open details
-screen offers -- or the one under the player -- read from the list's own
-derivation (`SourcesProbe` in `lib/features/details/meta_details_screen.dart`)
-rather than from the rows built near the viewport, so a collapsed section or
-a stream far down a list of a hundred is there too. One line per stream:
+screen offers, or the one under the player. It reads them from the list's
+own derivation (`SourcesProbe` in `lib/features/details/meta_details_screen.dart`)
+rather than from the rows built near the viewport. So a collapsed section,
+or a stream far down a list of a hundred, is there too. One line per stream:
 its index, its kind (torrent, link, YouTube, external ...; `not playable`
 when its row takes no tap), the addon (`Google Drive` and `This device` for
 the viewer's own files), what the row says, what was read out of it
 (resolution, size, seeders, the source, codec and audio tags, the flags)
 and the file the addon names, then `also from` and the other addons when
 the row stands for the same stream from several. Filter words work as
-`find`'s and keep the unfiltered indices. Before the list there is a note
-when there is nothing to list yet: the title not loaded, no episode picked,
-or an episode picked whose streams have not come back. It never prints a stream's URL, info hash or headers:
-addon and debrid URLs carry keys, and a link an addon wrote into its text
-is cut to its origin as a log line's is. While addons are still answering
-it says which, and the list can still grow and its numbers shift; list again
-before `play`.
+`find`'s and keep the unfiltered indices. When there is nothing to list
+yet, a note says why: the title not loaded, no episode picked, or an
+episode picked whose streams have not come back. It never prints a
+stream's URL, info hash or headers, because addon and debrid URLs carry
+keys. A link an addon wrote into its text is cut to its origin, as a log
+line's is. It names the addons still answering. Until they finish, the
+list can grow and its numbers shift, so list again before `play`.
 
 `play <index>` plays that stream through the same dispatcher a tap on its
-row calls, so it needs no scrolling; it refuses a stream whose row takes no
-tap, and refuses while another page (the player) is over the details
+row calls, so it needs no scrolling. It refuses a stream whose row takes
+no tap, and refuses while another page (the player) is over the details
 screen. A worked example: list, narrow to a 1080p x265 DDP release, play
 it:
 
@@ -127,7 +128,7 @@ routes: ... > MetaDetailsScreen > PlayerScreen (player) *
 `test/dev/app_driver_test.dart`, with the listing cut short.)
 
 `seek <h:mm:ss|m:ss|seconds|N%>` moves the player the way its seek bar
-does; the bar itself takes a tap at a place, which semantics cannot aim.
+does. The bar itself takes a tap at a place, and semantics cannot aim one.
 It needs exactly one player screen up, and a percentage needs a known
 duration. It answers `player` as it stands right after, so poll `player`
 for where it lands.
@@ -140,10 +141,10 @@ loaded, whether it is casting or leaving, and the last engine and open
 errors. Every URL in it, and every `log` line unless Verbose logging is on,
 goes through the same redaction as the diagnostics report.
 
-The stats panel's rows -- local playback's, and the cast panel's on the
-casting view ([CASTING.md](CASTING.md#the-stats-panel-while-casting)) --
-are text nodes, so `screen` reads them as they are drawn; `tap "Playback
-stats"` turns the panel on and off.
+The stats panel's rows are text nodes, so `screen` reads them as they are
+drawn. That holds for local playback's panel and for the cast panel on the
+casting view ([CASTING.md](CASTING.md#the-stats-panel-while-casting)).
+`tap "Playback stats"` turns the panel on and off.
 
 The debug app plays as whatever account is signed in to it: a play is
 watch progress on that account, and a long press can mark something
