@@ -173,11 +173,11 @@ void main() {
     final harness = PlayerHarness();
     harness.mediaIds.refusal = const MediaRefusal(
       'torrentRefused',
-      'backend refused the torrent; see server logs',
+      'the torrent engine refused this torrent, and the reason is in the log',
     );
     harness.torrentStats.response = const TorrentStats(
       phase: TorrentPhase.error,
-      error: 'backend refused the torrent; see server logs',
+      error: 'the torrent engine refused this torrent, and the reason is in the log',
     );
     await tester.pumpWidget(harness.build());
     await tester.pump();
@@ -188,7 +188,9 @@ void main() {
     expect(harness.engine.opened, isEmpty);
     expect(find.textContaining('Playback failed'), findsOneWidget);
     expect(
-      find.textContaining('backend refused the torrent; see server logs'),
+      find.textContaining(
+        'the torrent engine refused this torrent, and the reason is in the log',
+      ),
       findsOneWidget,
     );
   });
