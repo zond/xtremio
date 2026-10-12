@@ -828,7 +828,7 @@ same of the next episode, so a downloaded season plays through offline.
 persisted last stream. stremio-core resolves it against the addon's answers
 by source (a `Url` never matches a `Torrent`) and then by binge group, which
 is why `offlineStream` keeps `behaviorHints.bingeGroup`. When the addon sets
-none, "Continue with last source" disappears after an offline play until
+none, "Continue with last stream" disappears after an offline play until
 the title is played from an addon again. The next play then starts with no
 remembered subtitle or audio track.
 
@@ -913,7 +913,7 @@ same `grantSink` as a pairing). It then lists and matches every file the
 grant reaches (`fillSharedDrive`), so the titles have their Drive sources
 before the Library is opened. A device with a grant of its own, or one
 Google refused, never takes the vault's. Only a pairing writes the vault,
-so **Forget my Drive grants everywhere** (Settings, `DELETE`) stays
+so **Forget my Drive access everywhere** (Settings, `DELETE`) stays
 forgotten. It then points at myaccount.google.com/permissions, which is
 where the grant itself is revoked. Tests: `test/core/drive_vault_test.dart`,
 `test/features/drive_shared_grant_test.dart`, `test/app_xervice_test.dart`.

@@ -61,7 +61,7 @@ mpv is reading the bytes.
   beyond Main 10 (12 bits, 4:2:2, 4:4:4). Google lists H.264 as High
   Profile only and HEVC as Main and Main 10 on every receiver that has it
   (`ReceiverTable.deepestPicture`, all 4:2:0). The sentence names it:
-  "This film's video is 10-bit H.264, which no Chromecast can play, and
+  "This film's video is 10-bit H.264. No Chromecast can play it, and
   xtremio can't convert it for casting yet." (`CastRefusal.pictureFormat`).
   **mpv says which by its pixels**, not a profile. The libmpv this app
   ships (v0.36.0-549) names no profile anywhere. Its `video-codec` is the
@@ -155,10 +155,10 @@ as it is and for a rendition alike (a rendition copies the picture):
 - **Beyond what any model with the name decodes: refused up front**, with
   a sentence that says what the best of them plays (`CastRefusal.videoCodec`,
   `CastRefusal.pictureSize`): 'The best of the receivers that call
-  themselves "Chromecast" plays H.264, VP8, HEVC or VP9 video; this film's
+  themselves "Chromecast" plays H.264, VP8, HEVC or VP9 video. This film's
   video is AV1. ...'. For a name of one model, that is anything beyond
   its row: 'Every receiver that calls itself "Google Nest Hub" plays
-  H.264 up to 1280x720 at 60 frames a second; this film's picture is
+  H.264 up to 1280x720 at 60 frames a second. This film's picture is
   1920x1080 at 24 frames a second. ...'.
 
 A size or rate mpv has not reported is not held against a film.
@@ -192,7 +192,7 @@ The player (`_watchCastPicture`) stops the cast **once the receiver says
 PLAYING and its position has moved `PlayerScreen.castNoPictureAfter` (3 s)
 from where it first did, with no picture reported this load**. The film
 resumes here at the receiver's position, and the dialog *No picture on
-<receiver>* says "<receiver> played the sound but showed no picture: it
+<receiver>* says "<receiver> played the sound but showed no picture. It
 cannot show this film's picture (HEVC, 3840x2160). It was sent the film
 repackaged, its sound converted. The film is playing here again." The
 receiver is not sent that codec again this session
@@ -240,7 +240,7 @@ names it and why (the sound is never the reason: it converts):
   "This film's video is VP9, which xtremio can't repackage for casting
   yet.";
 - video the receiver cannot decode (AV1, MPEG-4 Part 2, MPEG-2, VC-1):
-  "This film's video is AV1, which this receiver can't play, and xtremio
+  "This film's video is AV1. This receiver can't play it, and xtremio
   can't convert it for casting yet." (step F4).
 
 The producer catches one thing mpv cannot see while the cast is prepared:
@@ -467,7 +467,7 @@ archive. And it is `CastReady` by mpv's report like any cast. A film that
 needs a rendition is repackaged here, so it is relayed. No listener is started,
 nothing is published, the watchdog has nothing to count, seeks are the
 receiver's, and Stop brings the film back at the receiver's position as
-for any cast. The remote says *Playing directly from the source* under the
+for any cast. The remote says *Playing directly, not through this device* under the
 receiver's name, so a report about a cast says which kind it was. The log
 says "casting the stream straight from its source" and never the link or
 its host.
@@ -590,7 +590,7 @@ source   torrent · 16.0 Mbps · 2 opens · 14 seeks
   model with that name decodes it and `tried` when only some do; what it
   says it is doing; and the picture it reports, or `no picture reported`
   where the platform would report one.
-- `sending`: `from its source, not through this device` for a link handed
+- `sending`: `directly, not through this device` for a link handed
   straight over, `as it is` with the type the receiver is answered with, or
   `rendition (video/mp4)`; the picture and the sound, mpv's word on the
   source's sound (taken when the cast was handed over) beside what the

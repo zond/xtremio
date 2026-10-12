@@ -131,7 +131,7 @@ on the stop it was left on, once that stop has arrived: the same source,
 group pill, episode or header, with its rung and group open. Meanwhile
 the remote waits on the header. A source that is gone gives way to the
 card beside it, then the group pills, then the header. The remote goes to
-the "Continue with last source" card instead when the title is opened from
+the "Continue with last stream" card instead when the title is opened from
 Continue watching. Nothing that arrives after the remote is put down, or
 after the viewer moves it, takes it anywhere. Coming back to the screen,
 from the player or a screen over it, leaves the remote where it was. What
@@ -300,7 +300,7 @@ Each installed addon carries a verdict on how it has been answering
 - **Account**: sign in, create an account, sync, log out; signed in,
   **Forget my likes everywhere** (asks first, then empties the faces on
   xtremio-xervice and on this device, and says if the service could not be
-  reached) and **Forget my Drive grants everywhere** (the copy kept for the
+  reached) and **Forget my Drive access everywhere** (the copy kept for the
   account's other devices; afterwards it points at Google's own permissions
   page, where the grant itself is revoked).
 - **Addons** and **Downloads**: the screens above.
