@@ -7,22 +7,21 @@ import '../../core/core.dart';
 /// Keeps the embedded server's `diagnosticsTrace` equal to
 /// [AppPrefs.verboseDiagnostics], for as long as the app is running.
 ///
-/// The server's half of "Verbose diagnostics": its retention trace -- one
-/// line per file every ten seconds on what its cache decided and why, and
-/// the line on what a file's reads look like -- is behind a setting of its
-/// own, because it is in the server's log filter and nothing else can
-/// reach that. The player's half ([MediaKitEngine.verboseLog]) reads the
-/// same preference directly when a player opens. The app's own half is set
-/// from here, since it has nowhere else to read a preference from: whole
-/// URLs in the log (`DiagnosticsLog.unredacted`).
+/// The server's half of "Verbose diagnostics" is its retention trace: one line
+/// per file every ten seconds on what its cache decided and why, and the line
+/// on what a file's reads look like. It is behind a setting of its own, because
+/// it is in the server's log filter and nothing else can reach that. The
+/// player's half ([MediaKitEngine.verboseLog]) reads the same preference
+/// directly when a player opens. The app's own half, whole URLs in the log
+/// (`DiagnosticsLog.unredacted`), is set from here, since it has nowhere else
+/// to read a preference from.
 ///
-/// One of these for the whole app, built by `XtremioApp`, on the pattern
-/// of `IdleSharingPolicy` and for the same reason: nothing else in the app
-/// writes this key, so the server's belief has one author. It pushes as
-/// soon as it starts -- the server's default is off and so is the
-/// preference's, but a viewer who turned it on has to be heard before the
-/// first pass that would have said something -- and again whenever the
-/// preference moves.
+/// One of these for the whole app, built by `XtremioApp`, on the pattern of
+/// `IdleSharingPolicy` and for the same reason: nothing else in the app writes
+/// this key, so the server's belief has one author. It pushes as soon as it
+/// starts, and again whenever the preference moves. The server's default is off
+/// and so is the preference's, but a viewer who turned it on has to be heard
+/// before the first pass that would have said something.
 class DiagnosticsTraceSync {
   DiagnosticsTraceSync({required this.prefs, required this.server});
 
@@ -32,10 +31,10 @@ class DiagnosticsTraceSync {
   static const String title = 'Verbose logging';
 
   /// What turning it on buys, on the tile: the two logs it opens up, and
-  /// plainly what it costs. Nothing in the report is redacted while it is
-  /// on -- not a URL, not a token, not a password -- because a redacted
-  /// line is the one a problem hides in; so the tile says the report then
-  /// holds credentials, in that word.
+  /// plainly what it costs. Nothing in the report is redacted while it is on
+  /// (not a URL, not a token, not a password), because a redacted line is the
+  /// one a problem hides in. So the tile says the report then holds
+  /// credentials, in that word.
   static const String description =
       'Adds cache, image and player detail to the report and redacts '
       'nothing: while on, the log includes credentials (account keys, '
@@ -85,10 +84,10 @@ class DiagnosticsTraceSync {
     try {
       await server.updateSettings({serverKey: on});
     } catch (error) {
-      // A server that is not up yet, or that refused: not recorded as
-      // sent, so the next change writes it again. Nothing retries on its
-      // own -- the server persists the last value it was told, so the
-      // cost of a lost push is one run at the previous setting.
+      // A server that is not up yet, or that refused: not recorded as sent, so
+      // the next change writes it again. Nothing retries on its own. The server
+      // persists the last value it was told, so the cost of a lost push is one
+      // run at the previous setting.
       if (kDebugMode) debugPrint('diagnostics trace not applied: $error');
       if (_sent == on) _sent = null;
     }

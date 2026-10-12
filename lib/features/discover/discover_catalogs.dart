@@ -31,16 +31,16 @@ final class DiscoverCatalog {
 /// the installed addons' manifests.
 ///
 /// **The same rule stremio-core applies to Discover's own menu**
-/// (`catalog_with_filters::selectable_update`): a catalog is on offer when
-/// it can be opened with nothing typed in -- every required property has
-/// options to start from -- in the order the addons are installed and the
-/// order each manifest lists its catalogs. So a catalog that needs a genre
-/// is here, opened on its first genre, and a search-only one is not.
+/// (`catalog_with_filters::selectable_update`): a catalog is on offer when it
+/// can be opened with nothing typed in, that is, when every required property
+/// has options to start from. Catalogs come in the order the addons are
+/// installed and the order each manifest lists its catalogs. So a catalog that
+/// needs a genre is here, opened on its first genre, and a search-only one is
+/// not.
 ///
-/// Read here rather than off the engine's `selectable` because Discover
-/// has to show the types and a type's catalogs before any catalog is
-/// loaded -- the engine only describes what surrounds the one catalog it
-/// holds.
+/// Read here rather than off the engine's `selectable` because Discover has to
+/// show the types and a type's catalogs before any catalog is loaded. The
+/// engine only describes what surrounds the one catalog it holds.
 final class DiscoverCatalogs {
   const DiscoverCatalogs(this.catalogs);
 
@@ -75,11 +75,11 @@ final class DiscoverCatalogs {
   /// and a second "All" beside the first would say two different things.
   static const String allType = 'all';
 
-  /// The types of [catalogs], each once, in stremio-core's order: the
-  /// known ones by rank (movies, series, channels, TV), then any other
-  /// alphabetically, and `other` last -- `TYPE_PRIORITIES` as
-  /// `compare_with_priorities` applies it, which is the order Discover's
-  /// own type list has.
+  /// The types of [catalogs], each once, in stremio-core's order: the known
+  /// ones by rank (movies, series, channels, TV), then any other
+  /// alphabetically, and `other` last. That is `TYPE_PRIORITIES` as
+  /// `compare_with_priorities` applies it, the order Discover's own type list
+  /// has.
   List<String> get types {
     final seen = <String>{};
     final types = [

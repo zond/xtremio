@@ -15,21 +15,19 @@ import 'discover_catalogs.dart';
 /// Browses the catalogs of the installed addons: all of them as rows, one
 /// type's as rows, or one catalog with its filters as a grid.
 ///
-/// **The tab** ([request] null) is the screen the app opens on: every
-/// catalog's first page as a row ([CatalogRows], on [CoreField.board]),
-/// under a "Continue watching" row. Across the top are
-/// the types, starting with All; choosing one shows the rows of that type.
-/// A type other than All adds a catalog menu, on "Any" -- the rows -- and
-/// choosing a catalog there, or "See all" on a row, opens that catalog as
-/// a grid with its filters beside the menu. Back comes down the same way:
-/// the catalog to its type's rows, a type's rows to All. The rows stay
-/// built under the grid, so coming back finds them where they were.
+/// **The tab** ([request] null) is the screen the app opens on: every catalog's
+/// first page as a row ([CatalogRows], on [CoreField.board]), under a "Continue
+/// watching" row. The types run across the top, starting with All, and choosing
+/// one shows the rows of that type. A type other than All adds a catalog menu,
+/// set to "Any" (the rows). Choosing a catalog there, or "See all" on a row,
+/// opens that catalog as a grid with its filters beside the menu. Back comes
+/// down the same way: the catalog to its type's rows, a type's rows to All. The
+/// rows stay built under the grid, so coming back finds them where they were.
 ///
 /// **A Discover pushed with a [request]** (a genre chip on a title) opens
-/// straight on that catalog and
-/// stays a catalog view: its types and catalogs are the engine's own, and
-/// it never shows rows -- the rows' field is the tab's, and a second screen
-/// loading it would empty the tab's rows when it left.
+/// straight on that catalog and stays a catalog view. Its types and catalogs
+/// are the engine's own, and it never shows rows. The rows' field is the tab's,
+/// and a second screen loading it would empty the tab's rows when it left.
 ///
 /// The catalog is `Load CatalogWithFilters` on the shared `discover`
 /// field. The engine answers with `selectable` (the catalog's filters, the
@@ -39,11 +37,12 @@ import 'discover_catalogs.dart';
 /// scroll. The field is unloaded when the catalog view goes, unless
 /// another Discover screen has loaded it since.
 ///
-/// On a TV the header and the content are separate [FocusTraversalGroup]s,
-/// the tab's header two rungs of a [TvLadder] (types, then menus), and the
-/// posters remember which one had focus for the shell's per-tab memory. A Discover pushed on top of another screen puts focus on its
-/// first poster, since nothing else on it holds any; the Discover tab does
-/// not, so selecting the tab keeps focus on the rail like the other tabs.
+/// On a TV the header and the content are separate [FocusTraversalGroup]s, the
+/// tab's header two rungs of a [TvLadder] (types, then menus), and the posters
+/// remember which one had focus for the shell's per-tab memory. A Discover
+/// pushed on top of another screen puts focus on its first poster, since
+/// nothing else on it holds any. The Discover tab does not, so selecting the
+/// tab keeps focus on the rail like the other tabs.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key, this.request});
 
@@ -130,8 +129,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   DiscoverState parseField(Map<String, dynamic> json) =>
       DiscoverState.fromJson(json);
 
-  /// Its `selected` is this screen's catalog (another screen's, or the
-  /// unloaded field's null, is not -- and nothing is while rows are shown).
+  /// Its `selected` is this screen's catalog. Another screen's is not, nor is
+  /// the unloaded field's null, and nothing is while rows are shown.
   @override
   bool isOwnState(DiscoverState state) {
     final selected = state.selected;
@@ -158,8 +157,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   void _select(ResourceRequest request) => _load(request);
 
-  /// Opens [request]'s catalog from the rows -- the catalog menu, or a
-  /// row's "See all" -- with its type chosen.
+  /// Opens [request]'s catalog from the rows (the catalog menu, or a row's "See
+  /// all"), with its type chosen.
   void _openCatalog(ResourceRequest request) {
     setState(() {
       _type = request.path.type;
@@ -168,9 +167,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (_request == null) ownState = null;
       _load(request);
     });
-    // The field may hold this very catalog already -- another Discover
-    // opened it and has not let it go -- and a `Load` of what is loaded
-    // changes nothing, so no new state would come to say so.
+    // The field may hold this very catalog already, if another Discover opened
+    // it and has not let it go. A `Load` of what is loaded changes nothing, so
+    // no new state would come to say so.
     onFieldChanged();
   }
 
@@ -304,9 +303,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   fit: StackFit.expand,
                   children: [
                     // Kept built under the catalog, so Back finds the rows
-                    // where they were -- out of sight, out of the ticker
-                    // and out of the remote's reach while the catalog is
-                    // up.
+                    // where they were. While the catalog is up they are out of
+                    // sight, out of the ticker and out of the remote's reach.
                     ExcludeFocus(
                       excluding: showsCatalog,
                       child: Offstage(
@@ -569,9 +567,9 @@ class _BrowseHeader extends StatelessWidget {
     ];
     final isTv = DeviceScope.isTv(context);
     // The type's menus: the catalog, and an open catalog's filters. On a
-    // television they are icons on the types' own band, their words in
-    // their tooltips and the choice in force checked in their menus --
-    // five types' pills leave no room for "Catalog: Popular" in 960 dp.
+    // television they are icons on the types' own band, their words in their
+    // tooltips and the choice in force checked in their menus. Five types'
+    // pills leave no room for "Catalog: Popular" in 960 dp.
     final menus = <Widget>[
       if (type != null) ...[
         FilterMenu(
@@ -653,12 +651,11 @@ class _BrowseHeader extends StatelessWidget {
   /// Down past the band is the first row; up is left alone (nothing is
   /// above the band, and directional traversal finds nothing there).
   ///
-  /// The menus sit at the band's right, where the first row -- Continue
-  /// watching, often a tile or two at its left -- may have nothing under
-  /// them, and directional traversal then takes the nearest tile below by
-  /// distance, which is the second row's. So down is the nearest stop of
-  /// the topmost row under the band, wherever the press was made from on
-  /// it.
+  /// The menus sit at the band's right. The first row, Continue watching, is
+  /// often a tile or two at its left and may have nothing under them.
+  /// Directional traversal then takes the nearest tile below by distance, which
+  /// is the second row's. So down is the nearest stop of the topmost row under
+  /// the band, wherever the press was made from on it.
   static bool _pastTheBand(BuildContext context, {required bool up}) {
     if (up) return false;
     final from = FocusManager.instance.primaryFocus;
