@@ -1,37 +1,35 @@
 /// Making addon text safe to lay out.
 ///
 /// A Dart `String` is a sequence of UTF-16 code units, and a code unit in
-/// `D800..DFFF` is only half a character: the two halves of a surrogate
-/// pair spell one code point above the BMP, which is where the emoji
-/// torrent addons write into their names and descriptions live (`👤`
-/// U+1F464, `💾` U+1F4BE). Flutter's text layout refuses a string holding
-/// half of such a pair — `ArgumentError: string is not well-formed UTF-16`
-/// out of `ParagraphBuilder.addText` — and refusing to lay out is not a
-/// small failure: it throws where the row is built, so the release name
-/// renders as `<?>` and the log fills with the same line a hundred times
-/// over.
+/// `D800..DFFF` is only half a character. The two halves of a surrogate pair
+/// spell one code point above the BMP. That is where the emoji torrent addons
+/// write into their names and descriptions live (`👤` U+1F464, `💾` U+1F4BE).
+/// Flutter's text layout refuses a string holding half of such a pair
+/// (`ArgumentError: string is not well-formed UTF-16` out of
+/// `ParagraphBuilder.addText`). Refusing to lay out is not a small failure. It
+/// throws where the row is built, so the release name renders as `<?>` and the
+/// log fills with the same line a hundred times over.
 ///
-/// Nothing in this app cuts a string in half — a row title is handed whole
-/// to a `Text` with `maxLines` and `TextOverflow.ellipsis`, which shortens
-/// the *painted* line and never the string, and every parser here is a
-/// regex over the whole text. So a half character can only arrive already
-/// broken: an addon whose JSON carries a lone `\uD83D` (a title truncated
-/// on its side, a bad transcoding upstream) is a string `jsonDecode`
-/// accepts and the text engine will not draw.
+/// Nothing in this app cuts a string in half. A row title is handed whole to a
+/// `Text` with `maxLines` and `TextOverflow.ellipsis`, which shortens the
+/// *painted* line and never the string, and every parser here is a regex over
+/// the whole text. So a half character can only arrive already broken. An addon
+/// whose JSON carries a lone `\uD83D` (a title truncated on its side, a bad
+/// transcoding upstream) sends a string `jsonDecode` accepts and the text
+/// engine will not draw.
 ///
-/// [wellFormedText] is the guard at that door. It is deliberately at the
-/// boundary where addon text becomes *display* text and nowhere else: the
-/// raw stream JSON `Load Player` takes back is never touched, because what
-/// goes to the engine should be what the addon said.
+/// [wellFormedText] is the guard at that door. It sits deliberately at the
+/// boundary where addon text becomes *display* text, and nowhere else. The raw
+/// stream JSON `Load Player` takes back is never touched, because what goes to
+/// the engine should be what the addon said.
 library;
 
-/// [text] with every unpaired surrogate dropped: a half character is not
-/// something to render, and it is not something a viewer can be shown as
-/// anything but damage.
+/// [text] with every unpaired surrogate dropped. A half character is not
+/// something to render, and a viewer can only be shown it as damage.
 ///
-/// A well-paired surrogate — every emoji an addon writes — is left exactly
-/// as it is, and so is the string object itself when there is nothing to
-/// fix, which is nearly always: this runs on every stream row.
+/// A well-paired surrogate (every emoji an addon writes) is left exactly as it
+/// is. So is the string object itself when there is nothing to fix, which is
+/// nearly always: this runs on every stream row.
 String? wellFormedText(String? text) {
   if (text == null || !_hasBrokenSurrogate(text)) return text;
   final kept = <int>[];

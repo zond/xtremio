@@ -1,25 +1,24 @@
 /// Keeping the device's faces and the account's the same set.
 ///
-/// The faces are the device's first (`AppPrefs.faces`): a press writes
-/// there and the screen answers at once, signed in or not. This copies them
-/// to the account on xtremio-xervice (`PUT /faces`, which merges) and takes
-/// back what the account holds, so a title liked on the phone is liked on
-/// the television. On every change, and whenever the app finds itself
-/// signed in -- at start and at a sign-in.
+/// The faces are the device's first (`AppPrefs.faces`): a press writes there
+/// and the screen answers at once, signed in or not. This copies them to the
+/// account on xtremio-xervice (`PUT /faces`, which merges) and takes back what
+/// the account holds, so a title liked on the phone is liked on the television.
+/// It runs on every change, and whenever the app finds itself signed in: at
+/// start and at a sign-in.
 ///
-/// **A first sync adds, it never replaces.** The service merges what is
-/// sent into what it has, newest per title; a title only the device has
-/// marked survives, and so does one only the account has ([Faces.merged]
-/// here, `mergeFaces` there). The one thing that removes a mark that
-/// another device still holds is [forgetEverywhere], which stamps the
-/// account's `clearedAt` -- every mark older than that is dropped wherever
-/// it is merged next.
+/// **A first sync adds, it never replaces.** The service merges what is sent
+/// into what it has, newest per title. A title only the device has marked
+/// survives, and so does one only the account has ([Faces.merged] here,
+/// `mergeFaces` there). The one thing that removes a mark another device still
+/// holds is [forgetEverywhere]. It stamps the account's `clearedAt`, and every
+/// mark older than that is dropped wherever it is merged next.
 ///
-/// **Only the signed-in account's marks, and nobody's.** Marks are kept
-/// per account on the device ([FacesByAccount]); a sync sends the account's
-/// own and the ones made signed out, which then become the account's --
-/// once: they leave nobody's set as the answer lands. Another account's
-/// marks on this device are never sent.
+/// **Only the signed-in account's marks, and nobody's.** Marks are kept per
+/// account on the device ([FacesByAccount]). A sync sends the account's own and
+/// the ones made signed out. Those then become the account's, once: they leave
+/// nobody's set as the answer lands. Another account's marks on this device are
+/// never sent.
 ///
 /// Signed out or offline is a sync that did not happen, quietly
 /// ([XerviceIdentity]); the next change or the next start tries again.
@@ -104,9 +103,9 @@ class FacesSync {
     );
   }
 
-  /// Forgets every face on the account and on this device. Answers whether
-  /// the account heard it: offline or signed out, nothing is forgotten
-  /// anywhere, so the viewer is not told it was.
+  /// Forgets every face on the account and on this device. Answers whether the
+  /// account heard it. Offline or signed out, nothing is forgotten anywhere, so
+  /// the viewer is not told it was.
   Future<bool> forgetEverywhere() async {
     final owner = prefs.facesOwner;
     if (owner == null) return false;

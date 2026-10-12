@@ -71,8 +71,8 @@ final class RuntimeCoreEvent extends CoreEvent {
   String? get errorSource => _errorSource?['event'] as String?;
 
   /// The `source.args` of an `Error` event: the arguments of the event that
-  /// failed, which for a login can be account details -- read a field of
-  /// them, never log them. Null for any other event.
+  /// failed. For a login these can be account details, so read a field of them
+  /// and never log them. Null for any other event.
   Map<String, dynamic>? get errorSourceArgs {
     final args = _errorSource?['args'];
     return args is Map<String, dynamic> ? args : null;

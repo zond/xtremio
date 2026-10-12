@@ -2,48 +2,46 @@
 /// now (`ServerHandle::stream_numbers`, read over FFI as
 /// `server_stream_numbers`).
 ///
-/// One question, asked with the one thing a client already holds that names
-/// the stream: the URL it handed its player. The URL's shape is what
-/// decides which of the server's two stores answers -- the piece store for
-/// a torrent, the proxy cache for a proxied response -- and a URL neither
-/// holds is no [StreamNumbers] at all rather than an error. That is the
-/// ordinary case for a stream this server never touched: an addon's direct
-/// link, a debrid URL, a file on the device.
+/// One question, asked with the one thing a client already holds that names the
+/// stream: the URL it handed its player. The URL's shape decides which of the
+/// server's two stores answers: the piece store for a torrent, the proxy cache
+/// for a proxied response. A URL neither holds is no [StreamNumbers] at all
+/// rather than an error. That is the ordinary case for a stream this server
+/// never touched: an addon's direct link, a debrid URL, a file on the device.
 ///
-/// **Every absence here is "there is no such number", never zero**, and
-/// every one of them is a row a panel must leave out rather than draw with
-/// a dash: a dash reads as a measured nothing, which is the opposite of
-/// what an absence means. See each field.
+/// **Every absence here is "there is no such number", never zero.** Each one is
+/// a row a panel must leave out rather than draw with a dash. A dash reads as a
+/// measured nothing, which is the opposite of what an absence means. See each
+/// field.
 ///
-/// **Nothing here is stored, on either side.** The server measures each
-/// number when it is asked for -- a listing of the stream's own
-/// directories, a counter read off the torrent's live state -- and keeps
-/// nothing between calls, so nothing in a reading is a claim about a past
-/// the process never saw. At process start there is no playhead in either
-/// store, so there is no window to read: the honest answer for a process
-/// that has watched nothing yet is the absence, and it is the answer this
-/// gives.
+/// **Nothing here is stored, on either side.** The server measures each number
+/// when it is asked for (a listing of the stream's own directories, a counter
+/// read off the torrent's live state) and keeps nothing between calls. So
+/// nothing in a reading is a claim about a past the process never saw. At
+/// process start there is no playhead in either store, so there is no window to
+/// read. The honest answer for a process that has watched nothing yet is the
+/// absence, and that is the answer this gives.
 final class StreamNumbers {
   const StreamNumbers({this.window, this.sharing});
 
-  /// The bytes on the disk unbroken behind and ahead of the playhead, or
-  /// null where no reader has been anywhere inside the stream in this
-  /// process (and, for a proxied stream, where it is not the one being
-  /// played), so there is no playhead to measure from.
+  /// The bytes on the disk unbroken behind and ahead of the playhead. Null
+  /// where no reader has been anywhere inside the stream in this process, and
+  /// for a proxied stream where it is not the one being played, so there is no
+  /// playhead to measure from.
   ///
   /// **Under every cache budget.** A budget that covers the whole file, one
-  /// never published, no cap, or a pin changes how long the run can grow,
-  /// not whether there is one: the row is there for all of them.
+  /// never published, no cap, or a pin changes how long the run can grow, not
+  /// whether there is one. The row is there for all of them.
   final CacheWindow? window;
 
-  /// The sharing numbers: torrents only. Null for a proxied response,
-  /// which is not seeded -- there is no swarm, so there is no committed
-  /// set and no ratio, and the row is absent rather than a line of zeroes.
+  /// The sharing numbers: torrents only. Null for a proxied response, which is
+  /// not seeded. There is no swarm, so there is no committed set and no ratio,
+  /// and the row is absent rather than a line of zeroes.
   final SharingNumbers? sharing;
 
-  /// The numbers in a `stream-numbers.json` body, or null for the `null`
-  /// the server answers for a stream it is not holding -- and for anything
-  /// malformed, which says the same thing: no rows.
+  /// The numbers in a `stream-numbers.json` body. Null for the `null` the
+  /// server answers for a stream it is not holding, and for anything malformed,
+  /// which says the same thing: no rows.
   static StreamNumbers? fromJson(Object? value) {
     if (value is! Map) return null;
     return StreamNumbers(
@@ -52,10 +50,9 @@ final class StreamNumbers {
     );
   }
 
-  /// Whether there is anything at all to draw. A [StreamNumbers] with
-  /// neither half is what a server that holds the stream but can say
-  /// nothing measurable about it answers, and it draws exactly like no
-  /// answer.
+  /// Whether there is anything at all to draw. A server that holds the stream
+  /// but can say nothing measurable about it answers a [StreamNumbers] with
+  /// neither half, and that draws exactly like no answer.
   bool get isEmpty => window == null && sharing == null;
 
   @override
@@ -75,13 +72,13 @@ final class StreamNumbers {
 /// **unbroken** run of the stream on the disk that the playhead stands in,
 /// split at the playhead.
 ///
-/// A live reading of a store and nothing else -- the piece store counting
-/// complete pieces of the file, the proxy cache counting chunks of the
-/// entity -- and the first one missing on either side ends that half: bytes
-/// past a hole are not in hand. It is **not the retention policy's window**
-/// and not the extent the policy intends to fill: [aheadBytes] is
-/// read-ahead that has arrived, and a stream that has fetched nothing yet
-/// reads zero rather than the size of the window it is going to have.
+/// It is a live reading of a store and nothing else: the piece store counting
+/// complete pieces of the file, the proxy cache counting chunks of the entity.
+/// The first missing one on either side ends that half, since bytes past a hole
+/// are not in hand. It is **not the retention policy's window**, and not the
+/// extent the policy intends to fill. [aheadBytes] is read-ahead that has
+/// arrived, and a stream that has fetched nothing yet reads zero rather than
+/// the size of the window it is going to have.
 final class CacheWindow {
   const CacheWindow({
     required this.behindBytes,
@@ -101,21 +98,21 @@ final class CacheWindow {
   /// How long the run behind lasts the stream that owns it, as the server
   /// measured it: that head's own bytes over that head's own rate.
   ///
-  /// Null where the stream is not consuming -- mpv's read of a Matroska
-  /// file's cues sits at the tail and takes nothing -- which is not "no
-  /// runway" but the opposite, and is why this is never computed here from
-  /// a video bitrate. A subtitle track's seconds have nothing to do with
-  /// how many bits the picture takes.
+  /// Null where the stream is not consuming, as with mpv's read of a Matroska
+  /// file's cues, which sits at the tail and takes nothing. That is not "no
+  /// runway" but the opposite, and it is why this is never computed here from a
+  /// video bitrate. A subtitle track's seconds have nothing to do with how many
+  /// bits the picture takes.
   final double? behindSeconds;
 
   /// The same for the run ahead: how long until the stream that is worst
   /// off runs out, which is when the film next stops.
   final double? aheadSeconds;
 
-  /// The window in a `window` value, or null for the null the server sends
-  /// where it has no playhead for the stream. A half the server did not send
-  /// is not half a window: the whole reading is dropped, because a zero
-  /// there would say the cache holds nothing on that side.
+  /// The window in a `window` value. Null for the null the server sends where
+  /// it has no playhead for the stream. A half the server did not send is not
+  /// half a window: the whole reading is dropped, because a zero there would
+  /// say the cache holds nothing on that side.
   static CacheWindow? fromJson(Object? value) {
     if (value is! Map) return null;
     final behind = (value['behindBytes'] as num?)?.toInt();
@@ -155,9 +152,9 @@ final class SharingNumbers {
     this.refusedReclaims,
   });
 
-  /// Bytes advertised and promised never to be reclaimed -- the retention
+  /// Bytes advertised and promised never to be reclaimed: the retention
   /// policy's committed set. Null for a torrent with no policy, which has
-  /// promised nothing whatever it announces.
+  /// promised nothing, whatever it announces.
   final int? committedBytes;
 
   /// What the torrent has moved since it last went live, or null where the
@@ -168,15 +165,15 @@ final class SharingNumbers {
   /// backend to forget and were refused, over the life of the engine.
   ///
   /// **Zero is the only healthy value.** A refusal is the backend keeping a
-  /// piece an open stream is still reading ahead over while the retention
-  /// window has moved off it: the cache cannot come back under its budget
-  /// while that stream lives. Null for a proxied stream, which has no
-  /// engine and no passes.
+  /// piece that an open stream is still reading ahead over, while the retention
+  /// window has moved off it. The cache cannot come back under its budget while
+  /// that stream lives. Null for a proxied stream, which has no engine and no
+  /// passes.
   final int? refusedReclaims;
 
-  /// The sharing numbers in a `sharing` value, or null for the null a
-  /// proxied stream answers with. A `sharing` with neither half in it is
-  /// no sharing row either.
+  /// The sharing numbers in a `sharing` value. Null for the null a proxied
+  /// stream answers with. A `sharing` with neither half in it is no sharing row
+  /// either.
   static SharingNumbers? fromJson(Object? value) {
     if (value is! Map) return null;
     final numbers = SharingNumbers(
@@ -211,27 +208,26 @@ final class SharingNumbers {
 /// the ratio of the two.
 ///
 /// **One live period's, and deliberately not the torrent's.** These are
-/// librqbit's own per-torrent counters, which the backend reads out of the
-/// live state and out of nowhere else
-/// (`enginefs::backend::TransferTotals`: "they start at zero when a torrent
-/// goes live and are gone when it leaves that state"). So a pause and
-/// resume starts them over, and so does the idle sweep dropping the engine
-/// before a later stream re-adds it -- whatever the same torrent moved
-/// before that is not in them and is not pretended to be. It is not the
-/// process's lifetime either, which is why nothing here says "session".
+/// librqbit's own per-torrent counters, which the backend reads out of the live
+/// state and out of nowhere else (`enginefs::backend::TransferTotals`: "they
+/// start at zero when a torrent goes live and are gone when it leaves that
+/// state"). So a pause and resume starts them over. So does the idle sweep
+/// dropping the engine before a later stream re-adds it. Whatever the same
+/// torrent moved before that is not in them, and nothing pretends it is. It is
+/// not the process's lifetime either, which is why nothing here says "session".
 /// Whoever draws them says which period they cover.
 ///
-/// Not stored, and that is the other half of it. Conventional BitTorrent
-/// clients keep a ratio per torrent across restarts; that would mean
-/// counters on disk which something then has to keep true, and a stored
-/// counter read back as an observation is exactly the claim about an
-/// unseen past this codebase keeps having to unship.
+/// They are not stored, and that is the other half of it. Conventional
+/// BitTorrent clients keep a ratio per torrent across restarts. That would mean
+/// counters on disk which something then has to keep true. A stored counter
+/// read back as an observation is exactly the claim about an unseen past this
+/// codebase keeps having to unship.
 ///
 /// The three stand or fall together, which is why they are one value rather
-/// than three fields on [SharingNumbers]: the counters live in a torrent's
-/// live state, so one that is paused, checking, stopped for space or in
-/// error has none to read -- and a torrent that moved gigabytes and then
-/// paused has not moved nothing.
+/// than three fields on [SharingNumbers]. The counters live in a torrent's live
+/// state, so a torrent that is paused, checking, stopped for space or in error
+/// has none to read. And a torrent that moved gigabytes and then paused has not
+/// moved nothing.
 final class LiveTransfer {
   const LiveTransfer({
     required this.downloadedBytes,
@@ -246,15 +242,14 @@ final class LiveTransfer {
   /// Of those, the bytes no piece hash has vouched for: what the server
   /// fetched, less what it has downloaded and checked.
   ///
-  /// **Not "wasted", because the subtraction cannot tell.** Chunks of a
-  /// piece still in flight sit in it and leave it when that piece checks;
-  /// so does the second copy of a chunk the server asked a fast peer for
-  /// on purpose, to get a piece out from under a stalled one; and so does
-  /// what really was thrown away. Read it as a level rather than as loss:
-  /// a few per cent of what was played is the ordinary cost of
-  /// duplication in flight, and a multiple of it is the cache fetching
-  /// what it is about to delete, which is what this figure exists to
-  /// show.
+  /// **Not "wasted", because the subtraction cannot tell.** Chunks of a piece
+  /// still in flight sit in it and leave it when that piece checks. So does the
+  /// second copy of a chunk the server asked a fast peer for on purpose, to get
+  /// a piece out from under a stalled one. So does what really was thrown away.
+  /// Read it as a level rather than as loss. A few per cent of what was played
+  /// is the ordinary cost of duplication in flight. A multiple of it is the
+  /// cache fetching what it is about to delete, which is what this figure
+  /// exists to show.
   final int unverifiedBytes;
 
   /// Bytes sent to peers since the torrent last went live.
@@ -262,15 +257,14 @@ final class LiveTransfer {
 
   /// Uploaded over downloaded, the form every BitTorrent client shows.
   ///
-  /// Null when nothing has been downloaded: a ratio against zero is not
-  /// `0.00`, it is undefined, and a torrent that has uploaded something
-  /// must never be drawn as one that has shared nothing.
+  /// Null when nothing has been downloaded. A ratio against zero is not `0.00`
+  /// but undefined, and a torrent that has uploaded something must never be
+  /// drawn as one that has shared nothing.
   final double? ratio;
 
-  /// The transfer in a `transfer` value, or null for the null the server
-  /// sends where the counters cannot be read. Either byte count missing
-  /// drops the whole group, for the same reason the server sends it as a
-  /// group.
+  /// The transfer in a `transfer` value. Null for the null the server sends
+  /// where the counters cannot be read. Either byte count missing drops the
+  /// whole group, for the same reason the server sends it as a group.
   static LiveTransfer? fromJson(Object? value) {
     if (value is! Map) return null;
     final downloaded = (value['downloadedBytes'] as num?)?.toInt();

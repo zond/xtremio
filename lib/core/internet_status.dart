@@ -12,7 +12,7 @@ import 'diagnostics_log.dart';
 /// **Asked of the internet, because nothing on this device knows it.** The
 /// interfaces carry a LAN address behind a router. So it is one request to
 /// Cloudflare's `cdn-cgi/trace`, which needs no key and answers with the
-/// address and its country together -- no table of address ranges on the
+/// address and its country together. No table of address ranges is kept on the
 /// device.
 @immutable
 sealed class InternetStatus {
@@ -135,9 +135,9 @@ Future<String> fetchCloudflareTrace({
 /// [InternetOnline] is not kept: the internet is not reachable now,
 /// whatever it was before.
 ///
-/// **Only the newest check lands.** Two rechecks in flight -- a resume and
-/// a tap -- may answer in either order, and the earlier one's answer is
-/// about a network that may no longer be there.
+/// **Only the newest check lands.** Two rechecks in flight (a resume and a tap)
+/// may answer in either order, and the earlier one's answer is about a network
+/// that may no longer be there.
 ///
 /// The address itself is never logged; only that a check failed, and the
 /// failure's type.

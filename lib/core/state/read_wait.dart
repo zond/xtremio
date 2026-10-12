@@ -2,11 +2,11 @@
 /// (stream-server's `ServerHandle::media_read_wait`, over FFI as
 /// `media_read_wait`).
 ///
-/// mpv blocked in a read reports neither a stall nor a cache to wait for:
-/// its picture stops and it says nothing. The server is the one that knows
-/// a read is parked on a piece the swarm has not delivered, and this is
-/// what it says about it. A read served off the disk returns in
-/// microseconds, so a wait of a second is a read parked on a piece.
+/// mpv blocked in a read reports neither a stall nor a cache to wait for: its
+/// picture stops and it says nothing. The server knows a read is parked on a
+/// piece the swarm has not delivered, and this is what it says about it. A read
+/// served off the disk returns in microseconds, so a wait of a second is a read
+/// parked on a piece.
 final class ReadWait {
   const ReadWait({this.waiting, this.offset});
 

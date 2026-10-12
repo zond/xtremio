@@ -8,29 +8,28 @@
 /// renamed in Drive comes back under its new name, and a file that has been
 /// deleted, or whose grant has been withdrawn, does not come back at all.
 ///
-/// **One call reaches every granted file.** The `drive.file` grants
-/// accumulate per user and per OAuth client and do not lapse (see
-/// [DriveAccount], "One token, not one per file"), so an access token
-/// minted now sees the files picked in earlier pairings too, and
-/// [DriveFileLister.listFiles] needs no per-file request.
+/// **One call reaches every granted file.** The `drive.file` grants accumulate
+/// per user and per OAuth client and do not lapse (see [DriveAccount], "One
+/// token, not one per file"). So an access token minted now sees the files
+/// picked in earlier pairings too, and [DriveFileLister.listFiles] needs no
+/// per-file request.
 ///
-/// **A partial listing must delete nothing**, which is the one property
-/// here worth arranging the types around. Drive pages its answer, and the
-/// page after next is exactly where a television drops off its wifi. A
-/// listing that stopped half way and was treated as the truth would read as
-/// "the viewer deleted the rest", and would take rows off a list that
-/// nothing can put back. So [DriveFilesListed] is *only* constructed at the
-/// page that carries no `nextPageToken`: every other way out of
-/// [XtremioDriveFileLister.listFiles] is a [_ListingRefused] thrown past
-/// the half-built map, and [reloadLinkedDriveFiles] can only reach a write
-/// through the [DriveFilesListed] arm of a switch. There is no value in
-/// this file that means "some of the files".
+/// **A partial listing must delete nothing.** That is the one property here
+/// worth arranging the types around. Drive pages its answer, and the page after
+/// next is exactly where a television drops off its wifi. A listing that
+/// stopped half way and was treated as the truth would read as "the viewer
+/// deleted the rest", and would take rows off a list that nothing can put back.
+/// So [DriveFilesListed] is *only* constructed at the page that carries no
+/// `nextPageToken`. Every other way out of [XtremioDriveFileLister.listFiles]
+/// is a [_ListingRefused] thrown past the half-built map, and
+/// [reloadLinkedDriveFiles] can only reach a write through the
+/// [DriveFilesListed] arm of a switch. No value in this file means "some of the
+/// files".
 ///
-/// **Nothing here is written down.** The refresh token goes into one
-/// request body and the access token into one header; neither is logged,
-/// neither is returned, and nothing in this file writes a line at all, so
-/// there is no message for `redactSecrets` to have to catch (`AGENTS.md`,
-/// "Never log auth material").
+/// **Nothing here is written down.** The refresh token goes into one request
+/// body and the access token into one header. Neither is logged or returned,
+/// and nothing in this file writes a line at all, so there is no message for
+/// `redactSecrets` to catch (`AGENTS.md`, "Never log auth material").
 library;
 
 import 'dart:async';
@@ -61,14 +60,14 @@ enum DriveListingFailure {
   unreachable,
 
   /// The pairing service is refusing to mint any more tokens for this
-  /// credential this hour (sixty, `xtremio-xervice/functions/index.js`). A limit
-  /// that exists for cost rather than anything about this device.
+  /// credential this hour (sixty, `xtremio-xervice/functions/index.js`). That
+  /// limit exists for cost, not because of anything about this device.
   tooOften,
 
-  /// Something answered a shape this build cannot read. Kept apart from
-  /// [unreachable] because it means a version skew rather than a network,
-  /// and **because more pages than this build will walk lands here**: that
-  /// is a refusal, never a truncation.
+  /// Something answered a shape this build cannot read. It is kept apart from
+  /// [unreachable] because it means a version skew rather than a network.
+  /// **More pages than this build will walk also land here**: that is a
+  /// refusal, never a truncation.
   notUnderstood,
 }
 
@@ -81,19 +80,18 @@ sealed class DriveListing {
 /// **Every** file the credential reaches, as Drive names them now.
 ///
 /// The invariant this type carries is completeness. A value of it means the
-/// paging ran to the end, so a stored file that is not in [filesById] is a
-/// file the viewer can no longer reach -- which is what makes it safe for
+/// paging ran to the end. So a stored file that is not in [filesById] is a file
+/// the viewer can no longer reach, which makes it safe for
 /// [reloadLinkedDriveFiles] to drop a row on the strength of it.
 final class DriveFilesListed extends DriveListing {
   const DriveFilesListed(this.filesById);
 
   /// Drive's own id to what Drive says about that file *now*.
   ///
-  /// A file Drive named with something this build cannot read maps to the
-  /// empty name, which [LinkedDriveFiles.reconciled] keeps the stored name
-  /// for: present but unnamed is not a rename. A file Drive has not
-  /// measured maps to a null height and duration, which is the ordinary
-  /// case and not a failure.
+  /// A file Drive named with something this build cannot read maps to the empty
+  /// name. [LinkedDriveFiles.reconciled] keeps the stored name for it: present
+  /// but unnamed is not a rename. A file Drive has not measured maps to a null
+  /// height and duration, which is the ordinary case and not a failure.
   final Map<String, DriveFileFacts> filesById;
 }
 
@@ -116,7 +114,7 @@ abstract interface class DriveFileLister {
   Future<DriveListing> listFiles({required String refreshToken});
 }
 
-/// How a page of the listing is asked for and read; thrown past a
+/// How a page of the listing is asked for and read. It is thrown past a
 /// half-built answer rather than returned, so that no partial map can be
 /// mistaken for a whole one.
 final class _ListingRefused implements Exception {
@@ -127,13 +125,13 @@ final class _ListingRefused implements Exception {
 
 /// [DriveFileLister] over the pairing service and the real Drive API.
 ///
-/// Two calls and not one. The app holds a refresh token and nothing else --
-/// minting an access token needs the OAuth client secret, which a
-/// sideloaded app cannot hold -- so this asks `POST /refresh` on the
-/// pairing service first and spends the hour-long token it gets back on
-/// `GET /drive/v3/files` straight after. The token is never stored: it is
-/// good for an hour, this device has nowhere safe to put a second
-/// credential, and a reload is over in a second.
+/// Two calls and not one. The app holds a refresh token and nothing else, since
+/// minting an access token needs the OAuth client secret, which a sideloaded
+/// app cannot hold. So this asks `POST /refresh` on the pairing service first,
+/// and spends the hour-long token it gets back on `GET /drive/v3/files`
+/// straight after. The token is never stored: it is good for an hour, this
+/// device has nowhere safe to put a second credential, and a reload is over in
+/// a second.
 @immutable
 class XtremioDriveFileLister implements DriveFileLister {
   const XtremioDriveFileLister({
@@ -146,13 +144,13 @@ class XtremioDriveFileLister implements DriveFileLister {
   /// used, written down in one place ([XtremioDrivePairingService]).
   final String origin;
 
-  /// Where Drive's own API is, or null for [driveFiles] -- which is what
-  /// the app builds this with, and the only value any shipped build has.
+  /// Where Drive's own API is, or null for [driveFiles]. The app builds this
+  /// with null, the only value any shipped build has.
   ///
-  /// A parameter for the reason [origin] is one and no further: the paging,
-  /// the statuses and the two JSON types Google's fields arrive in are
-  /// where this can go wrong, and a test proves those against a server on
-  /// the loopback rather than against a stub of the parsing.
+  /// It is a parameter for the reason [origin] is one, and no further. The
+  /// paging, the statuses and the two JSON types Google's fields arrive in are
+  /// where this can go wrong. A test proves those against a server on the
+  /// loopback rather than against a stub of the parsing.
   final Uri? filesEndpoint;
 
   /// How long any one of the calls is given, its body included.
@@ -166,45 +164,44 @@ class XtremioDriveFileLister implements DriveFileLister {
 
   /// What is asked of each file, as Drive's field mask.
   ///
-  /// `videoMediaMetadata` is the reason this is worth spelling out.
-  /// Drive decodes an uploaded video server-side and keeps what it found,
-  /// so the height that decides which resolution section a source belongs
-  /// in is already sitting in the answer to a call being made anyway. The
-  /// two alternatives are worse: a filename says `1080p` when somebody
-  /// typed it, and a first-bytes probe of an MP4 misses the `moov` atom
-  /// unless the file was written with faststart -- which is to say it fails
-  /// on the files a probe would have been for.
+  /// `videoMediaMetadata` is the reason this is worth spelling out. Drive
+  /// decodes an uploaded video server-side and keeps what it found. So the
+  /// height that decides a source's resolution section is already in the answer
+  /// to a call being made anyway. The two alternatives are worse. A filename
+  /// says `1080p` when somebody typed it. A first-bytes probe of an MP4 misses
+  /// the `moov` atom unless the file was written with faststart, so it fails on
+  /// exactly the files a probe would have been for.
   ///
-  /// The object is asked for whole. `width` and `mimeType` come back with
-  /// the rest and nothing stores them today; a mask that named only the two
-  /// fields in use would have to be edited by whoever wants the aspect
-  /// ratio, and there is no page of quota in it either way.
+  /// The object is asked for whole. `width` and `mimeType` come back with the
+  /// rest, and nothing stores them today. A mask that named only the two fields
+  /// in use would have to be edited by whoever wants the aspect ratio, and it
+  /// would make no difference to quota either way.
   static const String fields =
       'nextPageToken,files(id,name,mimeType,'
       'videoMediaMetadata(width,height,durationMillis))';
 
-  /// Asked of every page: a file a viewer picked out of a shared drive is
-  /// granted like any other, and `files.list` leaves shared drives out
-  /// unless told otherwise.
+  /// Asked of every page. A file a viewer picked out of a shared drive is
+  /// granted like any other, and `files.list` leaves shared drives out unless
+  /// told otherwise.
   static const Map<String, String> allDrives = {
     'supportsAllDrives': 'true',
     'includeItemsFromAllDrives': 'true',
   };
 
-  /// How many files one page asks for: Drive's own maximum. A reload now
-  /// adds what other devices picked, so the listing is the account's whole
-  /// set of picks rather than this device's handful, and one page of a
-  /// thousand is fewer round trips than ten of a hundred.
+  /// How many files one page asks for: Drive's own maximum. A reload now adds
+  /// what other devices picked, so the listing is the account's whole set of
+  /// picks rather than this device's handful. One page of a thousand is fewer
+  /// round trips than ten of a hundred.
   static const int pageSize = 1000;
 
   /// How many pages are walked before the answer is refused outright.
   ///
   /// **A cap and not a trim.** Past this the listing is
-  /// [DriveListingFailure.notUnderstood] and nothing is written: a
-  /// truncated listing is exactly the partial answer this file exists to
-  /// keep away from the store. Fifty pages is five thousand files, against
-  /// a hundred per pairing, so reaching it means a page token that never
-  /// ends rather than a large Drive.
+  /// [DriveListingFailure.notUnderstood], and nothing is written. A truncated
+  /// listing is exactly the partial answer this file exists to keep away from
+  /// the store. Fifty pages is five thousand files, against a hundred per
+  /// pairing, so reaching the cap means a page token that never ends rather
+  /// than a large Drive.
   static const int maxPages = 5;
 
   /// How much of one answer is read before it is called malformed. A page
@@ -230,9 +227,9 @@ class XtremioDriveFileLister implements DriveFileLister {
     } on _ListingRefused catch (refused) {
       return DriveListingFailed(refused.reason);
     } on Object {
-      // Every way a socket can fail is one sentence from an armchair, and
-      // the exception's own text is not it -- the call it came out of was
-      // handed a credential.
+      // Every way a socket can fail is one sentence from an armchair. The
+      // exception's own text is not that sentence, and the call it came out of
+      // was handed a credential.
       return const DriveListingFailed(DriveListingFailure.unreachable);
     } finally {
       client.close(force: true);
@@ -271,11 +268,11 @@ class XtremioDriveFileLister implements DriveFileLister {
   /// One page: the names on it, and the token for the next page or null
   /// when this was the last.
   ///
-  /// Nothing Google answers here is read as terminal. A `401` on a token
-  /// minted a moment ago is a good deal more likely to be a proxy or a
-  /// clock than a revoked grant, and reading it as [pairAgain] would drop
-  /// the viewer's credential over it -- so only the pairing service's own
-  /// `pairAgain` says that, and everything else is worth trying again.
+  /// Nothing Google answers here is read as terminal. A `401` on a token minted
+  /// a moment ago is far more likely to be a proxy or a clock than a revoked
+  /// grant. Reading it as [pairAgain] would drop the viewer's credential over
+  /// it. So only the pairing service's own `pairAgain` says that, and
+  /// everything else is worth trying again.
   Future<(Map<String, DriveFileFacts>, String?)> _page(
     HttpClient client,
     String accessToken,
@@ -340,14 +337,12 @@ class XtremioDriveFileLister implements DriveFileLister {
 /// page, and the token for the next page or null when this was the last.
 /// **Null** for a body that is not a page at all.
 ///
-/// Visible for tests, the way [parseDriveOpenAnswer] is, and for the same
-/// reason: the reading is where the surprises are and the fetching is not
-/// something a test may do.
+/// Visible for tests, like [parseDriveOpenAnswer], and for the same reason: the
+/// reading is where the surprises are, and a test may not do the fetching.
 ///
-/// A row with no id is skipped -- the id is what everything is keyed on --
-/// and a row with no readable name is kept under the empty name rather than
-/// skipped, because leaving it out means *gone* and gone removes somebody's
-/// row.
+/// A row with no id is skipped, since the id is what everything is keyed on. A
+/// row with no readable name is kept under the empty name rather than skipped,
+/// because leaving it out means *gone*, and gone removes somebody's row.
 (Map<String, DriveFileFacts>, String?)? parseDriveFilesPage(Object? json) {
   if (json is! Map) return null;
   final listed = json['files'];
@@ -363,9 +358,9 @@ class XtremioDriveFileLister implements DriveFileLister {
     files[id.trim()] = (
       name: name is String ? name : '',
       mimeType: mime is String ? mime : '',
-      // Absent for anything Drive has not processed or could not decode,
-      // which is an ordinary answer and not a malformed one -- so it is
-      // null here, and nothing downstream may require it.
+      // Absent for anything Drive has not processed or could not decode. That
+      // is an ordinary answer and not a malformed one, so it is null here, and
+      // nothing downstream may require it.
       height: _measured(measured, 'height'),
       durationMillis: _measured(measured, 'durationMillis'),
     );
@@ -383,8 +378,8 @@ class XtremioDriveFileLister implements DriveFileLister {
 /// *string*. A build that read only one of the two would drop the duration
 /// of every file and never say so.
 ///
-/// Zero and below are nothing measured rather than a measurement: a height
-/// of nought is not a video, it is a field somebody filled in.
+/// Zero and below mean nothing was measured: a height of nought is not a video
+/// but a field somebody filled in.
 int? _measured(Object? metadata, String field) {
   if (metadata is! Map) return null;
   final value = metadata[field];
@@ -401,7 +396,7 @@ sealed class DriveReloaded {
 
 /// The listing was complete, and the stored list now says what Drive says.
 ///
-/// Both counts are worth having because both are worth saying out loud: a
+/// Both counts are worth having because both are worth saying out loud. A
 /// reload that changed nothing has to say so, or it is a button that looks
 /// broken and gets pressed again.
 final class DriveReloadDone extends DriveReloaded {
@@ -442,12 +437,12 @@ final class DriveReloadRefused extends DriveReloaded {
 /// What it does, and the whole of it:
 ///
 ///  * a stored file Drive gives a **different name** takes the new name,
-///    and loses the match its old name earned -- the rename is the one
-///    thing a viewer can do about a file that matched the wrong title or
-///    nothing at all, and the note above the list tells them to do it, so
-///    the match has to be made again. That dropping is
-///    [LinkedDriveFile.reconciledWith]'s doing rather than a step here, so
-///    no caller can write a new name and keep a stale match.
+///    and loses the match its old name earned. A rename is the one thing a
+///    viewer can do about a file that matched the wrong title or nothing at
+///    all, and the note above the list tells them to do it, so the match
+///    has to be made again. [LinkedDriveFile.reconciledWith] drops the
+///    match, not a step here, so no caller can write a new name and keep a
+///    stale match.
 ///  * a stored file Drive has **measured** since it was linked takes the
 ///    height and duration it measured. The height decides the file's
 ///    resolution section on its details page; the duration is not read
@@ -457,19 +452,19 @@ final class DriveReloadRefused extends DriveReloaded {
 ///  * a stored file **absent** from the listing loses its row: the grant is
 ///    gone or the file is, and a row that cannot play is worse than no row.
 ///  * a file in the listing that is **not stored** is added
-///    ([LinkedDriveFiles.addingListed]): the listing is every file the
+///    ([LinkedDriveFiles.addingListed]). The listing is every file the
 ///    Google account picked through this client, on any device, so a file
-///    picked on the phone appears here -- which is what a grant shared
-///    through the account's vault is for. Folders are left out.
+///    picked on the phone appears here. That is what a grant shared through
+///    the account's vault is for. Folders are left out.
 ///
-/// One write, at the end, from a listing that is complete by construction:
-/// the failed arm returns before [DriveAccount.noteReconciled] is in
-/// reach.
+/// It makes one write, at the end, from a listing that is complete by
+/// construction. The failed arm returns before [DriveAccount.noteReconciled] is
+/// in reach.
 ///
-/// A pairing that lands while the listing is out changes the grant under
-/// it: the answer is about the old one, and reconciling it would drop the
-/// files the new pairing just linked (they are in no listing the old grant
-/// could make). So the listing is asked again, once, with the new token.
+/// A pairing that lands while the listing is out changes the grant under it.
+/// The answer is then about the old grant, and reconciling it would drop the
+/// files the new pairing just linked, since they are in no listing the old
+/// grant could make. So the listing is asked again, once, with the new token.
 Future<DriveReloaded> reloadLinkedDriveFiles({
   required DriveAccount account,
   required DriveFileLister lister,
@@ -515,9 +510,9 @@ Future<DriveReloaded> _reload(
   }
 }
 
-/// What a viewer is told about [outcome]. One sentence, always -- including
-/// for the reload that found nothing to do, which is the sentence that
-/// keeps the button from looking inert.
+/// What a viewer is told about [outcome]. It is always one sentence, including
+/// for the reload that found nothing to do, which is the sentence that keeps
+/// the button from looking inert.
 String driveReloadMessage(DriveReloaded outcome) => switch (outcome) {
   DriveReloadDone(:final renamed, :final removed, :final added)
       when renamed + removed + added == 0 =>

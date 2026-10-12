@@ -42,13 +42,13 @@ final class LibraryProgress {
 /// file plus its language, and whatever else the addon chose to say about
 /// it.
 ///
-/// Everything past `id`/`lang`/`url`/`label` is addon-specific: the pinned
-/// stremio-core keeps it in a flattened catch-all rather than dropping it
-/// (see docs/ARCHITECTURE.md, "Pinned forks"), so it arrives here as
-/// ordinary keys beside the modelled ones. That map is whatever the addon
-/// sent -- no schema, no promise about a type -- so every accessor below
-/// reads through it defensively: absent, empty or wrongly typed all read
-/// as null, and none of them throws.
+/// Everything past `id`/`lang`/`url`/`label` is addon-specific. The pinned
+/// stremio-core keeps it in a flattened catch-all rather than dropping it (see
+/// docs/ARCHITECTURE.md, "Pinned forks"), so it arrives here as ordinary keys
+/// beside the modelled ones. That map is whatever the addon sent, with no
+/// schema and no promise about a type. So every accessor below reads through it
+/// defensively: absent, empty or wrongly typed all read as null, and none of
+/// them throws.
 final class SubtitleInfo {
   const SubtitleInfo(this.json);
 
@@ -60,8 +60,8 @@ final class SubtitleInfo {
   String get lang => json['lang'] as String? ?? '';
   Uri get url => Uri.parse(json['url'] as String);
 
-  /// The addon's own name for this upload. Rare -- OpenSubtitles v3 sends
-  /// none -- but it wins over anything derived when it is there.
+  /// The addon's own name for this upload. It is rare (OpenSubtitles v3 sends
+  /// none), but it wins over anything derived when it is there.
   String? get label => _text('label');
 
   /// The name of the file inside the addon's archive
@@ -74,35 +74,34 @@ final class SubtitleInfo {
 
   /// The group that cut that release (`DFN`), when the addon split it out.
   ///
-  /// On about four OpenSubtitles entries in ten, and the one thing on an
-  /// entry that names the same upload family from one episode of a show
-  /// to the next: the Swedish `Gilmore.Girls.SxxExx.WEBRip.x264-FGT`
-  /// files answer `FGT` on every episode measured. Spelling drifts in
-  /// case only (`FoV` beside `fov`, `MEDiEVAL` beside `Medieval`), which
-  /// is what [releaseGroupKey] is for. Shown as it was sent.
+  /// It is on about four OpenSubtitles entries in ten. It is the one thing on
+  /// an entry that names the same upload family from one episode of a show to
+  /// the next: the Swedish `Gilmore.Girls.SxxExx.WEBRip.x264-FGT` files answer
+  /// `FGT` on every episode measured. Spelling drifts in case only (`FoV`
+  /// beside `fov`, `MEDiEVAL` beside `Medieval`), which is what
+  /// [releaseGroupKey] is for. Shown as it was sent.
   String? get releaseGroup => _text('releaseGroup');
 
-  /// [releaseGroup] as something to remember a file under: lower-cased,
-  /// so one addon's `FoV` and another's `fov` are one group, and null
-  /// when the addon named none.
+  /// [releaseGroup] as something to remember a file under: lower-cased, so one
+  /// addon's `FoV` and another's `fov` are one group. Null when the addon named
+  /// none.
   ///
-  /// This is the only stable name an addon gives a subtitle across the
-  /// episodes of a show -- an `id` and a `url` are per file, and `g` is
-  /// per answer -- so it is what a remembered adjustment and a remembered
-  /// pick are keyed on. Six entries in ten carry no group at all, and for
-  /// those nothing about the release is remembered rather than something
-  /// narrower being guessed.
+  /// This is the only stable name an addon gives a subtitle across the episodes
+  /// of a show: an `id` and a `url` are per file, and `g` is per answer. So it
+  /// is what a remembered adjustment and a remembered pick are keyed on. Six
+  /// entries in ten carry no group at all. For those, nothing about the release
+  /// is remembered, rather than something narrower being guessed.
   ///
-  /// `g`, OpenSubtitles v3's small-integer bucket, is deliberately not
-  /// read: despite the name, it is not a stable batch id. One Swedish
-  /// batch (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`) answers `g=6` on
-  /// S01E01, `5` on S01E02, `4` on S01E03 and `1` on S03E05 -- the index
-  /// is re-assigned per answer, roughly in size order, so the same integer
-  /// names a different family next episode. Nor is `fpsMilli`, the frame
-  /// rate the addon says the file was cut for: ten English files for one
-  /// film declaring six rates all end within 1 % of the same runtime, so
-  /// it says where an upload came from and not how it is timed (AGENTS,
-  /// *Nothing re-times a subtitle but the viewer*).
+  /// `g`, OpenSubtitles v3's small-integer bucket, is deliberately not read.
+  /// Despite the name, it is not a stable batch id. One Swedish batch
+  /// (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`) answers `g=6` on S01E01, `5` on
+  /// S01E02, `4` on S01E03 and `1` on S03E05. The index is re-assigned per
+  /// answer, roughly in size order, so the same integer names a different
+  /// family next episode. Nor is `fpsMilli` read, the frame rate the addon says
+  /// the file was cut for. Ten English files for one film declaring six rates
+  /// all end within 1 % of the same runtime. So it says where an upload came
+  /// from and not how it is timed (AGENTS, *Nothing re-times a subtitle but the
+  /// viewer*).
   String? get releaseGroupKey => releaseGroup?.toLowerCase();
 
   /// The source that release came from (`BluRay`, `WEB-DL`).
@@ -123,11 +122,10 @@ final class SubtitleInfo {
   /// fragment dropped, trailing slashes off the path, and the query's
   /// parameters put in a fixed order.
   ///
-  /// Nothing is removed from the query. The one parameter OpenSubtitles v3
-  /// ever sends is `senc` (`?senc=cp1250`), which picks the encoding of the
-  /// bytes it hands back -- strip that and two genuinely different files
-  /// collapse into one. The path keeps its case: only the host is
-  /// case-insensitive.
+  /// Nothing is removed from the query. The one parameter OpenSubtitles v3 ever
+  /// sends is `senc` (`?senc=cp1250`), which picks the encoding of the bytes it
+  /// hands back. Strip that and two genuinely different files collapse into
+  /// one. The path keeps its case: only the host is case-insensitive.
   String get normalizedUrl => normalizeUrl(url);
 
   /// The keys two entries must share to be the same file. Both are
@@ -135,9 +133,9 @@ final class SubtitleInfo {
   /// only gives a URL, and two addons naming the same file with slightly
   /// different URLs collapse too.
   ///
-  /// The id is scoped by language: an id names a file and a file has one
-  /// language, so an id two unrelated addons happen to reuse (`1`, `2`,
-  /// ...) can only merge entries that at least claim the same language.
+  /// The id is scoped by language. An id names a file and a file has one
+  /// language, so an id two unrelated addons happen to reuse (`1`, `2`, ...)
+  /// can only merge entries that at least claim the same language.
   Iterable<String> get identityKeys sync* {
     yield 'url:$normalizedUrl';
     final id = json['id'] as String?;
@@ -240,9 +238,9 @@ final class PlayerState {
   final ResourceLoadable<MetaItem>? metaItem;
   final VideoInfo? nextVideo;
 
-  /// The stream the engine picked for [nextVideo] (same addon, matching
-  /// binge group); null when it found none, in which case the next episode
-  /// has to be chosen from its own stream list.
+  /// The stream the engine picked for [nextVideo] (same addon, matching binge
+  /// group). Null when it found none; the next episode then has to be chosen
+  /// from its own stream list.
   final StreamInfo? nextStream;
   final LibraryProgress? progress;
 
@@ -342,10 +340,10 @@ final class PlayerState {
   /// subtitle addons returned, then the stream's own `subtitles`, then the
   /// converted stream's.
   ///
-  /// Deduplicated on [SubtitleInfo.identityKeys] -- the normalized URL and
-  /// the addon's own id -- rather than on the exact URL string, so the same
-  /// file reached two ways is one entry. The first answer wins, which keeps
-  /// the addons' own order.
+  /// Deduplicated on [SubtitleInfo.identityKeys] (the normalized URL and the
+  /// addon's own id) rather than on the exact URL string, so the same file
+  /// reached two ways is one entry. The first answer wins, which keeps the
+  /// addons' own order.
   List<SubtitleSource> get externalSubtitleSources {
     final seen = <String>{};
     final result = <SubtitleSource>[];

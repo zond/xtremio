@@ -33,11 +33,10 @@ abstract interface class DiagnosticsClient {
   /// not running, which costs the report those lines and nothing else.
   Future<ServerStorage> storage();
 
-  /// The mainline DHT's status right now (`ServerHandle::dht_status`).
-  /// Never throws: a server that is not running answers the same as "no
-  /// DHT to ask", `DhtStatus(enabled: false, ...)`. Cheap and synchronous;
-  /// this screen reads it once on open and on an explicit refresh, never
-  /// on a timer.
+  /// The mainline DHT's status right now (`ServerHandle::dht_status`). Never
+  /// throws: a server that is not running answers the same as "no DHT to ask",
+  /// `DhtStatus(enabled: false, ...)`. Cheap and synchronous. This screen reads
+  /// it once on open and on an explicit refresh, never on a timer.
   DhtStatus dhtStatus();
 }
 
@@ -74,11 +73,11 @@ class RustDiagnosticsClient implements DiagnosticsClient {
   /// The platform's answer, or what `dart:io` says when there is nobody to
   /// ask.
   ///
-  /// On Android `Platform.operatingSystemVersion` is the *build
-  /// fingerprint* (`W1VVS36H.7-108-8-6`), which names neither the Android
-  /// version, nor the API level, nor the hardware -- and the hardware is
-  /// what decides whether a codec is decoded on a chip or on the CPU.
-  /// Everywhere else it is already a sentence a person can read.
+  /// On Android `Platform.operatingSystemVersion` is the *build fingerprint*
+  /// (`W1VVS36H.7-108-8-6`). It names neither the Android version, nor the API
+  /// level, nor the hardware, and the hardware decides whether a codec is
+  /// decoded on a chip or on the CPU. Everywhere else it is already a sentence
+  /// a person can read.
   @override
   Future<String> osVersion() async {
     if (defaultTargetPlatform != TargetPlatform.android) {
@@ -101,10 +100,10 @@ class RustDiagnosticsClient implements DiagnosticsClient {
 /// `MainActivity`'s `os` reply as one line: `Android 14 (API 34) · Google
 /// Pixel 7`.
 ///
-/// Every part is optional -- an emulator image with no manufacturer, a
-/// build with no release string -- and what is missing is left out rather
-/// than written as a blank or an `unknown`. A model that already names its
-/// maker (`Nokia X20`) is not made to say it twice.
+/// Every part is optional (an emulator image with no manufacturer, a build with
+/// no release string). What is missing is left out rather than written as a
+/// blank or an `unknown`. A model that already names its maker (`Nokia X20`) is
+/// not made to say it twice.
 String describeAndroidOs(Map<String, Object?> reply) {
   final release = (reply['release'] as String? ?? '').trim();
   final sdk = reply['sdkInt'];

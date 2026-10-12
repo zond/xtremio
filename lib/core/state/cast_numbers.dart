@@ -30,8 +30,8 @@ final class CastNumbers {
   /// What the rendition has made; null for a plain publication.
   final RenditionMade? made;
 
-  /// The JSON `media_cast_numbers` answers, or null for anything that is
-  /// not one -- which draws the same as no answer: no server rows.
+  /// The JSON `media_cast_numbers` answers, or null for anything that is not
+  /// one. Null draws the same as no answer: no server rows.
   static CastNumbers? fromJson(Object? value) {
     if (value is! Map) return null;
     final delivery = CastDelivery.fromJson(value['delivery']);
@@ -180,8 +180,9 @@ final class RenditionMade {
   final int slotsMade;
   final Duration filmMade;
 
-  /// Where on the film's clock the unbroken run of made slots from the one
-  /// the receiver last asked for ends: how far ahead it is made.
+  /// Where the unbroken run of made slots ends on the film's clock, counting
+  /// from the one the receiver last asked for. That is how far ahead it is
+  /// made.
   final Duration? madeTo;
 
   static RenditionMade? fromJson(Object? value) {

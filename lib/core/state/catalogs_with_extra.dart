@@ -50,8 +50,8 @@ final class CatalogRow {
   /// Row title: the catalog's name, falling back to its id.
   String get title => label?.name ?? firstRequest.path.id;
 
-  /// The addon that was asked, from `catalogLabels` — falling back to the
-  /// host of the manifest URL, which is all a request carries by itself.
+  /// The addon that was asked, from `catalogLabels`. It falls back to the host
+  /// of the manifest URL, which is all a request carries by itself.
   String get addonName =>
       label?.addonName ??
       Uri.tryParse(firstRequest.base)?.host ??
@@ -85,12 +85,12 @@ final class CatalogRow {
 
   /// The addon could not answer at all — anything but `EmptyContent`.
   ///
-  /// Kept apart from [isEmpty] on purpose: a catalog that legitimately has
+  /// Kept apart from [isEmpty] on purpose. A catalog that legitimately has
   /// nothing for this query and one whose host answered `HTTP 404` are
-  /// different facts, and only the second is a fault to report. A failed
-  /// row has nothing to put on screen, so it is dropped from
-  /// [CatalogsWithExtraState.visibleRows] too — but unlike an empty one it
-  /// is accounted for, once, where the list ends.
+  /// different facts, and only the second is a fault to report. A failed row
+  /// has nothing to put on screen, so it is dropped from
+  /// [CatalogsWithExtraState.visibleRows] too. Unlike an empty one, it is
+  /// accounted for, once, where the list ends.
   bool get hasFailed {
     final error = this.error;
     return error != null && !error.isEmptyContent;

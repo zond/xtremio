@@ -47,8 +47,8 @@ final class DownloadRequest {
   /// The video inside the meta; the meta id itself for a movie.
   final String videoId;
 
-  /// The addon's stream. Must be a torrent, a web link or a linked Drive
-  /// file -- anything else is the one thing `downloads_add` refuses with an
+  /// The addon's stream. It must be a torrent, a web link or a linked Drive
+  /// file. Anything else is the one thing `downloads_add` refuses with an
   /// exception rather than a failure.
   final StreamInfo stream;
 
@@ -60,9 +60,9 @@ final class DownloadRequest {
   final String? poster;
 
   /// Overrides the stream's own `fileIdx`, for a caller that resolved the
-  /// episode's file itself. Left out, the server picks the file the stream
-  /// would have played (the `fileMustInclude` match, else the largest media
-  /// file), which is what the player's `-1` asks for too.
+  /// episode's file itself. When it is left out, the server picks the file the
+  /// stream would have played (the `fileMustInclude` match, else the largest
+  /// media file), which is what the player's `-1` asks for too.
   final int? fileIdx;
 
   /// A `MetaItem` snapshot, so Details renders offline.
@@ -128,9 +128,9 @@ enum DownloadFailureKind {
 }
 
 /// A refused pin. A full disk is something to show, not an exception, so it
-/// comes back as a value with the server's own client-safe sentence — which
-/// never names a local path — and, where there are any, the numbers that
-/// sentence was built from.
+/// comes back as a value. The value carries the server's own client-safe
+/// sentence, which never names a local path, and the numbers that sentence was
+/// built from, where there are any.
 final class DownloadFailure {
   const DownloadFailure(this.json);
 
@@ -193,10 +193,10 @@ enum DownloadOpenFailure {
   /// The bytes are not all here yet.
   incomplete('incomplete'),
 
-  /// Whole, and nothing can say right now whether it can be served: the
-  /// embedded server is not running (the pieces a download is made of are
-  /// only ever read through it), or it is and cannot speak for this file
-  /// yet -- the torrent was not restored, or it is still being checked or
+  /// Whole, but nothing can say right now whether it can be served. Either the
+  /// embedded server is not running (the pieces a download is made of are only
+  /// ever read through it), or it is running and cannot speak for this file
+  /// yet: the torrent was not restored, or it is still being checked or
   /// resolved, as at the start of a launch. Worth asking again.
   unavailable('unavailable'),
 
@@ -231,9 +231,9 @@ final class DownloadOpenResult {
   /// Whether this download can be played from what is on this device.
   final bool ok;
 
-  /// The URL to play it from -- the embedded server's media route for the
-  /// torrent and file, served off the pieces already here; null when there
-  /// is nowhere to play it from.
+  /// The URL to play it from: the embedded server's media route for the torrent
+  /// and file, served off the pieces already here. Null when there is nowhere
+  /// to play it from.
   final String? url;
 
   /// The entry as it now stands, `lastPlayedAt` stamped; null when the open
@@ -271,9 +271,9 @@ final class DownloadRemoveResult {
   /// Whether the registry had an entry to forget.
   final bool removed;
 
-  /// Whether the server's pin went with it. False when another download
-  /// names the same file — one torrent offered under two metas — in which
-  /// case the pin, and the bytes, are still the other one's.
+  /// Whether the server's pin went with it. False when another download names
+  /// the same file (one torrent offered under two metas); the pin and the bytes
+  /// are then still the other one's.
   final bool unpinned;
 
   /// Whether bytes actually left the disk.
@@ -304,11 +304,11 @@ abstract interface class DownloadsClient {
   /// waiting on its metadata.
   Future<DownloadAddResult> add(DownloadRequest request);
 
-  /// Drops the download [key] (`"{metaId}:{videoId}"`), with [deleteFiles]
-  /// the bytes too. A removal that happened is also pushed on [updates] as
-  /// a [DownloadsRemovalUpdate], because nothing else ever says one did:
-  /// the Rust feed carries rows that moved and rows that appeared, and a
-  /// row that is gone is neither.
+  /// Drops the download [key] (`"{metaId}:{videoId}"`), and with [deleteFiles]
+  /// the bytes too. A removal that happened is also pushed on [updates] as a
+  /// [DownloadsRemovalUpdate], because nothing else ever says one did. The Rust
+  /// feed carries rows that moved and rows that appeared, and a row that is
+  /// gone is neither.
   Future<DownloadRemoveResult> remove(String key, {bool deleteFiles = false});
 
   /// Every download, live progress merged in. Answers what is on disk when
@@ -317,29 +317,28 @@ abstract interface class DownloadsClient {
 
   /// Move a downloads list that will not read aside and start an empty one.
   ///
-  /// Only for [DownloadsRegistry.unreadable]: while that holds, the app
-  /// keeps every file on the device because it cannot say which were asked
-  /// for, and nothing can be added or removed. This gives that up -- the
-  /// files stop being named and are freed at the next launch -- so a caller
-  /// asks the user first. Throws when the list reads, which is what makes
-  /// it a repair rather than a way to delete everything.
+  /// Only for [DownloadsRegistry.unreadable]. While that holds, the app keeps
+  /// every file on the device because it cannot say which were asked for, and
+  /// nothing can be added or removed. This gives that up: the files stop being
+  /// named and are freed at the next launch. So a caller asks the user first.
+  /// Throws when the list reads, which makes it a repair rather than a way to
+  /// delete everything.
   Future<void> startFreshRegistry();
 
-  /// What to play the download [key] off the device with, and a note that
-  /// it was played: a finished download answers the embedded server's media
-  /// route for its own torrent and file -- there is no whole file to open,
-  /// only the pieces that server reads -- and takes a `lastPlayedAt` stamp.
-  /// Anything else -- no such entry, not finished, no server running to
-  /// read the pieces, or a server that no longer holds them -- answers
-  /// [DownloadOpenResult.reason] so the caller streams the title instead
-  /// of opening a player on a URL that would start a fresh torrent.
+  /// What to play the download [key] off the device with, and a note that it
+  /// was played. A finished download answers the embedded server's media route
+  /// for its own torrent and file, and takes a `lastPlayedAt` stamp. There is
+  /// no whole file to open, only the pieces that server reads. Anything else
+  /// answers [DownloadOpenResult.reason]: no such entry, not finished, no
+  /// server running to read the pieces, or a server that no longer holds them.
+  /// The caller then streams the title instead of opening a player on a URL
+  /// that would start a fresh torrent.
   Future<DownloadOpenResult> open(String key);
 
-  /// Progress, as it happens: each event carries only what moved -- the
-  /// ticker's narrow rows, a whole listing envelope, or the keys a
-  /// [remove] through this client dropped -- so fold them into a [list]
-  /// with [DownloadsUpdate.applyTo]. Broadcast, and nothing is buffered
-  /// for a late subscriber.
+  /// Progress, as it happens. Each event carries only what moved: the ticker's
+  /// narrow rows, a whole listing envelope, or the keys a [remove] through this
+  /// client dropped. Fold them into a [list] with [DownloadsUpdate.applyTo].
+  /// Broadcast, and nothing is buffered for a late subscriber.
   Stream<DownloadsUpdate> get updates;
 
   /// Releases the progress subscription. The client is done afterwards.
@@ -358,10 +357,9 @@ typedef DownloadsStartFreshFn = Future<String> Function();
 typedef DownloadsOpenFn = Future<String> Function({required String key});
 typedef DownloadsEventsFn = Stream<String> Function();
 
-/// [DownloadsClient] over `rust/src/api/downloads.rs` — the same functions
-/// the server's download routes run, over FFI, without the HTTP or the
-/// bearer token those routes want. The app never speaks HTTP to the
-/// embedded server.
+/// [DownloadsClient] over `rust/src/api/downloads.rs`: the same functions the
+/// server's download routes run, called over FFI without the HTTP or the bearer
+/// token those routes want. The app never speaks HTTP to the embedded server.
 ///
 /// The Rust side keeps a single event sink, so this opens the progress
 /// stream once, on the first look at [updates], and everything after that
@@ -436,10 +434,9 @@ class RustDownloadsClient implements DownloadsClient {
   }
 
   /// The Rust side keeps one event sink, so a second client replaces it and
-  /// ends this stream. Close the broadcast so listeners hear the feed is
-  /// over instead of sitting on a dead one, and let go of both halves so a
-  /// later look at [updates] opens a fresh stream rather than handing back
-  /// the closed one.
+  /// ends this stream. Close the broadcast so listeners hear the feed is over
+  /// instead of sitting on a dead one. Let go of both halves, so a later look
+  /// at [updates] opens a fresh stream rather than handing back the closed one.
   void _endFeed(StreamController<DownloadsUpdate> controller) {
     _events = null;
     if (identical(_controller, controller)) _controller = null;
@@ -455,9 +452,9 @@ class RustDownloadsClient implements DownloadsClient {
     _controller = null;
   }
 
-  /// A payload this build cannot read is dropped, not thrown: a progress
-  /// event is a nicety, and the next [list] is the truth anyway. What is
-  /// logged is why it could not be read -- a `FormatException` quotes the
+  /// A payload this build cannot read is dropped, not thrown: a progress event
+  /// is a nicety, and the next [list] is the truth anyway. The log gets why it
+  /// could not be read and nothing more, since a `FormatException` quotes the
   /// text it choked on, and an event's contents are not for the log.
   static DownloadsUpdate? _parse(String payload) {
     try {
@@ -475,11 +472,10 @@ class RustDownloadsClient implements DownloadsClient {
       jsonDecode(json) as Map<String, dynamic>;
 }
 
-/// Provides the [DownloadsClient] to the widget tree, the way
-/// `PlaybackScope` provides an engine. There is no fallback on purpose: the
-/// real client holds the one progress subscription the Rust side allows, so
-/// it is built once, by whoever also disposes it, and never conjured out of
-/// a `BuildContext`.
+/// Provides the [DownloadsClient] to the widget tree, the way `PlaybackScope`
+/// provides an engine. There is no fallback on purpose. The real client holds
+/// the one progress subscription the Rust side allows, so it is built once, by
+/// whoever also disposes it, and never conjured out of a `BuildContext`.
 class DownloadsScope extends InheritedWidget {
   const DownloadsScope({super.key, required this.client, required super.child});
 

@@ -22,18 +22,18 @@ import 'subtitle_sync.dart';
 /// The app's own preferences, over the Rust side's small JSON file
 /// (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`).
 ///
-/// These are the *client's* choices — how a list is laid out, which view a
-/// screen comes up in — and deliberately not stremio-core `Settings`
-/// fields: that struct is the engine's, it is synced to the account, and
-/// adding to it would mean forking the core. They are equally deliberately
-/// not a Dart preferences package: the storage directory is already ours
-/// and already writes atomically.
+/// These are the *client's* choices, such as how a list is laid out or which
+/// view a screen comes up in. They are deliberately not stremio-core `Settings`
+/// fields. That struct is the engine's and is synced to the account, and adding
+/// to it would mean forking the core. They are deliberately not a Dart
+/// preferences package either: the storage directory is already ours and
+/// already writes atomically.
 ///
 /// An interface so widget tests can hand [AppPrefs] a map instead of
 /// reaching FFI, the way `DiagnosticsClient` works for Diagnostics.
 abstract interface class PrefsClient {
-  /// Every preference that has been set. An empty map means none has been —
-  /// a missing, unreadable or non-object file all read that way, since a
+  /// Every preference that has been set. An empty map means none has been. A
+  /// missing, unreadable or non-object file all read that way, since a
   /// preference is a default the user changed.
   Future<Map<String, dynamic>> getAll();
 
@@ -67,11 +67,10 @@ class RustPrefsClient implements PrefsClient {
 /// next title comes up in. It is a [ChangeNotifier] so the screens that
 /// read one rebuild when it changes.
 ///
-/// [load] failing (nothing has pointed storage anywhere yet, no Rust
-/// library under a test) leaves the defaults, and a failed write leaves the
-/// value in memory: the choice holds for this run and simply does not
-/// survive a restart, which is a better answer than a control that snaps
-/// back under the user's finger.
+/// The defaults stay when [load] fails (nothing has pointed storage anywhere
+/// yet, no Rust library under a test). A failed write leaves the value in
+/// memory: the choice holds for this run and does not survive a restart. That
+/// is a better answer than a control that snaps back under the user's finger.
 class AppPrefs extends ChangeNotifier {
   AppPrefs({this.client});
 
@@ -82,21 +81,20 @@ class AppPrefs extends ChangeNotifier {
   /// Where the values are read from and written to; null persists nothing.
   final PrefsClient? client;
 
-  /// The `streamsSectioned` key: whether the Details screen lists every
-  /// addon's streams together, cut into a collapsible section per
-  /// resolution, instead of one section per addon. True — sectioned — is
-  /// the default: a fresh install has never chosen, and a fresh install is
-  /// what this flag now defaults to showing.
+  /// The `streamsSectioned` key: whether the Details screen lists every addon's
+  /// streams together, cut into a collapsible section per resolution, instead
+  /// of one section per addon. True (sectioned) is the default, which is what a
+  /// fresh install shows, since it has never chosen.
   ///
-  /// [load] falls back to [legacyStreamsFlatKey] when this key is unset, so
-  /// an install that chose under the old name keeps its choice.
+  /// [load] falls back to [legacyStreamsFlatKey] when this key is unset, so an
+  /// install that chose under the old name keeps its choice.
   static const String streamsSectionedKey = 'streamsSectioned';
 
-  /// The boolean an install from before the rename may still have under
-  /// its old name, `streamsFlat`. [load] reads it only when
-  /// [streamsSectionedKey] itself is unset, and nothing here ever writes
-  /// to it again — the first toggle after an upgrade moves the choice to
-  /// the new key and the old one is left stale.
+  /// The boolean an install from before the rename may still have under its old
+  /// name, `streamsFlat`. [load] reads it only when [streamsSectionedKey]
+  /// itself is unset. Nothing here ever writes to it again: the first toggle
+  /// after an upgrade moves the choice to the new key, and the old one is left
+  /// stale.
   static const String legacyStreamsFlatKey = 'streamsFlat';
 
   /// The `streamsOrder` key: what order the streams inside one resolution
@@ -105,36 +103,33 @@ class AppPrefs extends ChangeNotifier {
   /// order the next title comes up in.
   static const String streamsOrderKey = 'streamsOrder';
 
-  /// The `openStreamSections` key: which resolution sections of the
-  /// sectioned sources list are expanded, as a list of each section's
-  /// stored label (a resolution's own [StreamResolution.label], or
-  /// `'unknown'` for the section nothing could be read a resolution from —
-  /// see `_sectionStorageLabel` in `meta_details_screen.dart`). Global and
-  /// sticky the same way the layout and the order are: a section opened on
-  /// one title is open on the next, and on the next restart.
+  /// The `openStreamSections` key: which resolution sections of the sectioned
+  /// sources list are expanded. It holds a list of each section's stored label:
+  /// a resolution's own [StreamResolution.label], or `'unknown'` for the
+  /// section no resolution could be read for (see `_sectionStorageLabel` in
+  /// `meta_details_screen.dart`). It is global and sticky like the layout and
+  /// the order: a section opened on one title is open on the next, and after a
+  /// restart.
   ///
-  /// Every section starts collapsed until the viewer opens one — an empty
-  /// list is a real, deliberately-chosen value ("collapse everything"),
-  /// not "nothing chosen yet", so [load] keeps that apart from a missing
-  /// key the same way it does for [streamsSectionedKey]. See
-  /// [openStreamSections].
+  /// Every section starts collapsed until the viewer opens one. An empty list
+  /// is a real, deliberate value ("collapse everything"), not "nothing chosen
+  /// yet". So [load] keeps it apart from a missing key, as it does for
+  /// [streamsSectionedKey]. See [openStreamSections].
   static const String openStreamSectionsKey = 'openStreamSections';
 
-  /// The `openStreamAddons` key: which addon groups of the *grouped*
-  /// sources list are expanded, as a list of each group's stored label
-  /// (the addon's transport URL — see `_addonStorageLabel` in
-  /// `meta_details_screen.dart`). Global and sticky exactly the way
-  /// [openStreamSectionsKey] is, and empty the same deliberate way: with
-  /// nothing remembered every group is shut, on a fresh install and after
-  /// the viewer has closed the last one.
+  /// The `openStreamAddons` key: which addon groups of the *grouped* sources
+  /// list are expanded, as a list of each group's stored label (the addon's
+  /// transport URL; see `_addonStorageLabel` in `meta_details_screen.dart`). It
+  /// is global and sticky exactly as [openStreamSectionsKey] is, and empty in
+  /// the same deliberate way. With nothing remembered every group is shut, on a
+  /// fresh install and after the viewer has closed the last one.
   ///
-  /// A key of its own rather than a share of [openStreamSectionsKey], for
-  /// two reasons. An addon may be called something a resolution is also
-  /// called, and one set cannot tell the two apart — the addon would open
-  /// a section, or the section the addon. And they are different
-  /// questions: what a viewer left open among resolutions says nothing
-  /// about which addons they want open, so one layout's choice must not
-  /// arrive as the other's.
+  /// It is a key of its own rather than a share of [openStreamSectionsKey], for
+  /// two reasons. An addon may have the same name as a resolution, and one set
+  /// cannot tell the two apart: the addon would open a section, or the section
+  /// the addon. And they are different questions. What a viewer left open among
+  /// resolutions says nothing about which addons they want open, so one
+  /// layout's choice must not arrive as the other's.
   static const String openStreamAddonsKey = 'openStreamAddons';
 
   /// The `bufferAhead` key: how far ahead playback buffers by default (see
@@ -142,41 +137,40 @@ class AppPrefs extends ChangeNotifier {
   /// for the playback on screen.
   static const String bufferAheadKey = 'bufferAhead';
 
-  /// The `focusEmphasis` key: how strongly focus is marked on a television
-  /// (see [FocusEmphasis]). This device's room and display, not the
-  /// account's, which is why it lives here rather than in
-  /// `profile.settings`.
+  /// The `focusEmphasis` key: how strongly focus is marked on a television (see
+  /// [FocusEmphasis]). It is about this device's room and display, not the
+  /// account, so it lives here rather than in `profile.settings`.
   static const String focusEmphasisKey = 'focusEmphasis';
 
   /// The `shareWhileIdle` key: whether the embedded server goes on
   /// uploading to other people when nothing is playing (`IdleSharing`).
   ///
-  /// **On until the viewer turns it off**, which is why it is a plain
-  /// `bool` and not a `bool?`: the default is the same everywhere, so a
-  /// missing key and a stored `true` mean the same thing and there is
-  /// nothing left for a null to say. A stored `false` is a decision and
-  /// still survives, which is all the storage ever had to do.
+  /// **On until the viewer turns it off.** That is why it is a plain `bool` and
+  /// not a `bool?`. The default is the same everywhere, so a missing key and a
+  /// stored `true` mean the same thing, and a null has nothing left to say. A
+  /// stored `false` is a decision and still survives, which is all the storage
+  /// ever had to do.
   static const String shareWhileIdleKey = 'shareWhileIdle';
 
   /// The `verboseDiagnostics` key: whether the Diagnostics log carries the
-  /// streaming server's retention trace -- what its cache decided about
-  /// each file and why -- and mpv's demuxer, stream and cache lines
-  /// (`DiagnosticsTraceSync`, `MediaKitEngine.verboseLog`). Off by default:
-  /// both are what a report is read by when playback misbehaves, and noise
-  /// the rest of the time, filling the ring the report copies. This
-  /// device's, like the other preferences here, since it is about what
-  /// this device's log holds.
+  /// streaming server's retention trace (what its cache decided about each file
+  /// and why) and mpv's demuxer, stream and cache lines
+  /// (`DiagnosticsTraceSync`, `MediaKitEngine.verboseLog`). Off by default.
+  /// Both are what a report is read by when playback misbehaves, and noise the
+  /// rest of the time, filling the ring the report copies. Like the other
+  /// preferences here it belongs to this device, since it is about what this
+  /// device's log holds.
   static const String verboseDiagnosticsKey = 'verboseDiagnostics';
 
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
   /// made that is still remembered (see [SubtitleSyncMemory]), most
   /// recent first.
   ///
-  /// One key for both adjustments even though they are keyed differently
-  /// -- a speed on the series and the release group, a shift on those
-  /// and the video release as well -- because they are the same
-  /// preference: what this viewer has already fixed. It is a list, so
-  /// the recency the bound drops by is the order itself.
+  /// Both adjustments share one key because they are the same preference: what
+  /// this viewer has already fixed. They are keyed differently, though: a speed
+  /// on the series and the release group, a shift on those and the video
+  /// release as well. It is a list, so the recency the bound drops by is the
+  /// order itself.
   static const String subtitleSyncKey = 'subtitleSync';
 
   /// The `subtitlePicks` key: which subtitle each show was last watched
@@ -185,9 +179,9 @@ class AppPrefs extends ChangeNotifier {
   ///
   /// A separate key from [subtitleSyncKey] because it answers a different
   /// question. The sync memory is what the viewer *fixed* about a file's
-  /// timing; this is what they *chose*, and the two are written by
-  /// different hands -- the panel writes one, the menu the other -- read
-  /// at different moments and forgotten independently.
+  /// timing; this is what they *chose*. The panel writes one and the menu the
+  /// other, they are read at different moments, and they are forgotten
+  /// independently.
   static const String subtitlePicksKey = 'subtitlePicks';
 
   /// The `localMedia` key: the videos on this device and what each one
@@ -200,8 +194,8 @@ class AppPrefs extends ChangeNotifier {
   static const String localFoldersKey = 'localFolders';
 
   /// The `localFolderBookmarks` key: on macOS, each chosen folder's
-  /// security-scoped bookmark (base64), which is what lets a sandboxed app
-  /// read the folder again after it quits. Folder to bookmark.
+  /// security-scoped bookmark (base64), which lets a sandboxed app read the
+  /// folder again after it quits. It maps folder to bookmark.
   static const String localFolderBookmarksKey = 'localFolderBookmarks';
 
   /// The `detailsVisits` key: which season and episode each title's
@@ -212,21 +206,20 @@ class AppPrefs extends ChangeNotifier {
   /// `similarApiKey`, the Gemini key a viewer once pasted so the app could
   /// ask a model itself, and `similarModel`, which model it asked.
   ///
-  /// "More like this" is asked of the xtremio-xervice server now, which holds
-  /// the only key there is, so neither means anything to this build. They
-  /// are not merely ignored: the first is a credential, and a credential
-  /// nothing reads is one that should not be lying in a file on the device
-  /// -- so a load that finds either writes it away, once, and every later
-  /// load finds nothing.
+  /// This build asks the xtremio-xervice server for "More like this", and the
+  /// server holds the only key there is, so neither means anything here. They
+  /// are not merely ignored. The first is a credential, and a credential
+  /// nothing reads should not be lying in a file on the device. So a load that
+  /// finds either removes it, once, and every later load finds nothing.
   static const List<String> retiredKeys = ['similarApiKey', 'similarModel'];
 
   /// The `similarSuggestions` key: what the server has already answered
   /// about each title (see [SimilarMemory]).
   ///
-  /// Kept for the life of the install as the first of two caches: the
-  /// server keeps one answer per title for everyone, and this keeps it on
-  /// the device, so a title is asked of the server once per install and
-  /// its row is there without a round trip every time it is opened.
+  /// It is kept for the life of the install, as the first of two caches. The
+  /// server keeps one answer per title for everyone, and this keeps it on the
+  /// device. So a title is asked of the server once per install, and its row is
+  /// there without a round trip each time it is opened.
   static const String similarSuggestionsKey = 'similarSuggestions';
 
   /// The `faces` key: what the viewer said about titles -- liked,
@@ -251,24 +244,23 @@ class AppPrefs extends ChangeNotifier {
   /// The `driveLinkedFiles` key: which Google Drive files a pairing has
   /// linked to this device (see [LinkedDriveFiles]).
   ///
-  /// Here, and not in the [SecretStore] beside the refresh token, because
-  /// it is not a secret: file ids and filenames are the same kind of thing
-  /// as the library, and a viewer looking at this file learns nothing they
-  /// could use. The token is the secret and it is the only thing kept
-  /// anywhere else. Keeping the list here is also what makes the Drive
-  /// screen cheap to build -- it is already in memory with the rest of the
-  /// preferences, and nothing has to open a keyring to draw a list.
+  /// It lives here, not in the [SecretStore] beside the refresh token, because
+  /// it is not a secret. File ids and filenames are the same kind of thing as
+  /// the library, and a viewer looking at this file learns nothing they could
+  /// use. The token is the secret, and it is the only thing kept anywhere else.
+  /// Keeping the list here also makes the Drive screen cheap to build: it is
+  /// already in memory with the rest of the preferences, and nothing has to
+  /// open a keyring to draw a list.
   static const String driveLinkedFilesKey = 'driveLinkedFiles';
 
   /// The `driveTokenDead` key: the pairing service has answered
   /// `pairAgain` for the stored refresh token, and only a fresh pairing
   /// fixes it (see [DriveLinkState.pairAgain]).
   ///
-  /// Stored rather than held for the run, so the screen that comes up
-  /// after a restart says "pair again" straight away instead of saying
-  /// "linked" until the first request fails. It is not a secret and it is
-  /// not about a file, so it is a flag here rather than a shape in the
-  /// list above.
+  /// It is stored rather than held for the run, so the screen after a restart
+  /// says "pair again" straight away, instead of "linked" until the first
+  /// request fails. It is not a secret and not about a file, so it is a flag
+  /// here rather than a shape in the list above.
   static const String driveTokenDeadKey = 'driveTokenDead';
 
   /// The `drivePendingSession` key: a pairing this device started and has
@@ -276,20 +268,19 @@ class AppPrefs extends ChangeNotifier {
   /// written down at all.
   ///
   /// The id is a credential while its pairing waits (see
-  /// `DrivePairingSession`) but only for about ten minutes and only once,
-  /// and this file is private to the app, so it is kept here with the
-  /// preferences. It is never logged whole (`DrivePairingJob.logId`).
+  /// `DrivePairingSession`), but only for about ten minutes and only once. This
+  /// file is private to the app, so the id is kept here with the preferences.
+  /// It is never logged whole (`DrivePairingJob.logId`).
   static const String drivePendingSessionKey = 'drivePendingSession';
 
-  /// The `viewerId` key: this install's name for its viewer, the first half
-  /// of every player token (`p=<viewer>.<screen>`, see
-  /// `PlayerScreen`'s `_proxyToken`). The streaming server keeps one play
-  /// session per viewer, so every player screen of this install -- the next
-  /// episode opens a new one -- continues the same session rather than
-  /// starting another. (Another install never shares this server: it is
-  /// embedded in the app, and no other device's player uses it.) Random,
-  /// made once and kept; not a secret, since it names nothing but a session
-  /// on the server this app talks to.
+  /// The `viewerId` key: this install's name for its viewer, the first half of
+  /// every player token (`p=<viewer>.<screen>`, see `PlayerScreen`'s
+  /// `_proxyToken`). The streaming server keeps one play session per viewer, so
+  /// every player screen of this install (the next episode opens a new one)
+  /// continues the same session rather than starting another. Another install
+  /// never shares this server: it is embedded in the app, and no other device's
+  /// player uses it. The id is random, made once and kept. It is not a secret,
+  /// since it names nothing but a session on the server this app talks to.
   static const String viewerIdKey = 'viewerId';
 
   /// The `updateCheckedAt` key: when the app last asked GitHub for its
@@ -309,13 +300,13 @@ class AppPrefs extends ChangeNotifier {
 
   StreamOrder get streamsOrder => _streamsOrder;
 
-  /// The stored labels of the resolution sections currently expanded, or
-  /// null when nothing has ever been chosen — a fresh install, or a load
-  /// that has not run yet. The sources list also draws null and an empty
-  /// set the same way (every section collapsed), but the two are not the
-  /// same stored value: once a viewer has collapsed everything on purpose,
-  /// that empty set has to keep reading back as "on purpose", including
-  /// across a restart, never fall through to some other default.
+  /// The stored labels of the resolution sections currently expanded, or null
+  /// when nothing has ever been chosen (a fresh install, or a load that has not
+  /// run yet). The sources list draws null and an empty set the same way, with
+  /// every section collapsed, but they are different stored values. Once a
+  /// viewer has collapsed everything on purpose, that empty set has to keep
+  /// reading back as "on purpose", across a restart too, and never fall through
+  /// to some other default.
   Set<String>? get openStreamSections => _openStreamSections;
   Set<String>? _openStreamSections;
 
@@ -420,9 +411,9 @@ class AppPrefs extends ChangeNotifier {
 
   String? _drivePendingSession;
 
-  /// See [viewerIdKey]. Made on first use when the file holds none, and
-  /// written then; what [load] finds replaces it only if nothing has asked
-  /// for it yet.
+  /// See [viewerIdKey]. When the file holds none, it is made and written on
+  /// first use. What [load] finds replaces it only if nothing has asked for it
+  /// yet.
   String get viewerId {
     if (!_viewerIdKept) {
       _viewerIdKept = true;
@@ -460,15 +451,15 @@ class AppPrefs extends ChangeNotifier {
   String? get drivePendingSession => _drivePendingSession;
   bool _driveTokenDead = false;
 
-  /// Reads every stored preference. Called once at start-up, and not
+  /// Reads every stored preference. It is called once at start-up and not
   /// waited for: `XtremioApp` builds its first screens beside it, so a
   /// preference can be set while the read is out.
   ///
-  /// **A value set during the load wins over the stored one**, which is
-  /// older by definition. The keys written meanwhile ([_setWhileLoading])
-  /// are left out of what is read, and the values whose absence reads as
-  /// the default are not read at all for them -- an absence that would
-  /// otherwise put the default over what was just set.
+  /// **A value set during the load wins over the stored one**, which is older
+  /// by definition. The keys written meanwhile ([_setWhileLoading]) are left
+  /// out of what is read. For those keys, a value whose absence reads as the
+  /// default is not read at all, since that absence would put the default over
+  /// what was just set.
   Future<void> load() async {
     final client = this.client;
     if (client == null) return;
@@ -772,9 +763,9 @@ class AppPrefs extends ChangeNotifier {
 
   /// Stores [value], or removes the key once nothing is on this device.
   ///
-  /// **Tells no listener**, for the reason [setDetailsVisits] tells none:
-  /// matching writes once per file, a phone holds hundreds, and what draws
-  /// from the record listens to `LocalMedia`, which says when it changed.
+  /// **Tells no listener**, for the same reason as [setDetailsVisits]. Matching
+  /// writes once per file, and a phone holds hundreds. What draws from the
+  /// record listens to `LocalMedia`, which says when it changed.
   Future<void> setLocalMedia(LocalMediaFiles value) async {
     if (_localMedia == value) return;
     _localMedia = value;
@@ -804,12 +795,12 @@ class AppPrefs extends ChangeNotifier {
   /// Stores [value], or removes the key entirely once nothing is
   /// remembered -- for the same reason [setSubtitleSync] does.
   ///
-  /// **Tells no listener.** Nothing is drawn from this: a details screen
-  /// reads its title's row once, when it opens. Notifying would rebuild
-  /// every screen that reads the preferences each time a viewer stopped
-  /// on a season, and would make the write impossible from a screen's
-  /// `dispose`, which is where the last one is made -- a rebuild cannot be
-  /// asked for while the tree is taking a screen down.
+  /// **Tells no listener.** Nothing is drawn from this: a details screen reads
+  /// its title's row once, when it opens. Notifying would rebuild every screen
+  /// that reads the preferences each time a viewer stopped on a season. It
+  /// would also make the write impossible from a screen's `dispose`, where the
+  /// last one is made, since a rebuild cannot be asked for while the tree is
+  /// taking a screen down.
   Future<void> setDetailsVisits(DetailsVisitMemory value) async {
     if (_detailsVisits == value) return;
     _detailsVisits = value;
@@ -880,9 +871,9 @@ class AppPrefs extends ChangeNotifier {
 
   /// Stores the remembered scores, or removes the key once nothing is.
   ///
-  /// Tells no listener, as [setDetailsVisits] does not: the screen that
-  /// asked has the scores in hand already, and every other screen reading
-  /// the preferences would rebuild for a value none of them draws.
+  /// Tells no listener, like [setDetailsVisits]. The screen that asked already
+  /// has the scores in hand, and every other screen reading the preferences
+  /// would rebuild for a value none of them draws.
   Future<void> setTitleRatings(TitleRatingsMemory value) async {
     if (_titleRatings == value) return;
     _titleRatings = value;
@@ -895,10 +886,9 @@ class AppPrefs extends ChangeNotifier {
   /// Stores which files are linked, or removes the key once nothing is --
   /// for the same reason [setSubtitleSync] does.
   ///
-  /// Written by [DriveAccount] and not by a screen: the list and the token
-  /// are two halves of one fact, and letting a screen move one of them
-  /// without the other is how a list of files nothing can open gets
-  /// written.
+  /// Written by [DriveAccount], not by a screen. The list and the token are two
+  /// halves of one fact, and a screen that moved one without the other would
+  /// write a list of files nothing can open.
   Future<void> setDriveLinkedFiles(LinkedDriveFiles value) async {
     if (_driveLinkedFiles == value) return;
     _driveLinkedFiles = value;
@@ -906,8 +896,8 @@ class AppPrefs extends ChangeNotifier {
     await _write(driveLinkedFilesKey, value.isEmpty ? null : value.toJson());
   }
 
-  /// Records that the refresh token has been rejected, or that a fresh one
-  /// has replaced it. [DriveAccount] again, for the same reason.
+  /// Records that the refresh token has been rejected, or that a fresh one has
+  /// replaced it. Written by [DriveAccount] too, for the same reason.
   Future<void> setDriveTokenDead(bool value) async {
     if (_driveTokenDead == value) return;
     _driveTokenDead = value;
@@ -941,12 +931,11 @@ class AppPrefs extends ChangeNotifier {
   /// is waiting for them; null otherwise.
   Set<String>? _setWhileLoading;
 
-  /// The last write asked for, which the next one waits on. One chain for
-  /// every key: each `prefsSet` is its own FFI call on a worker pool, so two
-  /// writes started together -- the pairing job's `set(id)` and then
-  /// `set(null)` -- could otherwise land in either order and leave the file
-  /// holding the older value. Never completes with an error ([_write]
-  /// catches its own).
+  /// The last write asked for, which the next one waits on. One chain serves
+  /// every key. Each `prefsSet` is its own FFI call on a worker pool, so two
+  /// writes started together (the pairing job's `set(id)` and then `set(null)`)
+  /// could otherwise land in either order and leave the file holding the older
+  /// value. It never completes with an error ([_write] catches its own).
   Future<void> _writes = Future<void>.value();
 
   Future<void> _write(String key, Object? value) {

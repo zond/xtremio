@@ -1,21 +1,20 @@
 /// Finishing a Google Drive pairing, somewhere that is not a screen.
 ///
-/// **Owned by the account, not the screen that started it.** The service
-/// holds a finished pairing for about ten minutes and hands it over exactly
-/// once, to whoever asks; a screen that asked and was then backed out of
-/// would throw the pairing away with no error anywhere, since nothing had
-/// failed. The credential and file list outlive any widget here, so backing
-/// out of the pairing screen is no longer destructive -- a spinner that
-/// means "this is still happening" rather than "you must stay here".
+/// **Owned by the account, not the screen that started it.** The service holds
+/// a finished pairing for about ten minutes and hands it over exactly once, to
+/// whoever asks. A screen that asked and was then backed out of would throw the
+/// pairing away with no error anywhere, since nothing had failed. Here the
+/// credential and file list outlive any widget, so backing out of the pairing
+/// screen is no longer destructive. The spinner means "this is still happening"
+/// rather than "you must stay here".
 ///
-/// **The id is written down.** A job in memory survives a screen but not
-/// the process being killed. The session id alone is enough to collect a
-/// pairing that already reached the service, so it is kept in the
-/// preferences and tried again on the next library -- see
-/// `PrefsClient.drivePendingSessionKey`. Only a process that dies *between*
-/// the picking and the handover cannot be recovered, because the one-time
-/// code goes with it; that window is a second wide, against the ten minutes
-/// that would otherwise be lost.
+/// **The id is written down.** A job in memory survives a screen but not the
+/// process being killed. The session id alone is enough to collect a pairing
+/// that already reached the service, so it is kept in the preferences and tried
+/// again on the next library (see `PrefsClient.drivePendingSessionKey`). Only a
+/// process that dies *between* the picking and the handover cannot be
+/// recovered, because the one-time code goes with it. That window is a second
+/// wide, against the ten minutes that would otherwise be lost.
 library;
 
 import 'dart:async';
@@ -31,9 +30,9 @@ enum DrivePairingJobOutcome {
   /// The files are in the account.
   linked,
 
-  /// The credential arrived but the store would not keep it, so it is good
-  /// for this run and gone after a restart. Worth saying out loud; it is the
-  /// one outcome a viewer has to know about *later*.
+  /// The credential arrived but the store would not keep it, so it is good for
+  /// this run and gone after a restart. Worth saying out loud: it is the one
+  /// outcome a viewer has to know about *later*.
   thisRunOnly,
 
   /// The session is not there any more: collected already, or expired. A
@@ -72,12 +71,12 @@ class DrivePairingJob extends ChangeNotifier {
   /// `images`, `player` and `boot`. In logcat that reads as
   /// `xtremio_core::app: drive: …`.
   ///
-  /// **What is never in them.** No refresh token, no access token, no
-  /// server auth code -- not their values and not their lengths -- and no
-  /// whole session id: it is a credential while its pairing waits (see
-  /// [DrivePairingSession]). Its first eight characters are written
-  /// ([logId]), enough to join a log line to a row in the service's
-  /// records; eight characters of a uuid collect nothing.
+  /// **What is never in them.** No refresh token, no access token and no server
+  /// auth code, neither their values nor their lengths. No whole session id
+  /// either, since it is a credential while its pairing waits (see
+  /// [DrivePairingSession]). Its first eight characters are written ([logId]),
+  /// which is enough to join a log line to a row in the service's records;
+  /// eight characters of a uuid collect nothing.
   static const String target = 'drive';
 
   /// The part of [sessionId] a log line carries: its first eight
@@ -87,11 +86,11 @@ class DrivePairingJob extends ChangeNotifier {
 
   /// Hands a native pick over and collects what it becomes.
   ///
-  /// Returns when it is done, but **nothing has to wait for it**: the job
+  /// Returns when it is done, but **nothing has to wait for it**. The job
   /// notifies, and a screen that has gone away simply is not listening any
-  /// more. Two of these never run at once — a second call while one is in
-  /// flight is dropped, because the collecting read is destructive and two
-  /// of them would turn one pairing into one pairing and one `404`.
+  /// more. Two of these never run at once. A second call while one is in flight
+  /// is dropped, because the collecting read is destructive, and two of them
+  /// would turn one pairing into one pairing and one `404`.
   Future<void> finish({
     required String sessionId,
     required String serverAuthCode,
@@ -128,16 +127,16 @@ class DrivePairingJob extends ChangeNotifier {
     await _collect(sessionId);
   }
 
-  /// Collects a pairing that reached the service and was never taken: the
-  /// one a killed process leaves behind. Nothing is handed over here — that
-  /// already happened — so all this needs is the id.
+  /// Collects a pairing that reached the service and was never taken: the one a
+  /// killed process leaves behind. Nothing is handed over here, since that
+  /// already happened, so all this needs is the id.
   Future<void> resume(String sessionId) async {
     if (running) return;
-    // Bounded, because the thing that asks is woken by this job finishing:
-    // a collect that keeps failing would otherwise wake the library, which
-    // would ask again, for ever. Three goes is enough for a blip and short
-    // of a loop, and a fourth comes with the next start of the app -- the
-    // id is still written down.
+    // Bounded, because the thing that asks is woken by this job finishing. A
+    // collect that keeps failing would otherwise wake the library, which would
+    // ask again, for ever. Three goes is enough for a blip and short of a loop.
+    // A fourth comes with the next start of the app, since the id is still
+    // written down.
     final tries = _tries[sessionId] ?? 0;
     if (tries >= maxTries) {
       DiagnosticsLog.info(
@@ -208,10 +207,10 @@ class DrivePairingJob extends ChangeNotifier {
   /// Wakes everything that depends on the account, **after** whatever is
   /// running now.
   ///
-  /// A microtask and not a call: the thing that starts a resume is the
-  /// library building, and an account that notified from inside that build
-  /// would be marking its own dependents dirty mid-frame. The wake is not
-  /// urgent -- it only has to happen before anybody could look again.
+  /// A microtask and not a call. The thing that starts a resume is the library
+  /// building, and an account that notified from inside that build would be
+  /// marking its own dependents dirty mid-frame. The wake is not urgent: it
+  /// only has to happen before anybody could look again.
   void _wakeAccount() => scheduleMicrotask(account.notePairingChanged);
 
   void _end(DrivePairingJobOutcome outcome, {bool forget = true}) {

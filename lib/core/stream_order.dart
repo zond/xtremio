@@ -1,14 +1,13 @@
 /// What order the streams inside one resolution section are listed in.
 ///
-/// **Why the default is peers per megabyte.** Every stream in the list is
-/// the same film, so its duration is a constant and its size is
-/// proportional to its bitrate. Bitrate is the demand the connection has to
-/// meet; peers are the supply that meets it. The smallest size *per peer*
-/// is therefore the best first guess at a stream that arrives faster than
-/// it is watched — which is the thing that usually goes wrong — and it is a
-/// better guess than either half on its own: the fattest remux with a
-/// hundred seeders can still stall, and a lonely 700 MB rip can still
-/// arrive in time.
+/// **Why the default is peers per megabyte.** Every stream in the list is the
+/// same film, so its duration is a constant and its size is proportional to its
+/// bitrate. Bitrate is the demand the connection has to meet; peers are the
+/// supply that meets it. So the smallest size *per peer* is the best first
+/// guess at a stream that arrives faster than it is watched, which is the thing
+/// that usually goes wrong. It is a better guess than either half on its own:
+/// the fattest remux with a hundred seeders can still stall, and a lonely 700
+/// MB rip can still arrive in time.
 ///
 /// It stays a guess. Peers are a convention read out of a description
 /// ([StreamFacts.seeders]) rather than a field of any protocol, and how

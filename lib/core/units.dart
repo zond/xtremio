@@ -5,12 +5,12 @@ library;
 /// `1.4 GB`, `357 MB`), the same ladder the player's panel counts bitrate
 /// and speed on: one decimal below 100 of a unit and none above it.
 ///
-/// Every byte count the app draws goes through this -- a download's size,
-/// free space, the image cache, the stats panel. Two exceptions, both
-/// deliberate (`AGENTS.md`, the stats panel's units rule): piece lengths
-/// are powers of two and are drawn in binary units
-/// (`TorrentProgressCard.formatPieceSize`), and a stream pill repeats the
-/// size text the addon wrote, which is 1024-based (`StreamFacts`).
+/// Every byte count the app draws goes through this: a download's size, free
+/// space, the image cache, the stats panel. There are two exceptions, both
+/// deliberate (`AGENTS.md`, the stats panel's units rule). Piece lengths are
+/// powers of two and are drawn in binary units
+/// (`TorrentProgressCard.formatPieceSize`). A stream pill repeats the size text
+/// the addon wrote, which is 1024-based (`StreamFacts`).
 String formatBytes(int bytes) {
   if (bytes < 1000) return '$bytes B';
   const units = ['kB', 'MB', 'GB', 'TB', 'PB'];

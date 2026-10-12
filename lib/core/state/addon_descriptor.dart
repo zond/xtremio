@@ -24,8 +24,8 @@ final class AddonDescriptor {
   /// Cannot be uninstalled (Cinemeta, the local addon).
   bool get isProtected => _flags['protected'] as bool? ?? false;
 
-  /// The addon's configuration page, when it has one: the manifest URL with
-  /// its first `manifest.json` replaced by `configure` (so a query string
+  /// The addon's configuration page, when it has one. It is the manifest URL
+  /// with its first `manifest.json` replaced by `configure` (so a query string
   /// after it survives), as stremio-web opens it. Null when the manifest
   /// declares neither `configurable` nor `configurationRequired`.
   String? get configureUrl {
@@ -72,13 +72,12 @@ final class AddonManifest {
         resource['name'] as String,
   ];
 
-  /// Whether the manifest's `resources` offers [resourceName] for [type],
-  /// mirroring stremio-core's `Manifest::is_resource_supported` (minus the
-  /// id-prefix half, which needs an id this call has none of): a short-form
-  /// entry (`"stream"`) falls back to [types]; a long-form entry
-  /// (`{name, types}`) answers for its own `types` list alone -- one
-  /// declared with no `types` of its own supports nothing, same as the
-  /// Rust side.
+  /// Whether the manifest's `resources` offers [resourceName] for [type]. It
+  /// mirrors stremio-core's `Manifest::is_resource_supported`, minus the
+  /// id-prefix half, which needs an id this call does not have. A short-form
+  /// entry (`"stream"`) falls back to [types]. A long-form entry
+  /// (`{name, types}`) answers for its own `types` list alone, so one declared
+  /// with no `types` of its own supports nothing, as on the Rust side.
   bool offersResourceForType(String resourceName, String type) {
     for (final resource in (json['resources'] as List<dynamic>? ?? const [])) {
       if (resource is String) {
@@ -114,10 +113,10 @@ final class ManifestCatalog {
   String get type => json['type'] as String;
   String? get name => json['name'] as String?;
 
-  /// The extra properties the catalog takes, from either form a manifest
-  /// may use: the full `extra` list, or the short `extraRequired` /
-  /// `extraSupported` pair, whose properties have no options -- which is
-  /// how stremio-core reads them (`ManifestExtra::iter`).
+  /// The extra properties the catalog takes, from either form a manifest may
+  /// use: the full `extra` list, or the short `extraRequired` /
+  /// `extraSupported` pair, whose properties have no options. stremio-core
+  /// reads them the same way (`ManifestExtra::iter`).
   List<ManifestExtraProp> get extraProps {
     final full = json['extra'];
     if (full is List) {
@@ -142,15 +141,14 @@ final class ManifestCatalog {
     ];
   }
 
-  /// Whether the catalog can be asked with nothing chosen: no property of
-  /// it is required. What puts a catalog on the board, as a row.
+  /// Whether the catalog can be asked with nothing chosen, because no property
+  /// of it is required. That puts a catalog on the board, as a row.
   bool get needsNoInput => !extraProps.any((prop) => prop.isRequired);
 
-  /// The extra that opens the catalog: each required property at its
-  /// first option. Null when a required property has no options -- a
-  /// search-only catalog -- which nothing but a search can open.
-  /// stremio-core's `default_required_extra`, which decides what Discover
-  /// offers.
+  /// The extra that opens the catalog: each required property at its first
+  /// option. Null when a required property has no options (a search-only
+  /// catalog), which nothing but a search can open. This is stremio-core's
+  /// `default_required_extra`, which decides what Discover offers.
   List<ExtraValue>? get defaultRequiredExtra {
     final extra = <ExtraValue>[];
     for (final prop in extraProps.where((prop) => prop.isRequired)) {

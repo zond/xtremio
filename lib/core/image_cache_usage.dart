@@ -8,34 +8,34 @@ import 'units.dart';
 /// no cache bounds, and the encoded files on disk the first two are
 /// refilled from.
 ///
-/// `XtremioBootstrap.imageCacheCeilingBytes` caps that cache at 32 MiB in
-/// place of the framework's 100 MiB, and `XtremioApp` empties it when the
-/// app goes to the background. Nothing else in the app looks at what the
-/// cache actually holds, so this is the only way to tell whether the cap
-/// is ever reached -- worth knowing on a device the low-memory killer has
-/// taken at 147 MB resident (see [ImageDiskCache], the class doc).
+/// `XtremioBootstrap.imageCacheCeilingBytes` caps that cache at 32 MiB in place
+/// of the framework's 100 MiB, and `XtremioApp` empties it when the app goes to
+/// the background. Nothing else in the app looks at what the cache actually
+/// holds, so this is the only way to tell whether the cap is ever reached. That
+/// is worth knowing on a device the low-memory killer has taken at 147 MB
+/// resident (see [ImageDiskCache], the class doc).
 ///
-/// **Two halves, and they are not a sum.** [cachedBytes] is the cache
-/// proper: images an LRU bounds, evicted least-recently-used first as the
-/// ceiling is crossed and dropped whole when the app is backgrounded.
-/// [liveImages] is the other half -- images an on-screen widget, or one on
-/// a screen still in the navigator stack, is holding. Eviction and
-/// `ImageCache.clear` do not free those; only the widget going away does.
-/// Most live images are counted in [cachedBytes] as well, so adding the two
-/// means nothing. What they are read for is the share: how much of what the
-/// app is holding a ceiling could ever reach.
+/// **Two halves, and they are not a sum.** [cachedBytes] is the cache proper:
+/// images an LRU bounds, evicted least-recently-used first as the ceiling is
+/// crossed, and dropped whole when the app is backgrounded. [liveImages] is the
+/// other half: images held by an on-screen widget, or by one on a screen still
+/// in the navigator stack. Eviction and `ImageCache.clear` do not free those;
+/// only the widget going away does. Most live images are counted in
+/// [cachedBytes] as well, so adding the two means nothing. What they are read
+/// for is the share: how much of what the app is holding a ceiling could ever
+/// reach.
 ///
-/// [diskBytes] is neither: it is not memory at all, and it is not decoded.
-/// It says what the first two are refilled *from* -- with a full store an
-/// eviction is a local read, and with an empty one it is a download. That
-/// is the figure that says whether the ceiling above is cheap.
+/// [diskBytes] is neither: it is not memory at all, and it is not decoded. It
+/// says what the first two are refilled *from*. With a full store an eviction
+/// is a local read, and with an empty one it is a download. That is the figure
+/// that says whether the ceiling above is cheap.
 ///
-/// The framework counts live images but not their bytes -- there is no
-/// getter for them, and walking the cache for a sum would cost more than a
-/// diagnostics read is allowed to -- so that half is a count. A count still
-/// settles the question it is there for: a settled figure with the cached
-/// bytes far under the ceiling and a hundred images live says the memory is
-/// in the half no cap touches.
+/// The framework counts live images but not their bytes. There is no getter for
+/// them, and walking the cache for a sum would cost more than a diagnostics
+/// read is allowed to. So that half is a count. A count still settles the
+/// question it is there for. A settled figure with the cached bytes far under
+/// the ceiling and a hundred images live says the memory is in the half no cap
+/// touches.
 class ImageCacheUsage {
   const ImageCacheUsage({
     required this.cachedBytes,
@@ -100,22 +100,22 @@ class ImageCacheUsage {
   /// looks like from here.
   final int decodingImages;
 
-  /// What [ImageDiskCache] is holding, against its own ceiling, and how
-  /// many files that is -- all three null when no store was opened.
+  /// What [ImageDiskCache] is holding, against its own ceiling, and how many
+  /// files that is. All three are null when no store was opened.
   ///
-  /// The third half, and the one that says what the other two *cost*. A
-  /// cache at its ceiling with an empty store means every eviction is a
-  /// download; the same figure over a full store means every eviction is a
-  /// local read, and the ceiling can come down. Read from the store's own
-  /// index, which is two integers in memory -- the same rule as the rest
-  /// of this class: a diagnostics read may not stat a directory.
+  /// The third half, and the one that says what the other two *cost*. A cache
+  /// at its ceiling with an empty store means every eviction is a download. The
+  /// same figure over a full store means every eviction is a local read, and
+  /// the ceiling can come down. It is read from the store's own index, which is
+  /// two integers in memory. That is the same rule as the rest of this class: a
+  /// diagnostics read may not stat a directory.
   final int? diskBytes;
   final int? diskFiles;
   final int? diskCeilingBytes;
 
-  /// `18.2 MB of 33.6 MB ceiling`, in the decimal units every other size
-  /// in this app is shown in -- so 32 MiB of ceiling reads as 33.6 MB,
-  /// the same convention as the `cache:` and `disk:` lines above it.
+  /// `18.2 MB of 33.6 MB ceiling`, in the decimal units every other size in
+  /// this app is shown in. So 32 MiB of ceiling reads as 33.6 MB, the same
+  /// convention as the `cache:` and `disk:` lines above it.
   String get cachedLabel =>
       '${formatBytes(cachedBytes)} of '
       '${formatBytes(ceilingBytes)} ceiling';
@@ -137,11 +137,11 @@ class ImageCacheUsage {
   /// The three lines the diagnostics header carries, taken the instant the
   /// header's `taken:` stamp was.
   ///
-  /// Three lines and not one because they answer different questions, and
-  /// a reader who only saw a total would draw the wrong conclusion from
-  /// it: a cached figure well under the ceiling is not a small image
-  /// footprint if a hundred images are live, and a cache at its ceiling
-  /// is not expensive if what it evicts is a file away.
+  /// Three lines and not one, because they answer different questions, and a
+  /// reader who only saw a total would draw the wrong conclusion. A cached
+  /// figure well under the ceiling is not a small image footprint if a hundred
+  /// images are live. A cache at its ceiling is not expensive if what it evicts
+  /// is a file away.
   List<String> get reportLines => [
     'image cache: $cachedLabel · $cachedImages images',
     'images in use: $liveImages held by a live widget, which no eviction '
@@ -149,9 +149,9 @@ class ImageCacheUsage {
     'image files: $diskLabel',
   ];
 
-  /// What those lines say when the cache could not be read at all -- the
-  /// binding not up, which on a running app it always is. The header keeps
-  /// its shape either way, the way the storage lines do.
+  /// What those lines say when the cache could not be read at all, which means
+  /// the binding is not up; on a running app it always is. The header keeps its
+  /// shape either way, as the storage lines do.
   static const List<String> unknownReportLines = [
     'image cache: unknown',
     'images in use: unknown',

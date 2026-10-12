@@ -7,12 +7,12 @@ import 'core_events.dart';
 import 'fields.dart';
 
 /// Keeps the latest JSON of one model field, re-pulling it whenever a
-/// `NewState` event names the field. Pulls are coalesced within one
-/// microtask turn: several `refresh` calls before the microtask runs are one
-/// pull, and a pull that finishes after a newer request was made is followed
-/// by one more. Events the bridge delivers separately are separate pulls;
-/// what makes those cheap is [FieldPulls] on the client, which fetches and
-/// decodes a field once per `NewState` however many notifiers ask for it.
+/// `NewState` event names the field. Pulls are coalesced within one microtask
+/// turn. Several `refresh` calls before the microtask runs are one pull, and a
+/// pull that finishes after a newer request was made is followed by one more.
+/// Events the bridge delivers separately are separate pulls. [FieldPulls] on
+/// the client makes those cheap: it fetches and decodes a field once per
+/// `NewState`, however many notifiers ask for it.
 ///
 /// The value is null until the first pull completes.
 class CoreFieldNotifier extends ValueNotifier<Map<String, dynamic>?> {
@@ -84,10 +84,10 @@ class CoreFieldNotifier extends ValueNotifier<Map<String, dynamic>?> {
 /// One parse of a field's JSON, kept for as long as the JSON is the same
 /// object.
 ///
-/// A pull hands over a new map whenever the field changed, so an
-/// `identical` map is an unchanged field and its parse can be reused: a
-/// screen that reads its state from several places in one build parses it
-/// once instead of once per read.
+/// A pull hands over a new map whenever the field changed, so an `identical`
+/// map is an unchanged field and its parse can be reused. A screen that reads
+/// its state from several places in one build parses it once instead of once
+/// per read.
 class ParsedField<T> {
   ParsedField(this.parse);
 

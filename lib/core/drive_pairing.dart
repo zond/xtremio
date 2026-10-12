@@ -1,28 +1,27 @@
 /// Talking to the pairing service in `xtremio-xervice/`: opening a session and
 /// collecting what a phone left on it.
 ///
-/// The service holds the client secret this sideloaded app cannot: it turns
-/// an authorization code into tokens and a refresh token into an access
-/// token. This file makes the television's two calls -- `POST /session` for
-/// something to draw, and `GET /session/{id}` until the phone has finished
-/// -- and nothing else. Its README has the whole flow.
+/// The service holds the client secret this sideloaded app cannot: it turns an
+/// authorization code into tokens and a refresh token into an access token.
+/// This file makes the television's two calls and nothing else: `POST /session`
+/// for something to draw, and `GET /session/{id}` until the phone has finished.
+/// Its README has the whole flow.
 ///
-/// **The collecting call is destructive**: the service deletes the session
-/// in the same request that hands the tokens over, so a second read of a
-/// session that answered [DrivePairingCollected] is a `404` and the
-/// credential is gone for good. A [DrivePairingCollected] is never dropped,
-/// retried or asked for twice -- see `DrivePairingScreen` and
-/// `DrivePairingJob`, the two callers, which never collect one session at
-/// once.
+/// **The collecting call is destructive.** The service deletes the session in
+/// the same request that hands the tokens over. So a second read of a session
+/// that answered [DrivePairingCollected] is a `404`, and the credential is gone
+/// for good. A [DrivePairingCollected] is never dropped, retried or asked for
+/// twice. See the two callers, `DrivePairingScreen` and `DrivePairingJob`,
+/// which never collect one session at once.
 ///
-/// **Neither token is written down here.** The refresh token goes straight
-/// from the response into [DriveAccount.linkFiles]; nothing in this file
-/// logs a body, a header or an answer, and [DrivePairingCollected.toString]
-/// names the files and not the credential (`AGENTS.md`, "Never log auth
-/// material"). The access token the same answer carries is never read: it
-/// is good for an hour, this device has nowhere safe to put a second
-/// credential, and `DriveSource` in the streaming server mints its own from
-/// the refresh token through `POST /refresh` when it wants one.
+/// **Neither token is written down here.** The refresh token goes straight from
+/// the response into [DriveAccount.linkFiles]. Nothing in this file logs a
+/// body, a header or an answer, and [DrivePairingCollected.toString] names the
+/// files and not the credential (`AGENTS.md`, "Never log auth material"). The
+/// access token in the same answer is never read. It is good for an hour, this
+/// device has nowhere safe to put a second credential, and `DriveSource` in the
+/// streaming server mints its own from the refresh token through
+/// `POST /refresh` when it wants one.
 library;
 
 import 'dart:async';
@@ -35,43 +34,43 @@ import 'json_exchange.dart';
 /// Where the pick page sends a phone's browser when the picking is done, so
 /// that a viewer this app handed to a browser is handed back to it.
 ///
-/// **Nothing in this app acts on this link.** `deepLinkAddonManifestUrl`
-/// drops a `stremio://` link with no host -- those are the official
-/// clients' own in-app routes -- so this arrives, means nothing, and is
-/// dropped. The whole effect is the platform bringing this app to the
-/// front. The scheme keeps its one meaning, "open that addon's details",
-/// since this adds no second one; a launch link the platform replays on a
-/// cold start days later is dropped too, since it was never acted on. See
-/// `DrivePairingScreen` for the objections against `app_links` this answers.
+/// **Nothing in this app acts on this link.** `deepLinkAddonManifestUrl` drops
+/// a `stremio://` link with no host, since those are the official clients' own
+/// in-app routes. So this arrives, means nothing, and is dropped. The whole
+/// effect is the platform bringing this app to the front. The scheme keeps its
+/// one meaning, "open that addon's details", since this adds no second one. A
+/// launch link the platform replays on a cold start days later is dropped too,
+/// since it was never acted on. See `DrivePairingScreen` for the objections
+/// against `app_links` this answers.
 ///
-/// The service sends it: `HAND_BACK_LINK`
+/// The service sends it. `HAND_BACK_LINK`
 /// (`xtremio-xervice/functions/index.js`) is the copy that matters, hard-coded
 /// so a page on that origin never navigates to a URL a client sent it. This
-/// constant is the app's side of the agreement; nothing but a test reads it.
+/// constant is the app's side of the agreement, and nothing but a test reads
+/// it.
 const String drivePairingHandBackLink = 'stremio:///pair';
 
 /// The pairing session a link carries, or null when [link] is not one of
 /// this app's pairing links.
 ///
-/// **This is the second half of the QR, and the reason the phone can pick
-/// more than one file.** The code a television draws is
-/// `https://<origin>/link?s=<session>`. A phone without this app opens it as
-/// a plain web page; a phone with this app gets it as an **App Link**
-/// instead -- Android verifies the app against
-/// `/.well-known/assetlinks.json` on that origin and hands the URL here
-/// rather than to a browser.
+/// **This is the second half of the QR, and the reason the phone can pick more
+/// than one file.** The code a television draws is
+/// `https://<origin>/link?s=<session>`. A phone without this app opens it as a
+/// plain web page. A phone with this app gets it as an **App Link** instead:
+/// Android verifies the app against `/.well-known/assetlinks.json` on that
+/// origin and hands the URL here rather than to a browser.
 ///
-/// This is not the objection recorded against `stremio://` in
-/// `DrivePairingScreen`: that scheme means "open that addon's details" and
-/// the platform hands it to anybody. This is an `https` URL on a **domain
-/// this project owns and serves**, claimed by a certificate fingerprint
-/// Google checks -- nothing else can send it, and it means one thing.
+/// The objection recorded against `stremio://` in `DrivePairingScreen` does not
+/// apply here. That scheme means "open that addon's details", and the platform
+/// hands it to anybody. This is an `https` URL on a **domain this project owns
+/// and serves**, claimed by a certificate fingerprint Google checks. Nothing
+/// else can send it, and it means one thing.
 ///
-/// Strict on every part, because a link is an input from outside: the scheme
-/// must be `https`, the host must be exactly the service's own (no
-/// subdomain, no lookalike), the path must be the link page's, and `s` must
-/// be there and non-empty. Anything else is not a pairing link and is
-/// dropped — the caller treats null as "some other link", never as an error.
+/// It is strict on every part, because a link is an input from outside. The
+/// scheme must be `https`, the host must be exactly the service's own (no
+/// subdomain, no lookalike), the path must be the link page's, and `s` must be
+/// there and non-empty. Anything else is not a pairing link and is dropped. The
+/// caller treats null as "some other link", never as an error.
 String? drivePairingSessionOfLink(
   String link, {
   String origin = XtremioDrivePairingService.defaultOrigin,
@@ -91,11 +90,11 @@ String? drivePairingSessionOfLink(
 /// One file as the pairing service names it: what the viewer picked, before
 /// this device has written anything down about it.
 ///
-/// A record and not a class, so that [DriveAccount.linkFiles] can name the
-/// same shape structurally and the account need not depend on the pairing
-/// service's types. It is three strings out of somebody else's JSON; the
-/// row this device keeps is [LinkedDriveFile], which is stamped from the
-/// account's own clock and is a class for that reason.
+/// It is a record and not a class, so that [DriveAccount.linkFiles] can name
+/// the same shape structurally and the account need not depend on the pairing
+/// service's types. It is three strings out of somebody else's JSON. The row
+/// this device keeps is [LinkedDriveFile], which is stamped from the account's
+/// own clock and is a class for that reason.
 ///
 /// * `fileId` -- Drive's own id, the only field that has to be right, since
 ///   it is what a byte range is asked for.
@@ -108,11 +107,11 @@ typedef DrivePairingFile = ({String fileId, String name, String mimeType});
 /// One file out of a `ready` body, or null when it is not one this build can
 /// use.
 ///
-/// A row with no id is nothing -- the id is what a request is made against
-/// -- and is dropped rather than failing the whole answer: one unreadable
-/// row out of twelve should not lose the eleven, and the session is deleted
-/// either way. Everything else has an answer for being missing, the same
-/// answers [LinkedDriveFile.fromJson] gives.
+/// A row with no id is nothing, since the id is what a request is made against.
+/// It is dropped rather than failing the whole answer: one unreadable row out
+/// of twelve should not lose the eleven, and the session is deleted either way.
+/// Everything else has an answer for being missing, the same answers
+/// [LinkedDriveFile.fromJson] gives.
 DrivePairingFile? _pairedFile(Object? json) {
   if (json is! Map) return null;
   final fileId = json['fileId'];
@@ -145,11 +144,11 @@ final class DrivePairingSession {
 
   /// When the service says it will stop answering for this session, in UTC.
   ///
-  /// Read as a *length* and never compared against the clock: a television's
-  /// own time is whatever DHCP handed it and is routinely wrong by hours,
-  /// and a session believed expired the moment it opened is a screen nobody
-  /// can use (`DriveSource` in the streaming server keeps its token's life
-  /// as a duration for the same reason). See `DrivePairingScreen.windowOf`.
+  /// It is read as a *length* and never compared against the clock. A
+  /// television's own time is whatever DHCP handed it and is routinely wrong by
+  /// hours, and a session believed expired the moment it opened is a screen
+  /// nobody can use. `DriveSource` in the streaming server keeps its token's
+  /// life as a duration for the same reason. See `DrivePairingScreen.windowOf`.
   final DateTime expiresAt;
 
   /// One session as the service describes it, or null when the answer is
@@ -171,10 +170,10 @@ final class DrivePairingSession {
     );
   }
 
-  /// Nothing about the session at all. The id is the whole of what a pairing
-  /// is collected with -- anybody holding it can make the one read that
-  /// hands over the credential -- so it is not written into a line either,
-  /// and there is nothing else here worth naming.
+  /// Nothing about the session at all. The id is the whole of what a pairing is
+  /// collected with: anybody holding it can make the one read that hands over
+  /// the credential. So it is not written into a line either, and there is
+  /// nothing else here worth naming.
   @override
   String toString() => 'DrivePairingSession()';
 }
@@ -191,10 +190,10 @@ final class DrivePairingOpened extends DrivePairingOpening {
   final DrivePairingSession session;
 }
 
-/// No session, and a sentence saying why that a viewer can act on: the
-/// service is unreachable, or it is refusing to open more sessions for this
-/// address this hour (`429`, sixty an hour, which is the cost limit the
-/// service exists behind rather than anything about this device).
+/// No session, and a sentence a viewer can act on saying why: the service is
+/// unreachable, or it is refusing to open more sessions for this address this
+/// hour (`429`, sixty an hour). That limit is the cost limit the service exists
+/// behind, not anything about this device.
 final class DrivePairingUnavailable extends DrivePairingOpening {
   const DrivePairingUnavailable(this.reason);
 
@@ -221,9 +220,9 @@ final class DrivePairingWaiting extends DrivePairingAnswer {
   final bool signedIn;
 }
 
-/// The pairing, collected. **The session no longer exists**: this object is
-/// the only copy of the credential, so whatever happens next it is handed
-/// to [DriveAccount] and not thrown away.
+/// The pairing, collected. **The session no longer exists**: this object is the
+/// only copy of the credential. So whatever happens next, it is handed to
+/// [DriveAccount] and not thrown away.
 final class DrivePairingCollected extends DrivePairingAnswer {
   const DrivePairingCollected({
     required this.refreshToken,
@@ -237,11 +236,11 @@ final class DrivePairingCollected extends DrivePairingAnswer {
   final String refreshToken;
 
   /// Every file the viewer picked in the one Picker, in the order the Picker
-  /// handed them over, and **never empty** -- a `ready` session with no
-  /// readable file on it is [DrivePairingGone] instead, because there is
-  /// nothing to link and nothing left to poll for.
+  /// handed them over, and **never empty**. A `ready` session with no readable
+  /// file on it is [DrivePairingGone] instead, because there is nothing to link
+  /// and nothing left to poll for.
   ///
-  /// One is still the common case and is not a special one: a service that
+  /// One file is still the common case, and not a special one: a service that
   /// only ever named a single file answers as a list of one (see
   /// [XtremioDrivePairingService._readAnswer]).
   final List<DrivePairingFile> files;
@@ -259,9 +258,9 @@ final class DrivePairingExpired extends DrivePairingAnswer {
 }
 
 /// `404`: there is no such session. Either the phone never finished and
-/// Firestore's TTL collected it, or somebody else read it -- and a read is
-/// a delete, so the pairing this screen was waiting for is not coming.
-/// Terminal, like [DrivePairingExpired], and for the same reason.
+/// Firestore's TTL collected it, or somebody else read it. A read is a delete,
+/// so the pairing this screen was waiting for is not coming. Terminal, like
+/// [DrivePairingExpired], and for the same reason.
 final class DrivePairingGone extends DrivePairingAnswer {
   const DrivePairingGone();
 }
@@ -276,20 +275,19 @@ final class DrivePairingUnreachable extends DrivePairingAnswer {
   const DrivePairingUnreachable();
 }
 
-/// Which shape of device asked for a pairing. The only thing about the app
-/// the service is told, and the only thing the pick page words itself
+/// Which shape of device asked for a pairing. It is the only thing about the
+/// app the service is told, and the only thing the pick page words itself
 /// differently for.
 ///
-/// **Three, not two.** A phone and a desktop are the same at the start --
-/// both opened the browser themselves, on the screen the viewer is already
-/// looking at -- and differ only at the end. `stremio://` is registered on
-/// the phone, so the page can put the viewer back in front of the app; on a
-/// desktop that registration is installed by hand or not at all
-/// (`docs/DEEP_LINKS.md`), so a browser sent to the scheme would show an
-/// error page where a confirmation should be, and the page has to say the
-/// pairing is done and leave the window to be closed instead. A [television]
-/// is the third: its viewer is looking at the other screen already and is
-/// sent nowhere at all.
+/// **Three, not two.** A phone and a desktop are the same at the start: both
+/// opened the browser themselves, on the screen the viewer is already looking
+/// at. They differ only at the end. `stremio://` is registered on the phone, so
+/// the page can put the viewer back in front of the app. On a desktop that
+/// registration is installed by hand or not at all (`docs/DEEP_LINKS.md`). A
+/// browser sent to the scheme there would show an error page where a
+/// confirmation should be, so the page says the pairing is done and leaves the
+/// window to be closed. A [television] is the third: its viewer is already
+/// looking at the other screen and is sent nowhere at all.
 enum DrivePairingShape {
   television('tv'),
   phone('phone'),
@@ -314,9 +312,9 @@ abstract interface class DrivePairingService {
   /// Asks for a session: `POST /session`.
   ///
   /// [shape] tells the service which kind of device asked, and is the only
-  /// thing the shapes differ by on the wire -- it decides how the pick page
-  /// words its confirmation, and whether that page ends by sending the
-  /// browser to [drivePairingHandBackLink]. See [DrivePairingShape] and
+  /// thing the shapes differ by on the wire. It decides how the pick page words
+  /// its confirmation, and whether that page ends by sending the browser to
+  /// [drivePairingHandBackLink]. See [DrivePairingShape] and
   /// `DrivePairingScreen`.
   Future<DrivePairingOpening> open({required DrivePairingShape shape});
 
@@ -328,22 +326,22 @@ abstract interface class DrivePairingService {
 
   /// Hands a **native** pick to a waiting session: `POST /session/{id}/android`.
   ///
-  /// The phone's half of the App Link flow, and the one call the browser
+  /// It is the phone's half of the App Link flow, and the one call the browser
   /// never makes. A browser signs in and picks in two steps, so the service
-  /// learns them separately; a phone doing both natively has them in the
-  /// same instant, so this carries both and takes the session from waiting
-  /// to ready in one go.
+  /// learns them separately. A phone doing both natively has them in the same
+  /// instant, so this carries both and takes the session from waiting to ready
+  /// in one go.
   ///
-  /// [serverAuthCode] is a **credential** and belongs in no log line and on
-  /// no screen. It is a one-time code issued for the *web* client, because
-  /// that is the client the television's token belongs to: a `drive.file`
-  /// grant is recorded against a user and a client, so a pick recorded
-  /// against this app's Android client would grant the television nothing.
+  /// [serverAuthCode] is a **credential** and belongs in no log line and on no
+  /// screen. It is a one-time code issued for the *web* client, because that is
+  /// the client the television's token belongs to. A `drive.file` grant is
+  /// recorded against a user and a client, so a pick recorded against this
+  /// app's Android client would grant the television nothing.
   ///
-  /// Only ids are sent. The service reads the names itself with the
-  /// credential it just minted, because a name is drawn on a television and
-  /// matched against a catalogue, and is not a thing a client should be able
-  /// to invent about somebody else's Drive.
+  /// Only ids are sent. The service reads the names itself with the credential
+  /// it just minted. A name is drawn on a television and matched against a
+  /// catalogue, and a client should not be able to invent one about somebody
+  /// else's Drive.
   Future<DrivePairingHandover> handOverNativePick({
     required String sessionId,
     required String serverAuthCode,
@@ -378,8 +376,8 @@ class XtremioDrivePairingService implements DrivePairingService {
 
   /// Where the service lives, as the service itself writes it down
   /// (`xtremio-xervice/functions/index.js`, `PUBLIC_ORIGIN`). It has to be this
-  /// host and not the Cloud Run one behind the Hosting rewrite: the pages
-  /// are served here, and this is the redirect URI the OAuth client knows.
+  /// host and not the Cloud Run one behind the Hosting rewrite, because the
+  /// pages are served here and this is the redirect URI the OAuth client knows.
   static const String defaultOrigin = 'https://xtremio-xervice.web.app';
 
   final String origin;
@@ -502,11 +500,10 @@ class XtremioDrivePairingService implements DrivePairingService {
   /// What a `200` body means.
   ///
   /// `{"status": "pending"}` and `{"status": "signed-in"}` are the phone
-  /// part-way through; `ready` carries the pairing and means the session
-  /// has just been deleted. A body naming a status this build does not know
-  /// is [DrivePairingUnreachable] and so is polled again -- a service that
-  /// grew a fourth waiting state is not a pairing this screen should give
-  /// up on.
+  /// part-way through. `ready` carries the pairing and means the session has
+  /// just been deleted. A body naming a status this build does not know is
+  /// [DrivePairingUnreachable], and so is polled again. A service that grew a
+  /// fourth waiting state is not a pairing this screen should give up on.
   static DrivePairingAnswer _readAnswer(Map<String, dynamic>? json) {
     final status = json?['status'];
     if (status == 'pending') return const DrivePairingWaiting(signedIn: false);

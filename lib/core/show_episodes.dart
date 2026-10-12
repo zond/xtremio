@@ -1,12 +1,11 @@
 /// A series' episode list, as much of it as "watched through" needs, and
 /// where it is kept.
 ///
-/// A library item's watched marks are bits by position in the meta's
-/// video list (`watched_bitfield.dart`), so telling whether a season is
-/// watched needs that list. It is asked of Cinemeta -- the meta addon
-/// everybody has, which "More like this" already asks -- once per show,
-/// and kept: what is stored is the ids in stremio-core's order with their
-/// season numbers, nothing else.
+/// A library item's watched marks are bits by position in the meta's video list
+/// (`watched_bitfield.dart`), so telling whether a season is watched needs that
+/// list. It is asked of Cinemeta once per show and kept. Cinemeta is the meta
+/// addon everybody has, and "More like this" already asks it. What is stored is
+/// the ids in stremio-core's order with their season numbers, nothing else.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -63,8 +62,8 @@ final class ShowEpisodesMemory {
     return ShowEpisodesMemory(next);
   }
 
-  /// `{id: [[videoId, season], ...]}`, a season of null written as 0 -- a
-  /// special, which is what the rule takes it for either way.
+  /// `{id: [[videoId, season], ...]}`, with a season of null written as 0. That
+  /// is a special, which is what the rule takes it for either way.
   Map<String, Object> toJson() => {
     for (final MapEntry(:key, :value) in shows.entries)
       key: [
