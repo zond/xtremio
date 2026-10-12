@@ -27,12 +27,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// **Which file of the torrent the player is reading, as its URL spells
   /// it**: the `{fileIdx}` segment the core wrote, `-1` included.
   ///
-  /// Not `TorrentStatsRequest.fileIdx`, the addon's, which is often absent:
-  /// the core then writes `-1` and the *server* picks the file (the largest
-  /// video, narrowed by the URL's `f=` filters, [_openedFilters]). So the
-  /// segment is passed through with the filters and the server resolves them
-  /// as its stream route does; treating `-1` as "no file" would report no
-  /// length for most streams.
+  /// Not `TorrentStatsRequest.fileIdx`, the addon's, which is often absent. The
+  /// core then writes `-1` and the *server* picks the file (the largest video,
+  /// narrowed by the URL's `f=` filters, [_openedFilters]). So the segment is
+  /// passed through with the filters, and the server resolves them as its
+  /// stream route does. Treating `-1` as "no file" would report no length for
+  /// most streams.
   int? get _openedFileIdx {
     final segments = _opened?.pathSegments;
     if (segments == null || segments.length < 2) return null;
@@ -106,11 +106,11 @@ extension _PlayerServerPolls on _PlayerScreenState {
   }
 
   /// Tells the server the buffering popup is up while the video was playing
-  /// normally -- what has it split one more piece ahead of the reader for
-  /// the rest of this video. Not the wait after an open or a seek, which is
-  /// a window filling and which the server sizes from the film's rate on
-  /// its own ([_playingNormally]); and only a torrent this server is
-  /// streaming, since the count is that engine's.
+  /// normally, which has it split one more piece ahead of the reader for the
+  /// rest of this video. Not the wait after an open or a seek: that is a window
+  /// filling, which the server sizes from the film's rate on its own
+  /// ([_playingNormally]). Only for a torrent this server is streaming, since
+  /// the count is that engine's.
   Future<void> _reportStall() async {
     final request = _torrentStatsRequest;
     if (request == null || !_playingNormally) return;
@@ -151,11 +151,11 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// One ask of the read-wait readout ([_readStalled]), for the torrent
   /// the engine reads by media id.
   ///
-  /// The card goes up when a read has waited [PlayerScreen.readWaitShown]
-  /// while the picture stood still since the last ask, and comes down at
-  /// the first ask that finds reads flowing -- whatever the read is: the
-  /// file's head, its index, the resume point. No give-up: a read that
-  /// waits for ever keeps the card up for ever, and the viewer decides.
+  /// The card goes up when a read has waited [PlayerScreen.readWaitShown] while
+  /// the picture stood still since the last ask. It comes down at the first ask
+  /// that finds reads flowing, whatever the read is: the file's head, its
+  /// index, the resume point. No give-up: a read that waits for ever keeps the
+  /// card up for ever, and the viewer decides.
   Future<void> _pollReadWait() async {
     final id = _playingMediaId;
     final reader = _streamNumbersReader;
@@ -210,15 +210,15 @@ extension _PlayerServerPolls on _PlayerScreenState {
   // --- Torrent start-up ----------------------------------------------------
 
   /// Begins polling the server's stats for the torrent [state] plays (see
-  /// [TorrentStatsRequest.forStream]); a direct HTTP stream shows no
-  /// overlay. The first request goes out on the first tick, never before the
-  /// engine's `open` has been issued.
+  /// [TorrentStatsRequest.forStream]). A direct HTTP stream shows no overlay.
+  /// The first request goes out on the first tick, never before the engine's
+  /// `open` has been issued.
   ///
-  /// Every torrent is served by the embedded server -- the core's streaming
-  /// server URL is pinned to it (`core::pin_to_embedded`) -- so the only
-  /// torrent not asked about is one in a build that started no embedded
-  /// server ([_serverBase] null): there is no engine here to ask. No
-  /// request means no swarm rows, no start-up card and no stall card.
+  /// Every torrent is served by the embedded server, since the core's streaming
+  /// server URL is pinned to it (`core::pin_to_embedded`). So the only torrent
+  /// not asked about is one in a build that started no embedded server
+  /// ([_serverBase] null): there is no engine here to ask. No request means no
+  /// swarm rows, no start-up card and no stall card.
   void _startTorrentStats(PlayerState state) {
     _stopTorrentStats();
     final stream = state.selectedStream;
@@ -255,11 +255,11 @@ extension _PlayerServerPolls on _PlayerScreenState {
     );
   }
 
-  /// Reads the DHT's status once: for the start-up card's one explanation
-  /// (a trackerless magnet on a network where it never bootstrapped) and
-  /// the stats panel's own row. Never on a timer -- called only here, when
-  /// this torrent's polling begins -- and never throws: a provider that
-  /// fails (the server not up yet) simply shows nothing.
+  /// Reads the DHT's status once, for the start-up card's one explanation (a
+  /// trackerless magnet on a network where it never bootstrapped) and the stats
+  /// panel's own row. Never on a timer: it is called only here, when this
+  /// torrent's polling begins. It never throws: a provider that fails (the
+  /// server not up yet) simply shows nothing.
   void _refreshDhtStatus() {
     final provider = _dhtStatusProvider;
     if (provider == null) {
@@ -285,25 +285,23 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _dhtStatus = null;
   }
 
-  /// Stops polling but keeps the torrent, so a stall or the stats OSD can
-  /// pick it up again. The last answer outlives the timer, because a pause
-  /// is often only the panel going away for a moment (hovering off, on a
-  /// desktop) and the numbers it showed are still the numbers to show when
-  /// it comes back; [_syncTorrentStats] is where they are dropped as too
-  /// old to show.
+  /// Stops polling but keeps the torrent, so a stall or the stats OSD can pick
+  /// it up again. The last answer outlives the timer, because a pause is often
+  /// only the panel going away for a moment (hovering off, on a desktop). The
+  /// numbers it showed are still the numbers to show when it comes back.
+  /// [_syncTorrentStats] is where they are dropped as too old to show.
   void _pauseTorrentStats() {
     _torrentStatsTimer?.cancel();
     _torrentStatsTimer = null;
     _torrentStatsCadence = null;
   }
 
-  /// Both of the player's polls of the server, put back in step with
-  /// whoever is reading them. Every path that changes what wants numbers
-  /// calls this one -- the media loading, a stall starting or ending, the
-  /// app going behind and coming back, the stats panel opening and
-  /// closing -- because the two answer different questions on the same
-  /// occasions: the swarm rows want a torrent, the cache and sharing rows
-  /// want only a stream and a panel to draw them on.
+  /// Both of the player's polls of the server, put back in step with whoever is
+  /// reading them. Every path that changes what wants numbers calls this one:
+  /// the media loading, a stall starting or ending, the app going behind and
+  /// coming back, the stats panel opening and closing. The two polls answer
+  /// different questions on the same occasions. The swarm rows want a torrent;
+  /// the cache and sharing rows want only a stream and a panel to draw them on.
   void _syncStatsPolls() {
     _syncTorrentStats();
     _syncStreamNumbers();
@@ -327,30 +325,30 @@ extension _PlayerServerPolls on _PlayerScreenState {
         : null;
     if (cadence == null) {
       _pauseTorrentStats();
-      // Nobody wants numbers, but the subtitle memory still wants the name
-      // of the file the server opened (the release a shift is keyed on),
-      // and a torrent that loaded before the first poll came back has never
-      // been told one: this is the one ask that would otherwise never
-      // happen. Not in the background, which asks the server for nothing;
-      // coming back runs this again.
+      // Nobody wants numbers, but the subtitle memory still wants the name of
+      // the file the server opened (the release a shift is keyed on). A torrent
+      // that loaded before the first poll came back has never been told one, so
+      // this is the one ask that would otherwise never happen. Not in the
+      // background, which asks the server for nothing; coming back runs this
+      // again.
       if (!_appHidden && _serverFilename == null) _pollTorrentStats();
       return;
     }
     if (_torrentStatsTimer != null && _torrentStatsCadence == cadence) return;
-    // A stall that starts under an open OSD (or ends under one) changes
-    // only the pace: the last answer stands until the next one lands. The
-    // same goes for a panel that comes back before the answer does. Wanting
-    // the numbers again after nothing was showing them is another matter:
-    // those describe a start-up, or a stall, however long ago, and the
-    // stall card showing them would be stating the past as the present.
+    // A stall that starts under an open OSD (or ends under one) changes only
+    // the pace: the last answer stands until the next one lands. The same goes
+    // for a panel that comes back before the answer does. Wanting the numbers
+    // again after nothing was showing them is another matter. Those numbers
+    // describe a start-up, or a stall, however long ago, and the stall card
+    // showing them would be stating the past as the present.
     if (_torrentStatsTimer == null && !_statsVisible) _torrentStats = null;
     _torrentStatsTimer?.cancel();
     _torrentStatsCadence = cadence;
     _torrentStatsTimer = Timer.periodic(cadence, (_) => _pollTorrentStats());
-    // Unlike the start-up poll this one goes out at once: the stream
-    // request created the torrent's engine long ago, so there is no
-    // ordering to respect, and whoever just started watching wants numbers
-    // now, not in two seconds.
+    // Unlike the start-up poll, this one goes out at once. The stream request
+    // created the torrent's engine long ago, so there is no ordering to
+    // respect, and whoever just started watching wants numbers now, not in two
+    // seconds.
     _pollTorrentStats();
   }
 
@@ -365,10 +363,10 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _torrentStatsFetching = true;
     TorrentStats? stats;
     // Whether the answer is about the file being streamed rather than the
-    // torrent as a whole. It matters for the name below: the torrent-level
-    // `streamName` is the file the server *guessed*, which is the streamed
-    // one only when the stream carried no `fileIdx` -- and then the primary
-    // request is the torrent-level one anyway.
+    // torrent as a whole. It matters for the name below. The torrent-level
+    // `streamName` is the file the server *guessed*, which is the streamed one
+    // only when the stream carried no `fileIdx`, and then the primary request
+    // is the torrent-level one anyway.
     var aboutTheFile = false;
     try {
       stats = await client.fetch(request);
@@ -387,12 +385,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
     final opened = aboutTheFile ? stats?.streamName : null;
     if (!mounted || _torrentStatsRequest != request) return;
     // The numbers describe a moment, so an answer that came back after the
-    // polling stopped -- a stall that ended while the fetch was out -- is
-    // not one to show. The name is not a moment: which file this is does
-    // not go stale, and the poll that carries it is very often the last
-    // one there will be, since the polling stops for good once playback is
-    // under way. A poll that came back empty says nothing about the file
-    // the server opened; only an answer that names one replaces the name.
+    // polling stopped (a stall that ended while the fetch was out) is not one
+    // to show. The name is not a moment. Which file this is does not go stale,
+    // and the poll that carries it is very often the last one there will be,
+    // since the polling stops for good once playback is under way. A poll that
+    // came back empty says nothing about the file the server opened; only an
+    // answer that names one replaces the name.
     final names = opened != null && opened != _serverFilename;
     final counts = _torrentStatsTimer != null && stats != _torrentStats;
     if (!names && !counts) return;
@@ -407,15 +405,14 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// The URL the stats panel's rows are asked about, or null where there is
   /// nothing this server could answer for.
   ///
-  /// [_engineUrl], not [_opened]: the bytes are cached under the URL the
-  /// engine was handed (a `/proxy` URL for anything not a torrent), and the
-  /// server finds the store by path, so the bare origin would find nothing.
-  /// A torrent played by id is asked about by its id instead
-  /// ([_pollStreamNumbers]), and has no URL here. Otherwise only a URL on
-  /// the embedded server: a loopback one ([isEmbeddedServerHost]), which
-  /// every stream the engine is handed is unless this build started no
-  /// embedded server ([_serverBase] null). `buffer=` stays on: the server
-  /// ignores every query key but `f=`.
+  /// [_engineUrl], not [_opened]: the bytes are cached under the URL the engine
+  /// was handed (a `/proxy` URL for anything not a torrent), and the server
+  /// finds the store by path, so the bare origin would find nothing. A torrent
+  /// played by id is asked about by its id instead ([_pollStreamNumbers]), and
+  /// has no URL here. Otherwise only a URL on the embedded server counts: a
+  /// loopback one ([isEmbeddedServerHost]). Every stream the engine is handed
+  /// is one, unless this build started no embedded server ([_serverBase] null).
+  /// `buffer=` stays on: the server ignores every query key but `f=`.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
     if (url == null || _serverBase == null) return null;
@@ -431,12 +428,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _syncStreamNumbers();
   }
 
-  /// Polls for as long as the panel that draws these rows is up and the app
-  /// is in front, and not otherwise: nothing else in the player reads them,
-  /// and the ask costs the server a listing of the stream's own
-  /// directories. Unlike the swarm this does not wait for the media to
-  /// load -- what it reports is what is on the disk, which is exactly what
-  /// somebody watching a stream that has not started yet is looking for.
+  /// Polls for as long as the panel that draws these rows is up and the app is
+  /// in front, and not otherwise. Nothing else in the player reads them, and
+  /// the ask costs the server a listing of the stream's own directories. Unlike
+  /// the swarm, this does not wait for the media to load. What it reports is
+  /// what is on the disk, which is exactly what somebody watching a stream that
+  /// has not started yet is looking for.
   void _syncStreamNumbers() {
     if (_appHidden || !_statsVisible || _opened == null) {
       _stopStreamNumbers();
@@ -452,26 +449,25 @@ extension _PlayerServerPolls on _PlayerScreenState {
     _pollStreamNumbers();
   }
 
-  /// Stops polling and drops the last answer, which are one act. What was
-  /// on the panel described the moment it was measured in; kept past its
-  /// poll it would come back on screen -- the panel reopened, the app
-  /// brought forward, the next video started -- as a reading of something
-  /// it was never taken from.
+  /// Stops polling and drops the last answer, which are one act. What was on
+  /// the panel described the moment it was measured in. Kept past its poll, it
+  /// would come back on screen (the panel reopened, the app brought forward,
+  /// the next video started) as a reading of something it was never taken from.
   void _stopStreamNumbers() {
     _streamNumbersTimer?.cancel();
     _streamNumbersTimer = null;
     _streamNumbers = null;
   }
 
-  /// One ask, for the media id the engine reads or else [_heldStreamUrl],
-  /// and nothing when there is neither.
-  /// Decided per ask because what the engine was handed can change under an
-  /// open panel (a re-open for a new buffer window).
+  /// One ask, for the media id the engine reads or else [_heldStreamUrl], and
+  /// nothing when there is neither. It is decided per ask, because what the
+  /// engine was handed can change under an open panel (a re-open for a new
+  /// buffer window).
   ///
   /// An answer that comes back after the stream changed ([_opened], not the
-  /// URL, says which video), or after the polling stopped, is not shown.
-  /// Every failure is no rows: the server not running and a stream it does
-  /// not hold both mean there is nothing to draw.
+  /// URL, says which video), or after the polling stopped, is not shown. Every
+  /// failure is no rows: the server not running and a stream it does not hold
+  /// both mean there is nothing to draw.
   Future<void> _pollStreamNumbers() async {
     final id = _serverBase == null
         ? null

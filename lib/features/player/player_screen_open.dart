@@ -7,24 +7,24 @@ part of 'player_screen.dart';
 /// Opening the stream: what the engine is handed (a media id, as a rule),
 /// the read-ahead, re-opens, and retrying a slow torrent's start.
 extension _PlayerOpen on _PlayerScreenState {
-  /// Issues the engine's `open` for [url], with the start position the
-  /// current stream was resolved with. Every failure goes through
-  /// [_failPlayback], which decides whether it is worth another attempt --
-  /// which is why a retry is this call again and nothing else.
+  /// Issues the engine's `open` for [url], with the start position the current
+  /// stream was resolved with. Every failure goes through [_failPlayback],
+  /// which decides whether it is worth another attempt. That is why a retry is
+  /// this call again and nothing else.
   ///
-  /// **What the engine is handed is decided by the server**, not by the
-  /// URL's shape: the stream is registered as a media id ([_register]),
-  /// resolved ([_playable]), and mpv reads `xtremio://<id>` -- unless the
-  /// server says it reads it only forward, over HTTP.
+  /// **What the engine is handed is decided by the server**, not by the URL's
+  /// shape. The stream is registered as a media id ([_register]) and resolved
+  /// ([_playable]), and mpv reads `xtremio://<id>`, unless the server says it
+  /// reads the stream only forward, over HTTP.
   void _open(Uri url, {required String reason}) {
     final state = _openState;
     final attempt = ++_openAttempt;
     _mediaIn = false;
-    // A position reported before this open is not this file's; until one
-    // is, a seek has to be held ([_seekEngineTo]). And a seek held for the
-    // last open is not this one's: this open starts at it already
-    // ([_openStart]) when it was the viewer's, and a new stream is not
-    // where they sought at all.
+    // A position reported before this open is not this file's, and until one
+    // is, a seek has to be held ([_seekEngineTo]). A seek held for the last
+    // open is not this one's either. This open already starts at it
+    // ([_openStart]) when it was the viewer's, and a new stream is not where
+    // they sought at all.
     _reportedPosition = null;
     _letHeldSeekGo();
     final start = _openStart;
@@ -58,9 +58,9 @@ extension _PlayerOpen on _PlayerScreenState {
           if (mediaIdOf(media) case final id?) _reportMediaOpened(id);
           return opening.then((_) {
             if (state != null) _reportVideoParams(state, url);
-            // A re-open is a fresh `loadfile`, and a correction the viewer
-            // made belongs to the playback, not to the file re-read: write
-            // it again so it survives a re-open for a network error. The
+            // A re-open is a fresh `loadfile`, and a correction the viewer made
+            // belongs to the playback, not to the file re-read. So it is
+            // written again, to survive a re-open for a network error. The
             // addon file goes back first, because `loadfile` dropped it
             // ([_restoreExternalSubtitle]).
             if (_stillOurs && _opened == url) {
@@ -81,12 +81,12 @@ extension _PlayerOpen on _PlayerScreenState {
   }
 
   /// **Every stream is registered with the embedded server as a media id**,
-  /// whatever it is, and answers that id -- or null for one nothing here
-  /// can name, which the engine is handed as it is.
+  /// whatever it is, and this answers that id. It answers null for one
+  /// nothing here can name, which the engine is handed as it is.
   ///
-  /// - A URL on the embedded server -- a torrent, a `/proxy` link the core
-  ///   built, an archive member's `/{fmt}/create`, a kept torrent download
-  ///   -- as it is ([MediaIds.register]).
+  /// - A URL on the embedded server (a torrent, a `/proxy` link the core
+  ///   built, an archive member's `/{fmt}/create`, a kept torrent download),
+  ///   as it is ([MediaIds.register]).
   /// - A link on anybody else's host, wrapped in the server's `/proxy`
   ///   first ([proxiedThroughServer], with this screen's player token):
   ///   the server's proxy cache is the one cache on this device, and the
@@ -97,11 +97,11 @@ extension _PlayerOpen on _PlayerScreenState {
   ///   whose descriptor is handed over ([MediaIds.registerLocalContent]).
   ///
   /// The play goes with the id ([MediaIds.setPlay]): this screen's player
-  /// token, which makes the reads the viewer's playback, and the buffer
-  /// window, which a later change moves by [MediaIds.setBuffer]
-  /// ([_reopenForBuffer]). Kept across re-opens of the same stream -- a
-  /// retry, a false end -- so the server's answer about it is found again
-  /// rather than asked again; a different stream registers anew.
+  /// token, which makes the reads the viewer's playback, and the buffer window,
+  /// which a later change moves by [MediaIds.setBuffer] ([_reopenForBuffer]).
+  /// The id is kept across re-opens of the same stream (a retry, a false end),
+  /// so the server's answer about it is found again rather than asked again. A
+  /// different stream registers anew.
   ///
   /// Nothing in a build that started no embedded server ([_serverBase]).
   FutureOr<String?> _register(Uri url) {
@@ -162,20 +162,19 @@ extension _PlayerOpen on _PlayerScreenState {
     );
   }
 
-  /// What the engine is to be handed for [url], registered as [id]: has the
-  /// server resolve it first, and answers `xtremio://<id>` for anything
-  /// read in process, the server's `/proxy` URL for an origin it reads only
-  /// forward, and [url] itself when there is no id. Null when this screen
-  /// has moved on meanwhile.
+  /// What the engine is to be handed for [url], registered as [id]. It has the
+  /// server resolve it first, and answers `xtremio://<id>` for anything read in
+  /// process, the server's `/proxy` URL for an origin it reads only forward,
+  /// and [url] itself when there is no id. Null when this screen has moved on
+  /// meanwhile.
   ///
   /// **Here, and not in mpv's open.** Resolving a magnet waits for its
   /// metadata, up to the server's metadata timeout, and a `stream_cb` open
-  /// cannot be cancelled -- mpv's core thread would sit in it through a
-  /// quit. Done here, it is a wait on a worker that the screen can walk
-  /// away from, and the reader mpv opens afterwards finds the answer
-  /// kept. A refusal is the server's own sentence, and fails the playback
-  /// the way a refused `open` does ([_failPlayback], which retries a
-  /// torrent still starting).
+  /// cannot be cancelled: mpv's core thread would sit in it through a quit.
+  /// Done here, it is a wait on a worker that the screen can walk away from,
+  /// and the reader mpv opens afterwards finds the answer kept. A refusal is
+  /// the server's own sentence. It fails the playback the way a refused `open`
+  /// does ([_failPlayback], which retries a torrent still starting).
   ///
   /// The server's sniff is what finds a container: a `.rar` or an `.iso`
   /// resolves to the film inside it ([MediaResolution.memberName]), and
@@ -218,10 +217,9 @@ extension _PlayerOpen on _PlayerScreenState {
     return mediaIdUrl(id);
   }
 
-  /// Whether [url] is one of the embedded server's own routes that it
-  /// serves over HTTP and not by id yet -- an `/ftp` link, a YouTube
-  /// stream, anything it does not recognise -- which the engine is then
-  /// handed as it is, as before ids.
+  /// Whether [url] is one of the embedded server's own routes that it serves
+  /// over HTTP and not by id yet: an `/ftp` link, a YouTube stream, anything it
+  /// does not recognise. The engine is then handed it as it is, as before ids.
   bool _servedOnlyByRoute(Uri url, MediaRefusal refusal) =>
       (url.isScheme('http') || url.isScheme('https')) &&
       isEmbeddedServerHost(url.host) &&
@@ -262,16 +260,16 @@ extension _PlayerOpen on _PlayerScreenState {
   /// The media id the engine is reading, or null when it is reading a URL.
   String? get _playingMediaId => mediaIdOf(_engineUrl);
 
-  /// The media id the stream on screen ([_opened]) was registered as, from
-  /// the moment it was -- before the server has answered and the engine has
+  /// The media id the stream on screen ([_opened]) was registered as, from the
+  /// moment it was. That is before the server has answered and the engine has
   /// it, which [_playingMediaId] waits for. Null for a stream with no id.
   String? get _registeredMediaId => _mediaIdSource == _opened ? _mediaId : null;
 
   /// The viewer changed the buffer for this playback.
   ///
-  /// A stream played by id is told so through the server and nothing
-  /// re-opens ([_reopenForBuffer]). [BufferAhead.wholeFile] additionally pins the stream as an offline
-  /// download; the pin is what stores the file, so it outlives this
+  /// A stream played by id is told so through the server, and nothing re-opens
+  /// ([_reopenForBuffer]). [BufferAhead.wholeFile] also pins the stream as an
+  /// offline download. The pin is what stores the file, so it outlives this
   /// playback and is deleted from the Downloads screen like any other.
   void _setBufferAhead(BufferAhead choice) {
     if (choice == _bufferAhead) return;
@@ -287,8 +285,8 @@ extension _PlayerOpen on _PlayerScreenState {
     if (choice.storesTheFile) unawaited(_keepWholeFile());
   }
 
-  /// Re-opens the stream at [start] on the same engine -- no `Load Player`,
-  /// no new route, and the core's idea of the stream untouched.
+  /// Re-opens the stream at [start] on the same engine: no `Load Player`, no
+  /// new route, and the core's idea of the stream untouched.
   void _reopenAt(Duration start, {required String reason}) {
     final url = _opened;
     if (url == null || _leaving || _handedOver || _casting) return;
@@ -300,10 +298,10 @@ extension _PlayerOpen on _PlayerScreenState {
     // server is told about; see [_playingNormally].
     _playingNormally = false;
     _playedSinceSeek = Duration.zero;
-    // A re-open is a new attempt, so the last failure is not what is
-    // happening any more: left, it would sit as "Playback failed" over a
-    // stream that plays, block the display's rate ([_askDisplayFrameRate])
-    // and hold the stats panel's request away.
+    // A re-open is a new attempt, so the last failure is not what is happening
+    // any more. Left, it would sit as "Playback failed" over a stream that
+    // plays, block the display's rate ([_askDisplayFrameRate]) and hold the
+    // stats panel's request away.
     final failed = _engineError != null;
     if (failed) setState(() => _engineError = null);
     _open(url, reason: reason);
@@ -313,9 +311,9 @@ extension _PlayerOpen on _PlayerScreenState {
   /// Pins what is playing as an offline download, which is what
   /// [BufferAhead.wholeFile] is: the existing mechanism, not a second one.
   ///
-  /// A refusal is shown rather than swallowed -- a device that cannot fit
-  /// the file is told so, with the numbers the server refused on -- and the
-  /// choice falls back to the widest window that needs no room.
+  /// A refusal is shown rather than swallowed: a device that cannot fit the
+  /// file is told so, with the numbers the server refused on. The choice then
+  /// falls back to the widest window that needs no room.
   Future<void> _keepWholeFile() async {
     final client = DownloadsScope.maybeOf(context);
     final state = _state;
@@ -388,12 +386,12 @@ extension _PlayerOpen on _PlayerScreenState {
     _reopenForBuffer(previousWire);
   }
 
-  /// Tells the engine what it can know about the file, which is what makes
-  /// it ask the subtitle addons (they want a filename, hash or size; we
-  /// have at best the filename). Without a real one, none is sent: the
-  /// engine asks the addons anyway from its converted stream, and a
-  /// stand-in such as the stream's label ("1080p") would only mislead the
-  /// filename matching at OpenSubtitles.
+  /// Tells the engine what it can know about the file, which is what makes it
+  /// ask the subtitle addons. They want a filename, hash or size; we have at
+  /// best the filename. Without a real one, none is sent. The engine asks the
+  /// addons anyway from its converted stream, and a stand-in such as the
+  /// stream's label ("1080p") would only mislead the filename matching at
+  /// OpenSubtitles.
   void _reportVideoParams(PlayerState state, Uri url) {
     if (!_stillOurs || _handedOver || _opened != url) return;
     final segment = url.pathSegments.isEmpty ? null : url.pathSegments.last;
@@ -407,18 +405,17 @@ extension _PlayerOpen on _PlayerScreenState {
   /// Whether a refusal from the server is a wait for bytes rather than an
   /// answer: a torrent whose metadata did not come in time
   /// (`torrentUnavailable`, which the server keeps for a swarm that has not
-  /// answered). Every other refusal -- a torrent the backend refused
-  /// (`torrentRefused`), no such file, not a URL it serves, a pipe it
-  /// cannot seek, a pairing that is gone, an origin that refused -- says
-  /// the stream cannot be played.
+  /// answered). Every other refusal says the stream cannot be played: a torrent
+  /// the backend refused (`torrentRefused`), no such file, not a URL it serves,
+  /// a pipe it cannot seek, a pairing that is gone, an origin that refused.
   static bool _isWaitingForBytes(Object error) =>
       error is MediaRefusal && error.kind == 'torrentUnavailable';
 
-  /// Shows "Playback failed: [error]" in place of whatever was waiting for
-  /// the media (the start-up overlay included, whose polling ends here) --
-  /// unless the torrent is still starting up, or the server is waiting for
-  /// its bytes ([waitingForBytes]), in which case the open is simply tried
-  /// again ([_scheduleOpenRetry]), for as long as the viewer stays.
+  /// Shows "Playback failed: [error]" in place of whatever was waiting for the
+  /// media, the start-up overlay included, whose polling ends here. The
+  /// exception is a torrent still starting up, or a server waiting for its
+  /// bytes ([waitingForBytes]). Then the open is simply tried again
+  /// ([_scheduleOpenRetry]), for as long as the viewer stays.
   ///
   /// [answered] is a refusal from the server that says the stream cannot be
   /// played: it is shown at once, whatever phase the torrent is in.
@@ -433,10 +430,10 @@ extension _PlayerOpen on _PlayerScreenState {
     }
     DiagnosticsLog.error('player', 'playback failed: $error');
     _cancelOpenRetry();
-    // Nothing is being presented any more, and this screen stays up: the
-    // card and every menu drawn over it would otherwise sit on a panel
-    // held at the film's rate until the viewer pressed Back, which is the
-    // juddering system UI this feature exists to avoid.
+    // Nothing is being presented any more, and this screen stays up. Otherwise
+    // the card and every menu drawn over it would sit on a panel held at the
+    // film's rate until the viewer pressed Back. That is the juddering system
+    // UI this feature exists to avoid.
     _releaseDisplayFrameRate();
     setState(() {
       _engineError = error;
@@ -448,16 +445,14 @@ extension _PlayerOpen on _PlayerScreenState {
 
   /// Whether a failed `open` is worth another attempt.
   ///
-  /// Only for a torrent, only before the media has loaded, and only while
-  /// the server says the torrent is not ready yet (resolving metadata,
-  /// checking, filling the initial window) or has not answered at all: mpv
-  /// gives up on the first refusal, when the server has nothing to serve
-  /// yet.
+  /// Only for a torrent, only before the media has loaded, and only while the
+  /// server says the torrent is not ready yet (resolving metadata, checking,
+  /// filling the initial window) or has not answered at all. mpv gives up on
+  /// the first refusal, when the server has nothing to serve yet.
   ///
-  /// A torrent in `error` is one whose metadata did not come in time -- a
-  /// dead swarm, which is waited for. A direct HTTP stream, an unknown
-  /// phase, and a `ready` torrent that still would not open are real
-  /// failures.
+  /// A torrent in `error` is one whose metadata did not come in time: a dead
+  /// swarm, which is waited for. A direct HTTP stream, an unknown phase, and a
+  /// `ready` torrent that still would not open are real failures.
   bool get _retryableTorrentStart {
     if (!_torrentStarting) return false;
     final stats = _torrentStats;
@@ -480,11 +475,11 @@ extension _PlayerOpen on _PlayerScreenState {
 
   /// Answers [error] with another attempt instead of a failure, and says so.
   ///
-  /// The start-up card stays up untouched meanwhile -- the poller behind it
-  /// was never stopped -- so what the user sees is the torrent still
-  /// starting, which is exactly what is happening. At most one attempt is
-  /// ever waiting: `open`'s rejection and the engine's error stream both
-  /// land here for the same failure.
+  /// The start-up card stays up untouched meanwhile, since the poller behind it
+  /// was never stopped. So what the user sees is the torrent still starting,
+  /// which is exactly what is happening. At most one attempt is ever waiting:
+  /// `open`'s rejection and the engine's error stream both land here for the
+  /// same failure.
   bool _scheduleOpenRetry(String error, {bool waitingForBytes = false}) {
     final waits = waitingForBytes ? _torrentStarting : _retryableTorrentStart;
     if (!waits) return false;

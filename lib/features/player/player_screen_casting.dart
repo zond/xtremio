@@ -61,8 +61,8 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// What the receiver reports: what is drawn, and what the core is told.
   ///
-  /// The same three actions local playback dispatches -- `TimeChanged`,
-  /// `PausedChanged`, `Ended` -- so the library and continue-watching do not
+  /// The same three actions local playback dispatches (`TimeChanged`,
+  /// `PausedChanged`, `Ended`), so the library and continue-watching do not
   /// notice which device the pixels were on.
   void _onCastStatus(CastStatus reported) {
     if (!mounted) return;
@@ -100,7 +100,7 @@ extension _PlayerCasting on _PlayerScreenState {
       // **All a cast can tell the server.** The receiver's position is in
       // seconds, which do not convert to a byte offset without a constant
       // bitrate (a 2% error on a 23 GB film is wider than the retention
-      // window); the length does give the bitrate, so the window is sized
+      // window). The length does give the bitrate, so the window is sized
       // exactly and placed by the receiver's own sequential reads.
       unawaited(_reportDuration(duration));
     }
@@ -122,7 +122,7 @@ extension _PlayerCasting on _PlayerScreenState {
   /// **Whether the receiver shows the picture**, from its own report
   /// ([CastStatus.picture]). A receiver that cannot decode a film's picture
   /// plays its sound, reports PLAYING with its position moving, and says
-  /// nothing of a picture -- the black screen nothing else would notice.
+  /// nothing of a picture. That is the black screen nothing else would notice.
   /// So once it has played [PlayerScreen.castNoPictureAfter] of the film
   /// with no picture ever reported this load, the cast is ended, the film
   /// comes back here at the receiver's position, the viewer is told why,
@@ -174,11 +174,11 @@ extension _PlayerCasting on _PlayerScreenState {
     );
   }
 
-  /// [reported] as it is to be believed: with a zero the receiver has not
-  /// actually reported replaced by the position it was handed (see
-  /// [_castHandedAt]). The first position that is not zero is the
-  /// receiver's own tick, and from then on every report is its own --
-  /// including a later zero, which is then a receiver really at the start.
+  /// [reported] as it is to be believed: a zero the receiver has not actually
+  /// reported is replaced by the position it was handed (see [_castHandedAt]).
+  /// The first position that is not zero is the receiver's own tick. From then
+  /// on every report is its own, including a later zero, which is then a
+  /// receiver really at the start.
   CastStatus _trustedCastStatus(CastStatus reported) {
     if (_castReported) return reported;
     if (reported.position != Duration.zero) {
@@ -190,16 +190,17 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// The receivers, and Stop when one of them has the stream.
   ///
-  /// mpv is sampled while the sheet is up, because what it is reading is
-  /// the only thing the compatibility check believes about the file: until
-  /// its first sample lands a cast is a "not yet". The subscription is what makes the engine sample
-  /// at all, so it is held for exactly as long as the list is open.
+  /// mpv is sampled while the sheet is up, because what it is reading is the
+  /// only thing the compatibility check believes about the file. Until its
+  /// first sample lands, a cast is a "not yet". The subscription is what makes
+  /// the engine sample at all, so it is held for exactly as long as the list is
+  /// open.
   ///
-  /// **Discovery scans actively while the list is open** and goes back to
-  /// the passive search when it closes, however it closes: a passive
-  /// search can miss a receiver that is there, and the active one costs
-  /// power for as long as it runs, so it runs while someone is looking
-  /// for a receiver (what Android's MediaRouter asks of an app).
+  /// **Discovery scans actively while the list is open** and goes back to the
+  /// passive search when it closes, however it closes. A passive search can
+  /// miss a receiver that is there, and the active one costs power for as long
+  /// as it runs. So it runs while someone is looking for a receiver, which is
+  /// what Android's MediaRouter asks of an app.
   Future<void> _openCastSheet() async {
     _castStatsSubscription = _engine?.stats.listen((stats) {
       _lastStats = stats;
@@ -229,12 +230,11 @@ extension _PlayerCasting on _PlayerScreenState {
     _castStatsSubscription = null;
   }
 
-  /// **What a receiver is sent and what the cast is judged by.** A stream
-  /// played by id is cast by id ([_castUrl] publishes it) -- or, for a link
-  /// the receiver can fetch itself, as that link ([_directCastUrl]), with
-  /// the id kept to fall back on -- so this is the
-  /// `xtremio://<id>` the engine reads; a stream read over HTTP is the URL
-  /// as the core published it ([_opened]).
+  /// **What a receiver is sent and what the cast is judged by.** A stream read
+  /// over HTTP is the URL as the core published it ([_opened]). A stream played
+  /// by id is the `xtremio://<id>` the engine reads. It is cast by id
+  /// ([_castUrl] publishes it), or, for a link the receiver can fetch itself,
+  /// as that link ([_directCastUrl]), with the id kept to fall back on.
   Uri? get _castSource => _playingMediaId != null ? _engineUrl : _opened;
 
   /// Hands the stream to [device], or explains why it cannot be.
@@ -245,11 +245,11 @@ extension _PlayerCasting on _PlayerScreenState {
   /// and no remains of the session this one replaced, and says what
   /// happened.
   ///
-  /// **Leaving the player is one of those endings.** Each step is a round
-  /// trip the viewer can press Back inside, so every continuation asks
-  /// [_stillOurs], and one that says no unwinds what this call started
-  /// ([_teardownCast]): a session and a socket must not outlive the screen,
-  /// and until the last line nothing else knows they exist.
+  /// **Leaving the player is one of those endings.** Each step is a round trip
+  /// the viewer can press Back inside, so every continuation asks [_stillOurs].
+  /// One that says no unwinds what this call started ([_teardownCast]): a
+  /// session and a socket must not outlive the screen, and until the last line
+  /// nothing else knows they exist.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
     // The id the engine reads, or the URL; see [_castSource]. Every step
@@ -305,16 +305,15 @@ extension _PlayerCasting on _PlayerScreenState {
       );
     }
     // Whatever session is running is about to be replaced, so its wait ends
-    // here: starting a cast zeroes the listener's count, and a timer left
-    // armed for the last receiver would read the new session's zero during
-    // the load and end it. The next wait is armed after the load
-    // ([_watchCastFetch]).
+    // here. Starting a cast zeroes the listener's count, and a timer left armed
+    // for the last receiver would read the new session's zero during the load
+    // and end it. The next wait is armed after the load ([_watchCastFetch]).
     _cancelCastFetch();
-    // A session the switch itself ends is not one that ended elsewhere, and
-    // the platform reports it the same way: see [_onCastSession]. Counted
+    // A session the switch itself ends is not one that ended elsewhere, but the
+    // platform reports it the same way: see [_onCastSession]. It is counted
     // down before any dialog, since a dialog can stay up for as long as the
-    // viewer leaves it, and a session that really does end meanwhile is one
-    // the screen has to hear about.
+    // viewer leaves it, and a session that really does end meanwhile is one the
+    // screen has to hear about.
     _castStarts++;
     String? refusal;
     try {
@@ -343,11 +342,11 @@ extension _PlayerCasting on _PlayerScreenState {
     CastCompatibility compatibility,
   ) async {
     // Stop stays on the bar while a second receiver is being picked, and
-    // pressing it ends the cast, so every step below that finds a Stop has
-    // happened unwinds like a leave. The unwinding also settles the
-    // listener: a Stop during the enable sends its disable while the enable
-    // is in flight, and `_lanMediaOn` is written from the enable's answer,
-    // so the disable that counts is the one sent after that answer.
+    // pressing it ends the cast. So every step below that finds a Stop has
+    // happened unwinds like a leave. The unwinding also settles the listener. A
+    // Stop during the enable sends its disable while the enable is in flight,
+    // and `_lanMediaOn` is written from the enable's answer, so the disable
+    // that counts is the one sent after that answer.
     final stops = _castStops;
     bool abandoned() => !_stillOurs || _castStops != stops;
     // What comes back, not the row that was tapped: the platform is asked
@@ -361,11 +360,11 @@ extension _PlayerCasting on _PlayerScreenState {
     // cast is over, whatever becomes of this one.
     if (_casting) _logCastEnd();
     // Starting a session is a round trip to the platform and then to the
-    // receiver, and the viewer can leave the player during it. Every step
-    // below acts -- on the engine, on the LAN listener, on the receiver --
-    // so a leave stops here, and takes the session this call has just
-    // started with it: it is the one thing that must not outlive the
-    // screen, and nothing else knows about it yet.
+    // receiver, and the viewer can leave the player during it. Every step below
+    // acts on the engine, the LAN listener or the receiver, so a leave stops
+    // here. It takes with it the session this call has just started: that is
+    // the one thing that must not outlive the screen, and nothing else knows
+    // about it yet.
     if (abandoned()) {
       await _teardownCast();
       return null;
@@ -381,16 +380,16 @@ extension _PlayerCasting on _PlayerScreenState {
     );
   }
 
-  /// [_handToReceiver] once the session with [receiver] is up: works out
-  /// the URL the receiver is to fetch and hands it over, answering why not
-  /// when it could not. Also what a direct cast the receiver refused is
-  /// handed again through ([_fallBackFromDirect]), at [start].
+  /// [_handToReceiver] once the session with [receiver] is up: works out the
+  /// URL the receiver is to fetch and hands it over, answering why not when it
+  /// could not. A direct cast the receiver refused is also handed again through
+  /// this, at [start] ([_fallBackFromDirect]).
   ///
   /// **A plain link the receiver can play as it is goes straight to it**
-  /// ([directCastUrl]): the receiver is handed the link itself, and this
-  /// device serves nothing -- no LAN listener, no publication, so no fetch
-  /// watchdog either. Everything else is relayed: published on the LAN
-  /// listener ([_castUrl]).
+  /// ([directCastUrl]). The receiver is handed the link itself, and this device
+  /// serves nothing: no LAN listener, no publication, so no fetch watchdog
+  /// either. Everything else is relayed: published on the LAN listener
+  /// ([_castUrl]).
   Future<String?> _deliverToReceiver(
     CastClient cast,
     CastDevice device,
@@ -404,11 +403,11 @@ extension _PlayerCasting on _PlayerScreenState {
     final rendition = compatibility is CastRendition;
     final direct = _directCastUrl(compatibility);
     final Uri? url;
-    // A rendition is made for one start, the one it is published with: the
-    // preparation below asks the server for what a receiver told to start
-    // there asks first, and the receiver is told exactly that. So local
-    // playback stops here, at that position, rather than drift past it
-    // while the preparation runs.
+    // A rendition is made for one start, the one it is published with. The
+    // preparation below asks the server for what a receiver told to start there
+    // asks first, and the receiver is told exactly that. So local playback
+    // stops here, at that position, rather than drift past it while the
+    // preparation runs.
     final resumeAfter = rendition && _playing;
     if (rendition) await _engine?.pause();
     if (direct != null) {
@@ -461,7 +460,7 @@ extension _PlayerCasting on _PlayerScreenState {
       await _teardownCast();
       return null;
     }
-    // A rendition is made ready before the receiver hears of it: its first
+    // A rendition is made ready before the receiver hears of it. Its first
     // answer waits for the film's index and its first slots, and a receiver
     // left on a silent load gives up.
     if (rendition) {
@@ -560,10 +559,10 @@ extension _PlayerCasting on _PlayerScreenState {
         duration: _duration > Duration.zero ? _duration : null,
       );
     });
-    // What we handed the receiver, and which address it was picked for. Not
-    // the receiver's name, which is as often a person's as a room's, and
-    // never a published token's URL, which is a way into this device -- nor
-    // an addon's or a debrid link, which carries its key.
+    // What we handed the receiver, and which address it was picked for. Not the
+    // receiver's name, which is as often a person's as a room's. Never a
+    // published token's URL, which is a way into this device, nor an addon's or
+    // a debrid link, which carries its key.
     final handed = direct != null
         ? 'the stream straight from its source'
         : _castToken != null
@@ -588,12 +587,12 @@ extension _PlayerCasting on _PlayerScreenState {
         start: position,
       );
     } catch (error) {
-      // A receiver turning the media down does not come back this way (the
-      // plugin answers at once and the refusal arrives later as a media
-      // status, which the wait below is for). This is the platform itself
-      // refusing: a session gone between connect and load, a native
-      // exception. Nobody awaits this call, so it is undone here the way the
-      // no-address branch undoes it, and the viewer hears why.
+      // A receiver turning the media down does not come back this way: the
+      // plugin answers at once, and the refusal arrives later as a media
+      // status, which the wait below is for. This is the platform itself
+      // refusing: a session gone between connect and load, a native exception.
+      // Nobody awaits this call, so it is undone here the way the no-address
+      // branch undoes it, and the viewer hears why.
       DiagnosticsLog.warn(
         'player',
         'the receiver did not take the media: $error',
@@ -622,8 +621,8 @@ extension _PlayerCasting on _PlayerScreenState {
 
   /// The link to hand a receiver itself, for a stream it can play as it is
   /// ([directCastUrl]), or null to relay it. Only for a link the server has
-  /// resolved ([_mediaResolution]), so played by id and with the id to fall
-  /// back on; never for the stream a receiver already refused to fetch
+  /// resolved ([_mediaResolution]), so it is played by id and has the id to
+  /// fall back on. Never for the stream a receiver already refused to fetch
   /// ([_castDirectRefused]).
   Uri? _directCastUrl(CastCompatibility compatibility) {
     final opened = _opened;
@@ -636,12 +635,12 @@ extension _PlayerCasting on _PlayerScreenState {
     );
   }
 
-  /// **The receiver refused the link it was handed directly** before it
-  /// played any of it, so the same cast is handed again through this
-  /// device -- published on the LAN listener -- at the position it was
-  /// handed, on the session it already has. Once: the stream is relayed
-  /// from now on ([_castDirectRefused]), so a refusal of the relay is
-  /// handled as any cast's. [why] goes to the log; the link never does.
+  /// **The receiver refused the link it was handed directly** before it played
+  /// any of it. So the same cast is handed again through this device, published
+  /// on the LAN listener, at the position it was handed and on the session it
+  /// already has. Once: the stream is relayed from now on
+  /// ([_castDirectRefused]), so a refusal of the relay is handled as any
+  /// cast's. [why] goes to the log; the link never does.
   ///
   /// Not a timer: a receiver that is slow to start a link is waited for,
   /// as any cast is. Only its refusal hands the stream back.
@@ -670,25 +669,26 @@ extension _PlayerCasting on _PlayerScreenState {
     );
   }
 
-  /// **Makes the published rendition's start before the receiver is told
-  /// to load it**, and answers null once it is ready -- or what refused it
-  /// (a `failed` readiness with its sentence, or `ended`). A Cancel, a Stop
-  /// or leaving the screen ends the wait; the caller asks [abandoned].
+  /// **Makes the published rendition's start before the receiver is told to
+  /// load it**, and answers null once it is ready. Otherwise it answers what
+  /// refused it: a `failed` readiness with its sentence, or `ended`. A Cancel,
+  /// a Stop or leaving the screen ends the wait; the caller asks [abandoned].
   ///
-  /// The receiver (the Chromecast default receiver, Chrome 92) gives up on
-  /// a load whose first answer stays silent too long, and a rendition's
-  /// first answer waits for the film's index -- a Matroska file's is at its
-  /// end -- and the slot it starts in: a minute behind a thin swarm,
-  /// measured. So the server is asked to make them first
-  /// ([MediaIds.prepareRendition]) and asked how far it has got every
-  /// [PlayerScreen.castPreparePoll], with the phase on the card over the
-  /// video. **Local playback is paused meanwhile, at the start the
-  /// rendition is published with**: the server makes what a receiver told
-  /// to start there asks first (the header, slot 0, the slot for the
-  /// start), and the receiver is told exactly that start -- a phone that
-  /// played on would hand over a position nothing was made for. A Cancel or
-  /// a refusal resumes it. No give-up timer: a stalled source is waited
-  /// for, and the viewer is the one who cancels.
+  /// The receiver (the Chromecast default receiver, Chrome 92) gives up on a
+  /// load whose first answer stays silent too long. A rendition's first answer
+  /// waits for the film's index (a Matroska file's is at its end) and the slot
+  /// it starts in: a minute behind a thin swarm, measured. So the server is
+  /// asked to make them first ([MediaIds.prepareRendition]), and asked how far
+  /// it has got every [PlayerScreen.castPreparePoll], with the phase on the
+  /// card over the video.
+  ///
+  /// **Local playback is paused meanwhile, at the start the rendition is
+  /// published with.** The server makes first what a receiver told to start
+  /// there asks first (the header, slot 0, the slot for the start), and the
+  /// receiver is told exactly that start. A phone that played on would hand
+  /// over a position nothing was made for. A Cancel or a refusal resumes it. No
+  /// give-up timer: a stalled source is waited for, and the viewer is the one
+  /// who cancels.
   Future<RenditionReadiness?> _prepareRendition(
     CastDevice device,
     bool Function() abandoned,
@@ -756,10 +756,10 @@ extension _PlayerCasting on _PlayerScreenState {
     );
   }
 
-  /// Ends the wait. What it asks is about a session, so every way out of
-  /// one comes through here -- Stop, a session that ended elsewhere, a
-  /// failed start, another receiver picked in its place, [dispose] -- and
-  /// so does arming the next one.
+  /// Ends the wait. What it asks is about a session, so every way out of one
+  /// comes through here: Stop, a session that ended elsewhere, a failed start,
+  /// another receiver picked in its place, [dispose]. So does arming the next
+  /// one.
   void _cancelCastFetch() {
     _castFetchTimer?.cancel();
     _castFetchTimer = null;
@@ -830,29 +830,28 @@ extension _PlayerCasting on _PlayerScreenState {
   /// when there is none it could fetch. Not asked for a link the receiver
   /// fetches from its source ([_deliverToReceiver]).
   ///
-  /// **A stream played by id is published** ([MediaIds.publish]): the LAN
-  /// media listener goes up, and the receiver is handed
-  /// `<lan base>/cast/<token>` -- one random token for this one stream,
-  /// served with the play this screen's player had, so a torrent shares as
-  /// it does on this device. The listener serves published tokens and
-  /// nothing else, so every kind casts the same way: a torrent, a link
-  /// through the server's cache, a Drive file, a download, a file on this
-  /// device, the film inside an archive. Throws when the server will not
-  /// publish it.
+  /// **A stream played by id is published** ([MediaIds.publish]): the LAN media
+  /// listener goes up, and the receiver is handed `<lan base>/cast/<token>`.
+  /// That is one random token for this one stream, served with the play this
+  /// screen's player had, so a torrent shares as it does on this device. The
+  /// listener serves published tokens and nothing else, so every kind casts the
+  /// same way: a torrent, a link through the server's cache, a Drive file, a
+  /// download, a file on this device, the film inside an archive. Throws when
+  /// the server will not publish it.
   ///
-  /// **A [rendition] is published as one** ([MediaIds.publishRendition]):
-  /// the same listener and token rules, and the receiver is handed the
-  /// token's file, `<lan base>/cast/<token>/stream.mp4`: one fragmented MP4
-  /// the server makes as it is read, its first part from this player's
-  /// position, with the audio track it is playing -- converted to stereo
-  /// AAC when [convertSound]. It has a length and
-  /// ranges and an index of its segments, so the receiver seeks in it by
-  /// bytes like any file -- its remote's seeks and this screen's `SEEK`s
-  /// alike (stream-server `docs/design/renditions.md` §2.8).
+  /// **A [rendition] is published as one** ([MediaIds.publishRendition]), under
+  /// the same listener and token rules. The receiver is handed the token's
+  /// file, `<lan base>/cast/<token>/stream.mp4`. It is one fragmented MP4 the
+  /// server makes as it is read, its first part from this player's position,
+  /// with the audio track it is playing, converted to stereo AAC when
+  /// [convertSound]. It has a length, ranges and an index of its segments, so
+  /// the receiver seeks in it by bytes like any file. That holds for its
+  /// remote's seeks and this screen's `SEEK`s alike (stream-server
+  /// `docs/design/renditions.md` §2.8).
   ///
-  /// A stream read over HTTP -- an origin that will not serve ranges -- is
-  /// handed over as it is when it is on another internet host, and has no
-  /// address a receiver could use when it is on this device.
+  /// A stream read over HTTP (an origin that will not serve ranges) is handed
+  /// over as it is when it is on another internet host. When it is on this
+  /// device it has no address a receiver could use.
   Future<Uri?> _castUrl(
     Uri local,
     CastDevice device, {
@@ -896,9 +895,9 @@ extension _PlayerCasting on _PlayerScreenState {
     return base.resolve('cast/$token');
   }
 
-  /// The audio track playing here, by its place among the film's audio
-  /// tracks -- mpv lists them in the file's order, which is how the server
-  /// counts them. The first when none is said to be selected.
+  /// The audio track playing here, by its place among the film's audio tracks.
+  /// mpv lists them in the file's order, which is how the server counts them.
+  /// The first when none is said to be selected.
   int get _castAudioTrack {
     final tracks = _tracks.value;
     final at = tracks.audio.indexWhere(
@@ -941,9 +940,9 @@ extension _PlayerCasting on _PlayerScreenState {
     if (mounted) setState(() {});
     if (disconnect) await _cast?.disconnect();
     await _endLanMedia();
-    // Ending the session is a round trip, and what follows it puts the
-    // film back on this device's engine -- which is the one thing a
-    // player being released must not be asked to do.
+    // Ending the session is a round trip, and what follows it puts the film
+    // back on this device's engine. That is the one thing a player being
+    // released must not be asked to do.
     if (!_stillOurs) return;
     _position.value = position;
     _playingNormally = false;
@@ -955,10 +954,9 @@ extension _PlayerCasting on _PlayerScreenState {
   }
 
   /// Withdraws the publication and closes the LAN media listener, if this
-  /// screen is what opened it. The listener exists for the length of a
-  /// session and no longer, so every
-  /// way out of one comes through here: Stop, a session that ended
-  /// elsewhere, a failed start, and [dispose].
+  /// screen is what opened it. The listener exists for the length of a session
+  /// and no longer, so every way out of one comes through here: Stop, a session
+  /// that ended elsewhere, a failed start, and [dispose].
   Future<void> _endLanMedia() async {
     _cancelCastFetch();
     await _unpublishCast();
@@ -983,12 +981,11 @@ extension _PlayerCasting on _PlayerScreenState {
   }
 
   /// **One line when a cast ends**, so a pasted diagnostics log says how it
-  /// went: how long it lasted, how often and for how long the receiver
-  /// stopped to buffer, and what this device served it -- requests and
-  /// bytes, read off the publication before it is withdrawn. Nothing that
-  /// names the receiver, the stream or its token. Once per cast: it forgets
-  /// the cast's start, which every way out of a cast comes through here
-  /// first to read.
+  /// went: how long it lasted, how often and for how long the receiver stopped
+  /// to buffer, and what this device served it (requests and bytes, read off
+  /// the publication before it is withdrawn). Nothing that names the receiver,
+  /// the stream or its token. Once per cast: it forgets the cast's start, which
+  /// every way out of a cast comes through here first to read.
   void _logCastEnd() {
     final began = _castBeganAt;
     if (began == null) return;
