@@ -1174,9 +1174,9 @@ void main() {
 
       // The shortcut is above the list, still the shortcut -- shown
       // whether or not any section is open.
-      expect(find.text('Continue with last source'), findsOneWidget);
+      expect(find.text('Continue with last stream'), findsOneWidget);
       expect(
-        topOf('Continue with last source'),
+        topOf('Continue with last stream'),
         lessThan(topOfSection(tester, StreamResolution.uhd2160)),
       );
       // The addon that had nothing, and the one that failed, are left out
@@ -1226,7 +1226,7 @@ void main() {
 
       expect(find.text('No streams for this title'), findsOneWidget);
       expect(
-        find.textContaining('comes with no torrent addon'),
+        find.textContaining('comes without a torrent addon'),
         findsOneWidget,
       );
       expect(find.text('Add an addon'), findsOneWidget);

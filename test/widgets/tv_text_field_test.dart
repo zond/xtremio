@@ -515,7 +515,7 @@ void main() {
       expect(speech.calls, [SpeechInput.startMethod, TvTextEntry.method]);
       expect(controller.text, 'typed');
       expect(
-        find.text('Voice search needs the microphone permission (Settings).'),
+        find.text('Allow the microphone in Settings to search by voice.'),
         findsOneWidget,
       );
     });

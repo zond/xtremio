@@ -1475,7 +1475,7 @@ class _EmptyBoard extends StatelessWidget {
             Text('No catalogs', style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              'Install an addon with catalogs to fill the board.',
+              'Install an addon with catalogs to see titles here.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

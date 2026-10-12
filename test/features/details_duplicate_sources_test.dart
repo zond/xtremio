@@ -464,11 +464,11 @@ void main() {
       await pumpSectioned(tester, core);
 
       // The shortcut is above the one remaining row, still the shortcut.
-      expect(find.text('Continue with last source'), findsOneWidget);
+      expect(find.text('Continue with last stream'), findsOneWidget);
       // The shortcut's own subtitle is the release's name too, so the
       // row proper is the last of the two.
       expect(
-        topOf(tester, 'Continue with last source'),
+        topOf(tester, 'Continue with last stream'),
         lessThan(
           tester.getTopLeft(find.text('The Same Release 1080p').last).dy,
         ),
@@ -481,7 +481,7 @@ void main() {
 
       // And the shortcut is the same source as the collapsed row, so it
       // plays with the merged trackers too.
-      await tester.tap(find.text('Continue with last source'));
+      await tester.tap(find.text('Continue with last stream'));
       await tester.pumpAndSettle();
       final load = core.dispatched.firstWhere(
         (a) => a.field == CoreField.player,

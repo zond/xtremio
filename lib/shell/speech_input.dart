@@ -35,7 +35,7 @@ enum SpeechError {
   audio('No microphone.'),
 
   /// `ERROR_INSUFFICIENT_PERMISSIONS`, or the permission refused.
-  permission('Voice search needs the microphone permission (Settings).'),
+  permission('Allow the microphone in Settings to search by voice.'),
 
   /// The recognizer's service could not be reached.
   network('No connection for voice.'),

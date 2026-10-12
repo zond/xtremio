@@ -595,7 +595,10 @@ void main() {
     await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Addons are locked'), findsOneWidget);
+    expect(
+      find.textContaining('You cannot install, update or remove addons'),
+      findsOneWidget,
+    );
     await openMenuOf(tester, 'YouTube');
     final uninstall = tester.widget<PopupMenuItem<Object?>>(
       find.ancestor(

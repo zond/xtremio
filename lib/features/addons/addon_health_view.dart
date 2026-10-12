@@ -212,14 +212,14 @@ class AddonHealthEvidence extends StatelessWidget {
   /// be a claim the app's own menu falsifies, on the one verdict that is meant
   /// to settle the question.
   static const String neverAnsweredHere =
-      'Every request this device has made of it failed. It has never once '
-      'answered here, over the whole record kept for it, which begins when '
-      'it was installed or when its history was last forgotten. That is all '
-      'that was measured — it may well be answering someone else.';
+      'Every request this device has made of it failed. It has not answered '
+      'here once since it was installed, or since its history was last '
+      'forgotten. That is all this device can tell. It may still be '
+      'answering other people.';
   static const String notAsked = 'not asked yet';
   static const String fading =
-      'Counts fade: an answer is worth half as much a fortnight later, so an '
-      'addon that has been fixed stops being argued with.';
+      'Counts fade. An answer counts half as much two weeks later, so an '
+      'addon that has been fixed soon stops looking broken.';
 
   /// When the addon last answered with something, in words. Addon-wide,
   /// because that is what the verdict's silence half reads.
@@ -330,9 +330,9 @@ class AddonConnectionBanner extends StatelessWidget {
   const AddonConnectionBanner({super.key});
 
   static const String text =
-      'Nothing has answered since the app started. That usually means this '
-      'device cannot reach the internet, not that these addons are broken — '
-      'and none of it has been counted against them.';
+      'Nothing has answered since the app started. This device probably '
+      'cannot reach the internet, and the addons are likely fine. None of '
+      'this counts against them.';
 
   @override
   Widget build(BuildContext context) {

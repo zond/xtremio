@@ -638,7 +638,7 @@ void main() {
       expect(find.text(_NoStreams.title), findsOneWidget);
       expect(find.textContaining('had nothing'), findsNothing);
 
-      // With it: the notice -- "None of your sources had anything to
+      // With it: the notice -- "None of your addons had anything to
       // play" -- is gone, because one of them did, and the addons that
       // answered with nothing are still not accounted for anywhere.
       await tester.pumpWidget(const SizedBox());

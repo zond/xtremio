@@ -102,9 +102,9 @@ class AddonsLockedBanner extends StatelessWidget {
   const AddonsLockedBanner({super.key});
 
   static const String text =
-      'Addons are locked: your account\'s addon list could not be fetched, '
-      'so the official addons are in use. Installing, updating and removing '
-      'are disabled until it syncs.';
+      'Your addons could not be loaded from your account. Xtremio uses the '
+      'official addons until they load. You cannot install, update or '
+      'remove addons until then.';
 
   @override
   Widget build(BuildContext context) {

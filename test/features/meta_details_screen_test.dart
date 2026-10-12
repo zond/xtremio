@@ -292,16 +292,16 @@ void main() {
       await tester.pumpWidget(harness(core, FakePlaybackEngine()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Continue with last source'), findsOneWidget);
+      expect(find.text('Continue with last stream'), findsOneWidget);
       final pinned = tester.widget<ListTile>(
         find.ancestor(
-          of: find.text('Continue with last source'),
+          of: find.text('Continue with last stream'),
           matching: find.byType(ListTile),
         ),
       );
       expect(pinned.selected, isTrue);
 
-      await tester.tap(find.text('Continue with last source'));
+      await tester.tap(find.text('Continue with last stream'));
       await tester.pumpAndSettle();
       expect(find.byType(PlayerScreen), findsOneWidget);
       final load = core.dispatched.firstWhere(
@@ -362,7 +362,7 @@ void main() {
       // gained the watched check; what this holds is that it did not move
       // the page.
       expect(
-        find.text('Continue with last source', skipOffstage: false),
+        find.text('Continue with last stream', skipOffstage: false),
         findsOneWidget,
       );
       expect(offset(), 0);
@@ -1004,7 +1004,7 @@ void main() {
 
       expect(find.text('No streams for this episode'), findsOneWidget);
       expect(
-        find.textContaining('comes with no torrent addon'),
+        find.textContaining('comes without a torrent addon'),
         findsOneWidget,
       );
       // Neither the addon that failed nor the one that answered with
@@ -1048,7 +1048,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('comes with no torrent addon'),
+          find.textContaining('comes without a torrent addon'),
           findsNothing,
         );
         expect(find.text('Add an addon'), findsNothing);
@@ -1516,7 +1516,7 @@ void main() {
         );
         expect(find.text('Add an addon'), findsNothing);
         expect(
-          find.textContaining('comes with no torrent addon'),
+          find.textContaining('comes without a torrent addon'),
           findsNothing,
         );
         expect(find.textContaining('had nothing for this'), findsNothing);
@@ -1545,7 +1545,7 @@ void main() {
 
         expect(find.text('No streams for this title'), findsOneWidget);
         expect(
-          find.textContaining('comes with no torrent addon'),
+          find.textContaining('comes without a torrent addon'),
           findsOneWidget,
         );
         expect(find.text('Add an addon'), findsOneWidget);

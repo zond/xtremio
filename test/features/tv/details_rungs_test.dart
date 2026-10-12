@@ -846,10 +846,12 @@ void main() {
         'rather than a heading of their own above them', (tester) async {
       await mount(tester, film());
 
-      expect(find.text(kSourcesLabel), findsOneWidget);
+      // The rung and the phone's heading say the same word, so one widget
+      // carrying it is the rung alone: no heading drawn above the sources.
+      expect(kSourcesLabel, 'Streams');
       expect(
-        find.text('Streams'),
-        findsNothing,
+        find.text(kSourcesLabel),
+        findsOneWidget,
         reason: 'the rung header is the heading here',
       );
     });

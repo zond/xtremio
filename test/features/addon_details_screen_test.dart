@@ -330,7 +330,10 @@ void main() {
     await tester.pumpWidget(harness(core, FakeLinkOpener()));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Addons are locked'), findsOneWidget);
+    expect(
+      find.textContaining('You cannot install, update or remove addons'),
+      findsOneWidget,
+    );
     final install = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Install'),
     );

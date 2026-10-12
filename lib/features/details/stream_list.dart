@@ -62,8 +62,8 @@ class NoStreamsNotice extends StatelessWidget {
   /// Why the list is empty when [hasStreamAddon] is false: a fresh install
   /// has no torrent addon and this is what that looks like.
   static const String noAddonExplanation =
-      'None of your sources had anything to play. xtremio comes with no '
-      'torrent addon, so add one and its streams show up here.';
+      'None of your addons had anything to play. xtremio comes without a '
+      'torrent addon. Add one, and its streams show up here.';
 
   /// The sentence this notice says, which only claims there is no torrent
   /// addon when that is true ([hasStreamAddon] false). Otherwise it says the
@@ -135,15 +135,15 @@ const String kLookingForStreams = 'Looking for streams…';
 
 /// The shortcut to the source this title was last played from, above the
 /// sections on a phone and its own card on a television.
-const String kContinueWithLastSource = 'Continue with last source';
+const String kContinueWithLastSource = 'Continue with last stream';
 
 /// What the rung holding the last-used source is called when it is shut.
 const String kContinueWatchingLabel = 'Continue watching';
 
-/// What the rung holding the sources is called when it is shut. "Sources"
-/// and not "Streams": a television's rung is a row of releases to pick
-/// from, and the word the rest of this screen's TV code uses for one.
-const String kSourcesLabel = 'Sources';
+/// What the rung holding the sources is called when it is shut: "Streams",
+/// the word the phone's heading uses for the same list. The TV code calls
+/// one a source; the viewer is never shown that word.
+const String kSourcesLabel = 'Streams';
 
 /// What the rung holding the season and its episodes is called.
 const String kEpisodesLabel = 'Episodes';
@@ -540,7 +540,7 @@ class ResolutionSectionSliver extends StatelessWidget {
   final bool expanded;
   final VoidCallback onExpand;
 
-  /// The stream pinned as "Continue with last source", highlighted here too.
+  /// The stream pinned as "Continue with last stream", highlighted here too.
   final StreamInfo? lastUsed;
   final ValueChanged<SourceRow> onPlay;
 
@@ -637,7 +637,7 @@ class StreamGroupSliver extends StatelessWidget {
   final bool expanded;
   final VoidCallback onExpand;
 
-  /// The stream pinned as "Continue with last source", highlighted here too.
+  /// The stream pinned as "Continue with last stream", highlighted here too.
   final StreamInfo? lastUsed;
   final ValueChanged<SourceRow> onPlay;
 

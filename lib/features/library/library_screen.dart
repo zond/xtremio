@@ -1731,8 +1731,8 @@ class _SignInHint extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$text: this library lives on this device only '
-              '(Settings → Account).',
+              '$text under Settings → Account. This library is on this '
+              'device only.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1887,8 +1887,8 @@ class _EmptyLibrary extends StatelessWidget {
       detail: isLoggedIn
           ? 'Add titles from their details page and they show '
                 'up here on every device.'
-          : '${_SignInHint.text} — sign in to your Stremio account '
-                'in Settings to get your library on this device.',
+          : '${_SignInHint.text} under Settings → Account, and your '
+                'Stremio library shows up here.',
     ),
   );
 }
