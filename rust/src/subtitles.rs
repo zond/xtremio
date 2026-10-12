@@ -1,36 +1,35 @@
 //! What a subtitle file says about *time*, and nothing else.
 //!
-//! Two subtitle files for one video are two clocks. When they disagree the
-//! disagreement is a line -- `reference = ratio * playing + offset` -- and
-//! this module is how that line is measured: turn each file into a bitmap
-//! of **when it has text on screen** and find the ratio and shift that make
+//! Two subtitle files for one video are two clocks. When they disagree,
+//! the disagreement is a line, `reference = ratio * playing + offset`.
+//! This module measures that line: it turns each file into a bitmap of
+//! **when it has text on screen** and finds the ratio and shift that make
 //! the two bitmaps overlap most.
 //!
 //! **Both timestamps of every cue are read, and the text is thrown away.**
 //! The measurement this replaced compared cue *starts*, and it refused a
-//! pairing that was perfectly good: the owner's Swedish Gilmore Girls file
+//! pairing that was perfectly good. The owner's Swedish Gilmore Girls file
 //! has 690 cues where the English one for the same episode has 1024,
 //! because the translator merges lines and starts each merged line on its
 //! own beat. At the best ratio and offset only 54 % of its starts land
-//! within a third of a second of an English start -- but 97 % land within
-//! a second and a half, and the two files have text on screen at the same
+//! within a third of a second of an English start. But 97 % land within a
+//! second and a half, and the two files have text on screen at the same
 //! time almost all of the time. Merging and splitting stop mattering to a
-//! bitmap: a merged line *overlaps* both the lines it covers, and a line
+//! bitmap. A merged line *overlaps* both the lines it covers, and a line
 //! one file does not have costs its own bins rather than a whole match.
 //!
 //! **The overlap is scored against chance, never absolutely.** Subtitles
 //! are on screen roughly two thirds of an episode, so two files that have
-//! nothing to do with each other already overlap a great deal. What is
-//! reported and thresholded is therefore how far the overlap beats what
-//! two files of these two densities would reach by accident -- see
-//! [`above_chance`].
+//! nothing to do with each other already overlap a great deal. So what is
+//! reported and thresholded is how far the overlap beats what two files of
+//! these two densities would reach by accident (see [`above_chance`]).
 
 /// One cue's span: when a line goes up and when it comes down, in seconds.
 ///
 /// Both ends, because the whole point of this module is the interval
 /// rather than the instant. Ends drift with reading speed and with each
-/// translator's habits, which is why the old measurement threw them away;
-/// what that missed is that a *set* of intervals describes the episode's
+/// translator's habits, which is why the old measurement threw them away.
+/// What that missed is that a *set* of intervals describes the episode's
 /// speech even when no single interval agrees with its counterpart.
 pub type Cue = (f64, f64);
 
@@ -39,15 +38,15 @@ pub type Cue = (f64, f64);
 /// SRT and WebVTT both write a cue as `<start> --> <end>` on a line of its
 /// own, so the parse is that line and nothing around it: no cue numbering,
 /// no `WEBVTT` header, no `NOTE` block, no styling and no text. Anything
-/// this does not recognise is skipped rather than refused -- a subtitle
-/// file with one damaged cue in it is still a usable description of when
+/// this does not recognise is skipped rather than refused. A subtitle file
+/// with one damaged cue in it is still a usable description of when
 /// somebody is speaking, and the caller judges the result by how much of
 /// it overlaps the other file.
 ///
 /// The two formats differ in the fraction separator (`,` against `.`) and
-/// in whether the hours are written at all, and files in the wild mix both
-/// conventions, so both are accepted in either format rather than the file
-/// being sniffed for which one it claims to be. WebVTT also writes cue
+/// in whether the hours are written at all. Files in the wild mix both
+/// conventions, so both are accepted in either format, rather than the
+/// file being sniffed for which one it claims to be. WebVTT also writes cue
 /// settings (`line:90% align:middle`) after the end time, so only the
 /// first token on the right of the arrow is read.
 ///
@@ -58,13 +57,13 @@ pub type Cue = (f64, f64);
 /// because the extent of the file is read off the ends, and because that
 /// union is taken in one pass over cues in order of when they go up.
 ///
-/// **A cue past the file's [`horizon`] is dropped too**, and for the same
+/// **A cue past the file's [`horizon`] is dropped too**, for the same
 /// reason: it parses, but it does not describe this recording. Everything
-/// downstream reads the *last* moment a file has text on screen -- it is
+/// downstream reads the *last* moment a file has text on screen. That is
 /// how long the bitmap is, and it is the timeline the two files' densities
-/// and therefore [`above_chance`] are measured over -- so a single mistyped
-/// digit that parses is not one damaged cue's worth of damage, it is the
-/// whole measurement's.
+/// (and so [`above_chance`]) are measured over. So a single mistyped digit
+/// that parses is not one damaged cue's worth of damage. It is the whole
+/// measurement's.
 pub fn cue_spans(text: &str) -> Vec<Cue> {
     let mut cues: Vec<Cue> = text
         .lines()
@@ -86,8 +85,8 @@ pub fn cue_spans(text: &str) -> Vec<Cue> {
 /// One in a hundred, and never fewer than one, because the cue that
 /// matters is usually the only one of its kind: a mistyped hour digit in
 /// the last line of a file. What this buys is that a file damaged more
-/// thoroughly than that is *bounded* rather than repaired -- past this
-/// share the outliers are the body, and no rule inside one file can say
+/// thoroughly than that is *bounded* rather than repaired. Past this share
+/// the outliers are the body, and no rule inside one file can say
 /// otherwise.
 const DAMAGED_TAIL: usize = 100;
 
@@ -96,44 +95,44 @@ const DAMAGED_TAIL: usize = 100;
 /// the more.
 ///
 /// Both terms, because a file's tail is not evenly spaced. The tenth is
-/// what keeps a long file's last cue -- and the flat term is what keeps a
-/// short one's, where the last line can be minutes after the one before it
-/// and a tenth of a short body is nothing.
+/// what keeps a long file's last cue. The flat term keeps a short one's,
+/// where the last line can be minutes after the one before it and a tenth
+/// of a short body is nothing.
 const PAST_THE_BODY: f64 = 0.1;
 const FURTHEST_PAST_THE_BODY: f64 = 600.0;
 
 /// The longest recording a subtitle file is taken to describe.
 ///
-/// A stop rather than a judgement. The rule above is relative to the file's
-/// own body, so a file whose *body* is nonsense -- every stamp corrupt, a
-/// URL that answered with something that is not a subtitle at all -- has no
-/// body to be measured against, and [`Bitmap::of`] allocates one `f64` per
-/// bin of it: `1193046:00:00,000` parses to four billion seconds, which is
-/// a 34 GB allocation and an abort that [`crate::guard::guarded`] cannot
-/// catch, because Rust aborts on allocation failure rather than unwinding.
-/// Six hours is twice the longest cut of anything.
+/// A stop rather than a judgement. The rule above is relative to the
+/// file's own body. A file whose *body* is nonsense (every stamp corrupt,
+/// or a URL that answered with something that is not a subtitle at all)
+/// has no body to be measured against. [`Bitmap::of`] allocates one `f64`
+/// per bin of it, and `1193046:00:00,000` parses to four billion seconds.
+/// That is a 34 GB allocation and an abort that [`crate::guard::guarded`]
+/// cannot catch, because Rust aborts on allocation failure rather than
+/// unwinding. Six hours is twice the longest cut of anything.
 const LONGEST_RECORDING: f64 = 6.0 * 3600.0;
 
 /// The moment past which a cue is not describing the same recording as the
 /// rest of the file, given `cues` sorted as [`cue_spans`] sorts them.
 ///
 /// **One cue cannot decide how long a file is.** Taken at its word, the
-/// real line `02:10:18,160 --> 52:10:24,240` says its file covers fifty-two
-/// hours, and the damage that does is not confined to that cue: the file's
-/// density falls by the factor its timeline grew, the chance term
-/// [`above_chance`] divides by falls with it, and the score decays towards
+/// real line `02:10:18,160 --> 52:10:24,240` says its file covers
+/// fifty-two hours, and the damage is not confined to that cue. The file's
+/// density falls by the factor its timeline grew, and the chance term
+/// [`above_chance`] divides by falls with it. The score then decays towards
 /// the raw Dice coefficient that this module exists to *not* threshold. It
 /// goes both ways. A junk cue an hour past a half-hour episode leaves an
-/// unrelated pairing scoring what two talkative files overlap by accident
-/// -- measured, 0.08 became 0.65 and was applied -- and a cue that is fifty
-/// hours *long* lights the whole invented timeline, which holds Dice under
-/// its own ceiling and refuses a pairing that is perfect.
+/// unrelated pairing scoring what two talkative files overlap by accident:
+/// measured, 0.08 became 0.65 and was applied. A cue that is fifty hours
+/// *long* lights the whole invented timeline, which holds Dice under its
+/// own ceiling and refuses a pairing that is perfect.
 ///
 /// So the body of the file is what its cues say without its outliers
-/// ([`DAMAGED_TAIL`]), and a cue reaching further past that than
-/// [`PAST_THE_BODY`] allows is dropped like one that ends before it starts.
-/// A healthy file loses nothing: its last cue is its own body's, so the
-/// horizon is beyond every cue in it.
+/// ([`DAMAGED_TAIL`]). A cue reaching further past that than
+/// [`PAST_THE_BODY`] allows is dropped, like one that ends before it
+/// starts. A healthy file loses nothing: its last cue is its own body's, so
+/// the horizon is beyond every cue in it.
 fn horizon(cues: &[Cue]) -> f64 {
     let mut ends: Vec<f64> = cues.iter().map(|&(_, end)| end).collect();
     ends.sort_by(f64::total_cmp);
@@ -153,7 +152,7 @@ fn horizon(cues: &[Cue]) -> f64 {
 /// mixture of the two, in seconds. None for anything else, which includes
 /// every line of a subtitle file that is not a timing line.
 ///
-/// The hours are optional because WebVTT makes them optional; the fraction
+/// The hours are optional because WebVTT makes them optional. The fraction
 /// is optional because a hand-edited file that drops it means the whole
 /// second, and refusing the cue would lose the observation over a
 /// formality.
@@ -177,9 +176,9 @@ fn timestamp_seconds(stamp: &str) -> Option<f64> {
         return None;
     }
     // A fraction is read as a decimal, so both `.5` (half a second, which
-    // a hand-edited file means) and `,500` come out at 0.5 -- where
-    // treating the digits as milliseconds would call the first one half a
-    // millisecond and put the cue where it never was.
+    // a hand-edited file means) and `,500` come out at 0.5. Treating the
+    // digits as milliseconds would call the first one half a millisecond
+    // and put the cue where it never was.
     let fraction = match fraction {
         Some("") => 0.0,
         Some(digits) => {
@@ -203,8 +202,8 @@ fn timestamp_seconds(stamp: &str) -> Option<f64> {
 /// `reference = ratio * playing + offset`, which is exactly the transform
 /// mpv applies: `sub-speed` multiplies the file's timestamps and
 /// `sub-delay` is added to the product. So a trusted alignment is written
-/// straight onto those two properties -- the reference file is standing in
-/// for the video's own clock, on the viewer's word that it is in sync.
+/// straight onto those two properties. The reference file stands in for
+/// the video's own clock, on the viewer's word that it is in sync.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Alignment {
     /// What the playing file's timestamps are multiplied by.
@@ -222,13 +221,13 @@ pub struct Alignment {
 /// pass of the search.
 ///
 /// The first pass is over the whole rate window and every offset, so its
-/// bin is a second: an episode is then some tens of machine words, which
-/// is what makes a quarter of a million (ratio, offset) pairs affordable
-/// on a Chromecast. The passes after it look only near the winner, so
-/// they can afford the hundred milliseconds the spans are really worth --
-/// about the shortest interval two subtitlers agree on -- and then a fifth
-/// of that, which takes the residual drift over an episode below what a
-/// viewer can see.
+/// bin is a second. An episode is then some tens of machine words, which is
+/// what makes a quarter of a million (ratio, offset) pairs affordable on a
+/// Chromecast. The passes after it look only near the winner. So they can
+/// afford the hundred milliseconds the spans are really worth (about the
+/// shortest interval two subtitlers agree on), and then a fifth of that,
+/// which takes the residual drift over an episode below what a viewer can
+/// see.
 const COARSE_BIN: f64 = 1.0;
 const FINE_BIN: f64 = 0.1;
 const FINEST_BIN: f64 = 0.02;
@@ -236,12 +235,12 @@ const FINEST_BIN: f64 = 0.02;
 /// The window the ratio is looked for in, either side of the file's own
 /// timing.
 ///
-/// PAL against film -- 25 fps timings on a 23.976 fps cut -- is 4.27 %,
-/// and is the largest mismatch that really occurs; everything else is
-/// telecine, which preserves seconds and needs no ratio at all. **Finding
-/// that unaided is the point**, so the window has to be wide enough that
-/// nothing in it is a hint: a tenth either way is room for PAL plus
-/// anything a hand-retimed file has picked up, and still narrow enough to
+/// PAL against film (25 fps timings on a 23.976 fps cut) is 4.27 %, and is
+/// the largest mismatch that really occurs. Everything else is telecine,
+/// which preserves seconds and needs no ratio at all. **Finding that
+/// unaided is the point**, so the window has to be wide enough that
+/// nothing in it is a hint. A tenth either way is room for PAL plus
+/// anything a hand-retimed file has picked up. It is still narrow enough to
 /// stop the search "explaining" two unrelated files by stretching one into
 /// the shape of the other.
 pub const LOWEST_RATIO: f64 = 0.90;
@@ -252,23 +251,23 @@ pub const HIGHEST_RATIO: f64 = 1.10;
 ///
 /// Ten minutes covers a subtitle written for a disc with its own pre-roll,
 /// a broadcast recording that keeps the recap, and a distributor's logo
-/// reel. Past that the two files are not two timings of one recording but
-/// two different things -- the second half of a film against the whole, an
-/// episode against its neighbour -- which is a pairing to refuse rather
+/// reel. Past that, the two files are not two timings of one recording but
+/// two different things: the second half of a film against the whole, or
+/// an episode against its neighbour. That is a pairing to refuse rather
 /// than one to search harder for.
 const WIDEST_OFFSET: f64 = 600.0;
 
 /// How far above chance two files have to overlap before the transform is
 /// worth applying.
 ///
-/// **Measured.** 39,000 pairings of real files -- 717 of them, offered by
-/// the OpenSubtitles addon for forty films and episodes in thirty-seven
-/// languages, translators who merge lines (a Swedish file carries two
-/// thirds of the English one's cues for the same episode) and translators
-/// who split them (a Greek one carries a tenth more). Which population a
-/// pairing belongs to is decided by where the transform puts the lines and
-/// not by the score: the median cue start within a third of a second of
-/// the reference's nearest, at least half of them that close. The
+/// **Measured** over 39,000 pairings of 717 real files, offered by the
+/// OpenSubtitles addon for forty films and episodes in thirty-seven
+/// languages. They include translators who merge lines (a Swedish file
+/// carries two thirds of the English one's cues for the same episode) and
+/// translators who split them (a Greek one carries a tenth more). Where the
+/// transform puts the lines decides which population a pairing belongs
+/// to, not the score: the median cue start within a third of a second of
+/// the reference's nearest, and at least half of them that close. The
 /// measurement is `tests/subtitle_threshold.rs` and its fixture, which is
 /// also how it is taken again.
 ///
@@ -278,54 +277,54 @@ const WIDEST_OFFSET: f64 = 600.0;
 /// | to refuse: another episode, season, film or title | 30,918 | 0.04 | 0.11 | **0.376** |
 ///
 /// **The two populations overlap, so there is no gap to sit in the middle
-/// of** -- the worst pairing that should be applied scores below zero, and
+/// of.** The worst pairing that should be applied scores below zero, and
 /// two per cent of them score under the best mismatch. What the threshold
-/// can do is clear the mismatches: at 0.45 not one of the 30,918 is
-/// accepted, with 0.074 in hand over the best of them and a great deal
-/// more over the mistake a viewer actually makes (a different episode of
-/// the same season tops out at 0.222, a different season at 0.257), while
-/// 98 % of the confirmed pairings are accepted. The recorded cost curve is
-/// the argument against its neighbours: 0.40 accepts 98.8 % but leaves
-/// 0.024 of margin, 0.35 lets nine mismatches through, and 0.55 refuses
-/// one confirmed pairing in twenty to buy margin nothing measured needs.
+/// can do is clear the mismatches. At 0.45 not one of the 30,918 is
+/// accepted, while 98 % of the confirmed pairings are. That leaves 0.074 in
+/// hand over the best mismatch, and a great deal more over the mistake a
+/// viewer actually makes: a different episode of the same season tops out
+/// at 0.222, a different season at 0.257. The recorded cost curve is the
+/// argument against its neighbours. 0.40 accepts 98.8 % but leaves 0.024
+/// of margin, 0.35 lets nine mismatches through, and 0.55 refuses one
+/// confirmed pairing in twenty to buy margin nothing measured needs.
 ///
 /// The two per cent it costs are not random. They are pairs whose two
 /// files keep text on screen for very different shares of the episode,
 /// where the Dice coefficient's own ceiling holds the score down however
-/// well the lines land -- a partial track that recovers the ratio exactly
+/// well the lines land. A partial track that recovers the ratio exactly
 /// and puts four fifths of its starts within a third of a second scored
-/// 0.33. Buying those back means scoring differently, not lowering this;
-/// see `tests::chance_is_measured_from_both_densities` (test builds only).
+/// 0.33. Buying those back means scoring differently, not lowering this.
+/// See `tests::chance_is_measured_from_both_densities` (test builds only).
 ///
 /// **The fixture's four worst pairings to apply are not that.** Each names
-/// one file, each found the right transform (a median start error of a
-/// fifth of a second) and each scored about *zero*, the signature of a file
-/// whose timeline one damaged cue has stretched rather than of Dice's
-/// ceiling. The parse drops such a cue before it reaches the search
-/// ([`horizon`]), so re-recording the corpus should lose those rows;
-/// nothing above them moves, since the populations the threshold is set
-/// from are summarised by percentile.
+/// one file, and each found the right transform (a median start error of a
+/// fifth of a second). Each scored about *zero*: the signature of a file
+/// whose timeline one damaged cue has stretched, not of Dice's ceiling.
+/// The parse drops such a cue before it reaches the search ([`horizon`]),
+/// so re-recording the corpus should lose those rows. Nothing above them
+/// moves, since the populations the threshold is set from are summarised
+/// by percentile.
 pub const CONVINCING: f64 = 0.45;
 
 /// How few cues make a file useless as evidence either way.
 ///
 /// A forced-subtitle track of a dozen signs is lit so rarely that the
-/// chance it is scored against is near zero -- which is exactly the regime
+/// chance it is scored against is near zero. That is exactly the regime
 /// where a handful of accidental coincidences reads as a strong result.
 /// Refusing to measure is better than measuring badly, and the floor
 /// guards both sides because either file can be the sparse one.
 ///
-/// Fifty is generous: `tests::a_handful_of_cues_can_be_laid_onto_anything` (test builds only)
-/// measures an unrelated pair as alignable by accident down to about eight
-/// cues a side, and at fifty the best an unrelated pair reaches is well
-/// under [`CONVINCING`]. A file with fewer than fifty cues is a signs track
-/// rather than a translation, so the floor costs nothing real, and the
-/// mismatches that come closest to being convincing are the shortest files
-/// in that corpus, which is an argument for the floor rather than against
-/// it.
+/// Fifty is generous. `tests::a_handful_of_cues_can_be_laid_onto_anything`
+/// (test builds only) measures an unrelated pair as alignable by accident
+/// down to about eight cues a side, and at fifty the best an unrelated pair
+/// reaches is well under [`CONVINCING`]. A file with fewer than fifty cues
+/// is a signs track rather than a translation, so the floor costs nothing
+/// real. The mismatches that come closest to being convincing are the
+/// shortest files in that corpus, which is an argument for the floor
+/// rather than against it.
 const FEWEST_CUES: usize = 50;
 
-/// The bounds the first pass's ratio step is kept between; what it
+/// The bounds the first pass's ratio step is kept between. What it
 /// actually takes is [`coarse_step`], which is a property of the file's
 /// length.
 ///
@@ -341,7 +340,7 @@ const FINEST_STEP: f64 = 0.00002;
 ///
 /// **The step cannot be a constant, because what a wrong ratio costs
 /// depends on how long the file is.** A ratio out by `d` puts a cue `t`
-/// seconds into the file `d * t` from where it belongs; the offset the
+/// seconds into the file `d * t` from where it belongs. The offset the
 /// search chooses centres that error on the file, so the worst cue is out
 /// by `d * span / 2`, and a step of `h` leaves `d` as large as `h / 2`.
 /// For the right ratio to be found at all, the nearest step to it has to
@@ -366,17 +365,17 @@ impl Alignment {
 /// Solves for the line that maps `playing` onto `reference`, both being
 /// cue spans as [`cue_spans`] answers them.
 ///
-/// None when either file has too few cues to be evidence ([`FEWEST_CUES`]);
-/// otherwise an [`Alignment`] and its score, *including* when the score is
-/// hopeless -- refusing is [`Alignment::is_convincing`]'s call to make, and
+/// None when either file has too few cues to be evidence ([`FEWEST_CUES`]).
+/// Otherwise an [`Alignment`] and its score, *including* when the score is
+/// hopeless. Refusing is [`Alignment::is_convincing`]'s call to make, and
 /// what was found is what the viewer is owed either way.
 ///
 /// The measurement is a search rather than anything cleverer because the
-/// two unknowns are not independent: an offset can only be read once a
+/// two unknowns are not independent. An offset can only be read once a
 /// ratio is assumed, since the same pair of files at the wrong ratio has no
 /// single offset at all. Cross-correlating by FFT would answer every offset
-/// at once, which is what ffsubsync does; going coarse to fine costs no new
-/// dependency and, at a second per bin, gets the whole rate window and
+/// at once, which is what ffsubsync does. Going coarse to fine costs no new
+/// dependency, and at a second per bin it gets the whole rate window and
 /// every offset into a few hundred thousand machine words.
 pub fn align(playing: &[Cue], reference: &[Cue]) -> Option<Alignment> {
     if playing.len() < FEWEST_CUES || reference.len() < FEWEST_CUES {
@@ -409,7 +408,7 @@ fn solve(playing: &[Cue], reference: &[Cue]) -> Alignment {
     // Then twice near the winner, each pass narrowing the ratio window to
     // the step the pass before it could resolve and the offset window to
     // its bin. Two passes rather than one because the ratio and the offset
-    // trade off against each other: a ratio a step out is partly hidden by
+    // trade off against each other. A ratio a step out is partly hidden by
     // an offset half a bin out, and the second pass is where that comes
     // apart.
     for (bin, coarser_bin, coarser_step) in [
@@ -434,10 +433,10 @@ fn solve(playing: &[Cue], reference: &[Cue]) -> Alignment {
 /// Every ratio from `from` to `to` at `step`, clamped to the window the
 /// search is allowed to answer in.
 ///
-/// Inclusive of `to` up to a rounding, because a window that is not a whole
-/// number of steps long would otherwise leave its own end unexamined --
-/// and the end of the *refined* window is where the answer sits whenever
-/// the pass before it was half a step out.
+/// Inclusive of `to` up to a rounding. A window that is not a whole number
+/// of steps long would otherwise leave its own end unexamined, and the end
+/// of the *refined* window is where the answer sits whenever the pass
+/// before it was half a step out.
 fn ratios(from: f64, to: f64, step: f64) -> Vec<f64> {
     let count = ((to - from) / step).round().max(0.0) as usize;
     let candidates: Vec<f64> = (0..=count)
@@ -505,27 +504,27 @@ impl Bitmap {
     ///
     /// A bin is lit when text covers **at least half** of it, rather than
     /// any part of it. That rule is what makes the coarse pass mean
-    /// anything: lighting a bin from any overlap turns a file of two-second
+    /// anything. Lighting a bin from any overlap turns a file of two-second
     /// lines with one-second gaps into a bitmap that is ninety per cent lit
-    /// at a second per bin, and two files that are both nearly all lit have
-    /// no headroom above chance left to tell them apart -- measured, the
-    /// right ratio scored 0.14 there and a wrong one 0.34. Rounding to the
-    /// nearer answer keeps a file's density roughly what it is at every bin
-    /// width, so the coarse pass and the fine passes are measuring the same
-    /// thing at different resolutions.
+    /// at a second per bin. Two files that are both nearly all lit have no
+    /// headroom above chance left to tell them apart: measured, the right
+    /// ratio scored 0.14 there and a wrong one 0.34. Rounding to the nearer
+    /// answer keeps a file's density roughly what it is at every bin width,
+    /// so the coarse pass and the fine passes are measuring the same thing
+    /// at different resolutions.
     ///
     /// **What covers a bin is the union of the cues over it, not their
-    /// sum.** Two boxes on screen together -- an SDH speaker label beside
-    /// the line it belongs to, a sign captioned over dialogue, a song
-    /// subtitle under both -- are one lit interval and not two, and adding
-    /// their shares up counts the same moment as many times as the file
-    /// happens to write it: measured on the tests' own file with every cue
-    /// written twice, the coarse density read 0.81 where the file's is
-    /// 0.66, which cuts the headroom above chance by nearly half. It also
-    /// breaks the rule above outright -- two cues covering three tenths of
-    /// a bin between them summed to six and lit it. This is why [`cue_spans`]
-    /// does not have to deduplicate, and it is why it sorts: the union is
-    /// taken in one pass over cues in order of when they go up.
+    /// sum.** Two boxes on screen together (an SDH speaker label beside the
+    /// line it belongs to, a sign captioned over dialogue, a song subtitle
+    /// under both) are one lit interval and not two. Adding their shares up
+    /// counts the same moment as many times as the file happens to write
+    /// it. Measured on the tests' own file with every cue written twice, the
+    /// coarse density read 0.81 where the file's is 0.66, which cuts the
+    /// headroom above chance by nearly half. Summing also breaks the rule
+    /// above outright: two cues covering three tenths of a bin between them
+    /// summed to six and lit it. This is why [`cue_spans`] does not have to
+    /// deduplicate, and why it sorts: the union is taken in one pass over
+    /// cues in order of when they go up.
     fn of(cues: &[Cue], ratio: f64, bin: f64) -> Self {
         let bins = ((ratio * extent(cues) / bin).ceil() as usize).max(1);
         let mut covered = vec![0.0f64; bins];
@@ -533,8 +532,8 @@ impl Bitmap {
         for &(start, end) in cues {
             let (start, end) = (ratio * start / bin, ratio * end / bin);
             // Whatever an earlier cue already covers is already counted, so
-            // this one begins where that left off -- and a cue wholly
-            // inside another adds nothing at all.
+            // this one begins where that left off. A cue wholly inside
+            // another adds nothing at all.
             let start = start.max(already_lit_to);
             if end <= start {
                 continue;
@@ -574,19 +573,19 @@ fn extent(cues: &[Cue]) -> f64 {
 /// the two files' on-screen time is on screen in both.
 ///
 /// **Dice alone would accept anything.** A subtitle is up for something
-/// like two thirds of an episode, so two files that have nothing to do
-/// with each other -- a different episode, a different show -- already
-/// score around two thirds, and the pairs that must be accepted score in
-/// the high eighties: a threshold between them is a threshold between two
-/// numbers that are mostly measuring how talkative the programme is. So
-/// what is reported is how far the overlap beat the overlap two files of
-/// these densities would reach if they were lit independently:
-/// `chance = 2·da·db / (da+db)` from the two densities over the timeline
-/// the pair covers, and the answer is `(dice − chance) / (1 − chance)`.
-/// One is two files lit over exactly the same moments, zero is two files
-/// doing no better than their densities predict, and the wrong-episode
-/// pairs the old metric could not separate come out at a fifth to a
-/// quarter.
+/// like two thirds of an episode. So two files that have nothing to do
+/// with each other (a different episode, a different show) already score
+/// around two thirds, and the pairs that must be accepted score in the
+/// high eighties. A threshold between them is a threshold between two
+/// numbers that mostly measure how talkative the programme is. So what is
+/// reported is how far the overlap beat the overlap two files of these
+/// densities would reach if they were lit independently.
+/// `chance = 2·da·db / (da+db)` comes from the two densities over the
+/// timeline the pair covers, and the answer is
+/// `(dice − chance) / (1 − chance)`. One is two files lit over exactly the
+/// same moments, and zero is two files doing no better than their
+/// densities predict. The wrong-episode pairs the old metric could not
+/// separate come out at a fifth to a quarter.
 ///
 /// The timeline is the union of the two files' reach *under this shift*,
 /// so pushing one file off the end of the other lowers the densities
@@ -739,9 +738,9 @@ mod tests {
     /// and gives the merged line its own beat.
     ///
     /// Only the close ones, because that is what merging really is: a
-    /// translator does not join two lines a scene apart, and a merge that
+    /// translator does not join two lines a scene apart. A merge that
     /// swallowed a long pause would put text on screen where the programme
-    /// is silent -- a difference the bitmap is *supposed* to notice.
+    /// is silent, a difference the bitmap is *supposed* to notice.
     fn merged(cues: &[Cue]) -> Vec<Cue> {
         let mut merged: Vec<Cue> = Vec::new();
         for &(start, end) in cues {
@@ -781,7 +780,7 @@ mod tests {
     #[test]
     fn merging_and_splitting_cost_almost_nothing() {
         // The reason this measurement exists. A translation with 690 cues
-        // against an original with 1024 is not a worse pairing, it is the
+        // against an original with 1024 is not a worse pairing. It is the
         // same pairing written differently, and a bitmap of when text is
         // on screen barely notices: a merged line covers both the lines it
         // replaced, and a split one covers the same interval twice.
@@ -830,11 +829,11 @@ mod tests {
         // rather than being shown an error with no number in it.
         //
         // Both of these overlap the playing file heavily in absolute
-        // terms -- text is on screen two thirds of the time in all of them
-        // -- which is exactly what the normalisation is for.
+        // terms (text is on screen two thirds of the time in all of them),
+        // which is exactly what the normalisation is for.
         //
         // The second is retimed by a ratio the search *can* reach, so what
-        // refuses it is the evidence and not the rate window: a wrong file
+        // refuses it is the evidence and not the rate window. A wrong file
         // stretched into the right shape is the thing a window from 0.90 to
         // 1.10 cannot be asked to rule out.
         let playing = synthetic_cues(400);
@@ -861,8 +860,8 @@ mod tests {
     #[test]
     fn a_reference_covering_half_the_episode_is_not_convincing() {
         // The half it covers really does line up, and the ratio it implies
-        // is right -- but half a file of evidence is exactly the CD1
-        // against a whole film that must be refused rather than applied.
+        // is right. But half a file of evidence is exactly the CD1 against
+        // a whole film that must be refused rather than applied.
         let playing = synthetic_cues(400);
         let reference = retimed(&playing[..200], 1.0427, 2.5);
         let alignment = align(&playing, &reference).expect("align");
@@ -872,15 +871,15 @@ mod tests {
     #[test]
     fn chance_is_measured_from_both_densities() {
         // What the normalisation does when one file is lit far less than
-        // the other -- a full translation against one that carries only a
+        // the other: a full translation against one that carries only a
         // quarter of the lines, which is what a forced or partial track
         // really looks like.
         //
         // The chance term is computed from *both* densities, so the sparse
-        // file's own thinness is the yardstick: an unrelated sparse file
+        // file's own thinness is the yardstick. An unrelated sparse file
         // overlaps a dense one a great deal in absolute terms and lands at
-        // nothing at all here, while the sparse file that really belongs to
-        // this episode recovers the ratio and the offset exactly and scores
+        // nothing at all here. The sparse file that really belongs to this
+        // episode recovers the ratio and the offset exactly and scores
         // clear of it.
         let dense = synthetic_cues(400);
         let sparse: Vec<Cue> = dense
@@ -900,20 +899,20 @@ mod tests {
         assert!(honest.score > wrong.score + 0.1, "{honest:?} / {wrong:?}");
 
         // **And it is still refused**, which is a property of the Dice
-        // coefficient rather than of the threshold: when the reference is
+        // coefficient rather than of the threshold. When the reference is
         // lit a quarter as much as the playing file, `2|A∩B| / (|A|+|B|)`
         // cannot exceed 0.4 however perfectly the two line up, and the
         // chance term for those densities is 0.26 of that.
         //
-        // The threshold cannot rescue it. A real partial track -- a Romanian
+        // The threshold cannot rescue it. A real partial track (a Romanian
         // file carrying a quarter of the Russian one's lines for the same
-        // film -- recovers the ratio exactly, puts four fifths of its
-        // starts within a third of a second, and scores 0.33, while
-        // unrelated files reach 0.376. No threshold accepts the first and
-        // refuses the second, so a partial subtitle is not evidence *this
-        // score* can accept, and taking it means scoring a different way
-        // (an overlap coefficient does not have the ceiling) rather than
-        // moving `CONVINCING`.
+        // film) recovers the ratio exactly, puts four fifths of its starts
+        // within a third of a second, and scores 0.33. Unrelated files
+        // reach 0.376. No threshold accepts the first and refuses the
+        // second, so a partial subtitle is not evidence *this score* can
+        // accept. Taking it means scoring a different way (an overlap
+        // coefficient does not have the ceiling) rather than moving
+        // `CONVINCING`.
         assert!(!honest.is_convincing(), "{honest:?}");
     }
 
@@ -929,9 +928,9 @@ mod tests {
         stray.push((3_600.0, 3_602.0));
         assert_eq!(cue_spans(&as_srt(&stray)), cues);
 
-        // So does one mistyped hour digit on the last cue's end, which is
-        // the same damage written the other way round -- and it costs that
-        // cue and no other.
+        // So does one mistyped hour digit on the last cue's end, the same
+        // damage written the other way round. It costs that cue and no
+        // other.
         let damaged = with_a_mistyped_end(&cues, 2_400.0);
         assert_eq!(cue_spans(&as_srt(&damaged)), cues[..cues.len() - 1]);
 
@@ -946,7 +945,7 @@ mod tests {
         // Why the horizon is in the parse rather than left to the caller.
         // Everything downstream reads the last moment a file has text on
         // screen, so one cue that parses and is wrong moves the verdict
-        // both ways -- and the file it moves it for is a stranger's.
+        // both ways. And the file it moves it for is a stranger's.
         let playing = synthetic_cues(400);
         let unrelated = synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400);
         let reference = retimed(&playing, 1.0427, 2.5);
@@ -987,15 +986,15 @@ mod tests {
     #[test]
     fn a_handful_of_cues_can_be_laid_onto_anything() {
         // Why the floor is worth having. Two files of a handful of cues
-        // each are two files lit in a couple of dozen bins out of
-        // thousands, so chance is near nothing and there is nothing the
-        // search has to beat: with so little to satisfy, and a ratio and an
-        // offset of its own choosing to satisfy it with, it lays a
-        // forced-subtitle track onto an unrelated episode and calls it a
-        // match. Both sides are thinned because that is the shape it takes
-        // -- a dense file against a sparse one is held down by the sparse
-        // one's own density (`chance_is_measured_from_both_densities`), and
-        // it is two sparse files that leave no yardstick at all.
+        // each are lit in a couple of dozen bins out of thousands, so
+        // chance is near nothing and there is nothing the search has to
+        // beat. With so little to satisfy, and a ratio and an offset of its
+        // own choosing to satisfy it with, it lays a forced-subtitle track
+        // onto an unrelated episode and calls it a match. Both sides are
+        // thinned because that is the shape it takes. A dense file against
+        // a sparse one is held down by the sparse one's own density
+        // (`chance_is_measured_from_both_densities`). It is two sparse
+        // files that leave no yardstick at all.
         //
         // Fifty ([`FEWEST_CUES`]) has far more room than it needs: three
         // cues a side is convincing almost every time, eight is once in
@@ -1046,7 +1045,7 @@ mod tests {
     fn the_first_pass_keeps_a_whole_file_inside_a_bin() {
         // What the ratio step has to be worth. The passes after the first
         // one only look near its winner, so a step that lets the ends of
-        // the file drift out of their bins does not lose precision, it
+        // the file drift out of their bins does not lose precision. It
         // loses the answer.
         for span in [300.0, 1_200.0, 2_600.0, 5_400.0, 10_800.0] {
             let worst_ratio_error = coarse_step(span, COARSE_BIN) / 2.0;
@@ -1074,10 +1073,9 @@ mod tests {
     #[test]
     fn reads_both_ends_of_a_webvtt() {
         // Hours omitted, dots for the fraction, cue settings after the end
-        // time, a header and a NOTE block -- all of which a WebVTT file
-        // from an addon that does not normalise to SRT really carries.
-        // The settings are why only the first token after the arrow is
-        // read.
+        // time, a header and a NOTE block: a WebVTT file from an addon that
+        // does not normalise to SRT really carries all of these. The
+        // settings are why only the first token after the arrow is read.
         let vtt = "WEBVTT\n\nNOTE this file came from a broadcast\n\n\
                    00:01.000 --> 00:03.500 line:90% align:middle\nFirst line\n\n\
                    intro\n01:02.250 --> 01:04.000\nSecond line\n";
@@ -1088,7 +1086,7 @@ mod tests {
     fn skips_what_it_cannot_read_rather_than_refusing_the_file() {
         // A damaged cue costs its own interval and no other: the file is
         // still worth measuring against. A cue that ends before it starts
-        // is damaged in the same way -- it describes no interval at all.
+        // is damaged in the same way, since it describes no interval at all.
         let srt = "1\n00:00:01,000 --> 00:00:03,500\nGood\n\n\
                    2\n00:00:9x,000 --> 00:00:12,000\nBroken start\n\n\
                    3\n00:00:14,000 --> 00:00:1x,000\nBroken end\n\n\
@@ -1136,10 +1134,10 @@ mod tests {
     fn two_boxes_on_screen_together_are_one_lit_interval() {
         // What a file writes twice is not on screen twice. An SDH track
         // puts the speaker label beside the line, a sign is captioned over
-        // dialogue, a song runs under both -- and summing those shares
-        // counts one moment as many times as the file happens to write it,
-        // which inflates the density the chance term is computed from and
-        // eats the headroom the whole measurement lives in.
+        // dialogue, and a song runs under both. Summing those shares counts
+        // one moment as many times as the file happens to write it. That
+        // inflates the density the chance term is computed from and eats
+        // the headroom the whole measurement lives in.
         let cues = synthetic_cues(400);
         let doubled: Vec<Cue> = cues.iter().flat_map(|&cue| [cue, cue]).collect();
         for bin in [COARSE_BIN, FINE_BIN, FINEST_BIN] {
@@ -1177,11 +1175,11 @@ mod tests {
 
     #[test]
     fn an_absurd_hour_is_a_number_and_not_an_overflow() {
-        // The hours are whatever the file wrote, and a file is a stranger's:
-        // scaling them inside `u32` panics a debug build past 1,193,046 and
-        // wraps a release one, which is a timestamp nothing in the file ever
-        // said. What such a cue then costs is `cue_spans`' problem, not this
-        // function's.
+        // The hours are whatever the file wrote, and a file is a
+        // stranger's. Scaling them inside `u32` panics a debug build past
+        // 1,193,046 and wraps a release one into a timestamp nothing in the
+        // file ever said. What such a cue then costs is `cue_spans`'
+        // problem, not this function's.
         assert_eq!(
             timestamp_seconds("1193047:00:00,000"),
             Some(4_294_969_200.0)

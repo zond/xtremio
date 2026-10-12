@@ -8,13 +8,14 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Every preference that has been set, as one JSON object
-/// (`{"streamsFlat":true}`). An empty object means none has been: a file
-/// that is missing or not an object reads that way, since a preference is a
-/// default the user changed (one that will not parse is moved aside as
-/// `xtremio_prefs.json.corrupt-<seconds>` first). A file the disk cannot
-/// read is an error rather than an empty object -- "cannot tell" is not
-/// "nothing set", and the next `prefs_set` must not write one key over
-/// everything -- as is a call before storage has a directory (`core_init`).
+/// (`{"streamsFlat":true}`). An empty object means none has been, since a
+/// preference is a default the user changed. A file that is missing or not
+/// an object reads as empty. One that will not parse is first moved aside
+/// as `xtremio_prefs.json.corrupt-<seconds>`. A file the disk cannot read is
+/// an error rather than an empty object, because "cannot tell" is not
+/// "nothing set" and the next `prefs_set` must not write one key over
+/// everything. A call before storage has a directory (`core_init`) is an
+/// error too.
 Future<String> prefsGetAll() => RustLib.instance.api.crateApiPrefsPrefsGetAll();
 
 /// Stores `value_json` (any JSON value) under `key`, or removes the key

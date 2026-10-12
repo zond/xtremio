@@ -1,23 +1,23 @@
 //! The offline-downloads registry: what the app asked to keep on disk.
 //!
 //! The server owns the *pins* (which file of which torrent stays wanted and
-//! evictable-never, `stream_server::ServerHandle::pin_download`); this module
-//! owns everything the server has no idea about — which meta and video a
-//! download belongs to, the raw stream JSON `Load Player` takes back, the
-//! meta snapshot the Details and Downloads screens render offline, and when
-//! the file was added, finished and last played.
+//! evictable-never, `stream_server::ServerHandle::pin_download`). This
+//! module owns everything the server has no idea about: which meta and
+//! video a download belongs to, the raw stream JSON `Load Player` takes
+//! back, the meta snapshot the Details and Downloads screens render
+//! offline, and when the file was added, finished and last played.
 //!
 //! It lives in `<storage_dir>/downloads.json` next to stremio-core's buckets
 //! and is written with the same atomic writer (`crate::env::write_atomically`),
 //! so a crash mid-write cannot leave half a registry. Reading is
-//! forward-compatible on purpose, and never at the cost of what is kept: a
+//! forward-compatible on purpose, and never at the cost of what is kept. A
 //! file from a newer build keeps its `version` and its unknown keys (they
-//! round-trip through [`Entry::extra`]), an entry this build cannot parse is
-//! kept verbatim and still named in the launch's pin set ([`pins_in`]), and
-//! a file that is not the shape this build writes -- corrupt JSON, no
-//! `items` object -- is an error that leaves the file where it is, never an
-//! empty registry ([`read_registry`]). Init goes on either way: the
-//! server is then told it cannot know the pin set, and keeps everything.
+//! round-trip through [`Entry::extra`]). An entry this build cannot parse
+//! is kept verbatim and still named in the launch's pin set ([`pins_in`]).
+//! A file that is not the shape this build writes (corrupt JSON, no `items`
+//! object) is an error that leaves the file where it is, never an empty
+//! registry ([`read_registry`]). Init goes on either way: the server is
+//! then told it cannot know the pin set, and keeps everything.
 //!
 //! Live progress is not stored by the server per download either: it comes
 //! from `ServerHandle::downloads()` and is merged in by [`merge_live_in`],
@@ -27,23 +27,27 @@
 //!
 //! The server's pin set is durable the moment `pin_download` or
 //! `unpin_download` returns, and this file is durable the moment its write
-//! returns; a kill can land between the two, and a registry write can fail
+//! returns. A kill can land between the two, and a registry write can fail
 //! on a volume the pin's free-space check never looked at. So the order is
-//! one rule, applied at both ends. **On the way in, the row is written
-//! before the pin is asked for**, naming the file about to be pinned and,
-//! under [`Entry::replaces`], the file it stops naming -- a pin nothing in
-//! this file names is a torrent that downloads forever, exempt from every
-//! sweeper, that no screen can show and [`remove`] cannot reach. **On the
-//! way out, the intent is written before the pin is dropped**
-//! ([`Entry::pending_removal`]) and the row goes only after the server has
-//! answered -- a row that outlives its pin is a cancelled download the next
-//! boot re-pins and restarts, on metered data. Whatever a kill interrupts,
-//! the row on disk says what was meant, and [`reconcile_pins_in`]
-//! finishes it at the next boot: a removal is carried out, a replacement's
-//! old pin is released once the new pin is in, an unfinished row is pinned
-//! as it always was, and a finished row the server turns out not to hold is
-//! marked [`State::Gone`] instead of going on claiming a film that is not
-//! there.
+//! one rule, applied at both ends.
+//!
+//! **On the way in, the row is written before the pin is asked for.** It
+//! names the file about to be pinned and, under [`Entry::replaces`], the
+//! file it stops naming. A pin nothing in this file names is a torrent that
+//! downloads forever, exempt from every sweeper, that no screen can show
+//! and [`remove`] cannot reach.
+//!
+//! **On the way out, the intent is written before the pin is dropped**
+//! ([`Entry::pending_removal`]), and the row goes only after the server has
+//! answered. A row that outlives its pin is a cancelled download the next
+//! boot re-pins and restarts, on metered data.
+//!
+//! Whatever a kill interrupts, the row on disk says what was meant, and
+//! [`reconcile_pins_in`] finishes it at the next boot. A removal is carried
+//! out, and a replacement's old pin is released once the new pin is in. An
+//! unfinished row is pinned as it always was. A finished row the server
+//! turns out not to hold is marked [`State::Gone`] instead of going on
+//! claiming a film that is not there.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -64,11 +68,11 @@ use crate::state::AppState;
 /// downgrade does not silently claim the newer file is this build's shape.
 pub const VERSION: u32 = 1;
 
-/// Top-level keys an earlier build wrote and this one retired on purpose,
-/// so they are dropped on read rather than carried with the keys a newer
-/// build may have added: the record of a downloads folder, from before
-/// there was one torrent-data root the server owns. Written back, it could
-/// only ever contradict that root.
+/// Top-level keys an earlier build wrote and this one retired on purpose.
+/// They are dropped on read rather than carried with the keys a newer build
+/// may have added. They are the record of a downloads folder, from before
+/// there was one torrent-data root the server owns. Written back, they
+/// could only ever contradict that root.
 const RETIRED_KEYS: &[&str] = &["destinationSettled", "destinationChoice"];
 
 /// The registry file, under `crate::env::storage_dir()`.
@@ -79,13 +83,13 @@ const TICK: Duration = Duration::from_secs(1);
 
 /// How long a change to nothing but `downloaded` may wait for the disk.
 ///
-/// The registry's byte count is a cache of the server's own -- [`refresh_in`]
-/// merges it in, and the app never computes progress itself -- so what a
-/// skipped write costs is a stale number in a listing taken with no server
-/// to ask, until the next write that matters. What writing every tick costs
-/// is a whole-file rewrite and an fsync per second for the length of a
-/// download, on a phone. Anything that is not a byte count -- a state, a
-/// path, an error, a finished file -- goes to disk at once.
+/// The registry's byte count is a cache of the server's own: [`refresh_in`]
+/// merges it in, and the app never computes progress itself. So a skipped
+/// write costs a stale number in a listing taken with no server to ask,
+/// until the next write that matters. Writing every tick costs a whole-file
+/// rewrite and an fsync per second for the length of a download, on a
+/// phone. Anything that is not a byte count (a state, a path, an error, a
+/// finished file) goes to disk at once.
 const PROGRESS_WRITE_INTERVAL: Duration = Duration::from_secs(30);
 
 /// How long [`resolve_media_file`] waits for the file list of a stream that
@@ -112,8 +116,8 @@ struct RegistryFile {
     /// The registry as the file held it when it was last read or written,
     /// and the file's identity at that moment. A load answers from here
     /// while the file still has that identity, which costs one `stat`
-    /// instead of a read and a parse of every entry's `MetaItem` snapshot --
-    /// and the ticker loads twice a second for the length of a download.
+    /// instead of a read and a parse of every entry's `MetaItem` snapshot.
+    /// The ticker loads twice a second for the length of a download.
     /// This module is the app's only writer of the file, so the identity
     /// changes under it only when something outside the app edits it (a
     /// test, a person), and the `stat` is what keeps that honest.
@@ -132,9 +136,9 @@ struct Cached {
 }
 
 /// What tells two versions of the file apart without reading it: its
-/// modification time and its length -- no inode. The app's own writes do
-/// not depend on it: each one replaces the cache with what it wrote and
-/// the stamp taken just after. What it is for is a stranger's edit, and
+/// modification time and its length, with no inode. The app's own writes
+/// do not depend on it, since each one replaces the cache with what it
+/// wrote and the stamp taken just after. It is for a stranger's edit, and
 /// there it is coarse: one that keeps the length and lands within the
 /// timestamp granularity of the last write is missed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -150,7 +154,7 @@ struct FileStamp {
 /// on the server for as long as a magnet takes to resolve; holding one lock
 /// across all of that would stall the progress sink and every other
 /// download call with it. The order, where two are needed, is `ticking`
-/// then `file` -- [`ensure_ticker_in`] and the [`ticker`]'s stop check are
+/// then `file`. [`ensure_ticker_in`] and the [`ticker`]'s stop check are
 /// the only places that take both.
 #[derive(Default)]
 pub struct DownloadsState {
@@ -159,11 +163,11 @@ pub struct DownloadsState {
     /// different threads and must not lose each other's edits.
     file: Mutex<RegistryFile>,
     /// The last progress delivered per key, so the ticker does not repeat
-    /// itself: with a write skipped the registry on disk stays behind the
+    /// itself. With a write skipped, the registry on disk stays behind the
     /// server's numbers, and every tick would otherwise "change" the same
-    /// row back to the same values. Cleared whenever a new sink arrives --
-    /// it has the whole picture from `downloads_list` and needs no
-    /// reminder.
+    /// row back to the same values. Cleared whenever a new sink arrives,
+    /// since that sink has the whole picture from `downloads_list` and
+    /// needs no reminder.
     last_sent: Mutex<BTreeMap<String, Progress>>,
     event_sink: RwLock<Option<EventSink>>,
     /// Whether a [`ticker`] task is running for this state.
@@ -232,8 +236,8 @@ pub enum State {
     /// that is still wanted and still being tried: the boot re-pins it, and
     /// re-pinning a row whose bytes are gone is a whole film fetched again
     /// over whatever connection the device is on, asked for by nobody. This
-    /// state is inert -- nothing polls it and nothing pins it -- until the
-    /// user presses Download on the title again.
+    /// state is inert (nothing polls it and nothing pins it) until the user
+    /// presses Download on the title again.
     Gone,
 }
 
@@ -313,18 +317,18 @@ pub struct Entry {
     #[serde(default)]
     pub meta_request: Option<serde_json::Value>,
     /// The file this row named before [`add`] pointed it at another one,
-    /// whose pin is still the server's until this row's own pin is in. Set
-    /// in the write that precedes the pin and cleared in the one that
-    /// records it; a boot that finds it releases that pin (unless another
-    /// row names the file) once it sees this row pinned, so a kill between
-    /// the two writes leaves no pin this file does not name. Absent from
-    /// the file for every row that is not mid-swap.
+    /// whose pin is still the server's until this row's own pin is in. It
+    /// is set in the write that precedes the pin and cleared in the one
+    /// that records it. A boot that finds it releases that pin once it sees
+    /// this row pinned, unless another row names the file. So a kill
+    /// between the two writes leaves no pin this file does not name. Absent
+    /// from the file for every row that is not mid-swap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces: Option<Replaced>,
-    /// Set by [`remove`] before it asks the server to drop the pin, cleared
-    /// by the row going. A row carrying it is on its way out: not listed,
-    /// not polled, not re-pinned, and finished by the next boot -- the unpin
-    /// is idempotent -- if the process died before the row went.
+    /// Set by [`remove`] before it asks the server to drop the pin, and
+    /// cleared by the row going. A row carrying it is on its way out: not
+    /// listed, not polled, not re-pinned. If the process died before the
+    /// row went, the next boot finishes it (the unpin is idempotent).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_removal: Option<PendingRemoval>,
     /// Keys a newer build wrote that this one does not know: kept so a
@@ -361,7 +365,7 @@ impl Entry {
         Self::key_of(&self.meta_id, &self.video_id)
     }
 
-    /// Whether the ticker still has a reason to poll for this entry -- and
+    /// Whether the ticker still has a reason to poll for this entry, and
     /// the boot a reason to pin it. A row on its way out has neither.
     fn unfinished(&self) -> bool {
         self.pending_removal.is_none()
@@ -379,9 +383,9 @@ impl Entry {
     ///
     /// A [`State::Gone`] row is not one. Named as a pin, its file is wanted
     /// again, so the server fetches the whole film back over whatever
-    /// connection the device is on -- the re-download that state exists to
-    /// prevent -- and the merge then reads that pin's progress back into
-    /// the row and turns it `downloading` again.
+    /// connection the device is on: the re-download that state exists to
+    /// prevent. The merge then reads that pin's progress back into the row
+    /// and turns it `downloading` again.
     fn wants_pin(&self) -> bool {
         !self.is_leaving() && self.state != State::Gone
     }
@@ -392,17 +396,17 @@ impl Entry {
     /// says it stopped being whole.
     ///
     /// Some of the server's readings say nothing about the bytes on disk,
-    /// and they read as zeros: while the torrent hash-checks, per-file
-    /// progress is empty until the check ends, and a torrent with no file
-    /// list at all -- a magnet still resolving, or a dormant pin whose
-    /// torrent the backend does not have right now (an unmounted downloads
-    /// volume) -- reports a placeholder with no path, no length and no
-    /// progress. Those are treated as *unknown*, the way `path` and `size`
-    /// already were: taken at face value they would demote a complete,
-    /// playable download to `queued, 0 B` on the first refresh after a
-    /// restart and erase a `completedAt` nothing can recover. The server's
-    /// own reason still comes through, so a complete entry can explain why
-    /// it is not reachable.
+    /// and they read as zeros. While the torrent hash-checks, per-file
+    /// progress is empty until the check ends. A torrent with no file list
+    /// at all reports a placeholder with no path, no length and no
+    /// progress: a magnet still resolving, or a dormant pin whose torrent
+    /// the backend does not have right now (an unmounted downloads volume).
+    /// Those are treated as *unknown*, the way `path` and `size` already
+    /// were. Taken at face value, they would demote a complete, playable
+    /// download to `queued, 0 B` on the first refresh after a restart, and
+    /// erase a `completedAt` nothing can recover. The server's own reason
+    /// still comes through, so a complete entry can explain why it is not
+    /// reachable.
     fn apply_live(&mut self, info: &DownloadInfo, now: DateTime<Utc>) {
         let mut progress = Progress::of("", self);
         progress.apply_live(info, now);
@@ -435,11 +439,11 @@ fn phase(info: &DownloadInfo) -> String {
 /// What moves while a download runs, for one row: the six fields a progress
 /// event carries, and nothing else.
 ///
-/// The whole entry -- the `MetaItem` snapshot, the raw stream JSON, the two
-/// addon requests -- is what [`list`] is for. Pushing all of that once a
-/// second per row means serializing a large blob here and decoding it on the
-/// UI isolate there, for six numbers; a screen folds these into the listing
-/// it already has ([`Entry`] keyed by [`Progress::key`]).
+/// The whole entry (the `MetaItem` snapshot, the raw stream JSON, the two
+/// addon requests) is what [`list`] is for. Pushing all of that once a
+/// second per row means serializing a large blob here and decoding it on
+/// the UI isolate there, for six numbers. A screen folds these into the
+/// listing it already has ([`Entry`] keyed by [`Progress::key`]).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
@@ -506,7 +510,7 @@ impl Progress {
             State::Complete => {}
             // Only a reading that actually counted the bytes can say the
             // file is no longer whole (a deleted file the server
-            // re-downloads); a transient zero must not erase the date.
+            // re-downloads). A transient zero must not erase the date.
             _ if !unknown && self.downloaded < self.size => self.completed_at = None,
             _ => {}
         }
@@ -540,17 +544,18 @@ pub struct Registry {
     pub version: u32,
     pub items: BTreeMap<String, Entry>,
     /// Entries this build could not parse, exactly as they were on disk.
-    /// They are invisible to everything but [`Registry::serialize`], which
-    /// writes them back among the items -- a forgiving read plus a
-    /// whole-file rewrite would otherwise *erase* an entry the next version
-    /// wrote (or a truncated one), while the server's pin for it lived on,
-    /// an orphan the list cannot show and `remove` cannot reach -- and
-    /// [`pins_in`], which still names them to the launch: left out of the
-    /// set, their bytes are swept before the session opens.
+    /// They are invisible to everything but two readers.
+    /// [`Registry::serialize`] writes them back among the items. Otherwise
+    /// a forgiving read plus a whole-file rewrite would *erase* an entry the
+    /// next version wrote (or a truncated one), while the server's pin for
+    /// it lived on: an orphan the list cannot show and `remove` cannot
+    /// reach. [`pins_in`] still names them to the launch, because left out
+    /// of the set, their bytes are swept before the session opens.
     unreadable: BTreeMap<String, serde_json::Value>,
     /// Top-level keys beside `version` and `items` that this build knows
     /// nothing about, exactly as they were on disk, and written back by
-    /// [`Registry::serialize`] -- the file-level twin of [`Entry::extra`].
+    /// [`Registry::serialize`]. This is the file-level twin of
+    /// [`Entry::extra`].
     /// The keys it retired itself ([`RETIRED_KEYS`]) are not among them.
     extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -596,16 +601,16 @@ impl Registry {
     ///
     /// A `version` above [`VERSION`] is kept, unknown keys survive (in
     /// [`Entry::extra`], and at the top level in [`Registry::extra`]), and
-    /// an entry this build cannot read is kept
-    /// verbatim (see [`Registry::unreadable`]). What is refused is a file
-    /// that is not the shape this build writes: not JSON, not an object, no
-    /// `items` object, a `version` that is not a number. None of those may
-    /// read as an empty registry: this list is the only record of what the
-    /// user asked to keep -- the launch hands the server its pin set
-    /// ([`pins`]) and the server sweeps everything the set does not name --
-    /// so "empty" is the answer that deletes every download. A
-    /// file whose `items` a later build made an array reads as unreadable,
-    /// which keeps everything, rather than as nothing, which keeps nothing.
+    /// an entry this build cannot read is kept verbatim (see
+    /// [`Registry::unreadable`]). What is refused is a file that is not the
+    /// shape this build writes: not JSON, not an object, no `items` object,
+    /// a `version` that is not a number. None of those may read as an empty
+    /// registry. This list is the only record of what the user asked to
+    /// keep: the launch hands the server its pin set ([`pins`]), and the
+    /// server sweeps everything the set does not name. So "empty" is the
+    /// answer that deletes every download. A file whose `items` a later
+    /// build made an array reads as unreadable, which keeps everything,
+    /// rather than as nothing, which keeps nothing.
     pub fn parse(bytes: &[u8]) -> anyhow::Result<Self> {
         let value: serde_json::Value = serde_json::from_slice(bytes)
             .map_err(|error| anyhow::anyhow!("downloads registry is unreadable: {error}"))?;
@@ -675,8 +680,8 @@ fn registry_path() -> anyhow::Result<PathBuf> {
 }
 
 /// The same, against a storage directory handed in rather than read from
-/// the process-global one: `storage_dir` is set once by `core_init` and
-/// shared by every test in the lib binary, so what "there is no storage
+/// the process-global one. `storage_dir` is set once by `core_init` and
+/// shared by every test in the lib binary. So what "there is no storage
 /// directory" does is answered here, where no other test can set one
 /// halfway through.
 fn registry_path_in(dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
@@ -727,14 +732,14 @@ static REGISTRY_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomi
 /// Reads and parses the file at `path` (see [`Registry::parse`]).
 ///
 /// **A file that will not read is an error, not an empty registry, and it
-/// stays where it is.** This list is the only record of what the user asked
-/// to keep -- the server keeps none of its own and is told the pin set from
-/// here ([`pins`]) -- so answering "no downloads" for a truncated flush is
-/// answering "delete them all", and the first thing to act on it would be
-/// the server's launch sweep. Moving the file aside instead would only make
-/// the condition last one launch: the next boot, reading no file at all,
-/// would still name an empty pin set and sweep everything. Left in place,
-/// the disk keeps what it held until the file reads again.
+/// stays where it is.** This list is the only record of what the user
+/// asked to keep. The server keeps none of its own and is told the pin set
+/// from here ([`pins`]). So answering "no downloads" for a truncated flush
+/// is answering "delete them all", and the first thing to act on it would
+/// be the server's launch sweep. Moving the file aside instead would only
+/// make the condition last one launch: the next boot, reading no file at
+/// all, would still name an empty pin set and sweep everything. Left in
+/// place, the disk keeps what it held until the file reads again.
 fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
     #[cfg(test)]
     REGISTRY_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -749,35 +754,36 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
 }
 
 /// The pin set to hand the server at startup: every download this registry
-/// names, as `info hash -> file indices` -- or `None` when it cannot say.
+/// names, as `info hash -> file indices`, or `None` when it cannot say.
 ///
-/// **This is the authority on what is kept.** The server keeps no record of
-/// its own; it sweeps everything the set does not claim before its session
-/// opens, so this function's answer is what survives a launch. `None` names
-/// nothing and is not an empty set (stream-server `ServerConfig::pins`):
-/// the server keeps every torrent's data for that boot and reports the
-/// condition, rather than deleting the downloads whose list we failed to
-/// read.
+/// **This is the authority on what is kept.** The server keeps no record
+/// of its own. It sweeps everything the set does not claim before its
+/// session opens, so this function's answer is what survives a launch.
+/// `None` names nothing and is not an empty set (stream-server
+/// `ServerConfig::pins`). With it, the server keeps every torrent's data
+/// for that boot and reports the condition, rather than deleting the
+/// downloads whose list we failed to read.
 ///
-/// Rows on their way out are left out: a removal that has begun is a
+/// Rows on their way out are left out. A removal that has begun is a
 /// download the user has already said goodbye to, and re-pinning it here
-/// would be the launch undoing the removal. So are [`State::Gone`] rows
-/// (see [`Entry::wants_pin`]).
+/// would be the launch undoing the removal. [`State::Gone`] rows are left
+/// out too (see [`Entry::wants_pin`]).
 ///
 /// A row mid-swap names two files, and both are in: the one it names and
 /// the one it [`Entry::replaces`]. The old file is the title's until the
-/// new pin is in, and [`release_replaced_in`] lets it go only then; the
-/// launch runs first, and a set without it would sweep the old file before
+/// new pin is in, and [`release_replaced_in`] lets it go only then. The
+/// launch runs first, and a set without the old file would sweep it before
 /// that check could keep it.
 ///
-/// **An entry this build cannot parse is in too** -- it is most likely a
+/// **An entry this build cannot parse is in too.** It is most likely a
 /// newer build's download, and a downgrade must not cost the film. What it
 /// names is read out of the raw entry by the two keys every build has
-/// written ([`unreadable_pins`]); whatever else it may be doing is not
-/// this build's to judge, so it is pinned whether or not it is leaving. One
-/// whose file cannot be told from its keys makes the whole answer `None`:
-/// a set that leaves it out would sweep it, and one that guesses could pin
-/// the wrong file while sweeping nothing else of the torrent's anyway.
+/// written ([`unreadable_pins`]). Whatever else it may be doing is not this
+/// build's to judge, so it is pinned whether or not it is leaving. If one
+/// such entry's file cannot be told from its keys, the whole answer is
+/// `None`. A set that leaves it out would sweep it, and one that guesses
+/// could pin the wrong file while sweeping nothing else of the torrent's
+/// anyway.
 pub fn pins_in(registry: &Registry) -> Option<stream_server::PinSet> {
     let mut pins: stream_server::PinSet = Default::default();
     for entry in registry.items.values() {
@@ -824,7 +830,7 @@ pub fn pins_in(registry: &Registry) -> Option<stream_server::PinSet> {
 /// build so far has written them under: `infoHash` and `fileIdx`, and the
 /// same pair under `replaces` when there is one. `None` when any of them is
 /// there in a shape this build does not know, or `infoHash` is not there at
-/// all -- which is the caller's cue that the pin set cannot be known.
+/// all. That is the caller's cue that the pin set cannot be known.
 fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
     fn pair(value: &serde_json::Value) -> Option<(String, usize)> {
         let info_hash = value.get("infoHash")?.as_str()?.to_lowercase();
@@ -842,10 +848,10 @@ fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
     Some(named)
 }
 
-/// The proxy downloads to keep, [`pin_keys_in`]'s link half: what every
-/// row that is a link download and wants its pin names, rebuilt from the
-/// stream the row stores. `None` under the same rule as [`pins_in`]: an
-/// unreadable row that might be a link download this build cannot tell
+/// The proxy downloads to keep, [`pin_keys_in`]'s link half. That is what
+/// every row that is a link download and wants its pin names, rebuilt from
+/// the stream the row stores. `None` under the same rule as [`pins_in`]:
+/// an unreadable row that might be a link download this build cannot tell
 /// makes the whole set unknown, and the server then sweeps nothing.
 pub fn proxy_pins_in(registry: &Registry) -> Option<Vec<stream_server::ProxyPinKey>> {
     let mut pins = Vec::new();
@@ -893,10 +899,10 @@ pub fn proxy_pins_in(registry: &Registry) -> Option<Vec<stream_server::ProxyPinK
 /// names, one [`stream_server::PinKey`] each.
 ///
 /// **`Some` only when both halves are known.** The server takes one set and
-/// sweeps, in both its stores, everything that set does not claim; there is
-/// no handing it the torrent half alone. So a link half this build cannot
-/// read is not "no link downloads" -- passing the torrent keys by
-/// themselves would delete every link download -- and the answer is `None`,
+/// sweeps, in both its stores, everything that set does not claim. There
+/// is no handing it the torrent half alone. So a link half this build
+/// cannot read is not "no link downloads", since passing the torrent keys
+/// by themselves would delete every link download. The answer is `None`,
 /// which keeps everything for this boot. The same holds the other way round.
 pub fn pin_keys_in(registry: &Registry) -> Option<Vec<stream_server::PinKey>> {
     let torrents = pins_in(registry)?;
@@ -916,8 +922,9 @@ pub fn pin_keys_in(registry: &Registry) -> Option<Vec<stream_server::PinKey>> {
     Some(keys)
 }
 
-/// [`pin_keys_in`] of the registry on disk, or `None` when it would not read
-/// -- see [`read_registry`] -- or names something this build cannot place.
+/// [`pin_keys_in`] of the registry on disk. `None` when the registry would
+/// not read (see [`read_registry`]) or names something this build cannot
+/// place.
 /// Called once, by [`crate::server::start`], before the server opens its
 /// session.
 pub fn pins() -> Option<Vec<stream_server::PinKey>> {
@@ -940,8 +947,8 @@ pub fn pins() -> Option<Vec<stream_server::PinKey>> {
 ///
 /// **The way out of a registry that will not read, and it is deliberately
 /// the user's to take.** While the file stands, [`pins`] names nothing and
-/// the server keeps every torrent's data -- which is what stops a bad read
-/// deleting downloads -- but every write goes through the same load, so
+/// the server keeps every torrent's data. That is what stops a bad read
+/// deleting downloads. But every write goes through the same load, so
 /// nothing can be pinned or removed either. The app is safe and stuck, and
 /// only somebody who knows what they are giving up should end that.
 ///
@@ -982,9 +989,9 @@ pub fn load() -> anyhow::Result<Registry> {
 }
 
 /// [`load`] against a state the caller already holds, which is the only
-/// thing background work may do: `state::state` *creates* a state when there
-/// is none, so work that outlived a shutdown would put one back into the
-/// process rather than quietly finish against its own.
+/// thing background work may do. `state::state` *creates* a state when
+/// there is none, so work that outlived a shutdown would put one back into
+/// the process rather than quietly finish against its own.
 fn load_in(app: &AppState) -> anyhow::Result<Registry> {
     let mut file = app.downloads.file();
     load_locked(&mut file).cloned()
@@ -995,15 +1002,15 @@ fn load_in(app: &AppState) -> anyhow::Result<Registry> {
 /// each other's edits.
 ///
 /// "The" lock is one `AppState`'s, though, and the path comes from the
-/// process-wide storage directory: two instances writing one
-/// `downloads.json` take different mutexes, and since this is a
+/// process-wide storage directory. Two instances writing one
+/// `downloads.json` take different mutexes. Since this is a
 /// read-modify-write ending in an atomic rename, the loser's edits go whole
 /// rather than interleaved. That cannot happen while there is one instance,
-/// which is the ordinary case and the only one today -- the paths a retired
-/// instance can still write through are the ticker's, and it stops on
-/// `is_current`, and the re-pin's, and so does that. It would stop being
-/// true if something gave a retired instance a *reason* to keep writing;
-/// the lock would have to leave [`AppState`] first, and it is a field of it
+/// which is the ordinary case and the only one today. The paths a retired
+/// instance can still write through are the ticker's, which stops on
+/// `is_current`, and the re-pin's, which does too. It would stop being
+/// true if something gave a retired instance a *reason* to keep writing.
+/// The lock would have to leave [`AppState`] first, and it is a field of it
 /// deliberately (see [`crate::state`]).
 pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::Result<T> {
     update_in(&crate::state::state(), f)
@@ -1017,17 +1024,17 @@ fn update_in<T>(
     update_then_in(app, f, |_| {})
 }
 
-/// [`update`], and then `after` with what `f` answered -- once the write
-/// has landed and *before* the file's lock is let go.
+/// [`update`], and then `after` with what `f` answered, once the write has
+/// landed and *before* the file's lock is let go.
 ///
-/// For a release decided from the registry: "no row wants this file" is
-/// only true while nobody can stage a row that does, and an [`add`] of
+/// This is for a release decided from the registry. "No row wants this
+/// file" is only true while nobody can stage a row that does. An [`add`] of
 /// that file landing between the decision and the unpin would have its pin
 /// dropped, and its bytes deleted, under a row that goes on counting on
-/// them. After the write, so the order at the other end still holds: the
-/// row says what was meant before the server is asked (see the module
-/// docs). The cost is the file's lock held across one unpin, which asks
-/// the server for nothing that waits on this file.
+/// them. It runs after the write, so the order at the other end still
+/// holds: the row says what was meant before the server is asked (see the
+/// module docs). The cost is the file's lock held across one unpin, which
+/// asks the server for nothing that waits on this file.
 fn update_then<T>(
     f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
     after: impl FnOnce(&T),
@@ -1042,7 +1049,7 @@ fn update_then_in<T>(
     after: impl FnOnce(&T),
 ) -> anyhow::Result<T> {
     let mut file = app.downloads.file();
-    // One copy for `f` to edit; what the cache holds stays the "before" the
+    // One copy for `f` to edit. What the cache holds stays the "before" the
     // write decision is made against, and the two are compared rather than
     // the file re-read.
     let mut registry = load_locked(&mut file)?.clone();
@@ -1061,9 +1068,9 @@ fn write_locked(file: &mut RegistryFile, registry: Registry) -> anyhow::Result<(
     let bytes = serde_json::to_vec(&registry)?;
     crate::env::write_atomically(&path, &bytes)
         .map_err(|error| anyhow::anyhow!("write downloads registry: {error}"))?;
-    // What was just written is what the file now holds; a stat that
-    // fails here leaves a stamp the next load will not match, so it
-    // reads back what it wrote rather than trusting a guess.
+    // What was just written is what the file now holds. A stat that fails
+    // here leaves a stamp the next load will not match, so it reads back
+    // what it wrote rather than trusting a guess.
     let stamp = stamp(&path).unwrap_or(None);
     file.cached = Some(Cached {
         path,
@@ -1102,9 +1109,9 @@ pub enum PinFailure {
     /// The torrent engine refused the pin itself.
     Backend { message: String },
     /// Every refusal the kinds above do not name: the embedded server is
-    /// not running, or its runtime went away mid-call -- or a link or Drive
+    /// not running, or its runtime went away mid-call, or a link or Drive
     /// source refused the pin (the URL would not answer, Drive is not
-    /// linked). The message is what tells these apart; there is no kind
+    /// linked). The message is what tells these apart. There is no kind
     /// per source.
     Unavailable { message: String },
 }
@@ -1112,8 +1119,8 @@ pub enum PinFailure {
 impl PinFailure {
     /// Classifies what `crate::server::pin_download` (or a link or Drive
     /// pin) returned. The concrete [`PinDownloadError`] travels inside
-    /// `anyhow`, so this downcasts; anything else -- a server that is not
-    /// running, a source that refused -- is [`Self::Unavailable`] with its
+    /// `anyhow`, so this downcasts. Anything else (a server that is not
+    /// running, a source that refused) is [`Self::Unavailable`] with its
     /// (path-free) message.
     pub fn classify(error: &anyhow::Error) -> Self {
         let Some(pin_error) = error.downcast_ref::<PinDownloadError>() else {
@@ -1207,15 +1214,15 @@ pub struct AddRequest {
 /// which is the one thing the caller must not get wrong.
 #[derive(Clone, Debug, PartialEq)]
 struct TorrentSource {
-    /// The row's coordinates. A torrent's info hash -- or, for a stream
-    /// that is not a torrent, the proxy download's key the server derives
-    /// for it (64 hex characters, which no info hash is; see
-    /// [`is_proxy_key`]), in which case [`Self::proxy`] says what it is a
+    /// The row's coordinates: a torrent's info hash, or, for a stream that
+    /// is not a torrent, the proxy download's key the server derives for
+    /// it. That key is 64 hex characters, which no info hash is (see
+    /// [`is_proxy_key`]), and [`Self::proxy`] then says what it is a
     /// download of.
     info_hash: String,
-    /// The index the stream names, or `None` when it names none — a missing
-    /// `fileIdx` and the explicit `-1` sentinel alike. `None` is not file 0:
-    /// the app plays `/{infoHash}/-1`, which the server resolves to the
+    /// The index the stream names, or `None` when it names none: a missing
+    /// `fileIdx` and the explicit `-1` sentinel alike. `None` is not file
+    /// 0. The app plays `/{infoHash}/-1`, which the server resolves to the
     /// filtered or largest media file (`routes::compat::resolve_file_idx`),
     /// so the index has to be asked for rather than assumed.
     file_idx: Option<usize>,
@@ -1234,7 +1241,7 @@ struct TorrentSource {
 
 /// Whether a row's `info_hash` is a proxy download's key rather than a
 /// torrent's info hash: the server's cache key is 64 hex characters, an
-/// info hash 40. What every server call site branches on
+/// info hash 40. Every server call site branches on it
 /// (`crate::server::unpin_download` dispatches by it), so a row carries no
 /// second field to fall out of step with the first.
 pub fn is_proxy_key(info_hash: &str) -> bool {
@@ -1244,8 +1251,8 @@ pub fn is_proxy_key(info_hash: &str) -> bool {
 /// The scheme a linked Google Drive file is listed under among a title's
 /// sources (`driveSourceScheme` in `lib/core/drive_source.dart`): the
 /// stream's `url` is `xtremio-drive:<fileId>`, and nothing else about the
-/// file is in the stream -- the pairing that reads it is the account's,
-/// held by Dart and handed to [`crate::server::set_drive_grant`].
+/// file is in the stream. The pairing that reads it is the account's, held
+/// by Dart and handed to [`crate::server::set_drive_grant`].
 pub const DRIVE_SOURCE_SCHEME: &str = "xtremio-drive";
 
 /// The Drive file id a stream names, when it is a linked Drive file.
@@ -1376,9 +1383,9 @@ fn pin_source(source: &TorrentSource, file_idx: usize) -> anyhow::Result<Downloa
     }
 }
 
-/// Re-takes the pin a persisted row holds -- at boot, for an unfinished
-/// download -- from what the row kept: a torrent from its coordinates and
-/// trackers, a link from the stream the row stores.
+/// Re-takes the pin a persisted row holds, at boot, for an unfinished
+/// download. A torrent is re-pinned from its coordinates and trackers, a
+/// link from the stream the row stores.
 fn pin_entry(entry: &Entry) -> anyhow::Result<DownloadInfo> {
     if is_proxy_key(&entry.info_hash) {
         let pin = proxy_pin_of_stream(&entry.stream)
@@ -1420,7 +1427,7 @@ fn file_matches_filter(name: &str, filter: &str) -> bool {
 /// The file `/{infoHash}/-1` plays, from the torrent's `(name, length)` list:
 /// the first one a `fileMustInclude` filter matches, else the largest file
 /// with a media extension, else the largest file of any kind. A mirror of
-/// the server's `routes::compat::resolve_file_idx("-1", ..)` — what the app
+/// the server's `routes::compat::resolve_file_idx("-1", ..)`. What the app
 /// keeps offline has to be what it played online, and the index is the
 /// file's position in the torrent either way.
 fn media_file_index(files: &[(String, u64)], filters: &[String]) -> Option<usize> {
@@ -1448,11 +1455,11 @@ fn media_file_index(files: &[(String, u64)], filters: &[String]) -> Option<usize
         .map(|(idx, _)| idx)
 }
 
-/// Which file of `source` to pin when the stream names none: the server is
-/// asked for the torrent's file list and the media route's rule applied to
-/// it. The stats call creates the engine when the hash is new, so this waits
-/// for a magnet's metadata the way the pin itself would, and refuses with a
-/// message the UI can show rather than guessing file 0.
+/// Which file of `source` to pin when the stream names none. The server is
+/// asked for the torrent's file list, and the media route's rule is applied
+/// to it. The stats call creates the engine when the hash is new, so this
+/// waits for a magnet's metadata the way the pin itself would. It refuses
+/// with a message the UI can show rather than guessing file 0.
 fn resolve_media_file(source: &TorrentSource) -> Result<usize, PinFailure> {
     let deadline = std::time::Instant::now() + METADATA_WAIT;
     loop {
@@ -1495,9 +1502,9 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
 
 /// [`add`] with the pin and the releases handed in. The pin blocks for as
 /// long as a magnet takes to resolve, and what the registry does meanwhile
-/// is what decides every write and release after it; this is how a test
-/// changes the registry while the pin is in flight, and sees what `add`
-/// releases once it answers.
+/// decides every write and release after it. This is how a test changes
+/// the registry while the pin is in flight, and sees what `add` releases
+/// once it answers.
 fn add_with(
     request: AddRequest,
     pin: impl FnOnce(&TorrentSource, usize) -> anyhow::Result<DownloadInfo>,
@@ -1534,10 +1541,10 @@ fn add_with(
         },
     };
 
-    // The row first, the pin second (see the module docs): what is on disk
-    // names the file about to be pinned before the server holds it, so a
-    // kill between the two is a queued row the next boot pins rather than a
-    // pin no row names. The row this one replaces is remembered under
+    // The row first, the pin second (see the module docs). What is on disk
+    // names the file about to be pinned before the server holds it. So a
+    // kill between the two is a queued row the next boot pins, rather than
+    // a pin no row names. The row this one replaces is remembered under
     // `replaces` rather than dropped, for the same reason at the other end.
     let now = Utc::now();
     let (previous, replaces) = update(|registry| {
@@ -1546,8 +1553,8 @@ fn add_with(
         ))
     })?;
 
-    // Timed, because a pin takes as long as a magnet does -- up to the
-    // metadata timeout -- and everything that waits on this key's lock
+    // Timed, because a pin takes as long as a magnet does (up to the
+    // metadata timeout), and everything that waits on this key's lock
     // meanwhile (a removal, the progress tick) waits that long with it.
     let asked = Instant::now();
     let info = match pin(&source, file_idx) {
@@ -1610,8 +1617,8 @@ fn add_with(
         }
     };
 
-    // `pin_download` already reports the path when the engine knows it; ask
-    // again only for the case where it did not (metadata just landed).
+    // `pin_download` already reports the path when the engine knows it.
+    // Ask again only for the case where it did not (metadata just landed).
     let path = match info.path.clone() {
         Some(path) => Some(path),
         // A proxy download has no file: it is played by its source's media
@@ -1620,17 +1627,18 @@ fn add_with(
         None => crate::server::download_path(&info_hash, file_idx).unwrap_or_default(),
     };
 
-    // The new pin is in, so the old one may go -- before the row stops
+    // The new pin is in, so the old one may go, before the row stops
     // saying it is owed. A kill between the two releases it again at boot,
     // idempotently.
     //
     // Unless a row wants the old file now. The debt was decided when the
-    // row was staged, and the pin can take as long as a magnet does: the
-    // user can go back to the stream they had, or another title can name
-    // that file, and releasing it then drops the pin of a row that is
-    // counting on it, and deletes its bytes under it. Asked and acted on
-    // under one hold of the file's lock ([`update_then`]), or a row staged
-    // between the answer and the unpin is exactly that row.
+    // row was staged, and the pin can take as long as a magnet does. In
+    // that time the user can go back to the stream they had, or another
+    // title can name that file. Releasing it then drops the pin of a row
+    // that is counting on it, and deletes its bytes under it. So the
+    // question is asked and acted on under one hold of the file's lock
+    // ([`update_then`]). Otherwise a row staged between the answer and the
+    // unpin is exactly that row.
     if let Some(replaced) = &replaces {
         update_then(
             |registry| {
@@ -1648,10 +1656,10 @@ fn add_with(
         )?;
     }
 
-    // The row was taken while the pin was being taken -- a magnet takes as
-    // long as its tracker does -- so the pin just taken goes the way the row
-    // went, unless another row wants the file: asked and released under one
-    // hold of the lock ([`update_then`]).
+    // The row was taken while the pin was being taken (a magnet takes as
+    // long as its tracker does). So the pin just taken goes the way the row
+    // went, unless another row wants the file. That is asked and released
+    // under one hold of the lock ([`update_then`]).
     let recorded = update_then(
         |registry| {
             Ok(record_pin(
@@ -1720,10 +1728,10 @@ fn stage_add(
     // Re-adding the *same* file is a retry, not a new download, and only
     // a reading that counted bytes may move its numbers. `pin_download`
     // can answer `checking` while it relocates the torrent, which
-    // `apply_live` treats as saying nothing at all -- so a row rebuilt
-    // from zero here would sit at `queued, 0 B` until the hash check
-    // ends, and its `completedAt` would be gone for good, that date
-    // being set once and never recomputed.
+    // `apply_live` treats as saying nothing at all. A row rebuilt from
+    // zero here would sit at `queued, 0 B` until the hash check ends, and
+    // its `completedAt` would be gone for good, since that date is set once
+    // and never recomputed.
     let same = previous
         .as_ref()
         .filter(|entry| names(entry, info_hash, file_idx));
@@ -1731,12 +1739,12 @@ fn stage_add(
     // is in, and the row says so. Unless another row names that file,
     // in which case the pin is theirs and there is nothing to release.
     //
-    // Nor when the row it replaces wanted no pin: a gone row's pin was
+    // Nor when the row it replaces wanted no pin. A gone row's pin was
     // dropped when it was marked, and a removal in flight is dropping its
-    // own. A debt is also a pin the next launch holds (see [`pins_in`]), so
+    // own. A debt is also a pin the next launch holds (see [`pins_in`]). So
     // a kill before this row's pin lands would have the server want that
-    // file again -- fetching back the film the device had lost, or the
-    // one the user had just removed.
+    // file again, fetching back the film the device had lost, or the one
+    // the user had just removed.
     let replaces = previous
         .as_ref()
         .filter(|_| same.is_none())
@@ -1792,9 +1800,9 @@ fn stage_add(
 
 /// Whether `entry` names the file `(info_hash, file_idx)`. It is how
 /// [`add`] and [`remove`] know, after blocking on the server, that the row
-/// under their key is still the one they left there: each blocks for as
-/// long as a magnet takes, and meanwhile the other can take the key -- a
-/// removal finishing, a second add staging another file -- so their later
+/// under their key is still the one they left there. Each blocks for as
+/// long as a magnet takes, and meanwhile the other can take the key (a
+/// removal finishing, a second add staging another file). So their later
 /// writes go only to a row that still names their file.
 fn names(entry: &Entry, info_hash: &str, file_idx: usize) -> bool {
     entry.info_hash.eq_ignore_ascii_case(info_hash) && entry.file_idx == file_idx
@@ -1808,16 +1816,16 @@ fn pin_is_wanted(registry: &Registry, info_hash: &str, file_idx: usize) -> bool 
         .any(|entry| entry.wants_pin() && names(entry, info_hash, file_idx))
 }
 
-/// [`add`]'s write once the server refused the pin: what was under `key`
+/// [`add`]'s write once the server refused the pin. What was under `key`
 /// goes back, the row before or no row, so a refusal leaves the registry as
 /// it found it. Answers the pin to release, if any.
 ///
 /// Only over the row `add` staged. A removal can take it while the pin is
 /// asked for, and putting `previous` back then resurrects the title as an
-/// ordinary row the next boot re-pins; a second add can stage another file
-/// there, and overwriting it leaves that add's pin with no row. Taken, the
-/// row it replaced goes with it: its file, still pinned because the new
-/// pin never came, is released unless another row wants it.
+/// ordinary row the next boot re-pins. A second add can stage another file
+/// there, and overwriting it leaves that add's pin with no row. When the
+/// row is taken, the row it replaced goes with it. Its file, still pinned
+/// because the new pin never came, is released unless another row wants it.
 fn unstage_add(
     registry: &mut Registry,
     key: &str,
@@ -1843,11 +1851,11 @@ fn unstage_add(
 }
 
 /// [`add`]'s write once the pin is in: the server's reading onto the row it
-/// staged. Answers that row, or -- when it was taken meanwhile (see
-/// [`unstage_add`]) -- whether the pin just taken is one no row wants.
-/// Folding the reading into whatever row now holds the key would give a
-/// second add's row this file's path and state, and a removed title's key
-/// nothing at all.
+/// staged. Answers that row. When the row was taken meanwhile (see
+/// [`unstage_add`]), it answers whether the pin just taken is one no row
+/// wants. Folding the reading into whatever row now holds the key would
+/// give a second add's row this file's path and state, and a removed
+/// title's key nothing at all.
 #[allow(clippy::too_many_arguments)]
 fn record_pin(
     registry: &mut Registry,
@@ -1878,15 +1886,15 @@ fn record_pin(
     Ok(entry.clone())
 }
 
-/// Whether an entry other than `key` names the same `(infoHash, fileIdx)` --
+/// Whether an entry other than `key` names the same `(infoHash, fileIdx)`:
 /// one torrent that is a stream of two metas (a Cinemeta id and an anime id
 /// for the same film), downloaded from both.
 ///
 /// The server's pin registry is a set with no reference count, so a single
-/// unpin serves every entry naming that file: dropping one of them has to
+/// unpin serves every entry naming that file. Dropping one of them has to
 /// leave the pin, and the bytes, to the others. A row on its way out does
-/// not count as another: its own removal will ask about the pin in turn.
-/// Nor does a [`State::Gone`] row, which holds no pin to share.
+/// not count as another, since its own removal will ask about the pin in
+/// turn. Nor does a [`State::Gone`] row, which holds no pin to share.
 fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usize) -> bool {
     registry.items.iter().any(|(other, entry)| {
         other != key && entry.wants_pin() && names(entry, info_hash, file_idx)
@@ -1896,18 +1904,18 @@ fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usiz
 /// Drops the pin a row used to hold, once the row names another file and
 /// its own pin is in (the user pressed Download on a second stream for the
 /// same title, or retried at another index). The registry is keyed by meta
-/// and video, the server's pin registry by `(infoHash, fileIdx)`, so
-/// without this the replaced torrent stays wanted, exempt from everything
-/// that reclaims space, and downloading -- with nothing in
-/// `downloads.json` naming it any more, which means the list cannot show it
-/// and [`remove`] cannot reach it, ever.
+/// and video, and the server's pin registry by `(infoHash, fileIdx)`.
+/// Without this, the replaced torrent stays wanted, exempt from everything
+/// that reclaims space, and downloading. Nothing in `downloads.json` names
+/// it any more, so the list cannot show it and [`remove`] cannot reach it,
+/// ever.
 ///
 /// Whether another entry names the same file was decided when
-/// [`Entry::replaces`] was written, under the lock, and asked again by
-/// whoever calls this once the new pin is in; the bytes go with the pin,
-/// since nothing references them any more. Idempotent at the server: a
-/// boot that finishes an interrupted swap may release a pin that already
-/// went, and gets `unpinned: false` for it.
+/// [`Entry::replaces`] was written, under the lock. Whoever calls this asks
+/// again once the new pin is in. The bytes go with the pin, since nothing
+/// references them any more. Idempotent at the server: a boot that
+/// finishes an interrupted swap may release a pin that already went, and
+/// gets `unpinned: false` for it.
 fn release_replaced(key: &str, replaced: &Replaced) {
     match crate::server::unpin_download(&replaced.info_hash, replaced.file_idx, true) {
         Ok(outcome) => tracing::info!(
@@ -1938,7 +1946,7 @@ pub struct RemoveOutcome {
 }
 
 /// Unpins `key` and forgets it. With `delete_files` the data goes too. An
-/// entry the registry does not have is not an error — the pin is dropped
+/// entry the registry does not have is not an error. The pin is dropped
 /// anyway when its coordinates are known, and there is nothing to forget.
 ///
 /// Another entry naming the same file keeps it: the pin is that entry's as
@@ -1972,8 +1980,8 @@ fn remove_with(
     }
     // The intent first, the unpin second, the row last (see the module
     // docs). Dropping the row before the pin would leave a download nothing
-    // can find again; dropping the pin before the row wrote down that the
-    // removal was meant left a row the next boot re-pinned -- the cancelled
+    // can find again. Dropping the pin before the row wrote down that the
+    // removal was meant left a row the next boot re-pinned: the cancelled
     // download restarting on metered data.
     let step = update(|registry| {
         let Some(entry) = registry.items.get(key).cloned() else {
@@ -2018,13 +2026,13 @@ fn remove_with(
             file_idx,
         } => (info_hash, file_idx),
     };
-    // The intent is on disk; the unpin is decided again and carried out
+    // The intent is on disk. The unpin is decided again and carried out
     // under one hold of the file's lock, with the row's last write. The
     // first write's "no other row names this file" is only true while
-    // nobody can stage a row that does: an add of the same file for
+    // nobody can stage a row that does. An add of the same file for
     // another title, landing between that answer and the unpin, would have
-    // its pin dropped -- and with `delete_files` its bytes deleted -- under
-    // a row that goes on counting on them. The lock is held across one
+    // its pin dropped (and with `delete_files` its bytes deleted) under a
+    // row that goes on counting on them. The lock is held across one
     // unpin, which asks the server for nothing that waits on this file.
     let outcome = update(|registry| {
         if marked_for_removal(registry, key, &info_hash, file_idx).is_none() {
@@ -2097,15 +2105,15 @@ fn cancel_removal(registry: &mut Registry, key: &str, info_hash: &str, file_idx:
 }
 
 /// [`remove`]'s last write, once the pin is dropped: the row it marked
-/// goes. A row an add staged under the key meanwhile stays -- dropping it
-/// would leave that add's pin with no row naming it.
+/// goes. A row an add staged under the key meanwhile stays, since dropping
+/// it would leave that add's pin with no row naming it.
 fn forget_removed(registry: &mut Registry, key: &str, info_hash: &str, file_idx: usize) {
     if marked_for_removal(registry, key, info_hash, file_idx).is_some() {
         registry.items.remove(key);
     }
 }
 
-/// Carries out every removal a kill interrupted: the row said the pin was
+/// Carries out every removal a kill interrupted. The row said the pin was
 /// to go, so it goes (unless another row still names the file), and then
 /// the row does. Run at boot before anything is re-pinned, so that a
 /// cancelled download is not first restarted and then cancelled again.
@@ -2118,14 +2126,14 @@ fn finish_pending_removals_in(app: &Arc<AppState>) {
 ///
 /// The boot runs behind `core_init`, so the screens are up and Download
 /// can be pressed while it works. A reading taken once and acted on key by
-/// key is then a reading of rows that may not be there any more: the row
-/// under the key can be a fresh download of the same title, and dropping
-/// it -- or the pin of a file a new row has just started counting on --
-/// is the removal of a download the user asked for after the one being
-/// finished. So each removal is decided again and carried out under one
-/// hold of the file's lock, against the row [`remove`] marked
-/// ([`marked_for_removal`]) and nothing else. The lock is held across the
-/// unpin, which asks the server for nothing that waits on this file.
+/// key is then a reading of rows that may not be there any more. The row
+/// under the key can be a fresh download of the same title. Dropping it, or
+/// the pin of a file a new row has just started counting on, is the
+/// removal of a download the user asked for after the one being finished.
+/// So each removal is decided again and carried out under one hold of the
+/// file's lock, against the row [`remove`] marked ([`marked_for_removal`])
+/// and nothing else. The lock is held across the unpin, which asks the
+/// server for nothing that waits on this file.
 fn finish_pending_removals_with(
     app: &Arc<AppState>,
     mut unpin: impl FnMut(&str, usize, bool) -> anyhow::Result<stream_server::UnpinOutcome>,
@@ -2177,12 +2185,12 @@ fn finish_pending_removals_with(
     }
 }
 
-/// Releases the pin every swapped row still owes, where the row's own pin is
-/// in. Run at boot after the re-pin, which is what puts a swap's new pin in
-/// place when the kill came before it; a row whose own pin the server does
-/// not hold keeps the debt for the next boot, whose launch pins the old file
-/// again ([`pins_in`]), since releasing the old file ahead of the new one
-/// being wanted would leave the title with neither.
+/// Releases the pin every swapped row still owes, where the row's own pin
+/// is in. Run at boot after the re-pin, which is what puts a swap's new pin
+/// in place when the kill came before it. A row whose own pin the server
+/// does not hold keeps the debt for the next boot, whose launch pins the
+/// old file again ([`pins_in`]). Releasing the old file ahead of the new
+/// one being wanted would leave the title with neither.
 fn release_replaced_in(app: &Arc<AppState>) {
     let live = match crate::server::downloads() {
         Ok(live) => live,
@@ -2200,7 +2208,7 @@ fn release_replaced_in(app: &Arc<AppState>) {
 /// lock, for the reason [`finish_pending_removals_with`] gives: this runs
 /// while the screens are up, and a reading taken once goes stale under a
 /// press on Download. Released from a stale reading, a file a new row has
-/// just started counting on loses its pin and its bytes; cleared from one,
+/// just started counting on loses its pin and its bytes. Cleared from one,
 /// the debt a fresh swap under the same key has just written is gone, and
 /// the file it owes stays pinned with no row naming it.
 fn release_replaced_with(
@@ -2263,23 +2271,24 @@ pub enum OpenFailure {
     Unknown,
     /// The bytes are not all here yet.
     Incomplete,
-    /// Nothing can say whether the pieces are here right now: the embedded
-    /// server is not running (and the pieces are only ever read through
-    /// it), or it is and cannot speak for this file yet -- the pin is
+    /// Nothing can say whether the pieces are here right now. Either the
+    /// embedded server is not running (and the pieces are only ever read
+    /// through it), or it is and cannot speak for this file yet: the pin is
     /// dormant because the torrent was not restored, or the torrent is
     /// hash-checking or resolving and has not said the file is whole. Worth
     /// asking again; see [`stream_url`] for why these are not `NotHeld`.
     Unavailable,
     /// The server is running and has said it does not have this file's
-    /// pieces to serve: it holds no pin for them (the root was moved, or the
-    /// volume they were on was reclaimed and the start-up sweep took what
-    /// was left), or it has looked at the disk and the file is not whole.
+    /// pieces to serve. Either it holds no pin for them (the root was moved,
+    /// or the volume they were on was reclaimed and the start-up sweep took
+    /// what was left), or it has looked at the disk and the file is not
+    /// whole.
     ///
     /// It is a refusal and not a URL for a sharp reason. On loopback the
-    /// media route creates the torrent it is asked for when the session does
-    /// not have it (stream-server `c225908`, `routes/stream.rs` ->
-    /// `compat::get_or_add_magnet`), so a URL handed out for a torrent the
-    /// server does not hold is not a 404: it is a fresh magnet add from a
+    /// media route creates the torrent it is asked for when the session
+    /// does not have it (stream-server `c225908`, `routes/stream.rs` ->
+    /// `compat::get_or_add_magnet`). So a URL handed out for a torrent the
+    /// server does not hold is not a 404. It is a fresh magnet add from a
     /// bare info hash with no trackers on it, which blocks until the
     /// metadata timeout and joins a swarm on the way. The one thing a kept
     /// download must never do is start a download.
@@ -2314,22 +2323,23 @@ impl OpenOutcome {
     }
 }
 
-/// What `live` -- the server's pinned downloads, read a moment ago -- says
+/// What `live`, the server's pinned downloads read a moment ago, says
 /// about this entry's file being whole in the store.
 ///
 /// **Three answers, not two, and that is the whole point.** `complete` is
-/// false for a file that is genuinely short *and* for one the server cannot
-/// speak for yet: a dormant pin (the backend did not restore the torrent, so
-/// it reports zeroes and an error), a torrent still hash-checking what is on
-/// disk, and a magnet still resolving its metadata all report `complete:
-/// false` over bytes that may be entirely present.
+/// false for a file that is genuinely short *and* for one the server
+/// cannot speak for yet. A dormant pin (the backend did not restore the
+/// torrent, so it reports zeroes and an error), a torrent still
+/// hash-checking what is on disk, and a magnet still resolving its
+/// metadata all report `complete: false` over bytes that may be entirely
+/// present.
 ///
 /// Reading that as "not held" would cost both of the things this type
-/// prevents: at boot it would mark a whole, present download `gone` and let
-/// it decay into a re-download nobody asked for; on Play it would refuse a
-/// file that was on the device, which `offline_play.dart` answers to by
-/// falling back to the addon's own stream -- fetching a film from peers
-/// that was already here.
+/// prevents. At boot it would mark a whole, present download `gone` and
+/// let it decay into a re-download nobody asked for. On Play it would
+/// refuse a file that was on the device, and `offline_play.dart` answers
+/// that by falling back to the addon's own stream, fetching from peers a
+/// film that was already here.
 ///
 /// An absence of knowledge is not a negative fact. So the caller is handed
 /// the distinction and has to decide what to do with it.
@@ -2374,23 +2384,23 @@ fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> Held {
 /// server's pin set, or `None` when it could not be asked at all.
 ///
 /// **There is no file to open.** Torrent data is one file per piece in the
-/// server's store, for the streaming cache and a kept download alike, so
-/// what a download has on this device is its pieces and the only reader of
-/// those is the embedded server. The URL is therefore its media route for
-/// this torrent and file (`{base}/{infoHash}/{fileIdx}`), served from the
-/// disk with no peer, no tracker and no network involved.
+/// server's store, for the streaming cache and a kept download alike. So
+/// what a download has on this device is its pieces, and the only reader
+/// of those is the embedded server. The URL is therefore its media route
+/// for this torrent and file (`{base}/{infoHash}/{fileIdx}`), served from
+/// the disk with no peer, no tracker and no network involved.
 ///
 /// **Two things have to be true, and the row is only one of them.**
 /// [`State::Complete`] is the registry's last reading, and a reading can be
-/// stale in the one direction that matters: the pieces live under a root
+/// stale in the one direction that matters. The pieces live under a root
 /// that can be moved (Settings -> Server storage) or reclaimed (an Android
 /// cache directory), and neither event goes back and rewrites the rows. So
-/// the server is asked what it is holding *now*, and a row it does not back
-/// is refused with [`OpenFailure::NotHeld`] -- see there for what the URL
-/// would otherwise have started.
+/// the server is asked what it is holding *now*, and a row it does not
+/// back is refused with [`OpenFailure::NotHeld`]. See there for what the
+/// URL would otherwise have started.
 ///
-/// `entry.path` is not consulted, and must not be: the server answers it as
-/// a *name* for the file, and no whole file is ever written there.
+/// `entry.path` is not consulted, and must not be: the server answers it
+/// as a *name* for the file, and no whole file is ever written there.
 fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, OpenFailure> {
     if entry.state != State::Complete {
         return Err(OpenFailure::Incomplete);
@@ -2403,19 +2413,20 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
     match holds_whole(live, entry) {
         Held::Whole => {}
         Held::NotWhole => return Err(OpenFailure::NotHeld),
-        // The server is up but cannot speak for this file yet -- it is
+        // The server is up but cannot speak for this file yet: it is
         // dormant, hash-checking, or still resolving. Refusing as `NotHeld`
         // sends `offline_play.dart` to the addon's stream, which re-fetches
-        // from peers a film that is very likely on the device; `Unavailable`
-        // is the honest answer and the one that says "ask again in a moment".
+        // from peers a film that is very likely on the device. `Unavailable`
+        // is the honest answer, and the one that says "ask again in a
+        // moment".
         Held::Unknown => return Err(OpenFailure::Unavailable),
     }
     // A link or Drive download plays by what it is a download of: the
     // link, or the Drive file's `xtremio-drive:<fileId>`. The player
     // registers that as a media id, and the server resolves a finished
-    // download of it off the disk before it asks any origin -- which is
-    // what plays it offline. A torrent plays from its media route, which
-    // the player registers the same way.
+    // download of it off the disk before it asks any origin. That is what
+    // plays it offline. A torrent plays from its media route, which the
+    // player registers the same way.
     if is_proxy_key(&entry.info_hash) {
         return entry
             .stream
@@ -2433,23 +2444,23 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
 
 /// What to play `key` off the device with, and a note that it was played.
 ///
-/// A finished download the server is still holding whole answers `ok: true`
-/// with the URL it plays from -- the embedded server's media route, reading
-/// the pieces already on this device (see [`stream_url`] for why both halves
-/// are asked) -- and its `lastPlayedAt` is stamped in the same
-/// locked read-modify-write — so the timestamp cannot be lost to a progress
-/// tick landing between the check and the write, and cannot be stamped on a
-/// play that never happened.
+/// A finished download the server is still holding whole answers
+/// `ok: true` with the URL it plays from: the embedded server's media
+/// route, reading the pieces already on this device (see [`stream_url`]
+/// for why both halves are asked). Its `lastPlayedAt` is stamped in the
+/// same locked read-modify-write. So the timestamp cannot be lost to a
+/// progress tick landing between the check and the write, and cannot be
+/// stamped on a play that never happened.
 ///
-/// Anything else answers `ok: false` with a [`OpenFailure`]: the caller
-/// streams the title instead of opening a dead player.
+/// Anything else answers `ok: false` with a [`OpenFailure`], and the
+/// caller streams the title instead of opening a dead player.
 pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
-    // The pin set first and the registry lock second, which is the order
-    // [`merge_live_in`] takes them in and therefore the only order anything
-    // may: asking the server from inside `update` would hold the file lock
-    // across a blocking call into the server's runtime, and the refresh
-    // running the other way round is a cycle. `Err` here is a server that
-    // cannot answer -- `None`, which `stream_url` reads as
+    // The pin set first and the registry lock second. That is the order
+    // [`merge_live_in`] takes them in, and therefore the only order
+    // anything may. Asking the server from inside `update` would hold the
+    // file lock across a blocking call into the server's runtime, and the
+    // refresh running the other way round is a cycle. `Err` here is a
+    // server that cannot answer: `None`, which `stream_url` reads as
     // [`OpenFailure::Unavailable`].
     let live = crate::server::downloads().ok();
     update(|registry| {
@@ -2486,12 +2497,12 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
 /// it builds from the meta it fetches. Offline the fetch fails, so without
 /// this a title downloaded and never played has neither, and plays without
 /// being recorded. With this answering the failed fetch, the player builds
-/// the item the way it does online -- a `temp` one, kept as it plays -- and
-/// the title never has to be put into the library for it (which would put
-/// it in the library of every device on the account, where it is neither
-/// downloaded nor linked).
+/// the item the way it does online (a `temp` one, kept as it plays). The
+/// title never has to be put into the library for it, which would put it
+/// in the library of every device on the account, where it is neither
+/// downloaded nor linked.
 ///
-/// Matched on the addon's own request, not on the id alone: the kept meta
+/// Matched on the addon's own request, not on the id alone. The kept meta
 /// is Cinemeta's (or whichever addon it came from), and answering another
 /// addon's request with it would be that addon saying something it did
 /// not. `base` is the addon's manifest URL, as a `ResourceRequest` names it.
@@ -2525,11 +2536,11 @@ fn kept_meta_in(
 
 /// The process state for a caller that only wants to *read* it. Reaching
 /// for the resurrecting accessor here would let an FFI call in flight
-/// across a shutdown put a fresh state back into the process: a listing
+/// across a shutdown put a fresh state back into the process. A listing
 /// the app started (the downloads notification's, say) is not cancelled
 /// before the app awaits `core_shutdown`, so one landing in the window
 /// would undo the shutdown's whole point. See [`crate::state::state`] for
-/// which callers may build one -- the ones that *install* something.
+/// which callers may build one: the ones that *install* something.
 fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
     crate::state::current()
         .ok_or_else(|| anyhow::anyhow!("the core is not initialized; is `core_init` done?"))
@@ -2540,13 +2551,13 @@ fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
 /// file is rewritten for anything but a byte count, and for a byte count no
 /// more often than [`PROGRESS_WRITE_INTERVAL`].
 ///
-/// Against a state the caller already holds -- the ticker's, so that a tick
-/// finishing after a shutdown merges into the registry of the state it was
-/// started for and re-arms nothing but that state's ticker. See
+/// It runs against a state the caller already holds: the ticker's. So a
+/// tick finishing after a shutdown merges into the registry of the state
+/// it was started for, and re-arms nothing but that state's ticker. See
 /// [`load_in`].
 ///
 /// The live stats are the one thing still asked of the process rather than
-/// of `app`, and they may be: `crate::server::downloads` reads
+/// of `app`, and they may be. `crate::server::downloads` reads
 /// [`crate::state::current`], which answers "not running" instead of
 /// building a state, and a tick whose own server a shutdown has stopped has
 /// nothing left to merge anyway.
@@ -2554,8 +2565,8 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Vec<Progress>> {
     merge_live_in(app, false).map(|(moved, _)| moved)
 }
 
-/// The merge behind [`refresh_in`] and [`list`]: folds the live stats into
-/// every row and answers what moved, and -- when `copy` asks for it -- the
+/// The merge behind [`refresh_in`] and [`list`]. It folds the live stats
+/// into every row and answers what moved and, when `copy` asks for it, the
 /// merged registry. That is not always what is on disk: a tick that only
 /// moved byte counts leaves the file alone (see
 /// [`PROGRESS_WRITE_INTERVAL`]), so a listing takes its copy here, from the
@@ -2566,12 +2577,12 @@ fn merge_live_in(
 ) -> anyhow::Result<(Vec<Progress>, Option<Registry>)> {
     let live = crate::server::downloads()?;
     let result = merge_in(app, &live, Utc::now(), copy)?;
-    // A refresh is also where an entry can go *back* to unfinished -- a
+    // A refresh is also where an entry can go *back* to unfinished: a
     // torrent that is checking again, a file that went away, a pin the
-    // server lost -- and nothing else would restart the poll: `add`,
-    // `set_event_sink` and the boot's `reconcile_pins_in` are its only other
-    // callers and none of them runs afterwards, so progress would stay
-    // silent for the rest of the session.
+    // server lost. Nothing else would restart the poll. `add`,
+    // `set_event_sink` and the boot's `reconcile_pins_in` are its only
+    // other callers, and none of them runs afterwards, so progress would
+    // stay silent for the rest of the session.
     ensure_ticker_in(app);
     Ok(result)
 }
@@ -2579,17 +2590,17 @@ fn merge_live_in(
 /// [`merge_live_in`] with the live stats in hand.
 ///
 /// What moved is decided by the six fields a [`Progress`] carries, which
-/// are exactly the ones [`Entry::apply_live`] can change, so each row's
-/// progress is worked out beside the cached registry and compared there:
-/// no entry -- and so no `MetaItem` snapshot -- is copied unless the file
-/// is rewritten or `copy` asks for the merged registry. Once a second for
-/// the length of a download, a copy of every entry is the cost this shape
+/// are exactly the ones [`Entry::apply_live`] can change. So each row's
+/// progress is worked out beside the cached registry and compared there.
+/// No entry, and so no `MetaItem` snapshot, is copied unless the file is
+/// rewritten or `copy` asks for the merged registry. Once a second for the
+/// length of a download, a copy of every entry is the cost this shape
 /// exists to avoid.
 ///
 /// The file is rewritten for anything but a byte count, and for a byte
 /// count no more often than [`PROGRESS_WRITE_INTERVAL`]. A skipped write
 /// leaves the cache as the file is, so the next tick finds the same
-/// difference again; [`emit`] is what keeps it from being pushed twice.
+/// difference again. [`emit`] is what keeps it from being pushed twice.
 fn merge_in(
     app: &AppState,
     live: &[DownloadInfo],
@@ -2642,15 +2653,15 @@ fn merge_in(
     Ok((moved, out))
 }
 
-/// The whole registry with live progress merged in. Falls back to what is on
-/// disk when the server cannot be asked, so the list still renders offline.
-/// It is an observer, so it raises before an `init` and after a
-/// `shutdown` rather than building a state to read -- the caller before an
-/// `init` had no storage directory to read from either, and the one after a
-/// shutdown is a timer nobody stopped.
+/// The whole registry with live progress merged in. Falls back to what is
+/// on disk when the server cannot be asked, so the list still renders
+/// offline. It is an observer, so it raises before an `init` and after a
+/// `shutdown` rather than building a state to read. The caller before an
+/// `init` had no storage directory to read from either, and the one after
+/// a shutdown is a timer nobody stopped.
 ///
 /// Entries this build cannot parse stay on disk (that is the whole point of
-/// keeping them) but are left out here: the caller could not read them
+/// keeping them) but are left out here. The caller could not read them
 /// either, and the list is a payload, not the file. So is a row a removal
 /// has begun on: to the screen it is gone already.
 pub fn list() -> anyhow::Result<Registry> {
@@ -2677,7 +2688,7 @@ pub fn list() -> anyhow::Result<Registry> {
 
 /// Installs the progress sink, replacing any previous one, and starts the
 /// ticker if there is anything to watch. Nothing is buffered for a missing
-/// sink the way core events are: the full picture is one `downloads_list`
+/// sink the way core events are. The full picture is one `downloads_list`
 /// away, so a late subscriber loses nothing that matters.
 pub fn set_event_sink(sink: EventSink) {
     let app = crate::state::state();
@@ -2724,17 +2735,17 @@ fn emit(app: &AppState, moved: &[Progress]) {
 }
 
 /// Whether the progress poll is running. Nothing on the FFI surface needs
-/// it; the integration test does, because an armed ticker and a silent one
+/// it. The integration test does, because an armed ticker and a silent one
 /// look identical from outside until a download that nobody is polling for
 /// stops moving.
 pub fn is_ticking() -> bool {
     crate::state::current().is_some_and(|app| *app.downloads.ticking())
 }
 
-/// Whether a [`reconcile_pins_in`] is still running -- the one `core_init`
-/// starts behind itself, above all. Nothing on the FFI surface needs it;
-/// the integration test does, because the re-pin landing on the server is
-/// not the end of that work: once the pin answers, the row is asked again
+/// Whether a [`reconcile_pins_in`] is still running, above all the one
+/// `core_init` starts behind itself. Nothing on the FFI surface needs it.
+/// The integration test does, because the re-pin landing on the server is
+/// not the end of that work. Once the pin answers, the row is asked again
 /// whether it still wants the file, and a registry changed in between has
 /// the pin released (the window [`repin_unfinished_with`] closes). A test
 /// that waits for the pin alone and then rewrites the file races that
@@ -2760,9 +2771,9 @@ impl Drop for Reconciling<'_> {
     }
 }
 
-/// True while any entry of `app`'s registry is neither complete nor paused —
-/// an errored one counts, because peers can still turn up and the poll is
-/// one cheap call.
+/// True while any entry of `app`'s registry is neither complete nor
+/// paused. An errored one counts, because peers can still turn up and the
+/// poll is one cheap call.
 fn anything_unfinished_in(app: &AppState) -> bool {
     let mut file = app.downloads.file();
     load_locked(&mut file)
@@ -2793,19 +2804,19 @@ pub fn ensure_ticker_in(app: &Arc<AppState>) {
 /// so it runs on a blocking thread rather than a `CONCURRENT` worker.
 ///
 /// It holds the state it was started for, and stops as soon as that is no
-/// longer the process's: a shutdown retired its sink and its server, and a
+/// longer the process's. A shutdown retired its sink and its server, and a
 /// later `init` gets its own ticker rather than inheriting this one.
 ///
-/// That check is where the tick stops, not where it becomes safe: a shutdown
-/// can land anywhere inside the blocking refresh that follows it, and the
-/// whole refresh is the window. So every call the tick makes is an `_in`
-/// against the state in hand; one that looked a state up would create the
-/// one the shutdown has just taken.
+/// That check is where the tick stops, not where it becomes safe. A
+/// shutdown can land anywhere inside the blocking refresh that follows it,
+/// and the whole refresh is the window. So every call the tick makes is an
+/// `_in` against the state in hand. One that looked a state up would create
+/// the one the shutdown has just taken.
 ///
-/// The locks are taken on blocking threads too, never on the worker: the
+/// The locks are taken on blocking threads too, never on the worker. The
 /// registry's is held across server calls (an unpin under [`update_then`])
 /// that can queue behind a magnet, and [`ensure_ticker_in`] holds
-/// `ticking` while it waits for the registry's, so either one taken here
+/// `ticking` while it waits for the registry's. Either one taken here
 /// would stall one of `CONCURRENT`'s few workers for as long.
 async fn ticker(app: Arc<AppState>) {
     loop {
@@ -2841,26 +2852,26 @@ async fn ticker(app: Arc<AppState>) {
 
 /// What a row marked [`State::Gone`] carries as its reason, for the screen
 /// that draws it and the log that records it. It names what is true of the
-/// device rather than blaming a folder: with one root there is no second
-/// place the bytes could have been, and which root they were under when
-/// they went is not something the registry knows.
+/// device rather than blaming a folder. With one root there is no second
+/// place the bytes could have been, and the registry does not know which
+/// root they were under when they went.
 pub const GONE_MESSAGE: &str = "the downloaded data is not on this device any more";
 
 /// Records that `key`'s pieces are not on the device: [`State::Gone`], no
 /// bytes and no completion date, because none of the three is true any more.
 ///
 /// A fresh read-modify-write rather than an edit of the copy the caller is
-/// looping over: the loop blocks on magnet resolution between rows, and the
-/// registry can have been written by an `add`, a `remove` or the ticker in
-/// between. Only a row still saying `complete` is changed, so a download the
-/// user started again while this ran keeps what that start wrote.
+/// looping over. The loop blocks on magnet resolution between rows, and an
+/// `add`, a `remove` or the ticker can have written the registry in
+/// between. Only a row still saying `complete` is changed, so a download
+/// the user started again while this ran keeps what that start wrote.
 ///
-/// The pin goes too, unless another row still wants the file. "Not whole"
-/// is also what a server that still pins the file says -- a piece lost or
-/// corrupt, a torrent short of what the row recorded -- and a pin left
+/// The pin goes too, unless another row still wants the file. A server
+/// that still pins the file also says "not whole" when a piece is lost or
+/// corrupt, or the torrent is short of what the row recorded. A pin left
 /// standing keeps that file wanted: the server fetches it back whole, and
 /// the next merge turns the row `downloading` again. Its leftover pieces
-/// are not deleted here; unpinned, they are the server's to reclaim.
+/// are not deleted here. Unpinned, they are the server's to reclaim.
 fn mark_gone_in(app: &Arc<AppState>, key: &str) {
     let marked = update_in(app, |registry| {
         let Some(entry) = registry
@@ -2897,7 +2908,7 @@ fn mark_gone_in(app: &Arc<AppState>, key: &str) {
     }
 }
 
-/// Puts the registry and the server's pin set back into agreement, which is
+/// Puts the registry and the server's pin set back into agreement. This is
 /// the one moment either of them can be checked against the other: the
 /// server has just applied the pin set the launch handed it ([`pins`]),
 /// live or dormant, and nothing has been asked of it yet.
@@ -2905,13 +2916,13 @@ fn mark_gone_in(app: &Arc<AppState>, key: &str) {
 /// Two halves, because a row can be wrong in two directions:
 ///
 /// - **An unfinished row** is pinned again, with its own trackers. The
-///   launch named it, but a pin whose torrent the session does not have --
-///   its bytes went with a torrent-data root that was moved or purged -- is
-///   dormant, with nothing to fetch by, and without this the download would
-///   sit at whatever it last read for ever.
+///   launch named it, but a pin whose torrent the session does not have is
+///   dormant, with nothing to fetch by. (Its bytes went with a torrent-data
+///   root that was moved or purged.) Without this, the download would sit
+///   at whatever it last read for ever.
 /// - **A finished row the server does not hold whole** is marked
 ///   [`State::Gone`]. Its pieces were under that same root, and with them
-///   gone there is nothing on the device to play: the row said `complete`
+///   gone there is nothing on the device to play. The row said `complete`
 ///   and would have said it for ever, because the merge only touches rows
 ///   the server lists. It is *not* re-pinned, which is the difference
 ///   between a boot that reports a loss and one that quietly re-downloads
@@ -2923,8 +2934,8 @@ pub fn reconcile_pins() {
 }
 
 /// Pins one unfinished download again and writes a refusal down as its
-/// state; `false` when `app` was retired under the pin, which is the
-/// caller's signal to stop (see [`reconcile_pins_in`] for why a pin
+/// state. Answers `false` when `app` was retired under the pin, which is
+/// the caller's signal to stop (see [`reconcile_pins_in`] for why a pin
 /// issued after a shutdown must not be written down).
 fn repin_unfinished_in(app: &Arc<AppState>, key: &str, entry: &Entry) -> bool {
     repin_unfinished_with(app, key, entry, pin_entry, release_replaced)
@@ -2934,15 +2945,15 @@ fn repin_unfinished_in(app: &Arc<AppState>, key: &str, entry: &Entry) -> bool {
 /// is how a test changes the registry while the pin is in flight.
 ///
 /// `entry` is a reading taken before the loop started, and the pin blocks
-/// for as long as a magnet takes: the screens are up meanwhile, and the row
+/// for as long as a magnet takes. The screens are up meanwhile, and the row
 /// can be cancelled, or the key given to another file, before it answers.
 /// So what the pin answered is acted on only under one hold of the file's
-/// lock, against a row that still wants this very file -- the shape
-/// [`add`]'s [`record_pin`] and [`unstage_add`] have for the same window. A
-/// pin that lands with no row wanting its file is released there, or it
-/// downloads for the rest of the session with nothing naming it; a refusal
-/// is written only onto the row it was asked for, never onto whatever holds
-/// the key now.
+/// lock, against a row that still wants this very file. [`add`]'s
+/// [`record_pin`] and [`unstage_add`] have the same shape for the same
+/// window. A pin that lands with no row wanting its file is released
+/// there, or it downloads for the rest of the session with nothing naming
+/// it. A refusal is written only onto the row it was asked for, never onto
+/// whatever holds the key now.
 fn repin_unfinished_with(
     app: &Arc<AppState>,
     key: &str,
@@ -3010,16 +3021,16 @@ fn repin_unfinished_with(
     true
 }
 
-/// Pins every unfinished Google Drive download again: what the arrival of
+/// Pins every unfinished Google Drive download again, which the arrival of
 /// the account's grant ([`crate::server::set_drive_grant`]) makes possible.
 ///
 /// The boot's [`reconcile_pins`] runs before Dart has read the pairing out
-/// of the secure store, so a Drive download that was mid-fill at the last
-/// exit is refused then -- "no account is linked" -- and written down as
-/// such. This is the other half: once the grant is in hand, those rows are
-/// pinned again and the server's filler resumes; the next tick reads the
-/// live row back over the refusal (`Entry::apply_live`). Torrent and link
-/// downloads are not touched, since nothing about them changed.
+/// of the secure store. So a Drive download that was mid-fill at the last
+/// exit is refused then ("no account is linked") and written down as such.
+/// This is the other half. Once the grant is in hand, those rows are pinned
+/// again and the server's filler resumes. The next tick reads the live row
+/// back over the refusal (`Entry::apply_live`). Torrent and link downloads
+/// are not touched, since nothing about them changed.
 pub fn repin_drive_downloads() {
     let Some(app) = crate::state::current() else {
         return;
@@ -3041,20 +3052,20 @@ pub fn repin_drive_downloads() {
     }
 }
 
-/// [`reconcile_pins`] against a state the caller already holds -- `init`'s,
+/// [`reconcile_pins`] against a state the caller already holds: `init`'s,
 /// which is the state this work belongs to. It is the other half of the
 /// boot that can still be running after a shutdown (a magnet blocks it for
-/// as long as the tracker takes), so it may not look a state up either, and
-/// it stops once its instance has been retired. See [`load_in`].
+/// as long as the tracker takes). So it may not look a state up either,
+/// and it stops once its instance has been retired. See [`load_in`].
 ///
 /// Stopping there is also why [`update_in`]'s no-resurrection guarantee
 /// cannot be exercised through this path: the check here is what keeps a
 /// shutdown from ever driving into it.
 ///
-/// It is also where the file's intents are finished (see the module docs):
-/// removals a kill interrupted first, so a cancelled download is not
-/// re-pinned only to be dropped again; the pins of swapped-out files last,
-/// once the re-pin has put the swap's new pin in place.
+/// It is also where the file's intents are finished (see the module docs).
+/// Removals a kill interrupted go first, so a cancelled download is not
+/// re-pinned only to be dropped again. The pins of swapped-out files go
+/// last, once the re-pin has put the swap's new pin in place.
 pub fn reconcile_pins_in(app: &Arc<AppState>) {
     let _running = Reconciling::start(&app.downloads.reconciling);
     finish_pending_removals_in(app);
@@ -3066,10 +3077,10 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
         }
     };
     // One reading of the pin set for the finished half, taken before
-    // anything is pinned so that no pin this function issues is mistaken for
-    // one the last run left. A server that cannot answer marks nothing: "not
-    // held" and "not asked" are the same silence, and only one of them is a
-    // download that is gone.
+    // anything is pinned, so that no pin this function issues is mistaken
+    // for one the last run left. A server that cannot answer marks nothing.
+    // "Not held" and "not asked" are the same silence, and only one of them
+    // is a download that is gone.
     let live = match crate::server::downloads() {
         Ok(live) => Some(live),
         Err(error) => {
@@ -3080,7 +3091,7 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
     for (key, entry) in items {
         if !entry.unfinished() {
             // Only a server that would know may condemn a row. `Unknown`
-            // leaves it alone: marking a whole, present download `gone`
+            // leaves it alone. Marking a whole, present download `gone`
             // because its torrent happened to be hash-checking at boot is
             // how a row decays into a re-download nobody asked for.
             let lost = entry.state == State::Complete
@@ -3097,13 +3108,13 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
         }
         // The ticker's check, in the loop that needs it most, and twice:
         // once so a retired instance starts no more work, and once around
-        // the pin, which is where the window actually is -- it blocks for
-        // as long as a magnet takes to resolve. Every pin issued after a
+        // the pin. The pin is where the window actually is, since it blocks
+        // for as long as a magnet takes to resolve. Every pin issued after a
         // shutdown fails against a server that is not running any more, and
         // the arm below would write that down as the download's own state.
-        // A registry of "embedded server is not running" is then what the
-        // next boot lists, until its own re-pin and the first tick after it
-        // put the server's reading back over the top -- a failure this
+        // The next boot then lists a registry of "embedded server is not
+        // running", until its own re-pin and the first tick after it put
+        // the server's reading back over the top. That is a failure this
         // process caused, reported as the download's.
         if !crate::state::is_current(app) {
             return;
@@ -3233,10 +3244,10 @@ mod tests {
     /// A row the last boot marked gone reads back as gone.
     ///
     /// It is the one state whose *reading* decides whether a download
-    /// happens: an unknown state reads as `queued`, `queued` is
-    /// unfinished, and the next boot pins every unfinished row -- so a
-    /// build that dropped this arm would answer a moved root by fetching
-    /// every film again, one launch later and asked for by nobody.
+    /// happens. An unknown state reads as `queued`, `queued` is
+    /// unfinished, and the next boot pins every unfinished row. So a build
+    /// that dropped this arm would answer a moved root by fetching every
+    /// film again, one launch later and asked for by nobody.
     #[test]
     fn a_row_marked_gone_reads_back_gone_rather_than_as_something_to_pin() {
         let registry = Registry::parse(
@@ -3330,9 +3341,9 @@ mod tests {
     }
 
     /// An entry this build cannot parse still reaches the launch's pin set,
-    /// by the keys every build has named its file with; one whose file those
-    /// keys cannot tell makes the set unknown, which keeps everything, and
-    /// never a set without it, which sweeps it.
+    /// by the keys every build has named its file with. One whose file
+    /// those keys cannot tell makes the set unknown, which keeps
+    /// everything, and never a set without it, which would sweep it.
     #[test]
     fn an_unreadable_entry_is_still_pinned_at_launch() {
         let set = |items: &str| {
@@ -3409,12 +3420,12 @@ mod tests {
     }
 
     /// A link is a source too: keyed by the server, one file, its `h=`
-    /// headers carried; a stream that is neither a torrent nor a link is
+    /// headers carried. A stream that is neither a torrent nor a link is
     /// refused, and so is a link the server cannot key.
     /// A linked Drive file is listed as an `xtremio-drive:<id>` stream, and
     /// it downloads like a link: keyed by the server under
     /// `ProxyPinKey::Drive`, one file, no trackers. The grant is not in
-    /// the stream -- the server side asks `crate::server` for it.
+    /// the stream: the server side asks `crate::server` for it.
     #[test]
     fn a_drive_file_is_a_source_keyed_by_the_server() {
         let key = "cd".repeat(32);
@@ -3656,7 +3667,7 @@ mod tests {
     /// The server reports `downloaded: 0, complete: false` in states where
     /// the file may be whole on disk: while the torrent hash-checks, and for
     /// a pin whose torrent it does not have right now. A finished download
-    /// must survive both -- offline Play is gated on `complete`, and the
+    /// must survive both: offline Play is gated on `complete`, and the
     /// `completedAt` it would erase is not recoverable.
     #[test]
     fn transient_zeros_do_not_demote_a_finished_download() {
@@ -3734,9 +3745,9 @@ mod tests {
         }
     }
 
-    /// A row a removal has begun on is on its way out: nothing polls it,
-    /// nothing re-pins it, and it does not hold a pin for another row --
-    /// its own removal asks about that pin in turn.
+    /// A row a removal has begun on is on its way out. Nothing polls it,
+    /// nothing re-pins it, and it does not hold a pin for another row,
+    /// since its own removal asks about that pin in turn.
     #[test]
     fn a_row_on_its_way_out_is_neither_unfinished_nor_another_owner() {
         let mut leaving = entry("tt1", "tt1");
@@ -3879,7 +3890,7 @@ mod tests {
         (registry, previous, replaces)
     }
 
-    /// A refused pin puts back the row it replaced -- but only over the row
+    /// A refused pin puts back the row it replaced, but only over the row
     /// the add staged. The pin can take as long as a magnet does, and in
     /// that time the title can be removed or another file staged for it.
     #[test]
@@ -4268,10 +4279,10 @@ mod tests {
     }
 
     /// The boot's re-pin blocks for as long as a magnet takes, with the
-    /// screens up: a row cancelled meanwhile has its new pin released,
-    /// under the registry's lock, and a refusal is written only onto the
-    /// row it was asked for -- never onto a leaving row, or onto another
-    /// file that took the key.
+    /// screens up. A row cancelled meanwhile has its new pin released,
+    /// under the registry's lock. A refusal is written only onto the row it
+    /// was asked for, never onto a leaving row, or onto another file that
+    /// took the key.
     #[test]
     fn a_boot_repin_acts_only_for_the_row_that_still_wants_it() {
         crate::env::with_storage_dir(|_| {
@@ -4460,7 +4471,7 @@ mod tests {
         assert!(registry.items.is_empty(), "not resurrected: {registry:?}");
     }
 
-    /// The file a row replaced is released once the new pin is in -- but
+    /// The file a row replaced is released once the new pin is in, but
     /// only if no row wants it by then. The pin can take as long as a
     /// magnet does, and meanwhile the user can go back to the stream they
     /// had, or another title can name that file.
@@ -4557,7 +4568,7 @@ mod tests {
     }
 
     /// The two intents survive the file, and a row carrying neither is
-    /// written exactly as every build so far wrote it -- the Dart fixture
+    /// written exactly as every build so far wrote it. The Dart fixture
     /// and the wire-names test read those keys.
     #[test]
     fn the_intents_round_trip_and_an_ordinary_row_does_not_carry_them() {
@@ -4657,7 +4668,7 @@ mod tests {
     /// The half of [`open`] that decides. A download that is not whole has
     /// nothing to play whatever is on the disk, and a whole one still needs
     /// the embedded server, because the pieces are only readable through
-    /// it -- no server, nowhere to play from. What a complete download's
+    /// it: no server, nowhere to play from. What a complete download's
     /// URL *is* is checked against a running one, in `tests/downloads.rs`.
     ///
     /// The path the server reports is deliberately not consulted: it names
@@ -4711,7 +4722,7 @@ mod tests {
         .expect("DownloadInfo")
     }
 
-    /// `complete: false` is not "the bytes are missing" -- it is also every
+    /// `complete: false` is not "the bytes are missing". It is also every
     /// state in which the server has not looked.
     ///
     /// Reading the two alike cost both of the things `Held` exists to
@@ -4719,7 +4730,7 @@ mod tests {
     /// be hash-checking was marked `gone`, and a `gone` row is not re-pinned,
     /// so it decayed into a re-download nobody asked for. And on Play the
     /// same reading refused a file that was on the device, which
-    /// `offline_play.dart` answers by falling back to the addon's stream --
+    /// `offline_play.dart` answers by falling back to the addon's stream,
     /// fetching from peers a film already here.
     #[test]
     fn a_server_that_has_not_looked_yet_says_nothing_about_the_bytes() {
@@ -4752,7 +4763,7 @@ mod tests {
     /// a finished download: another torrent's pin is not this one's, another
     /// file of the same torrent is not this file, and a pin a torrent that
     /// is up reports short really is short. A pin the server cannot speak
-    /// for -- dormant, checking, resolving -- is a fourth case and not one
+    /// for (dormant, checking, resolving) is a fourth case and not one
     /// of these; see
     /// [`a_server_that_has_not_looked_yet_says_nothing_about_the_bytes`].
     /// Case is not one of them either: the registry keeps the hash as the
@@ -4840,9 +4851,9 @@ mod tests {
     }
 
     /// A progress event is the six fields that move and the key they move
-    /// under -- not the entry, whose meta snapshot, raw stream JSON and two
-    /// addon requests would be serialized here and decoded on the UI isolate
-    /// once a second for the length of a download.
+    /// under. It is not the entry, whose meta snapshot, raw stream JSON and
+    /// two addon requests would be serialized here and decoded on the UI
+    /// isolate once a second for the length of a download.
     #[test]
     fn a_progress_event_carries_what_moves_and_nothing_else() {
         let mut entry = entry("tt1", "tt1");
@@ -4942,9 +4953,9 @@ mod tests {
     }
 
     /// What that means for the file: a tick that only moved a byte count
-    /// leaves it exactly as it was -- while a listing taken from the same
-    /// merge shows the new count -- and the next change that matters
-    /// rewrites it with everything since.
+    /// leaves it exactly as it was, while a listing taken from the same
+    /// merge shows the new count. The next change that matters rewrites it
+    /// with everything since.
     #[test]
     fn a_progress_only_tick_does_not_rewrite_the_file() {
         crate::env::with_storage_dir(|dir| {
@@ -4982,8 +4993,8 @@ mod tests {
     }
 
     /// A row is pushed because it moved, so the same numbers are not pushed
-    /// twice -- which is what a tick whose write was skipped keeps finding
-    /// against the file. Against a state of this test's own: what has been
+    /// twice. A tick whose write was skipped keeps finding them against the
+    /// file. Against a state of this test's own: what has been
     /// sent is a property of an `AppState`, so this neither disturbs the
     /// process's sink nor cares what else ran first.
     #[test]

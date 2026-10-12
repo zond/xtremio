@@ -19,8 +19,8 @@ pub struct DiagnosticsSnapshot {
     pub stream_server_rev: Option<String>,
     /// The git revision stremio-core is pinned to.
     pub stremio_core_rev: Option<String>,
-    /// Base URL of the embedded server, or null when it is not running --
-    /// which is also how the app tells whether it is.
+    /// Base URL of the embedded server, or null when it is not running.
+    /// This is also how the app tells whether it runs.
     pub server_base_url: Option<String>,
     /// The captured `tracing` lines, oldest first: this crate's and the
     /// embedded server's, both through the one subscriber, bounded by
@@ -45,10 +45,10 @@ pub fn diagnostics_snapshot() -> anyhow::Result<DiagnosticsSnapshot> {
 }
 
 /// Records one line from the Dart side into the same ring the Rust log
-/// fills, so a report can explain a failure that happened above the FFI --
+/// fills, so a report can explain a failure that happened above the FFI:
 /// a player open that was refused and retried, an engine error out of
-/// media_kit, an unhandled Flutter error. Without this the ring holds only
-/// the Rust half of a session and a playback failure leaves no trace in it
+/// media_kit, an unhandled Flutter error. Without this, the ring holds only
+/// the Rust half of a session, and a playback failure leaves no trace in it
 /// at all.
 ///
 /// Sync on purpose: the line is written where it happened, so the ring's
@@ -59,7 +59,7 @@ pub fn diagnostics_snapshot() -> anyhow::Result<DiagnosticsSnapshot> {
 ///
 /// **Nothing secret may be passed here.** The caller sanitizes (no event
 /// args, no auth material, no manifest URL with a key), and the Dart side
-/// redacts again on the way to the clipboard; this is the middle of that
+/// redacts again on the way to the clipboard. This is the middle of that
 /// sandwich, not a place to be careless.
 #[frb(sync)]
 pub fn diagnostics_log(level: String, target: String, message: String) -> anyhow::Result<()> {

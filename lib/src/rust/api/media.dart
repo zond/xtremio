@@ -7,26 +7,25 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// Registers `streaming_url` -- a URL stremio-core built on the embedded
-/// server (a torrent's `/{infoHash}/{fileIdx}`, a `/proxy` link, an
-/// archive member's `/{fmt}/create` or `/{fmt}/stream`) -- and answers the
-/// id mpv
-/// is handed as `xtremio://<id>`. No I/O. Errors when the server is not
-/// running.
+/// Registers `streaming_url` and answers the id mpv is handed as
+/// `xtremio://<id>`. `streaming_url` is a URL stremio-core built on the
+/// embedded server: a torrent's `/{infoHash}/{fileIdx}`, a `/proxy` link,
+/// or an archive member's `/{fmt}/create` or `/{fmt}/stream`. No I/O.
+/// Errors when the server is not running.
 String mediaRegister({required String streamingUrl}) =>
     RustLib.instance.api.crateApiMediaMediaRegister(streamingUrl: streamingUrl);
 
 /// Registers the linked Google Drive file `file_id` (what an
 /// `xtremio-drive:<fileId>` stream names) and answers its id. The grant is
 /// the one the app handed Rust (`server_drive_grant`), read when the
-/// server resolves; a finished download of the file needs none. No I/O.
+/// server resolves. A finished download of the file needs none. No I/O.
 /// Errors when the server is not running.
 String mediaRegisterDrive({required String fileId, String? name}) => RustLib
     .instance
     .api
     .crateApiMediaMediaRegisterDrive(fileId: fileId, name: name);
 
-/// Registers a file on this device by its `path` and answers its id;
+/// Registers a file on this device by its `path` and answers its id.
 /// `name` is what to call it (the path's file name when null). No I/O.
 /// Errors when the server is not running.
 String mediaRegisterLocalPath({required String path, String? name}) => RustLib
@@ -37,40 +36,40 @@ String mediaRegisterLocalPath({required String path, String? name}) => RustLib
 /// Registers a file on this device by a descriptor the app has detached
 /// (Android's `ParcelFileDescriptor.detachFd()`) and answers its id. **The
 /// descriptor is Rust's from this call on**, answered or not: an error
-/// closes it. `name` is what to call it -- a descriptor has no name, and
-/// its extension is where the content type comes from. Errors when the
-/// server is not running, and on a platform with no descriptors.
+/// closes it. `name` is what to call it. A descriptor has no name, and the
+/// content type comes from the name's extension. Errors when the server is
+/// not running, and on a platform with no descriptors.
 String mediaRegisterLocalFd({required PlatformInt64 fd, String? name}) =>
     RustLib.instance.api.crateApiMediaMediaRegisterLocalFd(fd: fd, name: name);
 
 /// Publishes `id` for a cast and answers the token the receiver's URL ends
-/// in (`<lan base>/cast/<token>`); the play `media_set_play` recorded for
+/// in (`<lan base>/cast/<token>`). The play `media_set_play` recorded for
 /// the id goes with it. **A URL into this device while published: never
 /// log it.** Errors while the LAN listener is not running, or for an id
 /// the server does not hold.
 Future<String> mediaPublish({required String id}) =>
     RustLib.instance.api.crateApiMediaMediaPublish(id: id);
 
-/// Publishes a rendition of `id` for a cast -- one fragmented MP4 the
-/// server makes from the film as the receiver reads it -- and answers the
-/// token its stream is under (`<lan base>/cast/<token>/stream.mp4`); the
-/// play `media_set_play` recorded for the id goes with it. `spec` is the
-/// server's `RenditionSpec` as JSON (`durationMs`, `segmentMs`, `startMs`,
-/// `video`, `audio`, `audioTrack`). **A URL into this device while
-/// published: never log it.** Errors as `media_publish` does, and for a
-/// spec that is not one.
+/// Publishes a rendition of `id` for a cast and answers the token its
+/// stream is under (`<lan base>/cast/<token>/stream.mp4`). The rendition is
+/// one fragmented MP4 the server makes from the film as the receiver reads
+/// it. The play `media_set_play` recorded for the id goes with it. `spec`
+/// is the server's `RenditionSpec` as JSON (`durationMs`, `segmentMs`,
+/// `startMs`, `video`, `audio`, `audioTrack`). **A URL into this device
+/// while published: never log it.** Errors as `media_publish` does, and for
+/// a spec that is not one.
 Future<String> mediaPublishRendition({
   required String id,
   required String spec,
 }) =>
     RustLib.instance.api.crateApiMediaMediaPublishRendition(id: id, spec: spec);
 
-/// Starts making the published rendition `token`'s start -- the source's
-/// index, the header, the slot the receiver will begin in -- with no
-/// receiver asking yet, so the app hands the receiver the stream only once
-/// [`media_rendition_readiness`] says it is ready. Returns at once; the
+/// Starts making the published rendition `token`'s start before any
+/// receiver asks: the source's index, the header, the slot the receiver
+/// will begin in. The app hands the receiver the stream only once
+/// [`media_rendition_readiness`] says it is ready. Returns at once. The
 /// work waits as long as the source takes, and an unpublish ends it.
-/// Whether `token` is a published rendition.
+/// Answers whether `token` is a published rendition.
 bool mediaPrepareRendition({required String token}) =>
     RustLib.instance.api.crateApiMediaMediaPrepareRendition(token: token);
 
@@ -80,14 +79,14 @@ bool mediaPrepareRendition({required String token}) =>
 String mediaRenditionReadiness({required String token}) =>
     RustLib.instance.api.crateApiMediaMediaRenditionReadiness(token: token);
 
-/// What the publication `token` has served so far, as JSON -- the
-/// server's `CastNumbers`: `kind` (`plain`, `rendition`), `contentType`,
-/// `delivery` (requests, bodies begun, ended and open, bytes, where the
-/// latest body began, the furthest byte sent), `source` (its kind, bytes
-/// read, opens, seeks) and for a rendition what it has made -- or `None`
-/// once it is not published. Counts that only grow, no rate: the caller
-/// divides two answers by the time between them. Cheap; polled while the
-/// cast panel is up.
+/// What the publication `token` has served so far, as JSON, or `None` once
+/// it is not published. The JSON is the server's `CastNumbers`: `kind`
+/// (`plain`, `rendition`), `contentType`, `delivery` (requests, bodies
+/// begun, ended and open, bytes, where the latest body began, the furthest
+/// byte sent), `source` (its kind, bytes read, opens, seeks) and, for a
+/// rendition, what it has made. The counts only grow and there is no rate:
+/// the caller divides two answers by the time between them. Cheap; polled
+/// while the cast panel is up.
 String? mediaCastNumbers({required String token}) =>
     RustLib.instance.api.crateApiMediaMediaCastNumbers(token: token);
 
@@ -104,18 +103,19 @@ Future<bool> mediaUnpublish({required String token}) =>
     RustLib.instance.api.crateApiMediaMediaUnpublish(token: token);
 
 /// What `id` is, as JSON: `{name, contentType, len, member, sniffed,
-/// inProcess, proxyUrl}` once resolved, or `{refused, message}` when the server will
-/// not play it -- a refusal is an answer. Waits while the server adds the
-/// torrent and chooses its file (up to the metadata timeout for a
-/// magnet), so it runs on a worker; the reader mpv opens afterwards finds
-/// the answer kept. Errors when the server is not running.
+/// inProcess, proxyUrl}` once resolved, or `{refused, message}` when the
+/// server will not play it. A refusal is an answer. It waits while the
+/// server adds the torrent and chooses its file (up to the metadata timeout
+/// for a magnet), so it runs on a worker. The reader mpv opens afterwards
+/// finds the answer kept. Errors when the server is not running.
 Future<String> mediaResolve({required String id}) =>
     RustLib.instance.api.crateApiMediaMediaResolve(id: id);
 
-/// The play mpv's reader over `id` will be: this player's `token`
-/// (`<viewer>.<screen>`, what `p=` carried) and its read-ahead `buffer`
-/// (`normal`, `large`, `maximum`). Set before handing mpv the id; an open
-/// without one is an aside, which shares nothing and moves no play.
+/// Tells the server which play mpv's reader over `id` will be: this
+/// player's `token` (`<viewer>.<screen>`, what `p=` carried) and its
+/// read-ahead `buffer` (`normal`, `large`, `maximum`). Set it before
+/// handing mpv the id. An open without one is an aside, which shares
+/// nothing and moves no play.
 void mediaSetPlay({
   required String id,
   required String token,
@@ -127,14 +127,14 @@ void mediaSetPlay({
 );
 
 /// The viewer changed the read-ahead for `id`. The open reader takes it at
-/// its next reopen -- a seek -- and nothing reopens the player for it.
+/// its next reopen (a seek), and nothing reopens the player for it.
 /// Errors when the server is not running or holds nothing under `id`.
 void mediaSetBuffer({required String id, required String buffer}) =>
     RustLib.instance.api.crateApiMediaMediaSetBuffer(id: id, buffer: buffer);
 
 /// Where the playback of `id` resumes, in seconds, and how long the film
-/// is if the app knows: set right after [`media_set_play`], before mpv is
-/// handed the id. A resume of zero is a playback from the top. A hint:
+/// is if the app knows. Set it right after [`media_set_play`], before mpv
+/// is handed the id. A resume of zero is a playback from the top. A hint:
 /// never errors.
 void mediaSetResume({
   required String id,
@@ -146,8 +146,8 @@ void mediaSetResume({
   runtimeSeconds: runtimeSeconds,
 );
 
-/// The player of `id` is leaving at `position_seconds` of the film:
-/// remembered by the server for the next playback resuming near there. A
+/// The player of `id` is leaving at `position_seconds` of the film. The
+/// server remembers it for the next playback that resumes near there. A
 /// hint: never errors.
 Future<void> mediaNotePosition({
   required String id,
@@ -191,11 +191,11 @@ Future<void> mediaNotePlayerStalled({required String id}) =>
 
 /// Registers the `xtremio` protocol on the mpv handle at `ctx` (media_kit's
 /// `NativePlayer.ctx.address`), resolving libmpv's stream_cb API from the
-/// library at `libmpv_path` (`NativeLibrary.path`). Once per player, after
-/// `waitForPlayerInitialization` and before the first open; a second call
-/// on the same handle is a no-op. Answers whether this call registered it
-/// (`false`: it was there already). Errors for a null handle or a libmpv
-/// without the API.
+/// library at `libmpv_path` (`NativeLibrary.path`). Call it once per
+/// player, after `waitForPlayerInitialization` and before the first open.
+/// A second call on the same handle is a no-op. Answers whether this call
+/// registered it (`false`: it was there already). Errors for a null handle
+/// or a libmpv without the API.
 Future<bool> mpvStreamRegister({
   required PlatformInt64 ctx,
   required String libmpvPath,
