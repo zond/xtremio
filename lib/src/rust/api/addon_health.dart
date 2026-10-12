@@ -13,19 +13,19 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// those to `{"ok","empty","fail","lastOk","lastFail","updated"}`.
 ///
 /// `ok`/`empty`/`fail` are decayed counts as of `updated`, and the app ages
-/// them the rest of the way to now; the three are separate because "the
+/// them the rest of the way to now. The three are separate because "the
 /// addon answered with nothing" is not "the addon failed". `resource` is
 /// `catalog`, `meta`, `stream` or `subtitles`.
 ///
 /// `everyAnswerFailed` is true when nothing has answered at all since this
-/// run started, which is a statement about the connection rather than about
-/// any addon -- such a sweep is recorded against nobody, so it leaves no
-/// trace in the counts and has to be reported separately.
+/// run started. That says something about the connection, not about any
+/// addon. Such a sweep is recorded against nobody, so it leaves no trace in
+/// the counts and has to be reported separately.
 ///
-/// Async even though it only clones at most a couple of hundred small
-/// records: it takes the same lock the flush holds across a whole
-/// preferences rewrite, which ends in an fsync and a rename. Handed to
-/// Dart synchronously it would make the UI thread wait out that write.
+/// Async, though it clones at most a couple of hundred small records: it
+/// takes the same lock the flush holds across a whole preferences rewrite,
+/// which ends in an fsync and a rename. A sync call would make the UI
+/// thread wait out that write.
 /// Empty before `core_init` and after `shutdown`.
 Future<String> addonHealthReport() =>
     RustLib.instance.api.crateApiAddonHealthAddonHealthReport();

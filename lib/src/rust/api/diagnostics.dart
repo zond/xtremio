@@ -13,10 +13,10 @@ DiagnosticsSnapshot diagnosticsSnapshot() =>
     RustLib.instance.api.crateApiDiagnosticsDiagnosticsSnapshot();
 
 /// Records one line from the Dart side into the same ring the Rust log
-/// fills, so a report can explain a failure that happened above the FFI --
+/// fills, so a report can explain a failure that happened above the FFI:
 /// a player open that was refused and retried, an engine error out of
-/// media_kit, an unhandled Flutter error. Without this the ring holds only
-/// the Rust half of a session and a playback failure leaves no trace in it
+/// media_kit, an unhandled Flutter error. Without this, the ring holds only
+/// the Rust half of a session, and a playback failure leaves no trace in it
 /// at all.
 ///
 /// Sync on purpose: the line is written where it happened, so the ring's
@@ -27,7 +27,7 @@ DiagnosticsSnapshot diagnosticsSnapshot() =>
 ///
 /// **Nothing secret may be passed here.** The caller sanitizes (no event
 /// args, no auth material, no manifest URL with a key), and the Dart side
-/// redacts again on the way to the clipboard; this is the middle of that
+/// redacts again on the way to the clipboard. This is the middle of that
 /// sandwich, not a place to be careless.
 void diagnosticsLog({
   required String level,
@@ -51,8 +51,8 @@ class DiagnosticsSnapshot {
   /// The git revision stremio-core is pinned to.
   final String? stremioCoreRev;
 
-  /// Base URL of the embedded server, or null when it is not running --
-  /// which is also how the app tells whether it is.
+  /// Base URL of the embedded server, or null when it is not running.
+  /// This is also how the app tells whether it runs.
   final String? serverBaseUrl;
 
   /// The captured `tracing` lines, oldest first: this crate's and the

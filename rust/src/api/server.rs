@@ -1,7 +1,7 @@
 //! FRB surface for the embedded stream-server: lifecycle, and the control
 //! calls the app makes itself (torrent start-up stats, server settings) as
-//! JSON strings over the server's library API -- the Dart side never
-//! speaks HTTP to the server; only the player fetches media from it.
+//! JSON strings over the server's library API. The Dart side never speaks
+//! HTTP to the server; only the player fetches media from it.
 
 use flutter_rust_bridge::frb;
 
@@ -33,8 +33,8 @@ impl From<ServerConfig> for crate::server::StartConfig {
     }
 }
 
-/// Starts the embedded server (idempotent) and returns its base URL --
-/// `http://127.0.0.1:<port the OS picked>/`, which is the only place that
+/// Starts the embedded server (idempotent) and returns its base URL,
+/// `http://127.0.0.1:<port the OS picked>/`. This is the only place that
 /// port is ever known.
 ///
 /// **Test and diagnostic only.** The app never calls it: `core_init` starts
@@ -59,10 +59,10 @@ pub fn server_base_url() -> anyhow::Result<Option<String>> {
     guarded_ok(|| crate::server::base_url().map(|url| url.to_string()))
 }
 
-/// A torrent's `stats.json` as JSON (camelCase, the shape stremio-core's
-/// `Statistics` parses plus the start-up `phase` fields and an optional
-/// `error` message): the per-file stats when `file_idx` is set, the
-/// torrent-level ones otherwise. `trackers` is the stream's `announce`
+/// A torrent's `stats.json` as JSON: camelCase, the shape stremio-core's
+/// `Statistics` parses, plus the start-up `phase` fields and an optional
+/// `error` message. It holds the per-file stats when `file_idx` is set and
+/// the torrent-level ones otherwise. `trackers` is the stream's `announce`
 /// list, used only if this call is what creates the torrent's engine.
 /// Errors when the server is not running, for a negative index, or for an
 /// index the torrent does not have once its metadata is known. Blocks the
@@ -83,19 +83,19 @@ pub fn server_torrent_stats(
     })
 }
 
-/// **Tells the server how long the film is**, with no position: what a cast
-/// can state, the receiver reporting seconds that do not convert to a byte
-/// offset. The length is what sizes the retention window.
+/// **Tells the server how long the film is**, with no position. That is
+/// what a cast can state, since the receiver reports seconds that do not
+/// convert to a byte offset. The length is what sizes the retention window.
 ///
 /// Never errors and never blocks on the network. A duration is not a
-/// position, and it is the only one of the two the server is told: what a
-/// stream is fetched at is the file's own bitrate, which is its size over
+/// position, and it is the only one of the two the server is told. A
+/// stream is fetched at the file's own bitrate, which is its size over
 /// this.
 ///
-/// `file_idx` and `filters` are the player URL's own -- the `{fileIdx}`
-/// segment as the core wrote it, `-1` for a file the server picks, and the
-/// `f=` values that narrow the pick -- and the server resolves them by its
-/// stream route's rule.
+/// `file_idx` and `filters` are the player URL's own: the `{fileIdx}`
+/// segment as the core wrote it (`-1` for a file the server picks), and the
+/// `f=` values that narrow the pick. The server resolves them by its stream
+/// route's rule.
 pub fn server_note_duration(
     info_hash: String,
     file_idx: i64,
@@ -115,19 +115,19 @@ pub fn server_note_duration(
     })
 }
 
-/// **Tells the server a player opened on this torrent**: what the player
-/// goes on to say about buffering ([`server_note_player_stalled`]) is this
-/// video's and not the last one's. Never errors and never blocks on the
-/// network; with no server running it is a no-op.
+/// **Tells the server a player opened on this torrent**, so that what the
+/// player goes on to say about buffering ([`server_note_player_stalled`])
+/// is this video's and not the last one's. Never errors and never blocks on
+/// the network. With no server running it is a no-op.
 pub fn server_note_player_opened(info_hash: String) -> anyhow::Result<()> {
     guarded_ok(move || crate::server::note_player_opened(&info_hash))
 }
 
-/// **Tells the server the player is buffering after having played** -- the
-/// popup is up and the frames have stopped. The one thing about a stall
-/// the server cannot see for itself; each report has it split one more
-/// piece ahead of the reader for the rest of this video. Never errors and
-/// never blocks on the network.
+/// **Tells the server the player is buffering after having played**: the
+/// popup is up and the frames have stopped. This is the one thing about a
+/// stall the server cannot see for itself. Each report has it split one
+/// more piece ahead of the reader for the rest of this video. Never errors
+/// and never blocks on the network.
 pub fn server_note_player_stalled(info_hash: String) -> anyhow::Result<()> {
     guarded_ok(move || crate::server::note_player_stalled(&info_hash))
 }
@@ -137,7 +137,7 @@ mod note_player_tests {
     use super::{server_note_player_opened, server_note_player_stalled};
 
     /// **A report with no server running is a quiet no-op**, like a
-    /// length: the player fires these as hints and must never see an
+    /// length. The player fires these as hints and must never see an
     /// error for one.
     #[test]
     fn a_report_with_nothing_running_is_a_quiet_no_op() {
@@ -177,8 +177,8 @@ pub fn server_settings() -> anyhow::Result<String> {
 }
 
 /// Applies `patch_json` (a JSON object of settings keys) exactly as
-/// `POST /settings` would -- same keys, validation, engine update and
-/// persistence -- and returns the settings afterwards as JSON. Errors on
+/// `POST /settings` would (same keys, validation, engine update and
+/// persistence), and returns the settings afterwards as JSON. Errors on
 /// malformed JSON, a rejected value, or when the server is not running.
 pub fn server_update_settings(patch_json: String) -> anyhow::Result<String> {
     guarded(|| {
@@ -200,10 +200,10 @@ pub fn server_update_settings(patch_json: String) -> anyhow::Result<String> {
 /// the same store, so there is no second tree and no second volume.
 ///
 /// The first question about a playback that misbehaves is whether the
-/// device is full -- bytes arriving with no verified progress is what
-/// failing writes look like -- and the second is whether the cache is over
-/// its limit. The occupancy is the server's own figure, the `totalBytes`
-/// of `server_cache_usage`, so the two calls cannot disagree about it; the
+/// device is full, since bytes arriving with no verified progress is what
+/// failing writes look like. The second is whether the cache is over its
+/// limit. The occupancy is the server's own figure, the `totalBytes` of
+/// `server_cache_usage`, so the two calls cannot disagree about it. The
 /// volume's room is asked of the filesystem.
 ///
 /// Blocks the FRB worker (two calls into the server and a `statvfs`);
@@ -213,34 +213,34 @@ pub fn server_storage_report() -> anyhow::Result<String> {
 }
 
 /// Opens a file in the paired Google Drive for a screen that wants to play
-/// it, and answers, as JSON, what the player is to be handed -- or the
-/// reason there is none: `{"ok":true,"url","name","contentType","length"}`,
-/// else `{"ok":false,"reason":"pairAgain"|"noPairingService"|"unreachable"
-/// |"unavailable"}`.
+/// it. Answers, as JSON, what the player is to be handed,
+/// `{"ok":true,"url","name","contentType","length"}`, or the reason there
+/// is none, `{"ok":false,"reason":"pairAgain"|"noPairingService"|
+/// "unreachable"|"unavailable"}`.
 ///
 /// Registers the file as a media id and resolves it (`crate::media::
-/// open_drive_in`): the grant renewed, the file probed and its head read,
-/// which is the I/O a play would do, here where the screen that pressed
-/// can still say why not. The `url` is `xtremio-drive:<fileId>`, which the
-/// player registers and finds already resolved.
+/// open_drive_in`): the grant renewed, the file probed and its head read.
+/// That is the I/O a play would do, done here, where the screen that
+/// pressed can still say why not. The `url` is `xtremio-drive:<fileId>`,
+/// which the player registers and finds already resolved.
 ///
 /// **The token goes no further than this process.** `refresh_token` is the
 /// viewer's long-lived grant, read out of the secure store by
-/// `DriveAccount` and handed straight down; the embedded server spends it
+/// `DriveAccount` and handed straight down. The embedded server spends it
 /// once for an hourly access token. It is in no URL, no log line and no
-/// error; later resolves of the file read the grant `server_drive_grant`
+/// error. Later resolves of the file read the grant `server_drive_grant`
 /// left in Rust memory.
 ///
-/// `reason: "pairAgain"` is terminal: the grant is gone and only a new
-/// pairing brings it back, which is `DriveAccount.notePairAgain` and a
-/// fresh QR. It is a word rather than a sentence for exactly that reason
-/// -- nothing above this may have to match English to tell it from "the
-/// network is having a moment".
+/// `reason: "pairAgain"` is terminal: the grant is gone, and only a new
+/// pairing brings it back (`DriveAccount.notePairAgain` and a fresh QR).
+/// It is a word rather than a sentence for exactly that reason. Nothing
+/// above this may have to match English to tell it from "the network is
+/// having a moment".
 ///
 /// Blocks the FRB worker while the server renews a token, probes the file
 /// and reads its head; never call it from the UI thread. It does not error
-/// for a server that is not running -- that is `reason: "unavailable"` --
-/// so every failure is one of the four words.
+/// for a server that is not running (that is `reason: "unavailable"`), so
+/// every failure is one of the four words.
 pub fn server_drive_open(
     file_id: String,
     refresh_token: String,
@@ -253,22 +253,22 @@ pub fn server_drive_open(
 }
 
 /// Hands the Rust side the Google Drive pairing's refresh token, or takes
-/// it back with `None` -- `DriveAccount` calls this on load, on a new
-/// pairing, on unlink and on `pairAgain`, so that what Rust holds is
-/// exactly "linked or not".
+/// it back with `None`. `DriveAccount` calls this on load, on a new
+/// pairing, on unlink and on `pairAgain`, so what Rust holds is exactly
+/// "linked or not".
 ///
 /// **Why Rust needs it at all**, since playing a Drive file passes the
 /// token per call: a Drive *download* is a pin the server fills with the
-/// grant, and the pins nobody presses a button for -- the launch's re-pin
-/// of every unfinished download, a retry after a refusal -- have no Dart
-/// frame to fetch the token from. It is held in memory beside the server
-/// handle (`crate::server::set_drive_grant`), for as long as the account
-/// is linked, and written nowhere.
+/// grant. The pins nobody presses a button for have no Dart frame to fetch
+/// the token from: the launch's re-pin of every unfinished download, and a
+/// retry after a refusal. The token is held in memory beside the server
+/// handle (`crate::server::set_drive_grant`) for as long as the account is
+/// linked, and written nowhere.
 ///
 /// A grant that *arrives* also pins the unfinished Drive downloads again
-/// (`downloads::repin_drive_downloads`), off this thread: the boot's
-/// re-pin ran before the secure store was read and refused them, and this
-/// is the moment they can go on. Blocks for nothing itself.
+/// (`downloads::repin_drive_downloads`), off this thread. The boot's re-pin
+/// ran before the secure store was read and refused them, and this is the
+/// moment they can go on. The call itself blocks for nothing.
 pub fn server_drive_grant(refresh_token: Option<String>) -> anyhow::Result<()> {
     guarded(|| {
         if crate::server::set_drive_grant(refresh_token) {
@@ -287,24 +287,24 @@ pub fn server_drive_grant(refresh_token: Option<String>) -> anyhow::Result<()> {
 /// `limitBytes` is the smaller of the `cacheSize` setting and what the
 /// volume can give while keeping the server's free-space floor clear
 /// (`enginefs::free_space_floor`: a thirty-second of the volume, clamped
-/// to 128-512 MiB; 512 MiB when the volume's size is unreadable), so it is
-/// a number even with no `cacheSize` set, it is derived from free space
-/// and so moves when anything else on the device writes, and it is null
-/// only when neither caps anything. It is a different
-/// question from `server_storage_report`'s `cacheLimitBytes`, which is the
-/// setting itself.
+/// to 128-512 MiB; 512 MiB when the volume's size is unreadable). So it is
+/// a number even with no `cacheSize` set. It is derived from free space,
+/// so it moves when anything else on the device writes. It is null only
+/// when neither caps anything. It is a different question from
+/// `server_storage_report`'s `cacheLimitBytes`, which is the setting
+/// itself.
 /// `protectedBytes`/`protectedFiles` are what a pinned download or the
 /// window of the stream being played holds right now, which a clean can
-/// never take: when they equal `totalBytes` and the cache is still over
+/// never take. When they equal `totalBytes` and the cache is still over
 /// `limitBytes`, cleaning cannot help until playback moves on or something
 /// is unpinned.
 ///
-/// Counted from what the server's two owners say they hold -- the piece
-/// store and the proxy cache -- plus one listing of the store root, not a
-/// walk of the tree, so a call per screen open or manual refresh is cheap.
-/// Nothing caches the answer, so do not poll it on a sub-second timer.
-/// Blocks the FRB worker; never call from the UI thread. Errors when the
-/// server is not running.
+/// It is counted from what the server's two owners (the piece store and
+/// the proxy cache) say they hold, plus one listing of the store root, not
+/// a walk of the tree. So a call per screen open or manual refresh is
+/// cheap. Nothing caches the answer, so do not poll it on a sub-second
+/// timer. Blocks the FRB worker; never call from the UI thread. Errors when
+/// the server is not running.
 pub fn server_cache_usage() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::server::cache_usage()?).map_err(Into::into))
 }
@@ -312,20 +312,20 @@ pub fn server_cache_usage() -> anyhow::Result<String> {
 /// Gives back everything nobody is playing and nobody is reading, now, and
 /// answers what is left, as JSON (`EvictionReport`: `total`, `protected`,
 /// `protectedFiles`, `freed`, `deleted`, `limit`, `overLimit`).
-/// `freed`/`deleted` are what the call took off the volume; `limit` is the
-/// cap in force, on the same terms as `server_cache_usage`'s `limitBytes`
-/// -- null for no cap, and 0 for a volume with no room to give, which is a
+/// `freed`/`deleted` are what the call took off the volume. `limit` is the
+/// cap in force, on the same terms as `server_cache_usage`'s `limitBytes`:
+/// null for no cap, and 0 for a volume with no room to give, which is a
 /// cap and not the absence of one.
 ///
-/// Nothing is picked as a victim: the server asks the owners of the piece
+/// Nothing is picked as a victim. The server asks the owners of the piece
 /// store and the proxy cache for their slack, the same passes its own
-/// reconciler runs, so a pinned download and the window of the stream being
-/// played are never touched however far over the limit the cache is.
-/// **Nothing here stops playback.** Freeing nothing is the ordinary answer
-/// on a device with one film playing and one pinned; when `overLimit` is
-/// not zero, `protected`/`protectedFiles` name what holds the cache there,
-/// and the fix is to stop the stream or unpin the download, not to run
-/// this again.
+/// reconciler runs. So a pinned download and the window of the stream
+/// being played are never touched, however far over the limit the cache
+/// is. **Nothing here stops playback.** Freeing nothing is the ordinary
+/// answer on a device with one film playing and one pinned. When
+/// `overLimit` is not zero, `protected`/`protectedFiles` name what holds
+/// the cache there. The fix is then to stop the stream or unpin the
+/// download, not to run this again.
 ///
 /// Blocks the FRB worker; never call from the UI thread. Errors when the
 /// server is not running.
@@ -336,15 +336,15 @@ pub fn server_clean_cache_now() -> anyhow::Result<String> {
 /// **Clears the cache** and answers what that did, as JSON
 /// (`CacheClearReport`: `freed`, `stopped`, `deleted`, `total`).
 ///
-/// Unlike [`server_clean_cache_now`] this **stops playback**: every torrent
-/// that streams is stopped -- all but a kept download's -- and every read
-/// open on one fails, so a player in the middle of a film shows the error
-/// it shows for a failed read; then every piece and proxied chunk no
+/// Unlike [`server_clean_cache_now`], this **stops playback**. Every
+/// torrent that streams is stopped, all but a kept download's, and every
+/// read open on one fails. A player in the middle of a film shows the
+/// error it shows for a failed read. Then every piece and proxied chunk no
 /// download keeps is deleted, the window of the title played last
 /// included. `freed` is how far the cache's occupancy fell, `stopped` how
 /// many torrents it stopped, `total` what the cache holds afterwards. Kept
 /// downloads, the settings and where each file was last played are
-/// untouched; whoever asks afterwards is served as a first ask is.
+/// untouched. Whoever asks afterwards is served as a first ask is.
 ///
 /// Blocks the FRB worker; never call from the UI thread. Errors when the
 /// server is not running.
@@ -355,27 +355,26 @@ pub fn server_clear_cache() -> anyhow::Result<String> {
 /// Whether the server is moving bytes over this device's connection while
 /// nothing is playing, as JSON (`BackgroundTraffic`: `active`,
 /// `downloading`, `uploading`, `playing`, `bytesDownloaded`,
-/// `bytesUploaded`, `windowSecs`) -- `ServerHandle::background_traffic`,
-/// what the activity light reads.
+/// `bytesUploaded`, `windowSecs`). This is
+/// `ServerHandle::background_traffic`, what the activity light reads.
 ///
-/// `downloading` and `uploading` are each "that direction's peer counter
-/// grew over the last five-second window and nothing was playing over it
-/// or since", `active` is either, and `playing` is the moment's own answer
-/// so a caller can tell "dark because idle" from "dark because a film is
-/// on" without a second call. The conjunction with playback is taken on
-/// the Rust side over one sample; do not rebuild it in Dart from two
-/// calls, which would flicker whenever they disagree. The counters are the
-/// sums the verdict was judged from, over the torrents that exist right
-/// now -- a torrent that pauses or leaves takes its bytes with it.
+/// `downloading` and `uploading` each mean "that direction's peer counter
+/// grew over the last five-second window, and nothing was playing over it
+/// or since". `active` is either. `playing` is the moment's own answer, so
+/// a caller can tell "dark because idle" from "dark because a film is on"
+/// without a second call. The conjunction with playback is taken on the
+/// Rust side over one sample. Do not rebuild it in Dart from two calls,
+/// which would flicker whenever they disagree. The counters are the sums
+/// the verdict was judged from, over the torrents that exist right now. A
+/// torrent that pauses or leaves takes its bytes with it.
 ///
 /// **Safe to poll every few seconds.** The server peeks at counters
-/// librqbit already keeps for the engines that exist: no hash is looked up
-/// so no engine is created, and no idle clock is touched so a poll never
+/// librqbit already keeps for the engines that exist. No hash is looked
+/// up, so no engine is created. No idle clock is touched, so a poll never
 /// keeps a torrent seeding to report on it. `server_torrent_stats` is the
-/// opposite -- it creates the engine it is asked about -- and must never
-/// stand in for this. The verdict changes when a window closes or the
-/// moment playback is seen; asking faster is answered from the standing
-/// reading.
+/// opposite (it creates the engine it is asked about) and must never stand
+/// in for this. The verdict changes when a window closes or the moment
+/// playback is seen. Asking faster is answered from the standing reading.
 ///
 /// Blocks the FRB worker for one hop onto the server's runtime; never call
 /// from the UI thread. Errors when the server is not running, which a
@@ -384,44 +383,44 @@ pub fn server_background_traffic() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::server::background_traffic()?).map_err(Into::into))
 }
 
-/// What this server holds of the stream `url` is playing, as JSON
-/// (`StreamNumbers`: `window` -- `behindBytes`/`aheadBytes`, the bytes on
+/// What this server holds of the stream `url` is playing, as JSON, or null
+/// when this server holds nothing of that stream. The JSON is
+/// `StreamNumbers`: a `window` (`behindBytes`/`aheadBytes`, the bytes on
 /// the disk unbroken behind and ahead of the playhead, under any cache
-/// budget -- and, for a torrent, `sharing` -- `committedBytes` and a
-/// `transfer` group of `downloadedBytes`/`uploadedBytes`/`ratio`), or null
-/// when this server holds nothing of that stream.
+/// budget) and, for a torrent, `sharing` (`committedBytes` and a
+/// `transfer` group of `downloadedBytes`/`uploadedBytes`/`ratio`).
 ///
 /// `url` is the URL handed to the player, and its shape is the whole
-/// question: `/{infoHash}/{fileIdx}` (including `-1`, resolved through the
-/// same `f=` filters the stream route uses) reads the piece store,
-/// `/proxy/...` reads the proxy cache, and anything else -- an addon's
-/// direct link, a debrid URL, a file on the device -- is a stream this
-/// server is not holding. **Null there is an answer, not a failure**: a
-/// caller draws no rows and shows no error.
+/// question. `/{infoHash}/{fileIdx}` reads the piece store, `-1` included,
+/// resolved through the same `f=` filters the stream route uses.
+/// `/proxy/...` reads the proxy cache. Anything else (an addon's direct
+/// link, a debrid URL, a file on the device) is a stream this server is not
+/// holding. **Null there is an answer, not a failure**: a caller draws no
+/// rows and shows no error.
 ///
-/// Every `null` inside is "there is no such number", never zero, and a
-/// caller must draw an absent row rather than a dash: no `window` where no
-/// reader has been inside the stream in this process, so there is no
-/// playhead to measure from, no `sharing` for a proxied response (it is not
-/// seeded, so it has no committed set and no ratio), no `committedBytes`
-/// for a torrent with no policy, and no `transfer` for a torrent whose
-/// counters cannot be read -- paused, checking, stopped for space, in
-/// error. A torrent that has moved gigabytes and then paused has not moved
-/// nothing.
+/// Every `null` inside means "there is no such number", never zero, and a
+/// caller must draw an absent row rather than a dash. There is no `window`
+/// where no reader has been inside the stream in this process, since there
+/// is then no playhead to measure from. There is no `sharing` for a proxied
+/// response: it is not seeded, so it has no committed set and no ratio.
+/// There is no `committedBytes` for a torrent with no policy, and no
+/// `transfer` for a torrent whose counters cannot be read (paused,
+/// checking, stopped for space, in error). A torrent that has moved
+/// gigabytes and then paused has not moved nothing.
 ///
-/// **The transfer totals cover the torrent's current live period** --
-/// librqbit's per-torrent counters, which live in the live state and start
-/// at zero each time the torrent enters it, so a pause and resume or an
-/// idle drop and re-add starts them over -- and the ratio taken from them
+/// **The transfer totals cover the torrent's current live period.** They
+/// are librqbit's per-torrent counters, which live in the live state and
+/// start at zero each time the torrent enters it. So a pause and resume, or
+/// an idle drop and re-add, starts them over. The ratio taken from them
 /// must be labelled as that period and not as the session. Nothing is
 /// persisted, so nothing read back here is a claim about a past this
 /// process never saw.
 ///
 /// A peek: it creates no engine and touches no idle clock, so polling it
 /// cannot keep a torrent seeding to report on. The first ask about a
-/// proxied stream lists its own directories, so it blocks the FRB worker
-/// -- never call it from the UI thread, and ask it only while a panel
-/// wants it. Errors when the server is not running.
+/// proxied stream lists its own directories, so it blocks the FRB worker.
+/// Never call it from the UI thread, and ask it only while a panel wants
+/// it. Errors when the server is not running.
 pub fn server_stream_numbers(url: String) -> anyhow::Result<Option<String>> {
     guarded(|| {
         crate::server::stream_numbers(&url)?
@@ -431,73 +430,75 @@ pub fn server_stream_numbers(url: String) -> anyhow::Result<Option<String>> {
 }
 
 /// The mainline DHT's status on this host, as JSON (`DhtStatus`: `enabled`,
-/// `nodes`, `nodesV6`, `everBootstrapped`) -- `ServerHandle::dht_status`,
-/// which has no HTTP route: the app is the only thing that asks.
+/// `nodes`, `nodesV6`, `everBootstrapped`). This is
+/// `ServerHandle::dht_status`, which has no HTTP route, because the app is
+/// the only thing that asks.
 ///
 /// This is information, not a failure. The DHT is a peer *source*, not a
-/// requirement: a torrent with working trackers downloads fine without one,
-/// and a network that drops the DHT's UDP (carrier-grade NAT, a firewalled
+/// requirement. A torrent with working trackers downloads fine without one.
+/// A network that drops the DHT's UDP (carrier-grade NAT, a firewalled
 /// mobile APN, a captive portal) leaves `everBootstrapped` false for the
-/// whole session with nothing actually wrong. The one case worth telling a
-/// curious person about is a stream with no trackers on a network where the
-/// DHT never came up -- that genuinely may not find peers. `enabled: false`
-/// answers the same whether the server is not running or its backend has
-/// no DHT at all; this call never errors on its account.
+/// whole session, with nothing actually wrong. The one case worth telling a
+/// curious person about is a stream with no trackers on a network where
+/// the DHT never came up. That one genuinely may not find peers.
+/// `enabled: false` answers the same whether the server is not running or
+/// its backend has no DHT at all, and this call never errors on its
+/// account.
 ///
-/// Cheap (two routing-table length reads) and synchronous -- safe to call
-/// from the UI thread. Still, nothing should poll it on a timer of its own:
-/// read it on screen-open, or piggyback it on a poll that is already
+/// Cheap (two routing-table length reads) and synchronous, so it is safe to
+/// call from the UI thread. Still, nothing should poll it on a timer of its
+/// own. Read it on screen-open, or piggyback it on a poll that is already
 /// running for another reason (the player's stats panel).
 #[frb(sync)]
 pub fn server_dht_status() -> anyhow::Result<String> {
     guarded_ok(|| serde_json::to_string(&crate::server::dht_status()).unwrap_or_default())
 }
 
-/// Ends every proxied stream carrying `token` -- the name the app minted
-/// for the player being torn down and put in the `/proxy` URL that player
-/// fetches -- and answers how many streams that was.
+/// Ends every proxied stream carrying `token` and answers how many streams
+/// that was. `token` is the name the app minted for the player being torn
+/// down and put in the `/proxy` URL that player fetches.
 ///
-/// An HLS player has several at once (a playlist and its segments all
-/// carry the token, because the server writes it into every line of every
-/// playlist it rewrites), and they all end together. A player that is not
+/// An HLS player has several at once, and they all end together: a
+/// playlist and its segments all carry the token, because the server writes
+/// it into every line of every playlist it rewrites. A player that is not
 /// being proxied has none, and answers 0.
 ///
 /// **What it ends is the read and the token.** The body yields an error,
 /// hyper drops the connection, and the demuxer sees its source fail now
-/// rather than after `network-timeout`. Alone that would not end the
-/// stream -- ffmpeg reconnects through the URL it already has, token and
-/// all -- so the server retires the token at the same time and answers
+/// rather than after `network-timeout`. That alone would not end the
+/// stream, because ffmpeg reconnects through the URL it already has, token
+/// and all. So the server retires the token at the same time and answers
 /// `410 Gone` to anything bearing it afterwards. The order the server
 /// documents is quit-then-close, because a demuxer that has already been
-/// cancelled never reaches its reconnect; the refusal is what covers a
-/// close that arrives first. A demuxer wedged somewhere else -- on the
-/// Flutter texture, on the audio device -- is not waiting on this read and
-/// is untouched by it.
+/// cancelled never reaches its reconnect. The refusal covers a close that
+/// arrives first. A demuxer wedged somewhere else (on the Flutter texture,
+/// on the audio device) is not waiting on this read and is untouched by it.
 ///
 /// 0 covers a finished player, an unproxied one and a server that is not
-/// running alike, all of which mean there is nothing of this player left
-/// to close. It is not, however, infallible: like every function here it
-/// is wrapped in the panic guard, so a panic in the core crosses as an
-/// `Err` and reaches Dart as a thrown exception. The caller is a
-/// `dispose`, and it catches -- an unhandled throw there would skip the
-/// release of the player itself.
+/// running alike. Each means there is nothing of this player left to
+/// close. It is not infallible, however. Like every function here it is
+/// wrapped in the panic guard, so a panic in the core crosses as an `Err`
+/// and reaches Dart as a thrown exception. The caller is a `dispose`, and
+/// it catches, since an unhandled throw there would skip the release of the
+/// player itself.
 ///
-/// Synchronous, and deliberately so: it is a map scan with no I/O, and it
-/// is called from a teardown, where waiting for a place in the FRB worker
-/// pool behind a blocking call (a stats poll, a cache walk) would give
-/// back exactly the delay it exists to remove.
+/// Synchronous, and deliberately so: it is a map scan with no I/O, called
+/// from a teardown. Waiting there for a place in the FRB worker pool behind
+/// a blocking call (a stats poll, a cache walk) would give back exactly the
+/// delay it exists to remove.
 #[frb(sync)]
 pub fn server_close_proxy_streams(token: String) -> anyhow::Result<i64> {
     guarded_ok(|| i64::try_from(crate::server::close_proxy_streams(&token)).unwrap_or(i64::MAX))
 }
 
 /// **The player screen `token` is gone**: the torrent its requests held is
-/// let go (stream-server's `ServerHandle::release_player`). The server keeps
-/// a screen's torrent running from its first read until this -- paused,
-/// stalled or with nothing open -- and a cast published from the screen
-/// holds it on its own until unpublished. Whether a hold was released;
-/// `false` with no server running, which holds nothing. Synchronous, for
-/// the same teardown reason as [`server_close_proxy_streams`].
+/// let go (stream-server's `ServerHandle::release_player`). The server
+/// keeps a screen's torrent running from its first read until this, even
+/// paused, stalled or with nothing open. A cast published from the screen
+/// holds it on its own until unpublished. Answers whether a hold was
+/// released, and `false` with no server running, which holds nothing.
+/// Synchronous, for the same teardown reason as
+/// [`server_close_proxy_streams`].
 #[frb(sync)]
 pub fn server_release_player(token: String) -> anyhow::Result<bool> {
     guarded_ok(|| crate::server::release_player(&token))
@@ -507,23 +508,25 @@ pub fn server_release_player(token: String) -> anyhow::Result<bool> {
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
 ///
 /// The listener is a second HTTP listener serving media bytes to the local
-/// network -- what a Chromecast fetches from, since it cannot reach the
+/// network. A Chromecast fetches from it, since it cannot reach the
 /// loopback one. It mounts no control route at all, and deliberately not
 /// `/proxy` or `/ftp`, so a stream that is only playable through the proxy
-/// cannot be cast; the caller has to notice that itself rather than hand a
+/// cannot be cast. The caller has to notice that itself rather than hand a
 /// receiver a URL that will 404.
 ///
 /// It exists for the length of a cast session and no longer. Turning it on
-/// also grants the server's `lanMediaEnabled` permission and turning it off
-/// takes it back, so the persisted answer to "may this app serve the LAN" is
-/// no whenever nothing is casting. Errors when the server is not running or
-/// the bind fails; in either case nothing is listening afterwards.
+/// also grants the server's `lanMediaEnabled` permission, and turning it
+/// off takes it back. So the persisted answer to "may this app serve the
+/// LAN" is no whenever nothing is casting. Errors when the server is not
+/// running or the bind fails. In either case nothing is listening
+/// afterwards.
 pub fn server_set_lan_media(enabled: bool) -> anyhow::Result<Option<String>> {
     guarded(|| Ok(crate::server::set_lan_media(enabled)?.map(|addr| addr.to_string())))
 }
 
 /// Puts the embedded server into its lean background footprint (`true`) or
-/// back to full (`false`); answers whether a server was running to be told.
+/// back to full (`false`), and answers whether a server was running to be
+/// told.
 /// Cheap and synchronous. The app calls it from its lifecycle, through
 /// `ServerFootprint` (`lib/shell/server_footprint.dart`), which decides when
 /// lean is allowed.
@@ -533,44 +536,44 @@ pub fn server_set_background(background: bool) -> anyhow::Result<bool> {
 }
 
 /// Holds the embedded server's idle sharing off (`true`) or gives it back
-/// to the sharing setting (`false`); answers whether a server was running
-/// to be told. Playing and a torrent download still on its way upload
-/// either way. Nothing is persisted. The app calls it from its lifecycle,
-/// through `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`),
-/// which holds only on a phone or a tablet in the background. Blocks for
-/// one hop onto the server's runtime, like the settings call beside it.
+/// to the sharing setting (`false`), and answers whether a server was
+/// running to be told. Playing and a torrent download still on its way
+/// upload either way. Nothing is persisted. The app calls it from its
+/// lifecycle, through `IdleSharingPolicy`
+/// (`lib/features/sharing/idle_sharing.dart`), which holds only on a phone
+/// or a tablet in the background. Blocks for one hop onto the server's
+/// runtime, like the settings call beside it.
 pub fn server_set_idle_sharing_held(held: bool) -> anyhow::Result<bool> {
     guarded_ok(|| crate::server::set_idle_sharing_held(held))
 }
 
 /// Whether the LAN media listener is running. False when the server is not
-/// running either -- both mean nothing of ours is on the LAN.
+/// running either, since both mean nothing of ours is on the LAN.
 #[frb(sync)]
 pub fn server_lan_media_running() -> anyhow::Result<bool> {
     guarded_ok(crate::server::lan_media_running)
 }
 
-/// How many requests the LAN media listener has been asked for since it last
-/// started -- per cast session, since a start and a stop both reset it. Zero
-/// when nothing is listening, and zero for the next receiver rather than
-/// whatever the last one ran up.
+/// How many requests the LAN media listener has been asked for since it
+/// last started. It is per cast session, since a start and a stop both
+/// reset it. Zero when nothing is listening, and zero for the next receiver
+/// rather than whatever the last one ran up.
 ///
-/// What it is for is telling a receiver that never fetched the stream from
-/// one that did. Those look identical from the sofa (both are a splash
-/// screen that never becomes a film) and identical to the sender, because a
-/// receiver told an address it cannot route to hangs on the connect rather
-/// than reporting an error. Zero well after a load means the address was
-/// wrong; non-zero means the receiver reached this device, and that is the
-/// whole of it -- whether one that reached us is filling a buffer or cannot
-/// decode what it fetched is not something this number knows, since a cold
-/// torrent twenty seconds in has necessarily made requests and is
-/// necessarily still warming up.
+/// It tells a receiver that never fetched the stream from one that did.
+/// Those look identical from the sofa (both are a splash screen that never
+/// becomes a film) and identical to the sender, because a receiver told an
+/// address it cannot route to hangs on the connect rather than reporting an
+/// error. Zero well after a load means the address was wrong. Non-zero
+/// means the receiver reached this device, and that is the whole of it.
+/// This number cannot say whether a receiver that reached us is filling a
+/// buffer or cannot decode what it fetched. A cold torrent twenty seconds
+/// in has necessarily made requests and is necessarily still warming up.
 ///
-/// Signed, because `u64` crosses FRB as a Dart `BigInt` and this is a number
-/// the player compares against zero on a timer; `i64` crosses as a plain
-/// `int`. A session that served more than nine quintillion requests reads as
-/// `i64::MAX`, which says the same thing about the network as the true
-/// figure would.
+/// Signed, because `u64` crosses FRB as a Dart `BigInt` and this is a
+/// number the player compares against zero on a timer. `i64` crosses as a
+/// plain `int`. A session that served more than nine quintillion requests
+/// reads as `i64::MAX`, which says the same thing about the network as the
+/// true figure would.
 ///
 /// One relaxed atomic load, so it is synchronous and cheap enough to poll.
 #[frb(sync)]
@@ -579,37 +582,39 @@ pub fn server_lan_media_requests_served() -> anyhow::Result<i64> {
 }
 
 /// How many `/cast` bodies the LAN media listener has begun since it last
-/// started -- per cast session, reset where the requests count is. A body
-/// is a `GET` under a published token that started sending bytes; a
+/// started. It is per cast session, reset where the requests count is. A
+/// body is a `GET` under a published token that started sending bytes. A
 /// `HEAD`, an unknown token's `404` and a refusal are not.
 ///
-/// The cast watchdog's second reading (stream-server `docs/lan-media.md`):
-/// no requests is a receiver that cannot reach this device, requests but
-/// no body one that reached it and has been sent nothing yet, a body one
-/// the network and the server have done their part for. Signed for the
-/// reason the requests count is. One relaxed atomic load.
+/// This is the cast watchdog's second reading (stream-server
+/// `docs/lan-media.md`). No requests means a receiver that cannot reach
+/// this device. Requests but no body means one that reached it and has
+/// been sent nothing yet. A body means the network and the server have
+/// done their part. Signed for the reason the requests count is. One
+/// relaxed atomic load.
 #[frb(sync)]
 pub fn server_lan_media_bodies_served() -> anyhow::Result<i64> {
     guarded_ok(|| i64::try_from(crate::server::lan_media_bodies_served()).unwrap_or(i64::MAX))
 }
 
-/// The base URL to give a receiver at `peer_ip` (`"http://192.168.1.20:39271/"`),
-/// so a media URL built on it names an interface that receiver can connect
-/// back to -- the one sharing the receiver's subnet, since the first
-/// interface on a host with a VPN or a container bridge regularly is not.
+/// The base URL to give a receiver at `peer_ip`
+/// (`"http://192.168.1.20:39271/"`), so a media URL built on it names an
+/// interface that receiver can connect back to. That is the interface
+/// sharing the receiver's subnet, since the first interface on a host with
+/// a VPN or a container bridge regularly is not.
 ///
-/// `peer_ip` is null when the receiver's address is not known. The answer is
-/// then the best-ranked interface the server can offer for a peer it cannot
-/// place on any subnet -- a private address on an ordinary interface ahead
-/// of anything on one a receiver cannot be behind at all: a tunnel, a
-/// cellular link, a tether, a container or VM bridge -- which is a guess, and
-/// a guess a receiver on a home network can usually act on. It is a
-/// parameter, and not simply left out, because a receiver whose address *is*
-/// known deserves the answer that is not a guess at all.
+/// `peer_ip` is null when the receiver's address is not known. The answer
+/// is then the best-ranked interface the server can offer for a peer it
+/// cannot place on any subnet. A private address on an ordinary interface
+/// ranks ahead of anything on an interface a receiver cannot be behind at
+/// all: a tunnel, a cellular link, a tether, a container or VM bridge. That
+/// is a guess, and a guess a receiver on a home network can usually act on.
+/// `peer_ip` is a parameter, and not simply left out, because a receiver
+/// whose address *is* known deserves the answer that is not a guess at all.
 ///
-/// Null when the listener is not running, when `peer_ip` is given but is not
-/// an IP address, or when the host has nothing but loopback -- all of which
-/// mean this receiver cannot be handed a URL, and none of which may be
+/// Null when the listener is not running, when `peer_ip` is given but is
+/// not an IP address, or when the host has nothing but loopback. Each of
+/// these means this receiver cannot be handed a URL, and none may be
 /// answered with a loopback URL it could never fetch.
 pub fn server_lan_media_base_url(peer_ip: Option<String>) -> anyhow::Result<Option<String>> {
     guarded(|| {

@@ -1,14 +1,14 @@
 //! FRB surface for "Match to another subtitle": two subtitle files in,
 //! the ratio and the offset that map one onto the other out.
 //!
-//! Here rather than in Dart because it is two HTTP fetches and a search
-//! over ratios and shifts for the best overlap of two on-screen bitmaps
-//! (`crate::subtitles`), and neither belongs on the UI thread of a device
-//! as modest as a Chromecast with Google TV.
+//! It lives here rather than in Dart because it is two HTTP fetches and a
+//! search over ratios and shifts for the best overlap of two on-screen
+//! bitmaps (`crate::subtitles`). Neither belongs on the UI thread of a
+//! device as modest as a Chromecast with Google TV.
 //!
 //! Neither URL is ever logged or put in an error. An addon's URL can carry
 //! a debrid API key, which `AGENTS.md` puts in the same class as the auth
-//! material that is never written down; `crate::env::fetch_text` strips
+//! material that is never written down. `crate::env::fetch_text` strips
 //! the URL out of every failure it reports, and this module adds only
 //! which of the two files a failure was about.
 
@@ -32,26 +32,26 @@ pub struct SubtitleMatch {
     /// same moments, 0 for two doing no better than their own talkativeness
     /// predicts. **This is the number the viewer is shown**, because a
     /// count of cues is not comparable between a file that merges lines and
-    /// one that does not -- a translation that merges two lines into one
-    /// has half the cues and the same subtitle.
+    /// one that does not. A translation that merges two lines into one has
+    /// half the cues and the same subtitle.
     ///
     /// None when there was nothing to measure: one of the two files has too
-    /// few cues to be evidence either way, which is a different answer from
-    /// a bad score and is said differently.
+    /// few cues to be evidence either way. That is a different answer from
+    /// a bad score, and is said differently.
     pub score: Option<f64>,
-    /// How many cues the playing file has. Not evidence of a match -- it is
-    /// here so a file that could not be read as a subtitle at all can be
-    /// told from two files that merely disagree, which is what a missing
-    /// `score` is reported with.
+    /// How many cues the playing file has. It is not evidence of a match.
+    /// A missing `score` is reported with these counts, so that a file that
+    /// could not be read as a subtitle at all can be told from two files
+    /// that merely disagree.
     pub cues: u32,
     /// How many the reference has, for the same reason.
     pub reference_cues: u32,
     /// Whether the two agree well enough for the transform to be worth
-    /// applying. **False is an answer, not an error**: two files for
+    /// applying. **False is an answer, not an error.** Two files for
     /// different episodes, half a film against the whole, or a reference
-    /// that is itself adrift all measure, none of them should be applied,
-    /// and saying so with the score and the transform is honest where
-    /// applying it anyway would ruin a subtitle that was merely a little
+    /// that is itself adrift all measure, and none of them should be
+    /// applied. Saying so with the score and the transform is honest.
+    /// Applying it anyway would ruin a subtitle that was merely a little
     /// out.
     pub convincing: bool,
 }
@@ -59,7 +59,7 @@ pub struct SubtitleMatch {
 /// How much of a subtitle file is fetched before it is refused.
 ///
 /// A subtitle for a three-hour film with every line of song lyrics in it
-/// is around a megabyte; four is room for anything real and small enough
+/// is around a megabyte. Four is room for anything real, and small enough
 /// that a URL answering with something else cannot spend a television's
 /// memory on it.
 const MOST_BYTES: usize = 4 * 1024 * 1024;
@@ -69,7 +69,7 @@ const MOST_BYTES: usize = 4 * 1024 * 1024;
 ///
 /// Fetches both, reads when each of them has text on screen and solves for
 /// the line between them (`crate::subtitles`). Errors only when a file
-/// cannot be fetched -- a pair that does not match is a [`SubtitleMatch`]
+/// cannot be fetched. A pair that does not match is a [`SubtitleMatch`]
 /// with `convincing: false` and the score and transform that say so.
 ///
 /// Blocks the FRB worker for the length of two HTTP fetches and a sweep;
@@ -85,8 +85,8 @@ pub fn subtitles_match(
         })?;
         let reference_url = url::Url::parse(&reference_url)
             .map_err(|_| anyhow::anyhow!("the chosen subtitle is not at a URL this can fetch"))?;
-        // On the concurrent runtime, which is where network effects
-        // belong: the sequential one exists to keep storage writes in
+        // This runs on the concurrent runtime, where network effects
+        // belong. The sequential one exists to keep storage writes in
         // order, and two fetches have no order to keep.
         let (playing, reference) = crate::env::CONCURRENT.block_on(async {
             futures::future::join(

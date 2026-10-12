@@ -14,10 +14,10 @@
 //!
 //! Nothing secret crosses here. A record is addressed by
 //! `crate::addon_health::key_for`'s `host[:port]#<digest>` key, never by a
-//! transport URL -- a manifest URL can carry a debrid API key, and
-//! `AGENTS.md` puts that in the class of things that are never written
-//! down. The app derives the same key by hashing the transport URL it
-//! already holds, so the URL never leaves the profile.
+//! transport URL. A manifest URL can carry a debrid API key, which
+//! `AGENTS.md` puts among the things that are never written down. The app
+//! derives the same key by hashing the transport URL it already holds, so
+//! the URL never leaves the profile.
 
 use crate::guard::guarded;
 
@@ -27,19 +27,19 @@ use crate::guard::guarded;
 /// those to `{"ok","empty","fail","lastOk","lastFail","updated"}`.
 ///
 /// `ok`/`empty`/`fail` are decayed counts as of `updated`, and the app ages
-/// them the rest of the way to now; the three are separate because "the
+/// them the rest of the way to now. The three are separate because "the
 /// addon answered with nothing" is not "the addon failed". `resource` is
 /// `catalog`, `meta`, `stream` or `subtitles`.
 ///
 /// `everyAnswerFailed` is true when nothing has answered at all since this
-/// run started, which is a statement about the connection rather than about
-/// any addon -- such a sweep is recorded against nobody, so it leaves no
-/// trace in the counts and has to be reported separately.
+/// run started. That says something about the connection, not about any
+/// addon. Such a sweep is recorded against nobody, so it leaves no trace in
+/// the counts and has to be reported separately.
 ///
-/// Async even though it only clones at most a couple of hundred small
-/// records: it takes the same lock the flush holds across a whole
-/// preferences rewrite, which ends in an fsync and a rename. Handed to
-/// Dart synchronously it would make the UI thread wait out that write.
+/// Async, though it clones at most a couple of hundred small records: it
+/// takes the same lock the flush holds across a whole preferences rewrite,
+/// which ends in an fsync and a rename. A sync call would make the UI
+/// thread wait out that write.
 /// Empty before `core_init` and after `shutdown`.
 pub fn addon_health_report() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::addon_health::report()).map_err(Into::into))

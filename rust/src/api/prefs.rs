@@ -1,21 +1,22 @@
 //! FRB surface for the app's own preferences: the whole small JSON object
-//! out, one key at a time in. Thin, like every other `api` module; the file
+//! out, one key at a time in. Thin, like every other `api` module: the file
 //! itself is `crate::prefs`.
 //!
 //! Two calls rather than one per preference, so a new client-side choice
 //! costs a key and no regenerated bindings. Values are JSON, which is what
-//! the file holds -- the Dart side decides what a key means.
+//! the file holds. The Dart side decides what a key means.
 
 use crate::guard::guarded;
 
 /// Every preference that has been set, as one JSON object
-/// (`{"streamsFlat":true}`). An empty object means none has been: a file
-/// that is missing or not an object reads that way, since a preference is a
-/// default the user changed (one that will not parse is moved aside as
-/// `xtremio_prefs.json.corrupt-<seconds>` first). A file the disk cannot
-/// read is an error rather than an empty object -- "cannot tell" is not
-/// "nothing set", and the next `prefs_set` must not write one key over
-/// everything -- as is a call before storage has a directory (`core_init`).
+/// (`{"streamsFlat":true}`). An empty object means none has been, since a
+/// preference is a default the user changed. A file that is missing or not
+/// an object reads as empty. One that will not parse is first moved aside
+/// as `xtremio_prefs.json.corrupt-<seconds>`. A file the disk cannot read is
+/// an error rather than an empty object, because "cannot tell" is not
+/// "nothing set" and the next `prefs_set` must not write one key over
+/// everything. A call before storage has a directory (`core_init`) is an
+/// error too.
 pub fn prefs_get_all() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::prefs::get_all()?).map_err(Into::into))
 }
