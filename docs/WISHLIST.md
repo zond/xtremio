@@ -10,7 +10,7 @@ Ordered by how likely it is to be picked up, not by size.
 
 ## Subtitles on a cast
 
-A viewer picks a subtitle, casts, and it is simply not there -- silently.
+A viewer picks a subtitle and casts, and the subtitle is silently not there.
 
 The sending half is ready: the Cast plugin takes `tracks` on the media
 information, `activeTrackIds` on the load, and has `setActiveTrackIDs` for
@@ -23,12 +23,12 @@ addon:
 * Google requires **CORS headers** on a side-loaded track, which no
   third-party subtitle host sends.
 
-So: a subtitle route mounted on the LAN media listener that fetches the
-addon's URL (through the machinery that already carries a stream's
+So the server needs a subtitle route on the LAN media listener. It fetches
+the addon's URL (through the machinery that already carries a stream's
 credentials), gunzips it, converts SubRip to WebVTT and serves it with the
-CORS the listener already has; then the app builds a track for whatever
-the viewer chose and hands it over with the film. About a day, both sides,
-with tests -- and the server half is testable without a device.
+CORS the listener already has. Then the app builds a track for whatever
+the viewer chose and hands it over with the film. That is about a day,
+both sides, with tests, and the server half is testable without a device.
 
 Until then the player should *say* that subtitles are not sent, rather
 than dropping them without a word.
@@ -38,27 +38,26 @@ than dropping them without a word.
 About casting only: on the device mpv shows an embedded text track as it
 shows any other. A receiver does not render a text track embedded in an
 MKV or an MP4 at all, so on a cast it would have to be read out of the
-container and served as WebVTT, beside the step above. Nearer than it
-looks: the rendition producer (`rust/src/rendition.rs`) already demuxes
-the film on the phone through libavformat, reading every packet of every
-stream -- a subtitle track's included -- and throwing away all but the
-picture and the sound. Keeping the text track's packets as well, turning
-them into WebVTT cues and serving those beside the rendition is the
-missing half; a film that goes to the receiver as it is (an MP4, a WebM)
+container and served as WebVTT, beside the step above. This is nearer than
+it looks. The rendition producer (`rust/src/rendition.rs`) already demuxes
+the film on the phone through libavformat. It reads every packet of every
+stream, a subtitle track's included, and throws away all but the picture
+and the sound. The missing half is keeping the text track's packets as
+well, turning them into WebVTT cues and serving those beside the
+rendition. A film that goes to the receiver as it is (an MP4, a WebM)
 would need the same demuxer run for its subtitles alone.
 
 ## Transcoding for a cast
 
 What a cast does today ([CASTING.md](CASTING.md)): H.264 and HEVC in
-Matroska or MP4 are repackaged with the picture copied and any sound the
-receiver may not get converted to stereo AAC; a plain link the receiver
+Matroska or MP4 are repackaged with the picture copied, and any sound the
+receiver may not get is converted to stereo AAC. A plain link the receiver
 can fetch goes to it straight. What is still refused is a **picture** the
-cast cannot carry as it is: video a receiver cannot decode at all (AV1 on
-most, MPEG-4 Part 2, and H.264 that is not 8-bit 4:2:0 -- "Hi10P", common
-in anime releases -- or HEVC beyond Main 10, which no receiver decodes),
-VP9 in a Matroska file that is not a
-WebM (a copy does not carry it), a 4K film for a 1080p receiver, Dolby
-Vision profile 5. Re-encoding the picture is what would cast those. It
+cast cannot carry as it is. That is video a receiver cannot decode at all:
+AV1 on most, MPEG-4 Part 2, and H.264 that is not 8-bit 4:2:0 ("Hi10P",
+common in anime releases) or HEVC beyond Main 10, which no receiver
+decodes. It is also VP9 in a Matroska file that is not a WebM (a copy does
+not carry it), a 4K film for a 1080p receiver, and Dolby Vision profile 5. Re-encoding the picture is what would cast those. It
 would also give a film with no index exact seek positions on a cast: a
 re-encode puts its key frames where it chooses, so each slot's real start
 is known before the slot is made, which an estimated layout cannot know
@@ -69,8 +68,8 @@ and deferred because the copy covers what is actually watched.
 
 Typing a title with a D-pad is the worst part of the television.
 
-**The field half is built**: on a television Search's field has a
-microphone at its right end that recognizes speech in the app with
+**The field half is built.** On a television, Search's field has a
+microphone at its right end. It recognizes speech in the app with
 Android's `SpeechRecognizer`, shows the words as they are said and
 confirms the transcript as a typed entry
 ([ANDROID.md](ANDROID.md#typing-with-a-remote)). The first build handed
@@ -80,26 +79,26 @@ ours: its keyboard has a microphone.
 
 What is left is the remote's own search/mic key (`KEYCODE_SEARCH`, or the
 Assistant handing over a query through a searchable activity) going
-straight into the search screen; nothing takes it today. Check what a
+straight into the search screen. Nothing takes it today. Check what a
 Google TV remote's mic button actually sends to a foreground app before
-building on it -- the Assistant may keep it for itself.
+building on it, because the Assistant may keep it for itself.
 
 ## Continue watching on the Google TV home screen -- measured, closed
 
 The Google TV home screen has a "Continue watching" row that other apps put
-their half-watched titles in; xtremio's Continue watching lives only inside
+their half-watched titles in. xtremio's Continue watching lives only inside
 the app, and will stay there.
 
 **Measured 2026-10-07 on zond's Chromecast with Google TV.** A Watch Next
 entry published by the app itself (`androidx.tvprovider`,
 `TvContractCompat.WatchNextPrograms`, a movie with a poster, a position and
 an intent back into the app, the row id answered) never appeared on the home
-screen. That is what Google documents: Google TV shows Watch Next rows only
-from apps it has certified -- the ones under Settings → Accounts & sign-in
-→ the account → Your services -- and the certification is for Play-distributed
-partners, now moving to the allow-listed Engage SDK; nothing offers a path
-to a sideloaded app. Plex and the others do exactly what the probe did; their
-package is on the list. The probe, its permission and its channel were
+screen. That is what Google documents. Google TV shows Watch Next rows only
+from apps it has certified, the ones under Settings → Accounts & sign-in →
+the account → Your services. The certification is for Play-distributed
+partners, now moving to the allow-listed Engage SDK, and nothing offers a
+path to a sideloaded app. Plex and the others do exactly what the probe
+did, and their package is on the list. The probe, its permission and its channel were
 removed again the same day (`git log` for "home-screen probe"). What would
 show the rows: the classic Android TV launcher on older boxes, and
 third-party launchers such as Projectivy, which read the table unfiltered.
@@ -133,15 +132,14 @@ and a set needs all of them, each separately signed.
 `urls`, a list of volumes in order, while a link the server sniffs as a RAR
 is one volume (stream-server `docs/design/media-pipeline.md` §2.9: an
 explicit volume list is a `MediaSpec` field when something supplies one,
-not built yet). So this works the day an addon lists
-every volume of a set as its own stream -- the app would gather the
-siblings from the stream list it already has, by infohash and by the
+not built yet). So this works the day an addon lists every volume of a
+set as its own stream. The app would gather the siblings from the stream list it already has, by infohash and by the
 volume numbering in the names, and hand the server all of them. No URL
 guessing: an addon that offers three streams is offering three URLs.
 
 What is missing is an addon that does it. The debrid services unpack RAR
 sets themselves, so what they expose is usually the film rather than the
-volumes -- which is why a good addon answers such a torrent with "not
+volumes. That is why a good addon answers such a torrent with "not
 available" rather than with a list of `.partNN.rar` files, and why the one
 that *did* list them was the one misbehaving. **Send one real stream list
 that names every volume and this becomes an afternoon.**
@@ -149,39 +147,39 @@ that names every volume and this becomes an afternoon.**
 ## Audio a receiver cannot have
 
 About playing on the device into an AV receiver (an amplifier), not about
-casting. Dolby Atmos objects fold to the channel bed on every build there is,
-ffmpeg having no renderer for them; nothing to do until it does. TrueHD
-*passthrough* is a different matter: the shipped libmpv has `ad_spdif`
-and `spdif-truehd` compiled in, so `--audio-spdif=truehd` could bitstream
-to a capable receiver. Worth one experiment on the device; it helps only
-viewers with an AVR that takes it.
+casting. Dolby Atmos objects fold to the channel bed on every build there
+is, because ffmpeg has no renderer for them. There is nothing to do until
+it has one. TrueHD *passthrough* is a different matter: the shipped libmpv
+has `ad_spdif` and `spdif-truehd` compiled in, so `--audio-spdif=truehd`
+could bitstream to a capable receiver. It is worth one experiment on the
+device. It helps only viewers with an AVR that takes it.
 
 ## Recommendations for the viewer -- chosen, built, one path deferred
 
 What was wanted: a row that knows what this viewer likes, not only what one
 title is like. What was built is the For you row
-([ARCHITECTURE.md](ARCHITECTURE.md#for-you)): the viewer's own library --
-what they watched through, what they added, what they liked -- as sources,
-each source's "More like this" answer as the candidates, a weighted vote
-across them, and the catalogue check every suggestion already goes
-through. Chosen because every part of it already existed and was already
-paid for: the answers are the ones the server keeps per title for
-everybody, so the row costs no new model calls and no key on the device,
-it is worked out on the device from data the device already holds, and
-the only thing the viewer's taste adds to the service is a set of title
-ids under their account (the faces), which they can delete.
+([ARCHITECTURE.md](ARCHITECTURE.md#for-you)). Its sources are the viewer's
+own library: what they watched through, what they added, what they liked.
+Each source's "More like this" answer gives the candidates, a weighted
+vote runs across them, and the catalogue check every suggestion already
+goes through applies. It was chosen because every part of it already
+existed and was already paid for. The answers are the ones the server
+keeps per title for everybody, so the row costs no new model calls and no
+key on the device. It is worked out on the device from data the device
+already holds. The only thing the viewer's taste adds to the service is a
+set of title ids under their account (the faces), which they can delete.
 
 **Considered and deferred: collaborative filtering over MovieLens.** The
 MovieLens ratings (tens of millions of ratings by real people) would give
-"people who liked these also liked" -- a different and in places better
-signal than a model's "feels like" -- but it is a model to train and
+"people who liked these also liked". That is a different and in places
+better signal than a model's "feels like". But it is a model to train and
 host, a dataset licence that is research-only for the large sets, a
 mapping from MovieLens ids to IMDb ids that loses titles, and nothing
 newer than the last dump. The vote over per-title answers gives most of
-the row for none of that. Worth picking up if the row turns out to
-narrow too fast onto a few titles, which is what a per-title answer
-cannot correct and a co-rating model can; the faces it would need as
-input are already collected.
+the row for none of that. It is worth picking up if the row turns out to
+narrow too fast onto a few titles. A per-title answer cannot correct that,
+and a co-rating model can. The faces it would need as input are already
+collected.
 
 ## Closed, and staying closed
 
@@ -190,11 +188,11 @@ input are already collected.
   changes, and the CI job is red by design.
 * **Browser clients.** Closed by zond.
 * **Drive as an addon.** Closed by zond (2026-10-05): the app's own Drive
-  support -- remote files read by range, linked once, offline downloads --
-  is better than anything an addon seam would give it.
+  support (remote files read by range, linked once, offline downloads) is
+  better than anything an addon seam would give it.
 * **A discover-only torrent state** (finding peers and metadata for a
   source before it is picked). Closed by zond (2026-10-05): people scroll
   around among sources before selecting one, and starting and stopping
   torrents for that pollutes the swarm and our own compute and memory. A
-  torrent is on because something explicit holds it -- a player screen, a
-  cast, a download -- and for no other reason.
+  torrent is on only because something explicit holds it: a player screen,
+  a cast, a download.
