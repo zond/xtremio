@@ -9,28 +9,28 @@
 //! ([`crate::libav::LibavAac`]). No Kotlin, no JNI: the NDK's C API is the
 //! whole of it.
 //!
-//! **The codec**: `c2.android.aac.encoder` by name -- AOSP's software
-//! encoder, Fraunhofer's FDK, on every device since Android 10 -- and
-//! `audio/mp4a-latm` by type only where that name is missing, since a
-//! vendor's encoder is not known to make the same bytes from the same sound,
-//! nor to have FDK's priming. AAC-LC, 48 kHz, two channels, 16-bit PCM in
-//! (FDK takes nothing else).
+//! **The codec**: `c2.android.aac.encoder` by name, AOSP's software encoder,
+//! Fraunhofer's FDK, on every device since Android 10. `audio/mp4a-latm` by
+//! type is used only where that name is missing, since a vendor's encoder is
+//! not known to make the same bytes from the same sound, nor to have FDK's
+//! priming. AAC-LC, 48 kHz, two channels, 16-bit PCM in (FDK takes nothing
+//! else).
 //!
-//! **The priming** is FDK's `nDelay` for AAC-LC with 1024-sample frames:
-//! the transform's 1024 plus the block switching's look-ahead,
-//! `4 x 128 + 128 / 2` -- 1600 samples (`libAACenc/src/aacenc_lib.cpp`,
-//! `DELAY_AAC`). The Codec2 wrapper (`C2SoftAacEnc`) does not compensate
-//! for it (its output times are its input times), so the converter
-//! discards it by count ([`crate::sound`]).
+//! **The priming** is FDK's `nDelay` for AAC-LC with 1024-sample frames: the
+//! transform's 1024 plus the block switching's look-ahead, `4 x 128 + 128 /
+//! 2`, which is 1600 samples (`libAACenc/src/aacenc_lib.cpp`, `DELAY_AAC`).
+//! The Codec2 wrapper (`C2SoftAacEnc`) does not compensate for it (its
+//! output times are its input times), so the converter discards it by count
+//! ([`crate::sound`]).
 //!
 //! **A fresh state for every chunk**: each call is fed, ended with
-//! end-of-stream, drained, and the codec stopped and configured again
-//! before the next, which is what the API documents as a codec back at
-//! its start. (`C2SoftAacEnc`'s flush also re-initialises FDK,
-//! `AACENC_INIT_ALL`; the stop is the documented way.) Synchronous: the
-//! run's own thread feeds and drains, waiting at most
+//! end-of-stream and drained. The codec is then stopped and configured again
+//! before the next, which is what the API documents as a codec back at its
+//! start. (`C2SoftAacEnc`'s flush also re-initialises FDK,
+//! `AACENC_INIT_ALL`; the stop is the documented way.) It is synchronous.
+//! The run's own thread feeds and drains, waiting at most
 //! [`DEQUEUE_WAIT_US`] at a time for the codec, with no limit on how many
-//! waits -- a codec that errors fails the run, one that is merely slow is
+//! waits. A codec that errors fails the run; one that is merely slow is
 //! waited for.
 
 use std::ffi::{c_char, c_long, c_void, CStr};
@@ -99,11 +99,11 @@ pub struct Encoded {
     pub frames: Vec<Bytes>,
 }
 
-/// **The buffer loop**: `pcm` (16-bit stereo at 48 kHz, little-endian) fed
-/// to `codec` buffer by buffer, the last flagged end-of-stream (an empty one
-/// when there is nothing), every output collected until the codec says the
-/// stream ended. Input is offered whenever a buffer is free; the loop waits
-/// on the codec only when it has nothing to feed it.
+/// **The buffer loop**: `pcm` (16-bit stereo at 48 kHz, little-endian) is
+/// fed to `codec` buffer by buffer, the last flagged end-of-stream (an empty
+/// one when there is nothing). Every output is collected until the codec
+/// says the stream ended. Input is offered whenever a buffer is free; the
+/// loop waits on the codec only when it has nothing to feed it.
 pub fn encode_with<C: Codec>(codec: &mut C, pcm: &[u8]) -> Result<Encoded, String> {
     const FRAME_BYTES: usize = 4; // a stereo 16-bit sample
     let mut fed = 0usize;
@@ -460,12 +460,12 @@ mod tests {
     use super::*;
     use std::collections::VecDeque;
 
-    /// A codec like FDK in shape: input buffers of `room` bytes, output one
-    /// "frame" per 4096 bytes of input (a 1024-sample stereo frame), whose
-    /// bytes are the frame's number, a configuration first and an
-    /// end-of-stream flag on the last; `free_inputs` buffers free at a time,
-    /// output held back until `lag` frames are pending, so the loop has to
-    /// drain to be given input again.
+    /// A codec like FDK in shape. Input buffers are `room` bytes. It outputs
+    /// one "frame" per 4096 bytes of input (a 1024-sample stereo frame),
+    /// whose bytes are the frame's number, with a configuration first and an
+    /// end-of-stream flag on the last. `free_inputs` buffers are free at a
+    /// time, and output is held back until `lag` frames are pending, so the
+    /// loop has to drain to be given input again.
     struct FakeCodec {
         free_inputs: usize,
         lag: usize,
@@ -640,8 +640,8 @@ mod tests {
     }
 
     /// **Every chunk from a fresh start**: the codec is restarted before
-    /// each call but the first, and a configuration that is not AAC-LC
-    /// 48 kHz stereo -- what the server was told -- fails.
+    /// each call but the first, and a configuration that is not AAC-LC 48
+    /// kHz stereo (what the server was told) fails.
     #[test]
     fn each_call_restarts_the_codec_and_checks_its_configuration() {
         let mut aac = CodecAac::new(FakeCodec::new(8192, 4, 0), FDK_DELAY);

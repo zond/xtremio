@@ -1,29 +1,29 @@
 //! **libavformat, from the libmpv the app already ships**: the demuxer a
-//! rendition is read with (stream-server `docs/design/renditions.md` §5,
-//! F1½: `MediaExtractor` drops every Dolby and DTS track and opens no AVI,
-//! so the demuxer is FFmpeg's).
+//! rendition is read with. `MediaExtractor` drops every Dolby and DTS track
+//! and opens no AVI, so the demuxer is FFmpeg's (stream-server
+//! `docs/design/renditions.md` §5, F1½).
 //!
 //! # Where the functions come from
 //!
 //! Nothing here links FFmpeg. The vendored `media_kit_libs_android_video`
 //! libmpv (`full` flavour, libmpv-android v1.1.11) carries FFmpeg **n6.0**
-//! inside it (`Lavf60.3.100`, `Lavc60.3.100`) and exports its whole API
-//! from its dynamic symbol table -- 801 `av*`/`swr_*` symbols on every
-//! ABI, arm64, armv7, x86 and x86_64 alike. [`crate::mpv_stream`] already
-//! `dlopen`s that library to reach `mpv_stream_cb_add_ro`; this opens it
-//! again by the same path ([`Libav::registered`]), which the loader answers
+//! inside it (`Lavf60.3.100`, `Lavc60.3.100`). It exports FFmpeg's whole API
+//! from its dynamic symbol table: 801 `av*`/`swr_*` symbols on every ABI,
+//! arm64, armv7, x86 and x86_64 alike. [`crate::mpv_stream`] already
+//! `dlopen`s that library to reach `mpv_stream_cb_add_ro`. This opens it
+//! again by the same path ([`Libav::registered`]), and the loader answers
 //! with the instance already mapped. On Linux the system libmpv links the
 //! system's `libavformat.so.N`, and a lookup on libmpv's handle finds the
 //! symbols in its dependencies, so the same code reaches them there.
 //!
 //! # Bound to one FFmpeg ABI, and checked
 //!
-//! Functions are looked up by name; **structs are read by layout**, and a
-//! layout is only stable within a major version (`docs/design/renditions.md`
-//! §6½). Every struct below is the *prefix* of FFmpeg 6.0's, up to the last
-//! field this module reads, transcribed from `libavformat/avformat.h`,
-//! `avio.h`, `libavcodec/codec_par.h`, `packet.h` and
-//! `libavutil/channel_layout.h` at tag `n6.0`. Two checks hold them:
+//! Functions are looked up by name, but **structs are read by layout**, and
+//! a layout is only stable within a major version
+//! (`docs/design/renditions.md` §6½). Every struct below is the *prefix* of
+//! FFmpeg 6.0's, up to the last field this module reads, transcribed from
+//! `libavformat/avformat.h`, `avio.h`, `libavcodec/codec_par.h`, `packet.h`
+//! and `libavutil/channel_layout.h` at tag `n6.0`. Two checks hold them:
 //!
 //! - **At compile time**, every field this module reads is asserted at the
 //!   offset a C compiler puts it, for 64-bit and 32-bit targets
@@ -35,16 +35,16 @@
 //! - **At load time**, [`Libav::load`] refuses a library whose
 //!   `avformat_version`, `avcodec_version` or `avutil_version` is not the
 //!   major these layouts are for ([`AVFORMAT_MAJOR`], [`AVCODEC_MAJOR`],
-//!   [`AVUTIL_MAJOR`]): a desktop whose system FFmpeg is 7.x answers
+//!   [`AVUTIL_MAJOR`]). A desktop whose system FFmpeg is 7.x answers
 //!   "unavailable", never a misread struct.
 //!
 //! # What it is used for
 //!
-//! [`Demuxer`]: a custom `AVIOContext` over any [`Source`] -- the server's
-//! [`MediaReader`] in the app, bytes in memory in the tests -- whose read
-//! and seek callbacks are blocking Rust, then `av_read_frame` packet by
-//! packet. Nothing is decoded but what `avformat_find_stream_info` decodes
-//! to learn where the film starts, as mpv's own open does.
+//! [`Demuxer`]: a custom `AVIOContext` over any [`Source`] (the server's
+//! [`MediaReader`] in the app, bytes in memory in the tests), whose read and
+//! seek callbacks are blocking Rust, then `av_read_frame` packet by packet.
+//! Nothing is decoded but what `avformat_find_stream_info` decodes to learn
+//! where the film starts, as mpv's own open does.
 
 use std::ffi::{c_char, c_int, c_uint, c_void};
 use std::io;
@@ -130,9 +130,9 @@ struct AVInputFormat {
     name: *const c_char,
 }
 
-/// `AVIndexEntry`, n6.0, whole: `int flags:2; int size:30;` is one `int`
-/// whose two low bits -- on every little-endian ABI this is built for --
-/// are the flags.
+/// `AVIndexEntry`, n6.0, whole. `int flags:2; int size:30;` is one `int`
+/// whose two low bits are the flags, on every little-endian ABI this is
+/// built for.
 #[repr(C)]
 struct AVIndexEntry {
     pos: i64,
@@ -160,9 +160,9 @@ struct AVFormatContext {
     duration: i64,
 }
 
-/// `AVStream`, n6.0, up to `nb_side_data` (deprecated in 6.1, which still
-/// fills it from the codec parameters' side data, and gone in 7.0 -- where
-/// the major check refuses the library anyway).
+/// `AVStream`, n6.0, up to `nb_side_data`. That field is deprecated in 6.1,
+/// which still fills it from the codec parameters' side data, and gone in
+/// 7.0, where the major check refuses the library anyway.
 #[repr(C)]
 struct AVStream {
     av_class: *const c_void,
@@ -198,10 +198,10 @@ struct AVPacketSideData {
 /// stream's descriptor).
 const AV_PKT_DATA_DOVI_CONF: c_int = 29;
 
-/// `AVChannelLayout`, n6.0, whole: its union's `uint64_t` (the mask, for
-/// the native order) is what aligns the struct -- and so where `ch_layout`
-/// sits -- to eight bytes. Whole, because the sound's conversion hands one
-/// to FFmpeg by pointer ([`STEREO`]).
+/// `AVChannelLayout`, n6.0, whole. Its union's `uint64_t` (the mask, for the
+/// native order) aligns the struct to eight bytes, and so decides where
+/// `ch_layout` sits. It is whole because the sound's conversion hands one to
+/// FFmpeg by pointer ([`STEREO`]).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AVChannelLayout {
@@ -510,10 +510,10 @@ struct Codecs {
 }
 
 impl Libav {
-    /// The functions from the library at `path` -- libmpv on Android, or
-    /// any library whose dependencies are libavformat, libavcodec and
-    /// libavutil -- refused unless all three are the majors the layouts
-    /// here were measured for.
+    /// The functions from the library at `path`: libmpv on Android, or any
+    /// library whose dependencies are libavformat, libavcodec and libavutil.
+    /// Refused unless all three are the majors the layouts here were
+    /// measured for.
     pub fn load(path: &str) -> Result<Self, String> {
         // SAFETY: the app's libmpv is already loaded (media_kit loaded it),
         // so this takes one more reference and runs no initialiser; a test
@@ -575,9 +575,9 @@ impl Libav {
         self.codecs.as_ref().map_err(Clone::clone)
     }
 
-    /// Whether this library has FFmpeg's own AAC encoder: a desktop's
-    /// system FFmpeg does, the libmpv an Android build ships does not
-    /// (`--disable-encoders`), which encodes with `MediaCodec` instead.
+    /// Whether this library has FFmpeg's own AAC encoder. A desktop's system
+    /// FFmpeg does. The libmpv an Android build ships does not
+    /// (`--disable-encoders`), so Android encodes with `MediaCodec` instead.
     pub fn has_aac_encoder(&self) -> bool {
         self.codecs().is_ok_and(|codecs| {
             // SAFETY: a static string, a lookup that allocates nothing.
@@ -695,7 +695,7 @@ struct Io<S: Source> {
 }
 
 /// `read_packet`: bytes read, `AVERROR_EOF` at the end, `AVERROR(EIO)` when
-/// the source fails -- a cancel's included.
+/// the source fails, a cancel included.
 unsafe extern "C" fn read_cb<S: Source>(opaque: *mut c_void, buf: *mut u8, size: c_int) -> c_int {
     // SAFETY: `opaque` is the `Io<S>` the demuxer owns, alive for as long
     // as the context that calls this; libavformat makes one call at a time.
@@ -935,9 +935,9 @@ impl<S: Source> Demuxer<S> {
             }
             demuxer.ctx = ctx;
             // What mpv does after its open (`demux_lavf.c`), and for the
-            // same reason here: it is what sets the container's
-            // `start_time` -- the first timestamp of any stream, which is
-            // the zero mpv's clock and the playlist count from. Matroska's
+            // same reason here. It is what sets the container's
+            // `start_time`: the first timestamp of any stream, which is the
+            // zero mpv's clock and the playlist count from. Matroska's
             // header does not carry it; the first packets do (an AAC
             // encoder's priming starts audio before zero). The packets it
             // reads are kept and handed out by the reads that follow.
@@ -1024,9 +1024,9 @@ impl<S: Source> Demuxer<S> {
         }
     }
 
-    /// Up to `len` bytes of the source at `offset`, read past libavformat,
-    /// which finds the source where it left it: what it reads next comes
-    /// from its own buffer or a seek of its own.
+    /// Up to `len` bytes of the source at `offset`, read past libavformat.
+    /// libavformat finds the source where it left it, because what it reads
+    /// next comes from its own buffer or a seek of its own.
     pub fn read_source_at(&mut self, offset: u64, len: usize) -> io::Result<Vec<u8>> {
         let state = self.state.as_mut();
         let len = len.min(usize::try_from(state.len.saturating_sub(offset)).unwrap_or(len));
@@ -1170,9 +1170,10 @@ impl<S: Source> Drop for Demuxer<S> {
     fn drop(&mut self) {
         // SAFETY: each pointer is null or one this demuxer allocated and
         // still owns. The format context goes first (it does not free a
-        // custom `pb`), then the I/O buffer -- read from the context, which
-        // may have replaced it -- and the I/O context. `state` outlives all
-        // of them, being a field dropped after this body.
+        // custom `pb`), then the I/O buffer, then the I/O context. The
+        // buffer is read from the context, which may have replaced it.
+        // `state` outlives all of them, being a field dropped after this
+        // body.
         unsafe {
             if !self.ctx.is_null() {
                 (self.libav.avformat_close_input)(&mut self.ctx);
@@ -1261,15 +1262,15 @@ pub struct Pcm {
 }
 
 /// **A decoder of one stream's sound to 48 kHz stereo**, opened afresh for
-/// every call to [`SoundDecoder::decode`], so what it makes of the same
-/// packets is the same whichever call it is: no state crosses from one
-/// call to the next, in the decoder or in the resampler.
+/// every call to [`SoundDecoder::decode`]. So what it makes of the same
+/// packets is the same whichever call it is: no state crosses from one call
+/// to the next, in the decoder or in the resampler.
 ///
-/// The downmix is libswresample's default matrix (centre and surrounds at
-/// -3 dB into each side, LFE left out), **normalised** so no sum clips
-/// (`rematrix_maxval` 1): the stereo a 16-bit encoder is handed never
-/// exceeds full scale, at the cost of a quieter mix than the source's
-/// front pair alone.
+/// The downmix is libswresample's default matrix (centre and surrounds at -3
+/// dB into each side, LFE left out), **normalised** so no sum clips
+/// (`rematrix_maxval` 1). The stereo a 16-bit encoder is handed never
+/// exceeds full scale, at the cost of a quieter mix than the source's front
+/// pair alone.
 pub struct SoundDecoder {
     libav: &'static Libav,
     decoder: *const c_void,
@@ -1295,7 +1296,7 @@ impl SoundDecoder {
     }
 
     /// `packets` (one stream's, in order) decoded from a fresh decoder, and
-    /// the sound converted to 48 kHz stereo by a fresh resampler; a packet
+    /// the sound converted to 48 kHz stereo by a fresh resampler. A packet
     /// the decoder refuses is skipped.
     pub fn decode(&mut self, packets: &[Packet]) -> Result<Vec<Pcm>, String> {
         let codecs = self.libav.codecs()?;
@@ -1726,11 +1727,11 @@ mod tests {
         assert_eq!(to_us(1, Rational { num: 1, den: 0 }), None);
     }
 
-    /// The callbacks a demuxer hands libavformat, driven by hand: a read
-    /// counts the position on, the end is `AVERROR_EOF`, a seek answers the
-    /// length for `AVSEEK_SIZE` and refuses outside the file, and a source
-    /// that fails is remembered -- which is how the end of a film is told
-    /// from a source that broke.
+    /// The callbacks a demuxer hands libavformat, driven by hand. A read
+    /// counts the position on, and the end is `AVERROR_EOF`. A seek answers
+    /// the length for `AVSEEK_SIZE` and refuses outside the file. A source
+    /// that fails is remembered, which is how the end of a film is told from
+    /// a source that broke.
     #[test]
     fn the_io_callbacks_track_the_position_and_remember_a_failure() {
         /// The bytes, a switch that makes every read fail, and the seeks
