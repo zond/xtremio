@@ -78,7 +78,10 @@ reads them all instead. `act`, `tap`, `go` and `play` wait for the
 screen to settle (at most three seconds, so a spinner does not hang them)
 and answer the new screen. `find`, `tap` and `wait` match every word given,
 ignoring case, against a node's label, value, hint and tooltip. `wait`
-polls for twenty seconds unless told `--timeout`.
+polls for twenty seconds unless told `--timeout`. A settings row's icon is
+a node of its own, a button with the tooltip "What is this?" and no label.
+So `tap <title>` still taps the row, and `act <id> tap` on the icon opens
+the row's explanation.
 
 `streams [<text>...] [--not <text>]` lists every source the open details
 screen offers, or the one under the player. It reads them from the list's

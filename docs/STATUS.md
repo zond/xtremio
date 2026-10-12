@@ -297,6 +297,12 @@ Each installed addon carries a verdict on how it has been answering
 
 ## Settings
 
+Every row shows its title. What the row means opens from its icon (the
+tooltip says "What is this?"), or from a held OK on a television. A row
+whose second line is state keeps it: the account, the server's status,
+peer discovery, the internet readout, the core schema version, the
+installed version, the local folders' scan and a paused Share while idle.
+
 - **Account**: sign in, create an account, sync, log out; signed in,
   **Change password** (opens Stremio's reset page for the account's address
   in the browser; the address is never logged),

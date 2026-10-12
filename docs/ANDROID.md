@@ -501,8 +501,8 @@ position advancing can.
 |---|---|---|
 | D-pad | `KEYCODE_DPAD_UP` `_DOWN` `_LEFT` `_RIGHT` (19-22) | Moves focus; in the player, seek left/right, controls up/down |
 | Centre | `KEYCODE_DPAD_CENTER` (23) | Activates the focused control; on the video, play/pause and wake the controls |
-| Centre, held | `input keyevent --longpress 23` | The long press: mark watched, an item's action menu, remove from Continue watching (after asking, the remote starting on Cancel). What is left of the held key presses nothing (`RemotePress`) |
-| Context menu | `KEYCODE_MENU` (82) | The same menu as the long press |
+| Centre, held | `input keyevent --longpress 23` | The long press: mark watched, an item's action menu, remove from Continue watching (after asking, the remote starting on Cancel). On a settings row, what the row means (`Explained`), with the remote on Close and Back closing it. What is left of the held key presses nothing (`RemotePress`) |
+| Context menu | `KEYCODE_MENU` (82) | The same as the long press |
 | Back | `KEYCODE_BACK` (4) | Comes down the ladder; leaves the player |
 | Play/pause | `KEYCODE_MEDIA_PLAY_PAUSE` (85), `_PLAY` (126), `_PAUSE` (127) | Play/pause |
 | Rewind / fast-forward | `KEYCODE_MEDIA_REWIND` (89), `_FAST_FORWARD` (90) | Seek by the profile's seek step |
