@@ -190,12 +190,12 @@ class DrivePairingScreen extends StatefulWidget {
   /// Said out loud, because nothing in the Picker suggests it: a viewer who
   /// does not know several can be chosen picks one and presses the button.
   static const String signedInMessage =
-      'Signed in. Now pick what to play — '
-      'you can pick more than one file.';
+      'Signed in. Now pick what to play. '
+      'You can pick more than one file.';
   static const String inBrowserMessage =
-      'Sign in to Google in the page that '
-      'opened and pick what you want to play — you can pick more than one '
-      'file. This screen is watching for it.';
+      'Sign in to Google in the page that opened, and pick what you want '
+      'to play. You can pick more than one file. This screen moves on by '
+      'itself when you are done.';
   static const String windowMessage = 'This lasts about ten minutes.';
 
   /// What a device that picks in place says when the picker closed with nothing
@@ -213,17 +213,13 @@ class DrivePairingScreen extends StatefulWidget {
   static const String unreachableMessage =
       'Could not reach the service just now. This will finish by itself '
       'when it can.';
-  static const String expiredMessage =
-      'That code has expired before anybody '
-      'finished with it.';
+  static const String expiredMessage = 'That code expired before it was used.';
   static const String lostMessage =
-      'That pairing did not finish. Nothing has '
-      'been linked.';
+      'Linking did not finish. Nothing has been linked.';
   static const String thisRunOnlyMessage =
-      'This device has no secure store '
-      'that would take the pairing, so it lasts until the app closes. '
-      'Everything works now; you will have to link the file again after a '
-      'restart.';
+      'This device cannot store the link safely, so it lasts until the app '
+      'closes. Everything works for now. You will have to link the file '
+      'again after a restart.';
   static const String freshCodeLabel = 'New code';
   static const String openAgainLabel = 'Open the page again';
   static const String doneLabel = 'Done';

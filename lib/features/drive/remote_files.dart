@@ -90,8 +90,7 @@ class _RemoteFilesDialog extends StatelessWidget {
   static const String title = 'Link files';
   static const String driveLabel = 'Google Drive';
   static const String driveSubtitle =
-      'Pick a file on your phone; this '
-      'device reads it.';
+      'Pick a file on your phone, and this device plays it.';
   static const String cancelLabel = 'Cancel';
 
   /// What a test finds the Drive row by, rather than by being the first

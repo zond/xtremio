@@ -331,8 +331,8 @@ String driveFailureMessage(DriveOpenFailure reason) => switch (reason) {
   DriveOpenFailure.notLinked =>
     'No Google account is linked to this device yet.',
   DriveOpenFailure.noPairingService =>
-    'This build cannot keep a Google Drive link alive. Nothing you can do '
-        'about it from here.',
+    'This version cannot keep a Google Drive link working. You cannot fix '
+        'this from here.',
   DriveOpenFailure.unreachable =>
     'Google could not be reached just now. Try again in a moment.',
   DriveOpenFailure.unavailable =>

@@ -526,11 +526,11 @@ String driveReloadMessage(DriveReloaded outcome) => switch (outcome) {
     DriveListingFailure.notLinked =>
       'No Google account is linked to this device yet.',
     DriveListingFailure.unreachable =>
-      'Google could not be reached just now. Nothing has changed; try again '
+      'Google could not be reached just now. Nothing has changed. Try again '
           'in a moment.',
     DriveListingFailure.tooOften =>
       'This link has been refreshed too many times in the last hour. '
-          'Nothing has changed; try again later.',
+          'Nothing has changed. Try again later.',
     DriveListingFailure.notUnderstood =>
       'Drive answered something this app could not read. Nothing has '
           'changed.',
