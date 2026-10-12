@@ -1,32 +1,33 @@
 //! The app's own preferences: one small JSON object in the storage
 //! directory, next to stremio-core's buckets.
 //!
-//! This is for choices that are the *client's*, not the engine's -- how a
-//! list is laid out, which view a screen came up in. It deliberately does
-//! not go into stremio-core's `Settings`: that is a synced, engine-owned
-//! struct, and adding a field to it would mean forking the core. It is not
-//! a Dart preferences package either, because the storage directory is
-//! already ours and already atomic (`crate::env::write_atomically`).
+//! This is for choices that are the *client's*, not the engine's: how a list
+//! is laid out, which view a screen came up in. It deliberately does not go
+//! into stremio-core's `Settings`. That is a synced, engine-owned struct, and
+//! adding a field to it would mean forking the core. It is not a Dart
+//! preferences package either, because the storage directory is already ours
+//! and already atomic (`crate::env::write_atomically`).
 //!
-//! The file is forgiving and additive, like the downloads registry: it is a
+//! The file is forgiving and additive, like the downloads registry. It is a
 //! flat JSON object, every key is optional, and a key this build knows
-//! nothing about survives a round trip untouched -- a write is a
-//! read-modify-write of one key, never a rewrite of the whole shape. A file
-//! that cannot be parsed at all reads as "no preferences set" so a bad byte
-//! costs a layout choice and not the app -- but it is moved aside first
-//! (`xtremio_prefs.json.corrupt-<seconds>`, `crate::env::move_aside`), so
-//! the next write starts a fresh file beside the bytes rather than over
-//! them. A file the disk will not *read* is a different thing: nothing says
-//! its contents are bad, so a read answers with the error and a write
-//! refuses, instead of "nothing set" letting one key be written over every
-//! other -- which is what an `EIO` on an ageing flash chip, or a
-//! file-descriptor shortage under a busy swarm, would otherwise cost: the
-//! whole file, silently.
+//! nothing about survives a round trip untouched. A write is a
+//! read-modify-write of one key, never a rewrite of the whole shape.
+//!
+//! A file that cannot be parsed at all reads as "no preferences set", so a
+//! bad byte costs a layout choice and not the app. It is moved aside first
+//! (`xtremio_prefs.json.corrupt-<seconds>`, `crate::env::move_aside`), so the
+//! next write starts a fresh file beside the bytes rather than over them.
+//!
+//! A file the disk will not *read* is a different thing, because nothing says
+//! its contents are bad. A read answers with the error and a write refuses.
+//! Answering "nothing set" would let one key be written over every other. An
+//! `EIO` on an ageing flash chip, or a file-descriptor shortage under a busy
+//! swarm, would then cost the whole file, silently.
 //!
 //! Nothing here is secret and nothing here is synced. Do not put auth
-//! material in it (`AGENTS.md`, "Never log auth material") -- it is written
-//! in the clear and copied into diagnostics-shaped reports by nobody, but
-//! it is also not the place for a token.
+//! material in it (`AGENTS.md`, "Never log auth material"). Nobody copies it
+//! into diagnostics-shaped reports, but it is written in the clear and is not
+//! the place for a token.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -41,15 +42,15 @@ const FILE_NAME: &str = "xtremio_prefs.json";
 
 /// The file's lock, one per process.
 ///
-/// A write is a read-modify-write of a shared file, and the FFI calls that
-/// do one run on FRB's worker pool, so two toggles landing together would
-/// otherwise be able to lose each other's key. It is a process static, not
-/// a field of [`crate::state::AppState`], because the file is one per
-/// process too: `crate::core::shutdown` takes the state out and *then*
-/// flushes the addon-health table through [`set`], and a lock inside the
-/// state would leave that flush and a concurrent FFI write holding two
-/// different mutexes over the same file -- or, looked up afresh, would
-/// build a new state and undo the `take`.
+/// A write is a read-modify-write of a shared file, and the FFI calls that do
+/// one run on FRB's worker pool. Without the lock, two toggles landing
+/// together could lose each other's key. It is a process static, not a field
+/// of [`crate::state::AppState`], because the file is one per process too.
+/// `crate::core::shutdown` takes the state out and *then* flushes the
+/// addon-health table through [`set`]. A lock inside the state would leave
+/// that flush and a concurrent FFI write holding two different mutexes over
+/// the same file. Looked up afresh, it would build a new state and undo the
+/// `take`.
 static FILE: Mutex<()> = Mutex::new(());
 
 /// A poisoned lock only means a previous holder panicked; there is no
@@ -67,16 +68,15 @@ fn path() -> Option<PathBuf> {
 /// Every preference set, as a JSON object.
 ///
 /// A missing file and one holding anything but an object both read as an
-/// empty set: a preference is a default the user changed, so "not there"
-/// and "not changed" are the same answer to the caller. A file the disk
-/// will not read is not the same answer -- that is "cannot tell" -- and
-/// comes back as the error, so nobody writes a default over what could not
-/// be seen.
+/// empty set. A preference is a default the user changed, so "not there" and
+/// "not changed" are the same answer to the caller. A file the disk will not
+/// read gives a different answer, "cannot tell". It comes back as the error,
+/// so nobody writes a default over what could not be seen.
 ///
-/// Under the file's lock, like a write: a read of a file that will not
-/// parse moves it aside, and a rename landing between a locked [`set`]'s
-/// read and its write -- or just after the write -- takes the key it has
-/// just stored with it.
+/// This runs under the file's lock, like a write. A read of a file that will
+/// not parse moves it aside. A rename landing between a locked [`set`]'s read
+/// and its write, or just after the write, would take the key it has just
+/// stored with it.
 pub fn get_all() -> anyhow::Result<Map<String, Value>> {
     let path = path().context("preferences: storage directory is not set")?;
     let _guard = file();
@@ -118,9 +118,9 @@ fn read_object(path: &std::path::Path) -> anyhow::Result<Map<String, Value>> {
 /// Stores `value` under `key`, or removes the key when it is `None`,
 /// leaving every other key exactly as it was.
 ///
-/// Serialized on the process's file lock ([`FILE`]), and never looks up the
-/// process state: the flush in `crate::core::shutdown` calls this after the
-/// state has been taken out, and must not put one back.
+/// It is serialized on the process's file lock ([`FILE`]) and never looks up
+/// the process state. The flush in `crate::core::shutdown` calls this after
+/// the state has been taken out, and must not put one back.
 ///
 /// A file that cannot be read refuses the write: the read-modify-write has
 /// nothing to modify, and writing the one key anyway is how a transient
@@ -206,9 +206,9 @@ mod tests {
             .collect()
     }
 
-    /// A file that will not parse reads as nothing set and the next write
-    /// starts over -- beside the bytes, which are moved aside first rather
-    /// than written over.
+    /// A file that will not parse reads as nothing set, and the next write
+    /// starts over beside the bytes. They are moved aside first rather than
+    /// written over.
     #[test]
     fn a_file_that_will_not_parse_is_moved_aside_and_reads_as_empty() {
         with_storage_dir(|dir| {

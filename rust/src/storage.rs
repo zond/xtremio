@@ -1,9 +1,9 @@
 //! What the server's storage currently costs, and how much room is left.
 //!
-//! The first question about a playback that misbehaves is whether the
-//! device is full: bytes arriving with no verified progress is what failing
-//! writes look like, and a cache well over its limit is what a server that
-//! reclaims nothing looks like. Neither was anywhere in a report.
+//! The first question about a playback that misbehaves is whether the device
+//! is full. Bytes arriving with no verified progress is what failing writes
+//! look like, and a cache well over its limit is what a server that reclaims
+//! nothing looks like. Neither was anywhere in a report.
 //!
 //! The numbers are read here rather than in Dart because the app never
 //! speaks HTTP to the server and has no business walking its directories
@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// One filesystem's room, as `statvfs` sees it. `None` for a path that
-/// cannot be asked about (it is gone, or the platform will not say), which
-/// the report shows as unknown rather than as zero -- a volume nobody could
+/// One filesystem's room, as `statvfs` sees it. `None` for a path that cannot
+/// be asked about (it is gone, or the platform will not say). The report
+/// shows that as unknown rather than as zero, because a volume nobody could
 /// measure is not a full one.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,16 +45,16 @@ impl Volume {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageReport {
-    /// The server's `cacheRoot` setting: **the one root**, where every
-    /// byte a torrent puts on this device lives -- the piece store the
+    /// The server's `cacheRoot` setting: **the one root**. Every byte a
+    /// torrent puts on this device lives under it: the piece store the
     /// streaming cache and the kept downloads share, the session's own
     /// records, and what `/proxy` cached.
     pub cache_dir: String,
-    /// What the cache occupies, in bytes: the server's own figure, the
-    /// `totalBytes` of `server_cache_usage` taken on this call. The storage
-    /// screen shows the two side by side, and two counts of one cache that
-    /// disagree by construction are a contradiction on the one screen that
-    /// exists to explain it.
+    /// What the cache occupies, in bytes. This is the server's own figure,
+    /// the `totalBytes` of `server_cache_usage` taken on this call. The
+    /// storage screen shows the two side by side, and two counts of one cache
+    /// that disagree by construction are a contradiction on the one screen
+    /// that exists to explain it.
     pub cache_used_bytes: u64,
     /// The `cacheSize` setting, or null for "no limit". Bytes.
     pub cache_limit_bytes: Option<u64>,
@@ -62,18 +62,17 @@ pub struct StorageReport {
     pub cache_volume: Volume,
 }
 
-/// Reads the report. Blocks: it asks the server for its settings and its
-/// usage, so it belongs on an FRB worker, never on the UI thread. Errors
-/// only when the server is not running -- there is no cache root to name
-/// then, and inventing one would be a lie about which directory the
-/// numbers are from.
+/// Reads the report. It blocks, because it asks the server for its settings
+/// and its usage, so it belongs on an FRB worker, never on the UI thread. It
+/// errors only when the server is not running. There is no cache root to name
+/// then, and inventing one would be a lie about which directory the numbers
+/// are from.
 ///
-/// The size is not walked for. The server counts what its owners hold
-/// without listing the tree, and a walk here was a `stat` of every piece
-/// file -- tens of thousands on a phone -- to arrive at a second figure
-/// that could not agree with the first: it counted apparent lengths where
-/// the server counts allocated blocks, and whatever lies under the root
-/// that no owner holds.
+/// The size is not walked for. The server counts what its owners hold without
+/// listing the tree. A walk here was a `stat` of every piece file (tens of
+/// thousands on a phone), and it arrived at a second figure that could not
+/// agree with the first. It counted apparent lengths where the server counts
+/// allocated blocks, plus whatever lies under the root that no owner holds.
 pub fn report() -> anyhow::Result<StorageReport> {
     let settings = crate::server::settings()?;
     let usage = crate::server::cache_usage()?;
@@ -86,9 +85,9 @@ pub fn report() -> anyhow::Result<StorageReport> {
     })
 }
 
-/// The `cacheSize` setting as a byte cap: `None` (and a negative or
-/// non-finite value) is "no limit", which is what the server's own
-/// `cache_size_bytes` saturates to.
+/// The `cacheSize` setting as a byte cap. `None`, a negative or a non-finite
+/// value is "no limit", which is what the server's own `cache_size_bytes`
+/// saturates to.
 fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
     match cache_size {
         Some(bytes) if bytes.is_finite() && bytes >= 0.0 => Some(bytes as u64),
@@ -96,26 +95,25 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
     }
 }
 
-/// Bytes the volume holding `dir` will still give an unprivileged writer,
-/// or `None` when the platform will not say. `dir` is one that exists --
-/// [`existing_ancestor`] finds it, and [`Volume::of`] asks it once for both
-/// of its readings.
+/// Bytes the volume holding `dir` will still give an unprivileged writer, or
+/// `None` when the platform will not say. `dir` exists: [`existing_ancestor`]
+/// finds it, and [`Volume::of`] asks it once for both of its readings.
 ///
-/// `fs4::available_space` is `statvfs`'s `f_frsize * f_bavail` -- `df`'s
-/// Available column, root's reserve excluded -- which is the same call and
-/// the same crate the embedded server sizes its cache cap with, holding
-/// `enginefs::free_space_floor` free -- a thirty-second of the volume,
-/// clamped to 128-512 MiB, and 512 MiB when the volume's size is
-/// unreadable (stream-server's `cache_budget`). Deliberately the same one:
-/// a report puts this number next to the floor the server keeps, and two
-/// answers to "how much room is left" taken from different places would
-/// drift apart on the one screen that exists to explain a device with no
-/// room left. It counts the volume's free blocks, so a deleted file some
-/// process still holds open costs room here that no directory walk sees.
+/// `fs4::available_space` is `statvfs`'s `f_frsize * f_bavail`, which is
+/// `df`'s Available column with root's reserve excluded. The embedded server
+/// sizes its cache cap with the same call and the same crate. It holds
+/// `enginefs::free_space_floor` free: a thirty-second of the volume, clamped
+/// to 128-512 MiB, and 512 MiB when the volume's size is unreadable
+/// (stream-server's `cache_budget`). The sameness is deliberate. A report
+/// puts this number next to the floor the server keeps, and two answers to
+/// "how much room is left" taken from different places would drift apart on
+/// the one screen that exists to explain a device with no room left. It
+/// counts the volume's free blocks, so a deleted file some process still
+/// holds open costs room here that no directory walk sees.
 ///
-/// `None`, never 0, on failure: a volume nobody could measure is not a
-/// full one, and a report that showed it as full would accuse a device
-/// whose filesystem simply will not answer.
+/// On failure it is `None`, never 0. A volume nobody could measure is not a
+/// full one, and a report that showed it as full would accuse a device whose
+/// filesystem simply will not answer.
 fn free_bytes(dir: &Path) -> Option<u64> {
     fs4::available_space(dir).ok()
 }
@@ -154,8 +152,8 @@ mod tests {
     fn a_path_on_no_volume_at_all_reads_as_unknown_rather_than_full() {
         // Relative, and nothing of that name in the working directory: the
         // ancestor walk runs out before it finds anything to ask about.
-        // Unreadable must not be reported as zero -- a caller would then
-        // refuse a cache on a device that has plenty of room.
+        // Unreadable must not be reported as zero, or a caller would refuse a
+        // cache on a device that has plenty of room.
         let volume = Volume::of(Path::new("xtremio-no-such-path-4c1f"));
         assert_eq!(volume.free_bytes, None);
         assert_eq!(volume.total_bytes, None);

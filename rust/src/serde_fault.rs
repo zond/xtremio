@@ -1,25 +1,25 @@
 //! How a rejected JSON payload is described, which is never its contents.
 //!
-//! `serde_json`'s own messages quote the value they refused -- `invalid
-//! type: string "hunter2", expected u64` -- and every payload this crate
-//! deserializes carries something that must not be written down:
-//! `Ctx::Authenticate` holds the user's password, a download request holds a
-//! debrid URL with its token in the path, an addon response holds the
-//! Stremio auth key, and a preference value holds whatever the app keeps.
+//! `serde_json`'s own messages quote the value they refused: `invalid type:
+//! string "hunter2", expected u64`. Every payload this crate deserializes
+//! carries something that must not be written down. `Ctx::Authenticate` holds
+//! the user's password, a download request holds a debrid URL with its token
+//! in the path, an addon response holds the Stremio auth key, and a
+//! preference value holds whatever the app keeps.
 //!
 //! Those messages do not stay in the caller's `Result`. They reach
-//! [`crate::diagnostics`]'s ring and, on Android, logcat -- and the ring is
-//! what a bug report copies, which is precisely the moment a password would
-//! travel. The error is not even the interesting half: a payload malformed
-//! enough to be refused is a bug in our own Dart, and the field it was
-//! refused at is what finds it.
+//! [`crate::diagnostics`]'s ring and, on Android, logcat. The ring is what a
+//! bug report copies, which is precisely the moment a password would travel.
+//! The error is not even the interesting half. A payload malformed enough to
+//! be refused is a bug in our own Dart, and the field it was refused at is
+//! what finds it.
 //!
 //! So a fault is reported as **where** and **what kind**, never **what**.
 //! `serde_path_to_error` gives the field path, and `serde_json` gives a
 //! category and a position, none of which quote the payload.
 //!
 //! The path is field names and indices rather than values, so it does not
-//! carry the secret; the one place it could is a map whose *keys* come from
+//! carry the secret. The one place it could is a map whose *keys* come from
 //! the payload, and no type deserialized here has one whose keys are worth
 //! hiding.
 
@@ -44,10 +44,10 @@ pub(crate) fn cause(error: &serde_json::Error) -> String {
 
 #[cfg(test)]
 mod tests {
-    /// The whole point, and the only test that matters: whatever went in
-    /// does not come out. The value here is the shape that leaked --
-    /// `serde_json` answers a type mismatch with `invalid type: string
-    /// "hunter2", expected u64`, quoting the string it was given.
+    /// The whole point, and the only test that matters: whatever went in does
+    /// not come out. The value here is the shape that leaked. `serde_json`
+    /// answers a type mismatch with `invalid type: string "hunter2", expected
+    /// u64`, quoting the string it was given.
     #[test]
     fn a_refused_value_is_never_in_the_message() {
         #[derive(Debug, serde::Deserialize)]

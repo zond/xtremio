@@ -1,31 +1,31 @@
 //! The state this process owns, in one value.
 //!
-//! Everything the crate keeps between FFI calls -- the stremio-core
-//! `Runtime` and its event sink, the embedded server's handle, the downloads
-//! registry's locks and its progress sink, the addon-health counts and what
-//! the event pump has already seen -- lives in one [`AppState`], grouped by
-//! the concern that owns it, behind one process static. That is the whole
-//! point: "who owns this, and when does it go away" has a single answer
-//! instead of one per `static`. The preferences file's lock is the one
-//! exception, a static of its own in `crate::prefs`: it guards a file that
-//! outlives every instance, and the shutdown flush writes it after the
-//! state is gone.
+//! Everything the crate keeps between FFI calls lives in one [`AppState`],
+//! grouped by the concern that owns it, behind one process static: the
+//! stremio-core `Runtime` and its event sink, the embedded server's handle,
+//! the downloads registry's locks and its progress sink, the addon-health
+//! counts, and what the event pump has already seen. That is the whole point:
+//! "who owns this, and when does it go away" has a single answer instead of
+//! one per `static`. The preferences file's lock is the one exception. It is
+//! a static of its own in `crate::prefs`, because it guards a file that
+//! outlives every instance, and the shutdown flush writes it after the state
+//! is gone.
 //!
-//! Lifetime: `crate::core::init` creates it -- or, before that, whichever
-//! call first needs it, because Dart subscribes to the event streams
-//! *before* `core_init` and buffering an event has to have somewhere to put
-//! it -- and `crate::core::shutdown` takes it out with [`take`]. The next
-//! `init` therefore starts from a fresh value and cannot inherit the
-//! previous instance's sinks, buffered events or ticker flag.
+//! Lifetime: `crate::core::init` creates it, unless a call that needs it
+//! comes first. Dart subscribes to the event streams *before* `core_init`,
+//! and buffering an event has to have somewhere to put it.
+//! `crate::core::shutdown` takes it out with [`take`]. The next `init`
+//! therefore starts from a fresh value and cannot inherit the previous
+//! instance's sinks, buffered events or ticker flag.
 //!
-//! It is handed out as an `Arc` and every lock is a field *inside* that
-//! value, never around it: a caller clones the `Arc` (a read lock held for
+//! It is handed out as an `Arc`, and every lock is a field *inside* that
+//! value, never around it. A caller clones the `Arc` (a read lock held for
 //! that long and no longer) and then takes only the one lock it needs, so
 //! nothing coarse is held across the server's blocking library calls. Work
-//! that outlives a shutdown -- the runtime-event pump, the downloads ticker
-//! -- keeps its own `Arc` and goes on addressing the state it was started
-//! for, which by then nobody else can reach; [`is_current`] is how such a
-//! task notices it has been retired.
+//! that outlives a shutdown, such as the runtime-event pump and the downloads
+//! ticker, keeps its own `Arc`. It goes on addressing the state it was
+//! started for, which by then nobody else can reach. [`is_current`] is how
+//! such a task notices it has been retired.
 
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -62,8 +62,8 @@ fn write() -> RwLockWriteGuard<'static, Option<Arc<AppState>>> {
     APP.write().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// The process state, creating it if there is none. For callers that
-/// *install* something (init, the server's start, a sink); an observer wants
+/// The process state, creating it if there is none. This is for callers that
+/// *install* something (init, the server's start, a sink). An observer wants
 /// [`current`], which does not resurrect a state after shutdown.
 pub fn state() -> Arc<AppState> {
     if let Some(app) = current() {
@@ -74,8 +74,8 @@ pub fn state() -> Arc<AppState> {
     Arc::clone(guard.get_or_insert_with(|| Arc::new(AppState::default())))
 }
 
-/// The process state, or `None` when nothing has created one -- which is
-/// what "not initialized" looks like to an observer.
+/// The process state, or `None` when nothing has created one. That is what
+/// "not initialized" looks like to an observer.
 pub fn current() -> Option<Arc<AppState>> {
     read().clone()
 }
