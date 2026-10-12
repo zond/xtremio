@@ -1142,7 +1142,12 @@ and opens that title's details page (on a television between the title and
 the choices; the remote still starts on Cancel), and the total ("5
 points"), all from the kept result, so nothing is fetched to draw it. Each
 kept source carries its id and type for that; a row kept before they were
-is worked out again once (`ForYouController.keptShape`). Under them, for a
+is worked out again once (`ForYouController.keptShape`). The sheet is as
+tall as it needs (`isScrollControlled`): at the default nine-sixteenths a
+television cut the last reason in half under the actions. Under them,
+**Add to library**, for films and series: the bookmark's own
+`AddToLibrary`, a saved title synced to the account, which the row hides
+at once and counts as a saved source next time. Then, for a
 film only, **Mark as watched**: stremio-core's own
 `MetaItemMarkAsWatched` (`CoreActions.metaItemMarkAsWatched`), which for a
 title the library has never seen makes a temporary item -- `temp` and

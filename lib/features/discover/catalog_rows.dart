@@ -75,6 +75,7 @@ class CatalogRows extends StatefulWidget {
   /// The For you long-press sheet's actions.
   static const String notInterestedLabel = 'Not interested';
   static const String markWatchedLabel = 'Mark as watched';
+  static const String addToLibraryLabel = 'Add to library';
 
   /// Rows requested beyond the visible ones, on each side.
   static const int overscanRows = 1;
@@ -398,6 +399,10 @@ class _CatalogRowsState extends State<CatalogRows> {
     final at = _boardFocus.hasFocus ? focused?.rect : null;
     final choice = await showModalBottomSheet<Object>(
       context: context,
+      // As tall as it needs: by default a sheet stops at nine-sixteenths of
+      // the screen, and on a television that cut the last reason in half
+      // under the actions, where the remote took it for the stop above them.
+      isScrollControlled: true,
       builder: (_) => _NotInterestedSheet(title: title),
     );
     final prefs = _prefs;
@@ -408,6 +413,11 @@ class _CatalogRowsState extends State<CatalogRows> {
       case _OpenSource(:final source):
         _openDetails(source.type, source.id);
         return;
+      case _ForYouChoice.addToLibrary:
+        // The bookmark's own action: a saved title, synced to the account,
+        // which the row leaves out and counts as a saved source.
+        unawaited(_client?.dispatch(CoreActions.addToLibrary(title.item.json)));
+        _forYou?.hide(title.item.id);
       case _ForYouChoice.markWatched:
         // Seen elsewhere: watched as a finished film is, in the engine's own
         // library state, which also makes it a source of the row.
@@ -1102,7 +1112,7 @@ class _ForYouPoster extends StatelessWidget {
 
 /// What the For you sheet was left with; null is Cancel, and an
 /// [_OpenSource] is one of its source lines.
-enum _ForYouChoice { markWatched, notInterested }
+enum _ForYouChoice { addToLibrary, markWatched, notInterested }
 
 /// A source line of the For you sheet was pressed: open that title.
 final class _OpenSource {
@@ -1115,11 +1125,12 @@ final class _OpenSource {
 /// `RemotePress` path as Continue watching): the title, then every source
 /// that suggested it, strongest first, each with what it counted for --
 /// `Watched and saved: Heat (×2)` -- each a stop that closes the sheet and
-/// opens that title's details page, and the total that ranked it; then,
-/// for a film, "Mark as watched" (seen elsewhere; a series' watched state
-/// is which episodes, the details page's to say), "Not interested", or
-/// Cancel, where a television's remote starts, so a
-/// key held a moment too long dismisses nothing. All of it is in the row's
+/// opens that title's details page, and the total that ranked it; then
+/// "Add to library" (the bookmark's action), for a film "Mark as
+/// watched" (seen elsewhere; a series' watched state is which episodes,
+/// the details page's to say), "Not interested", or Cancel, where a
+/// television's remote starts, so a key held a moment too long dismisses
+/// nothing. All of it is in the row's
 /// kept result, so nothing is fetched to draw it.
 class _NotInterestedSheet extends StatelessWidget {
   const _NotInterestedSheet({required this.title});
@@ -1176,6 +1187,11 @@ class _NotInterestedSheet extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bookmark_add_outlined),
+            title: const Text(CatalogRows.addToLibraryLabel),
+            onTap: () => Navigator.of(context).pop(_ForYouChoice.addToLibrary),
           ),
           if (title.item.type == 'movie')
             ListTile(

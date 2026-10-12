@@ -641,12 +641,14 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       upward.add(focused());
     }
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused(), 'Watched and saved: Both Film (×2)', reason: 'the top');
     expect(upward, [
       CatalogRows.notInterestedLabel,
       CatalogRows.markWatchedLabel,
+      CatalogRows.addToLibraryLabel,
       'Saved: Saved Film',
       'Watched: Watched Film',
-      'Watched and saved: Both Film (×2)',
       'Watched and saved: Both Film (×2)',
     ]);
     final downward = <String?>[];
@@ -657,7 +659,7 @@ void main() {
     expect(downward, [
       'Watched: Watched Film',
       'Saved: Saved Film',
-      CatalogRows.markWatchedLabel,
+      CatalogRows.addToLibraryLabel,
     ]);
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focused(), 'Saved: Saved Film');
@@ -698,6 +700,48 @@ void main() {
     await mount(tester, library: library, stored: {AppPrefs.forYouKey: kept});
     expect(fake.suggested, ['movie/tt-saved']);
   });
+
+  for (final type in ['movie', 'series']) {
+    testWidgets('Add to library is offered for a $type, saves it with the '
+        'bookmark\'s action, takes it off the row and makes it a saved '
+        'source', (tester) async {
+      fake
+        ..knows('Keep It', 'tt950', type: type)
+        ..knows('After', 'tt951')
+        ..suggests('tt-saved', ['Keep It'])
+        ..suggests('tt950', ['After']);
+      final library = [libraryItemJson('tt-saved', name: 'S')];
+      await mount(tester, library: library);
+      await tester.longPress(find.bySemanticsLabel(RegExp(r'^Keep It\.')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(CatalogRows.addToLibraryLabel));
+      await tester.pumpAndSettle();
+
+      final sent = core.dispatched.last.toJson();
+      expect(sent['field'], 'ctx');
+      expect(sent['action']['args']['action'], 'AddToLibrary');
+      expect(sent['action']['args']['args']['id'], 'tt950');
+      expect(sent['action']['args']['args']['type'], type);
+      expect(find.bySemanticsLabel(RegExp(r'^Keep It\.')), findsNothing);
+
+      // What the engine then holds: a saved title.
+      core.setState(
+        CoreField.libraryItems,
+        libraryItemsState([
+          ...library,
+          libraryItemJson(
+            'tt950',
+            type: type,
+            name: 'Keep It',
+            added: '2026-10-12T00:00:00Z',
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expect(fake.suggested, contains('$type/tt950'));
+      expect(tiles(tester), ['After. Because you saved Keep It']);
+    });
+  }
 
   group('the controller', () {
     test('works a kept row out again once it is a day old, and asks about '

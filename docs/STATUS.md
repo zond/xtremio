@@ -40,7 +40,8 @@ Android TV layout are all built. What is not is in the README's
   title that suggested it, strongest first, with what it counted for in
   words ("Watched and saved: Heat (×2)") -- each a link to that title's
   details page -- and the points that ranked it;
-  then, for a film, **Mark as watched** (seen elsewhere: the film is
+  then **Add to library** (as the bookmark does; the title leaves the row
+  and becomes a saved source), for a film **Mark as watched** (seen elsewhere: the film is
   watched as one finished in the player is, in Stremio's own library
   state, without being added to the library, and becomes a source of the
   row), **Not interested** and **Cancel**. A series has no Mark as
