@@ -5,12 +5,12 @@ import '../../core/faces.dart';
 /// The happy face and the sad one, beside the bookmark: what the viewer
 /// thought of a title, for the For you row.
 ///
-/// At rest both are drawn, unfilled. Pressing one marks the title: that
-/// face is drawn filled in the accent colour and the other goes, so what
-/// is left says what was said. Pressing it again takes the mark off and
-/// both come back. [onFace] is told the face the title should have now,
-/// null for none. A title dismissed from For you shows both, unfilled;
-/// liking it replaces the dismissal.
+/// Both are drawn unfilled at rest. Pressing one marks the title: that face
+/// is drawn filled in the accent colour and the other goes, so what is left
+/// says what was said. Pressing it again takes the mark off and both come
+/// back. [onFace] is told the face the title should have now, null for none.
+/// A title dismissed from For you shows both, unfilled; liking it replaces
+/// the dismissal.
 abstract final class FaceButtons {
   static const String likeTooltip = 'I liked this';
   static const String likedTooltip = 'Liked, press to clear';
@@ -35,10 +35,10 @@ abstract final class FaceButtons {
     FocusNode? focusNode,
   }) {
     final on = current == Face.like;
-    // On, the face is the grin on a filled accent disc: Material's filled
-    // sentiment glyphs cut the mouth so fine that both read as a neutral
-    // face from a sofa (zond, 2026-10-12), so the expression stays the
-    // outlined one and the disc says it is on.
+    // When on, the face is the outlined grin on a filled accent disc.
+    // Material's filled sentiment glyphs cut the mouth so fine that both read
+    // as a neutral face from a sofa (zond, 2026-10-12). So the expression
+    // stays the outlined one, and the disc says it is on.
     return IconButton.filled(
       focusNode: focusNode,
       tooltip: on ? likedTooltip : likeTooltip,

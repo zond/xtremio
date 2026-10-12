@@ -1,12 +1,12 @@
 /// How a title scored, as the details header draws it: IMDb, TMDB, Rotten
 /// Tomatoes' Tomatometer ("RT") and its Popcornmeter ("Popcorn").
 ///
-/// IMDb comes first and comes at once, from what the addon sent with the
-/// title ([MetaItem.imdbRating]); the other three come from the
-/// xtremio-xervice server ([RatingsService]) a moment later, or from what
-/// this device remembers of the last time. Whatever is known is drawn and
-/// nothing waits for the rest: a score the server never sends is a score
-/// that is not on the screen, never a gap or a dash.
+/// IMDb comes first and at once, from what the addon sent with the title
+/// ([MetaItem.imdbRating]). The other three come a moment later from the
+/// xtremio-xervice server ([RatingsService]), or from what this device
+/// remembers of the last time. Whatever is known is drawn, and nothing waits
+/// for the rest. A score the server never sends is not on the screen, never a
+/// gap or a dash.
 ///
 /// The labels are words rather than the sources' logos, which are their
 /// owners' marks and not this app's to ship.
@@ -18,9 +18,9 @@ import '../../core/core.dart';
 import '../ratings/xtremio_ratings.dart';
 import 'details_header.dart' show ImdbRating;
 
-/// Supplies where the scores are asked, for the details screen: a test
-/// answers what the server would without a network. Absent, the screen
-/// asks the xtremio-xervice server ([XtremioRatings]).
+/// Supplies where the details screen asks for scores, so a test can answer
+/// what the server would without a network. Without one, the screen asks the
+/// xtremio-xervice server ([XtremioRatings]).
 class RatingsScope extends InheritedWidget {
   const RatingsScope({super.key, required this.provider, required super.child});
 
@@ -41,8 +41,8 @@ typedef ShownScore = ({String label, String value, String spoken});
 /// What the header shows, in the order it shows it.
 ///
 /// IMDb is the addon's rating while there is one, and MDBList's only when
-/// there is not: the addon's arrives with the page, and a number that
-/// changed by a tenth a second later would read as a mistake.
+/// there is not. The addon's arrives with the page, and a number that changed
+/// by a tenth a second later would read as a mistake.
 List<ShownScore> shownScores(MetaItem meta, TitleRatings? ratings) {
   final imdb = meta.imdbRating ?? _tenths(ratings?.imdb);
   final tmdb = _tenths(ratings?.tmdb);
@@ -71,9 +71,9 @@ String? _tenths(TitleScore? score) => score?.score.toStringAsFixed(1);
 String? _percent(TitleScore? score) =>
     score == null ? null : '${score.score.round()}%';
 
-/// The scores on a phone or a desktop: the IMDb rating as it has always
-/// been drawn -- a link to the title's page when the addon gave one --
-/// and the others after it, each its number and then its word.
+/// The scores on a phone or a desktop. The IMDb rating is drawn as it always
+/// has been, a link to the title's page when the addon gave one. The others
+/// follow it, each its number and then its word.
 class DetailsScores extends StatelessWidget {
   const DetailsScores({super.key, required this.meta, this.ratings});
 
@@ -96,7 +96,7 @@ class DetailsScores extends StatelessWidget {
           if (score.label == 'IMDb')
             ImdbRating(
               rating: score.value,
-              // The address only with the addon's own rating: it is never
+              // The link comes only with the addon's own rating. It is never
               // built here out of an id ([ImdbRating]).
               url: meta.imdbRating == null ? null : meta.imdbUrl,
             )

@@ -8,21 +8,21 @@ part of 'meta_details_screen.dart';
 /// state is reloaded while the call runs, so the tile the user tapped is
 /// a different widget by the time it comes back.
 ///
-/// **A torrent, a link or a Drive file has one.** A torrent is keyed by
-/// its info hash and file index, a link by its URL, a linked Drive file
-/// by its `xtremio-drive:` URL; every other stream of a video shares
-/// `$videoId|null|null` -- which is harmless only because
-/// [StreamDownloads.starter] refuses anything else and so no such pin
-/// is ever in flight.
+/// **A torrent, a link or a Drive file has one.** A torrent is keyed by its
+/// info hash and file index, a link by its URL, a linked Drive file by its
+/// `xtremio-drive:` URL. Every other stream of a video shares
+/// `$videoId|null|null`. That is harmless only because
+/// [StreamDownloads.starter] refuses anything else, so no such pin is ever in
+/// flight.
 String _streamKey(String videoId, StreamInfo stream) =>
     '$videoId|${stream.infoHash ?? stream.url}|${stream.fileIdx}';
 
 /// Taking a source offline from this screen, and removing it again.
 extension _MetaDetailsDownloads on _MetaDetailsScreenState {
   /// The download of one video, whatever source it was taken from. The
-  /// registry is keyed by meta and video, so there is at most one, and a
-  /// stream tile reads it two ways: as *its* download when the sources
-  /// match, and as the download it would replace when they do not.
+  /// registry is keyed by meta and video, so there is at most one. A stream
+  /// tile reads it two ways: as *its* download when the sources match, and as
+  /// the download it would replace when they do not.
   DownloadView? _videoDownload(String videoId) =>
       _downloads?.forVideo(widget.id, videoId);
 
@@ -32,14 +32,15 @@ extension _MetaDetailsDownloads on _MetaDetailsScreenState {
   /// title stays out of the library, and how offline progress is recorded
   /// without it.
   ///
-  /// A download of the same video from another release, finished or not,
-  /// is asked about first: the pin replaces it, and the Rust side deletes
-  /// what it had. Nothing undoes that, so it is not something a stray tap
-  /// gets to do -- and the button itself is an ordinary download button,
-  /// so this question is the only place the replacement is said.
+  /// The viewer is asked first when a download of the same video from another
+  /// release exists, finished or not. The pin replaces it, and the Rust side
+  /// deletes what it had. Nothing undoes that, so a stray tap must not do it.
+  /// The button itself is an ordinary download button, so this question is
+  /// the only place the replacement is said.
+  ///
   /// [group] is null for a linked Drive file, which has no addon request to
-  /// record the pin against: the row carries [driveStreamRequest] instead,
-  /// so a play of the download keeps progress the way a streamed Drive play
+  /// record the pin against. The row carries [driveStreamRequest] instead, so
+  /// a play of the download keeps progress the way a streamed Drive play
   /// does.
   Future<void> _download(
     MetaDetailsState state,
@@ -110,8 +111,8 @@ extension _MetaDetailsDownloads on _MetaDetailsScreenState {
   }
 
   /// Drops the download of [entry], and its bytes, once the user has
-  /// confirmed -- the Downloads list's own question, asked here so the tile
-  /// that started a download is the tile that undoes it.
+  /// confirmed. The question is the Downloads list's own, asked here so the
+  /// tile that started a download is the tile that undoes it.
   ///
   /// The dialog is modal, so it is the guard against a second press while
   /// it stands, and a dismissed one removes nothing.
@@ -135,9 +136,9 @@ extension _MetaDetailsDownloads on _MetaDetailsScreenState {
 }
 
 /// Asks before a download replaces a finished one of the same video taken
-/// from another release. Popping `true` goes ahead; the file that is on
-/// the device is deleted by the Rust side as the new pin is taken, and
-/// there is no undo, which is why it is named here.
+/// from another release. Popping `true` goes ahead. The Rust side deletes the
+/// file on the device as the new pin is taken. There is no undo, which is why
+/// it is named here.
 class _ReplaceDialog extends StatelessWidget {
   const _ReplaceDialog({required this.replaced});
 

@@ -6,11 +6,12 @@ import 'package:flutter/material.dart';
 /// Films only. A series' watched state is which episodes, and its episode
 /// list is where that is seen and changed.
 ///
-/// Drawn the way the faces are ([IconButton.filled], `face_buttons.dart`):
-/// unwatched an outlined check, watched a filled check on the accent disc.
-/// Pressing it sends stremio-core's `MetaItemMarkAsWatched` with the other
-/// value, which also works for a film the library has never seen (it makes
-/// the temporary item a finished playback would).
+/// It is drawn the way the faces are ([IconButton.filled],
+/// `face_buttons.dart`): an outlined check when unwatched, a filled check on
+/// the accent disc when watched. Pressing it sends stremio-core's
+/// `MetaItemMarkAsWatched` with the other value. That also works for a film
+/// the library has never seen (it makes the temporary item a finished
+/// playback would).
 abstract final class WatchedButton {
   static const String markTooltip = 'Mark as watched';
   static const String watchedTooltip = 'Watched, press to clear';

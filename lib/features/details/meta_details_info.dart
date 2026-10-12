@@ -53,15 +53,15 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
         expandedHeight: isTv ? null : (isWide ? 300 : 220),
         backgroundColor: isTv ? Colors.transparent : null,
         scrolledUnderElevation: isTv ? 0 : null,
-        // The way out, and it leaves rather than going through
-        // `Navigator.maybePop` the way the bar's own [BackButton] does:
-        // on a television that press is answered by the ladder below,
-        // which puts the open row of sources away and leaves the viewer
-        // on the screen they aimed to leave. Back is the key that comes
-        // down a ladder, because it is one key for every layer; this is a
-        // control the viewer pointed at. Drawn only where there is
-        // something to go back to, as the implied one is, so it is never
-        // an arrow that does nothing.
+        // The way out. It leaves outright instead of going through
+        // `Navigator.maybePop` the way the bar's own [BackButton] does. On a
+        // television that press is answered by the ladder below, which puts
+        // the open row of sources away and leaves the viewer on the screen
+        // they aimed to leave. Back is the key that comes down a ladder,
+        // because it is one key for every layer. This arrow is a control the
+        // viewer pointed at. It is drawn only where there is something to go
+        // back to, as the implied one is, so it is never an arrow that does
+        // nothing.
         leading: Navigator.of(context).canPop()
             ? _AboveTheLadder(
                 isTv: isTv,
@@ -203,13 +203,13 @@ extension _MetaDetailsInfo on _MetaDetailsScreenState {
           ),
         ],
       ],
-      // The same films a television gets, as an ordinary section rather
-      // than a rung: this column is what the title *is* -- its name, its
-      // description, its episodes -- and what it is like belongs at the
-      // end of it. Below the breakpoint that puts it between the episodes
-      // and the sources, and on a wide layout at the foot of the left
-      // pane, which is the same place in both. It is drawn only where
-      // there is no ladder: the television has one.
+      // The same films a television gets, as an ordinary section rather than
+      // a rung. This column is what the title *is* (its name, its
+      // description, its episodes), and what it is like belongs at the end of
+      // it. That puts it between the episodes and the sources below the
+      // breakpoint, and at the foot of the left pane on a wide layout: the
+      // same place in both. It is drawn only where there is no ladder, since
+      // the television has one.
       if (!isTv && _hasSimilar)
         SliverToBoxAdapter(
           child: SimilarSection(titles: _similar, onOpen: _openSimilar),
