@@ -82,6 +82,7 @@ class PlayerScreen extends StatefulWidget {
     this.subtitlesPath,
     this.driveOpener = const ServerDriveFileOpener(),
     this.now = DateTime.now,
+    this.fullscreen = false,
   });
 
   /// Raw stream JSON as it came out of `meta_details.streams` (or a
@@ -106,6 +107,11 @@ class PlayerScreen extends StatefulWidget {
   /// The wall clock the cast panel's rates and the cast's buffering time are
   /// read on ([CastStatsOverlay], [CastBuffering]): a test winds it.
   final DateTime Function() now;
+
+  /// The window is already fullscreen when this player opens: the player it
+  /// replaces was, and handed over to this one for the next episode. This
+  /// player takes it over as it is, without entering it again.
+  final bool fullscreen;
 
   /// The name every route that mounts this screen is pushed under, so
   /// whoever is about to open something over the player can tell there is
@@ -1169,10 +1175,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // A television has no window to be one part of. The video fills the screen
     // from the moment the player opens, with the system bars out of the way,
     // until the player is left. [dispose] leaves fullscreen, unless this screen
-    // is handing over to the next episode's.
+    // is handing over to the next episode's. Anywhere else the player opens
+    // fullscreen only when it takes over from one that was
+    // ([PlayerScreen.fullscreen]).
     if (_isTv) {
       _fullscreenOn = true;
       _fullscreen?.enter().ignore();
+    } else if (widget.fullscreen) {
+      _fullscreenOn = true;
     }
 
     _wireCast(CastScope.of(context), CastScope.lanMediaOf(context));
@@ -2409,11 +2419,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // with it.
     _wakeCastPrepare();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
-    // A television leaves fullscreen only when the player is really over: on
-    // a hand-over the replacement entered fullscreen while this screen was
-    // alive and is disposed after it, so exiting here would drop the new
-    // player out of fullscreen.
-    if (_fullscreenOn && !(_isTv && _handedOver)) _fullscreen?.exit().ignore();
+    // Fullscreen ends only when the player is really over. On a hand-over
+    // the next episode's player has it: a television's entered it, and any
+    // other took it over ([PlayerScreen.fullscreen]). That player is built
+    // while this screen is alive, so exiting here would drop it out of
+    // fullscreen.
+    if (_fullscreenOn && !_handedOver) _fullscreen?.exit().ignore();
     // The rate goes back whatever else is true: a display held at 24 Hz by a
     // player that no longer exists judders every menu. A hand-over has
     // already released it ([_handOver]), so this is a no-op there.

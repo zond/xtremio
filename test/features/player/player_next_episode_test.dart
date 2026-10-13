@@ -171,6 +171,28 @@ void main() {
     );
   });
 
+  testWidgets('a fullscreen window stays fullscreen into the next episode', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithNext();
+    await harness.pump(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+    expect(harness.fullscreen.enters, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+    expect(harness.engines, hasLength(2), reason: 'the next episode plays');
+    expect(harness.fullscreen.exits, 0, reason: 'the window stays fullscreen');
+
+    // The next episode's player knows the window is fullscreen: F leaves it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+    expect(harness.fullscreen.exits, 1);
+    expect(harness.fullscreen.enters, 1);
+  });
+
   testWidgets('the next episode\'s player keeps looking for receivers', (
     tester,
   ) async {

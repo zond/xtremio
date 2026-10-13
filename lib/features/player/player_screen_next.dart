@@ -216,6 +216,7 @@ extension _PlayerNextEpisode on _PlayerScreenState {
           metaRequest: state.metaRequest ?? widget.metaRequest,
           subtitlesPath: subtitlesPath?.copyWith(id: next.id),
           driveOpener: widget.driveOpener,
+          fullscreen: _fullscreenOn,
         ),
       ),
     );
