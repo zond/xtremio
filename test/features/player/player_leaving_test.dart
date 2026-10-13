@@ -93,6 +93,25 @@ void main() {
     );
   });
 
+  testWidgets('an episode left before it started is the one the library '
+      'goes on with', (tester) async {
+    // The next episode is still downloading its first bytes, so mpv knows no
+    // length and the player has reported no time. Leaving tells the core the
+    // viewer is at the start of this episode, which moves continue-watching
+    // on to it.
+    final harness = PlayerHarness();
+    await harness.pumpPushed(tester);
+    await pumpEvents(tester);
+    expect(harness.lastPlayerArgs('TimeChanged'), isNull);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(harness.lastPlayerArgs('TimeChanged'), isNotNull);
+    expect(harness.lastPlayerArgs('TimeChanged'), containsPair('time', 0));
+    expect(harness.lastPlayerArgs('TimeChanged'), containsPair('duration', 0));
+  });
+
   testWidgets('an end of file during the wait does not re-open the stream', (
     tester,
   ) async {

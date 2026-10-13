@@ -525,6 +525,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// last `Seek` or `TimeChanged` this screen sent. The core moves it back
   /// only for a `Seek` ([_reportTime]). Null with no stream.
   Duration? _coreTime;
+
+  /// This stream has been reported to the core at least once ([_reportTime],
+  /// [_flushTime]). False from each open until the first report.
+  bool _reportedToCore = false;
   bool? _lastPlaying;
   bool _playing = false;
   bool _buffering = false;
@@ -1348,6 +1352,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _position.value = start;
     _reportedPosition = null;
     _coreTime = Duration(milliseconds: progress?.timeOffset ?? 0);
+    _reportedToCore = false;
     _cancelOpenRetry();
     _openState = state;
     _openStart = start;
@@ -1465,6 +1470,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _lastReported = position;
     final core = _coreTime;
     _coreTime = position;
+    _reportedToCore = true;
     _client?.dispatch(
       core != null && position < core
           ? CoreActions.playerSeek(
@@ -1482,8 +1488,22 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// Tells the core the position now, throttle or not: the last report
   /// before the screen lets go ([_leave]).
+  ///
+  /// **A video left before it started is reported too, at its start.** Until
+  /// mpv knows the length nothing is reported ([_reportTime]), and the core
+  /// moves its library item to another episode only on a report. Without
+  /// this, a next episode left while its first bytes downloaded kept
+  /// continue-watching on the episode before it. A length of zero is the
+  /// core's "not known": it updates neither the length nor the watched mark.
   void _flushTime() {
     _lastReported = null;
+    if (_opened != null && !_reportedToCore && _duration == Duration.zero) {
+      _reportedToCore = true;
+      _client?.dispatch(
+        CoreActions.playerTimeChanged(time: 0, duration: 0, device: _device),
+      );
+      return;
+    }
     _reportTime(_position.value);
   }
 
@@ -2117,6 +2137,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
     if (_opened != null && _duration > Duration.zero) {
       _coreTime = clamped;
+      _reportedToCore = true;
       _client?.dispatch(
         CoreActions.playerSeek(
           time: clamped.inMilliseconds,
