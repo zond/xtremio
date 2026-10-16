@@ -22,8 +22,14 @@ import androidx.core.app.ServiceCompat
  * user leaves the app is the *right to keep running*, and a `dataSync`
  * foreground service is how an app asks for it. Everything about which
  * downloads exist and how far along they are is decided on the Dart side
- * ([DownloadsChannel]), which starts this, feeds it a line of text and a
- * percentage, and stops it as soon as nothing is unfinished.
+ * ([DownloadsChannel]), which starts this, feeds it two lines of text, a
+ * percentage and what each download is doing (shown when the notification is
+ * pulled open), and stops it as soon as nothing is on its way.
+ *
+ * It lives exactly as long as a download is on its way: Dart starts it on the
+ * first and stops it after the last. Each update re-posts the same ongoing
+ * notification through [startForeground], so one swiped away (Android 14 lets
+ * a user dismiss it) is back at the next update.
  *
  * What it does not promise: the system may still kill the process under
  * memory pressure, and Doze or the per-app battery optimisation may throttle
@@ -141,6 +147,13 @@ class DownloadsService : Service() {
             .setProgress(bar.max, bar.current, bar.indeterminate)
             .setContentIntent(openDownloads())
             .addAction(0, content.cancelLabel, cancelAll())
+            .apply {
+                // Pulled open: what each download is doing, in the words of
+                // the player's buffering card.
+                DownloadsNotificationText.expanded(content.blocks)?.let { text ->
+                    setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                }
+            }
             .build()
     }
 
@@ -175,6 +188,7 @@ class DownloadsService : Service() {
         val text: String = "",
         val progress: Int = -1,
         val cancelLabel: String = "Cancel all",
+        val blocks: List<DownloadBlock> = emptyList(),
     ) {
         companion object {
             fun from(intent: Intent): Content = Content(
@@ -182,6 +196,11 @@ class DownloadsService : Service() {
                 text = intent.getStringExtra(EXTRA_TEXT).orEmpty(),
                 progress = intent.getIntExtra(EXTRA_PROGRESS, -1),
                 cancelLabel = intent.getStringExtra(EXTRA_CANCEL_LABEL) ?: "Cancel all",
+                blocks = DownloadsNotificationText.blocks(
+                    intent.getStringArrayListExtra(EXTRA_NAMES).orEmpty(),
+                    intent.getIntegerArrayListExtra(EXTRA_LINE_COUNTS).orEmpty(),
+                    intent.getStringArrayListExtra(EXTRA_LINES).orEmpty(),
+                ),
             )
         }
     }
@@ -198,6 +217,9 @@ class DownloadsService : Service() {
         const val EXTRA_TEXT = "com.zond.xtremio.downloads.TEXT"
         const val EXTRA_PROGRESS = "com.zond.xtremio.downloads.PROGRESS"
         const val EXTRA_CANCEL_LABEL = "com.zond.xtremio.downloads.CANCEL_LABEL"
+        const val EXTRA_NAMES = "com.zond.xtremio.downloads.NAMES"
+        const val EXTRA_LINE_COUNTS = "com.zond.xtremio.downloads.LINE_COUNTS"
+        const val EXTRA_LINES = "com.zond.xtremio.downloads.LINES"
 
         /** Set on the intent the notification's body opens the app with. */
         const val EXTRA_OPEN_DOWNLOADS = "com.zond.xtremio.downloads.OPEN"

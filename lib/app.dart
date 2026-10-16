@@ -387,6 +387,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _downloadsService = DownloadsForegroundService(
       client: _downloads,
       openDownloads: _openDownloads,
+      details: _downloadDetail,
     );
     unawaited(_downloadsService.start());
     _ownsCast = widget.cast == null;

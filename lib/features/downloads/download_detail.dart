@@ -38,6 +38,7 @@ final class DownloadDetail {
     this.piece,
     this.speed,
     this.percent,
+    this.arriving = false,
   });
 
   /// What [view] is doing, given the server's latest `stats.json` for its
@@ -68,6 +69,7 @@ final class DownloadDetail {
         transfer: speed == null ? null : TorrentProgressCard.formatSpeed(speed),
         speed: speed,
         percent: percent,
+        arriving: view.state == DownloadState.downloading,
       );
     }
     final speed = stats.downloadSpeed;
@@ -80,17 +82,22 @@ final class DownloadDetail {
       return kept.isEmpty ? null : kept.join(' · ');
     }
 
-    DownloadDetail as(String status, String? transfer, {String? piece}) =>
-        DownloadDetail(
-          key: view.key,
-          name: view.name,
-          status: status,
-          bytes: bytes,
-          transfer: transfer,
-          piece: piece,
-          speed: speed,
-          percent: percent,
-        );
+    DownloadDetail as(
+      String status,
+      String? transfer, {
+      String? piece,
+      bool arriving = false,
+    }) => DownloadDetail(
+      key: view.key,
+      name: view.name,
+      status: status,
+      bytes: bytes,
+      transfer: transfer,
+      piece: piece,
+      speed: speed,
+      percent: percent,
+      arriving: arriving,
+    );
 
     switch (stats.phase) {
       case TorrentPhase.error:
@@ -130,6 +137,7 @@ final class DownloadDetail {
           piece: waiting == null || waiting.verified
               ? null
               : TorrentProgressCard.pieceWaitOf(waiting),
+          arriving: true,
         );
     }
   }
@@ -162,6 +170,10 @@ final class DownloadDetail {
   /// `0..100` of the file, or null while its length is not known.
   final int? percent;
 
+  /// Whether [status] is the plain downloading word, so a summary that
+  /// already says "Downloading" need not say it again.
+  final bool arriving;
+
   /// What a Downloads row says under its bar: the piece when a reader waits
   /// on one, else the phase, then the transfer and the bytes.
   String get line => [piece ?? status, ?transfer, bytes].join(' · ');
@@ -179,11 +191,21 @@ final class DownloadDetail {
       other.bytes == bytes &&
       other.piece == piece &&
       other.speed == speed &&
-      other.percent == percent;
+      other.percent == percent &&
+      other.arriving == arriving;
 
   @override
-  int get hashCode =>
-      Object.hash(key, name, status, transfer, bytes, piece, speed, percent);
+  int get hashCode => Object.hash(
+    key,
+    name,
+    status,
+    transfer,
+    bytes,
+    piece,
+    speed,
+    percent,
+    arriving,
+  );
 
   @override
   String toString() => 'DownloadDetail($key: $line)';

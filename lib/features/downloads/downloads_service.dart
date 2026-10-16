@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import '../player/torrent_progress_card.dart';
+import 'download_detail.dart';
 import 'downloads_listings.dart';
 
 /// What is being fetched right now, as the notification puts it: how many
@@ -49,7 +51,7 @@ class DownloadsSummary {
     var size = 0;
     var measured = true;
     for (final view in registry.items.values) {
-      if (!view.isUnfinished || view.state == DownloadState.error) continue;
+      if (!isOnItsWay(view)) continue;
       active++;
       downloaded += view.downloaded;
       size += view.size;
@@ -93,15 +95,6 @@ class DownloadsSummary {
         : 'Waiting to start';
   }
 
-  /// What the platform side is handed to draw. `progress` is `-1` for the
-  /// indeterminate bar, so the Kotlin side needs no null handling.
-  Map<String, Object?> toNotification() => {
-    'title': title,
-    'text': text,
-    'progress': percent ?? -1,
-    'cancelLabel': kDownloadsCancelAllAction,
-  };
-
   @override
   bool operator ==(Object other) =>
       other is DownloadsSummary &&
@@ -115,6 +108,122 @@ class DownloadsSummary {
   @override
   String toString() =>
       'DownloadsSummary($active active, $downloaded/$size bytes)';
+}
+
+/// What the notification says, collapsed and pulled open: [DownloadsSummary]
+/// for the whole, and a [DownloadDetail] per download on its way for what
+/// each is doing. Compared whole, so an unchanged tick sends nothing.
+@immutable
+class DownloadsNotice {
+  const DownloadsNotice({
+    required this.title,
+    required this.text,
+    required this.progress,
+    this.blocks = const [],
+  });
+
+  /// Nothing to say.
+  static const DownloadsNotice none = DownloadsNotice(
+    title: '',
+    text: '',
+    progress: -1,
+  );
+
+  /// How many downloads get a block of their own when pulled open. The rest
+  /// are counted in one line: a notification is not the Downloads screen.
+  static const int shownBlocks = 5;
+
+  /// The notice for the downloads on their way in [registry], each described
+  /// by [detailOf] (the app's poller; the registry's words alone without
+  /// one).
+  factory DownloadsNotice.of(
+    DownloadsRegistry registry, {
+    DownloadDetail Function(DownloadView view)? detailOf,
+  }) {
+    final summary = DownloadsSummary.of(registry);
+    final describe = detailOf ?? DownloadDetail.of;
+    final details = [
+      for (final view in registry.newestFirst)
+        if (isOnItsWay(view)) describe(view),
+    ];
+    // The whole speed, when anything is arriving. A zero here is left to the
+    // expanded lines, where it sits beside the peers it is about.
+    final total = details.fold<double>(0, (sum, d) => sum + (d.speed ?? 0));
+    final speed = total > 0 ? TorrentProgressCard.formatSpeed(total) : null;
+    final percent = summary.percent;
+    final single = details.length == 1 ? details.single : null;
+    final text = [
+      if (single != null && !single.arriving) single.status,
+      if (percent != null) '$percent%',
+      ?speed,
+    ].join(' · ');
+    final more = details.length - shownBlocks;
+    return DownloadsNotice(
+      title: single != null && single.name.isNotEmpty
+          ? 'Downloading ${single.name}'
+          : summary.title,
+      text: text.isEmpty ? summary.text : text,
+      progress: percent ?? -1,
+      blocks: [
+        for (final detail in details.take(shownBlocks))
+          (name: detail.name, lines: detail.lines),
+        if (more > 0)
+          (
+            name: more == 1 ? 'And 1 more title' : 'And $more more titles',
+            lines: const <String>[],
+          ),
+      ],
+    );
+  }
+
+  /// The collapsed notification's two lines: `Downloading A Film` over
+  /// `32% · 1.2 MB/s`.
+  final String title;
+  final String text;
+
+  /// `0..100` of everything on its way, `-1` for the bar with no end.
+  final int progress;
+
+  /// One per download when pulled open: its title and its
+  /// [DownloadDetail.lines].
+  final List<({String name, List<String> lines})> blocks;
+
+  /// What the platform side is handed to draw. `progress` is `-1` for the
+  /// indeterminate bar, so the Kotlin side needs no null handling. The
+  /// blocks go flat (`names`, `lineCounts`, `lines`) because an intent
+  /// carries string lists and not nested ones. Titles and numbers only:
+  /// nothing here names a stream or where it comes from.
+  Map<String, Object?> toNotification() => {
+    'title': title,
+    'text': text,
+    'progress': progress,
+    'cancelLabel': kDownloadsCancelAllAction,
+    'names': [for (final block in blocks) block.name],
+    'lineCounts': [for (final block in blocks) block.lines.length],
+    'lines': [for (final block in blocks) ...block.lines],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DownloadsNotice &&
+      other.title == title &&
+      other.text == text &&
+      other.progress == progress &&
+      listEquals(other.blocks.map((b) => b.name).toList(), [
+        for (final block in blocks) block.name,
+      ]) &&
+      listEquals(other.blocks.expand((b) => b.lines).toList(), [
+        for (final block in blocks) ...block.lines,
+      ]) &&
+      listEquals(other.blocks.map((b) => b.lines.length).toList(), [
+        for (final block in blocks) block.lines.length,
+      ]);
+
+  @override
+  int get hashCode => Object.hash(title, text, progress, blocks.length);
+
+  @override
+  String toString() => 'DownloadsNotice($title: $text)';
 }
 
 /// The only action on the notification, and the only one the registry can
@@ -173,6 +282,8 @@ class DownloadsForegroundService {
     required this.client,
     this.channel = defaultChannel,
     this.openDownloads,
+    this.details,
+    this.updateGap = defaultUpdateGap,
     TargetPlatform? platform,
   }) : isSupported =
            (platform ?? defaultTargetPlatform) == TargetPlatform.android;
@@ -196,13 +307,31 @@ class DownloadsForegroundService {
   /// Android, and then nothing here ever touches the channel.
   final bool isSupported;
 
+  /// What each download is doing, for the lines the notification shows
+  /// when pulled open. The app's one poller, shared with the Downloads
+  /// rows. Without it the notification says what the registry says.
+  final DownloadDetailPoller? details;
+
+  /// The least time between two `update`s. The feed moves once a second and
+  /// the poller every two, and a notification redrawn faster than it can be
+  /// read costs battery for nothing. A start and a stop are never held.
+  final Duration updateGap;
+
+  static const Duration defaultUpdateGap = Duration(seconds: 2);
+
+  /// Open while an `update` was sent less than [updateGap] ago.
+  Timer? _gate;
+
+  /// A change arrived while [_gate] was open: send it when it closes.
+  bool _held = false;
+
   StreamSubscription<DownloadsUpdate>? _updates;
   DownloadsRegistry _registry = DownloadsRegistry.empty;
   final DownloadsListings _listings = DownloadsListings();
 
   /// What the notification currently says, so an unchanged tick is not sent
   /// over the channel once a second for nothing.
-  DownloadsSummary _shown = DownloadsSummary.idle;
+  DownloadsNotice _shown = DownloadsNotice.none;
 
   bool _running = false;
   bool _available = true;
@@ -240,6 +369,7 @@ class DownloadsForegroundService {
   Future<void> start() async {
     if (!isSupported || _disposed) return;
     channel.setMethodCallHandler(_onPlatformCall);
+    details?.addListener(_onDetails);
     try {
       _updates = client.updates.listen(_onUpdate, onError: _onFeedError);
     } catch (error) {
@@ -305,6 +435,9 @@ class DownloadsForegroundService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    details?.removeListener(_onDetails);
+    _gate?.cancel();
+    _gate = null;
     await _updates?.cancel();
     _updates = null;
     if (!isSupported) return;
@@ -330,6 +463,12 @@ class DownloadsForegroundService {
     unawaited(_sync());
   }
 
+  /// The poller has new numbers for a download.
+  void _onDetails() {
+    if (_disposed || !_running) return;
+    unawaited(_sync());
+  }
+
   /// The feed died (the Rust side handed its one sink to another client). The
   /// app builds one client, so this is a broken bridge rather than a rival.
   /// What the notification says stands until the next listing (a cancel from
@@ -350,25 +489,51 @@ class DownloadsForegroundService {
     final summary = DownloadsSummary.of(_registry);
     if (summary.isIdle) {
       _resuming = false;
+      _closeGate();
       if (!_running) return;
       _running = false;
-      _shown = DownloadsSummary.idle;
+      _shown = DownloadsNotice.none;
       await _invoke('stop');
       return;
     }
-    if (_running && summary == _shown) return;
+    final notice = DownloadsNotice.of(_registry, detailOf: details?.detailOf);
+    if (_running && notice == _shown) return;
     final starting = !_running;
-    _shown = summary;
+    if (!starting && _gate != null) {
+      // Sent too recently: the gate sends the newest when it closes.
+      _held = true;
+      return;
+    }
+    _shown = notice;
     _running = true;
     if (starting && !_resuming) await _requestNotifications();
+    _openGate();
     final sent = await _invoke(
       starting ? 'start' : 'update',
-      summary.toNotification(),
+      notice.toNotification(),
     );
     // A service the platform refused to start is not running; the next
     // change asks again, by which time the app may be in the foreground.
     if (starting && !sent) _running = false;
     if (starting && sent) _resuming = false;
+  }
+
+  /// Holds `update`s back for [updateGap] from now.
+  void _openGate() {
+    if (updateGap <= Duration.zero) return;
+    _gate?.cancel();
+    _gate = Timer(updateGap, () {
+      _gate = null;
+      if (!_held || _disposed) return;
+      _held = false;
+      unawaited(_sync());
+    });
+  }
+
+  void _closeGate() {
+    _gate?.cancel();
+    _gate = null;
+    _held = false;
   }
 
   /// Asks for `POST_NOTIFICATIONS`, once, and only now: a download has actually
@@ -399,8 +564,9 @@ class DownloadsForegroundService {
           'for the app to be opened',
     );
     _running = false;
-    _shown = DownloadsSummary.idle;
+    _shown = DownloadsNotice.none;
     _resuming = true;
+    _closeGate();
   }
 
   /// Invokes [method] for its effect: true when the platform side took it.

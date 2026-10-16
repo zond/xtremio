@@ -20,7 +20,8 @@ import io.flutter.plugin.common.MethodChannel
  * of device this is. This one is a running conversation about downloads.
  *
  * From Dart: `start` and `update` (the notification's title, text,
- * percentage and action label), `stop`, `requestNotificationPermission`,
+ * percentage and action label, and each download's lines for the expanded
+ * view), `stop`, `requestNotificationPermission`,
  * and `takePendingOpen` for a tap that arrived before Dart had a handler
  * installed. To Dart: `open` (the notification was tapped) and `cancelAll`
  * (its action was pressed). The registry is behind the FFI, so only Dart
@@ -86,6 +87,21 @@ class DownloadsChannel(
             putExtra(
                 DownloadsService.EXTRA_CANCEL_LABEL,
                 call.argument<String>("cancelLabel"),
+            )
+            // What each download is doing, flat: an intent carries string
+            // lists, not nested ones. [DownloadsNotificationText.blocks]
+            // puts them back together.
+            putStringArrayListExtra(
+                DownloadsService.EXTRA_NAMES,
+                ArrayList(call.argument<List<String>>("names").orEmpty()),
+            )
+            putIntegerArrayListExtra(
+                DownloadsService.EXTRA_LINE_COUNTS,
+                ArrayList(call.argument<List<Int>>("lineCounts").orEmpty()),
+            )
+            putStringArrayListExtra(
+                DownloadsService.EXTRA_LINES,
+                ArrayList(call.argument<List<String>>("lines").orEmpty()),
             )
         }
         try {

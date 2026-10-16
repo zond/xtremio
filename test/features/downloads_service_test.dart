@@ -4,9 +4,12 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/downloads/download_detail.dart';
 import 'package:xtremio/features/downloads/downloads_service.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 
 import '../support/fake_downloads_client.dart';
+import '../support/fake_torrent_stats_client.dart';
 
 /// One download of 100 bytes, [downloaded] of them on the device.
 DownloadView viewAt(String id, int downloaded, {int size = 100}) =>
@@ -103,14 +106,19 @@ void main() {
     );
   });
 
-  /// A service on Android unless told otherwise.
+  /// A service on Android unless told otherwise. Updates are not held back
+  /// here: the tests about the gap between them ask for it.
   DownloadsForegroundService build({
     TargetPlatform platform = TargetPlatform.android,
     VoidCallback? openDownloads,
+    DownloadDetailPoller? details,
+    Duration updateGap = Duration.zero,
   }) => service = DownloadsForegroundService(
     client: client,
     platform: platform,
     openDownloads: openDownloads,
+    details: details,
+    updateGap: updateGap,
   );
 
   /// Starts the service with one download already on its way.
@@ -138,10 +146,13 @@ void main() {
       expect(serviceMethods(), ['start']);
       expect(service.isRunning, isTrue);
       expect(lastOf('start').arguments, {
-        'title': 'Downloading 1 title',
-        'text': '25 B of 100 B · 25%',
+        'title': 'Downloading A Film',
+        'text': '25%',
         'progress': 25,
         'cancelLabel': kDownloadsCancelAllAction,
+        'names': ['A Film'],
+        'lineCounts': [2],
+        'lines': ['Downloading 25%', '25 B of 100 B'],
       });
     });
 
@@ -270,7 +281,7 @@ void main() {
         expect(serviceMethods(), isNot(contains('stop')));
         expect(
           lastOf('update').arguments,
-          containsPair('title', 'Downloading 1 title'),
+          containsPair('title', 'Downloading A Film'),
         );
       },
     );
@@ -506,7 +517,12 @@ void main() {
 
       expect(summary.active, 2);
       expect(summary.percent, isNull);
-      expect(summary.toNotification()['progress'], -1);
+      expect(
+        DownloadsNotice.of(
+          registryOf([viewAt('tt1', 40), viewAt('tt2', 0, size: 0)]),
+        ).toNotification()['progress'],
+        -1,
+      );
       expect(summary.text, '40 B so far');
     });
 
@@ -574,6 +590,167 @@ void main() {
       );
 
       expect(summary.isIdle, isTrue);
+    });
+  });
+
+  group('what the notification says when pulled open', () {
+    const connected = TorrentStats(
+      phase: TorrentPhase.buffering,
+      downloadSpeed: 1200000,
+      peers: 14,
+      swarmSeeders: 137,
+      swarmLeechers: 402,
+      peerDiscovery: PeerDiscovery(live: 14, seen: 80),
+    );
+
+    test('one download: its title, its percentage and speed, and the '
+        'card\'s lines', () async {
+      client.registry = registryOf([viewAt('tt1', 25)]);
+      final stats = FakeTorrentStatsClient()..response = connected;
+      final poller = DownloadDetailPoller(client: client, stats: stats);
+      addTearDown(poller.dispose);
+      await poller.start();
+      await settle();
+      build(details: poller);
+      await service.start();
+      await settle();
+
+      expect(lastOf('start').arguments, {
+        'title': 'Downloading A Film',
+        'text': '25% · 1.2 MB/s',
+        'progress': 25,
+        'cancelLabel': kDownloadsCancelAllAction,
+        'names': ['A Film'],
+        'lineCounts': [3],
+        'lines': [
+          'Downloading 25%',
+          '1.2 MB/s · connected 14 · seeds 137 · swarm 539',
+          '25 B of 100 B',
+        ],
+      });
+    });
+
+    test('a phase other than downloading leads the collapsed line', () {
+      final notice = DownloadsNotice.of(
+        registryOf([viewAt('tt1', 0)]),
+        detailOf: (view) => DownloadDetail.of(
+          view,
+          stats: const TorrentStats(phase: TorrentPhase.buffering),
+        ),
+      );
+      expect(notice.text, 'Finding peers · 0%');
+      expect(notice.blocks.single.lines, [
+        'Finding peers',
+        'No peers found yet',
+        '0 B of 100 B',
+      ]);
+    });
+
+    test('several: a count, the whole, and a block each', () {
+      final notice = DownloadsNotice.of(
+        registryOf([viewAt('tt1', 20), viewAt('tt2', 60)]),
+        detailOf: (view) => DownloadDetail.of(view, stats: connected),
+      );
+      expect(notice.title, 'Downloading 2 titles');
+      expect(notice.text, '40% · 2.4 MB/s');
+      expect(notice.blocks, hasLength(2));
+    });
+
+    test('past five, the rest are counted in a line', () {
+      final notice = DownloadsNotice.of(
+        registryOf([for (var i = 0; i < 8; i++) viewAt('tt$i', 10)]),
+      );
+      expect(notice.blocks, hasLength(6));
+      expect(notice.blocks.last, (
+        name: 'And 3 more titles',
+        lines: const <String>[],
+      ));
+    });
+
+    test('a poll that changes the words updates it, and one that does not '
+        'sends nothing', () {
+      fakeAsync((async) {
+        client.registry = registryOf([viewAt('tt1', 25)]);
+        final stats = FakeTorrentStatsClient()..response = connected;
+        final poller = DownloadDetailPoller(client: client, stats: stats);
+        unawaited(poller.start());
+        async.flushMicrotasks();
+        build(details: poller, updateGap: const Duration(seconds: 2));
+        unawaited(service.start());
+        async.flushMicrotasks();
+        expect(serviceMethods(), ['start']);
+
+        // The same numbers, poll after poll: nothing to send.
+        async.elapse(DownloadDetailPoller.cadence * 3);
+        expect(serviceMethods(), ['start']);
+
+        stats.response = const TorrentStats(phase: TorrentPhase.buffering);
+        async.elapse(DownloadDetailPoller.cadence);
+        expect(serviceMethods(), ['start', 'update']);
+        expect(
+          lastOf('update').arguments,
+          containsPair(
+            'text',
+            'Finding '
+                'peers · 25%',
+          ),
+        );
+
+        unawaited(service.dispose());
+        poller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('what arrived while held back is sent when the gap ends', () {
+      fakeAsync((async) {
+        client.registry = registryOf([viewAt('tt1', 25)]);
+        build(updateGap: DownloadsForegroundService.defaultUpdateGap);
+        unawaited(service.start());
+        async.flushMicrotasks();
+
+        client.emitProgress([rowOf(viewAt('tt1', 40))]);
+        client.emitProgress([rowOf(viewAt('tt1', 60))]);
+        async.flushMicrotasks();
+        expect(serviceMethods(), ['start']);
+
+        async.elapse(DownloadsForegroundService.defaultUpdateGap);
+        expect(serviceMethods(), ['start', 'update']);
+        expect(lastOf('update').arguments, containsPair('progress', 60));
+
+        unawaited(service.dispose());
+        async.flushMicrotasks();
+      });
+    });
+
+    test('updates come at most every two seconds, and the last one is '
+        'not lost', () {
+      fakeAsync((async) {
+        client.registry = registryOf([viewAt('tt1', 25)]);
+        build(updateGap: DownloadsForegroundService.defaultUpdateGap);
+        unawaited(service.start());
+        async.flushMicrotasks();
+        expect(serviceMethods(), ['start']);
+
+        // A row a second, as the feed delivers them.
+        for (var done = 26; done <= 30; done++) {
+          client.emitProgress([rowOf(viewAt('tt1', done))]);
+          async.elapse(const Duration(seconds: 1));
+        }
+        // Five rows in five seconds: the start, and an update at each gap.
+        expect(serviceMethods(), ['start', 'update', 'update']);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(lastOf('update').arguments, containsPair('progress', 30));
+
+        // The last one finishing is not held: the service goes at once.
+        client.emitProgress([rowOf(viewAt('tt1', 100))]);
+        async.flushMicrotasks();
+        expect(serviceMethods().last, 'stop');
+
+        unawaited(service.dispose());
+        async.flushMicrotasks();
+      });
     });
   });
 

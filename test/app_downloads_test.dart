@@ -155,6 +155,68 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('it says what the app\'s poller says each download is doing', (
+      tester,
+    ) async {
+      final calls = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        DownloadsForegroundService.defaultChannel,
+        (call) async {
+          calls.add(call);
+          return call.method == 'takePendingOpen' ? false : null;
+        },
+      );
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(
+          DownloadsForegroundService.defaultChannel,
+          null,
+        ),
+      );
+      final downloads = FakeDownloadsClient(
+        registry: DownloadsRegistry(
+          items: {
+            'tt1:tt1': DownloadView({
+              'metaId': 'tt1',
+              'videoId': 'tt1',
+              'infoHash': 'abcdabcdabcdabcdabcdabcdabcdabcdabcdabcd',
+              'fileIdx': 0,
+              'name': 'A Film',
+              'size': 100,
+              'downloaded': 25,
+              'state': 'downloading',
+            }),
+          },
+        ),
+      );
+      addTearDown(downloads.dispose);
+      final stats = FakeTorrentStatsClient()
+        ..response = const TorrentStats(phase: TorrentPhase.buffering);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          downloadStats: stats,
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(DownloadsForegroundService.defaultUpdateGap);
+      await tester.pump();
+
+      final shown = calls.lastWhere(
+        (call) => call.method == 'start' || call.method == 'update',
+      );
+      expect((shown.arguments as Map)['lines'], [
+        'Finding peers',
+        'No peers found yet',
+        '25 B of 100 B',
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('tapping it opens the Downloads screen', (tester) async {
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
