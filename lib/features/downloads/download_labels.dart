@@ -45,14 +45,20 @@ String downloadName(MetaItem meta, VideoInfo? video) {
   return label.isEmpty ? meta.name : '${meta.name}: $label';
 }
 
+/// The state word of a download that is arriving, and of one that stopped:
+/// shared with the live detail (`download_detail.dart`), which says them
+/// from the server's numbers rather than the row's state.
+const String kDownloadingLabel = 'Downloading';
+const String kDownloadStoppedLabel = 'Stopped';
+
 /// One word (or two) for the state of [view], with the percentage while it
 /// is arriving.
 String downloadStateLabel(DownloadView view) => switch (view.state) {
   DownloadState.complete => 'Downloaded',
-  DownloadState.downloading => 'Downloading${_percentSuffix(view)}',
+  DownloadState.downloading => '$kDownloadingLabel${_percentSuffix(view)}',
   DownloadState.queued => 'Waiting to start',
   DownloadState.paused => 'Paused',
-  DownloadState.error => 'Stopped',
+  DownloadState.error => kDownloadStoppedLabel,
   DownloadState.gone => 'Not on this device',
 };
 

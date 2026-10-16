@@ -55,14 +55,14 @@ class TorrentStartupOverlay extends StatelessWidget {
     switch (stats.phase) {
       case TorrentPhase.resolvingMetadata:
         return TorrentProgressStatus(
-          label: 'Fetching torrent metadata…',
+          label: '${TorrentProgressCard.fetchingMetadata}…',
           detail: detail,
         );
       case TorrentPhase.checking:
         final progress = stats.checkProgress;
         return TorrentProgressStatus(
           label: TorrentProgressCard.withPercent(
-            'Checking existing data…',
+            '${TorrentProgressCard.checking}…',
             progress,
           ),
           progress: progress,
@@ -70,25 +70,15 @@ class TorrentStartupOverlay extends StatelessWidget {
         );
       case TorrentPhase.buffering:
         final progress = stats.initialWindowProgress;
-        if (stats.peerDiscovery.live == 0 && stats.peers == 0) {
-          final found = stats.peerDiscovery.seen;
-          final connecting = stats.peerDiscovery.connecting;
+        if (TorrentProgressCard.searchingForPeers(stats)) {
           // Nothing is connected yet, so there is no seed to count; the
           // swarm's own seeder count, when a tracker answered, is the one
           // thing here that says whether the wait is worth it.
-          final swarm = stats.swarmSeeders;
           return TorrentProgressStatus(
-            label: 'Finding peers…',
+            label: '${TorrentProgressCard.findingPeers}…',
             progress: progress,
             detail: [
-              if (found == 0)
-                'No peers found yet'
-              else ...[
-                '$found found',
-                if (connecting > 0) '$connecting connecting',
-              ],
-              if (swarm != null)
-                '$swarm ${swarm == 1 ? 'seed' : 'seeds'} in the swarm',
+              ...TorrentProgressCard.peerSearch(stats),
               if (!hasTrackers && (dht?.unavailable ?? false))
                 'no trackers on this stream, and the DHT may find no peers '
                     'on this network',

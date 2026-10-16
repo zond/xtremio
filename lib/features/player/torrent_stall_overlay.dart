@@ -52,7 +52,7 @@ class TorrentStallOverlay extends StatelessWidget {
         final progress = stats.checkProgress;
         return TorrentProgressStatus(
           label: TorrentProgressCard.withPercent(
-            'Checking existing data…',
+            '${TorrentProgressCard.checking}…',
             progress,
           ),
           progress: progress,

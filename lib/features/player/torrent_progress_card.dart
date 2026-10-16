@@ -108,6 +108,38 @@ class TorrentProgressCard extends StatelessWidget {
     );
   }
 
+  /// What a torrent is doing, in the words every surface that shows one
+  /// uses: this card, a row on the Downloads screen and the downloads
+  /// notification. The card adds an ellipsis because it is a wait; a row
+  /// states the fact.
+  static const String fetchingMetadata = 'Fetching torrent metadata';
+  static const String checking = 'Checking existing data';
+  static const String findingPeers = 'Finding peers';
+
+  /// What the search for peers has come to while nothing is connected:
+  /// `12 found · 3 connecting · 40 seeds in the swarm`, or
+  /// `No peers found yet`. The swarm's seeder count is the one figure here
+  /// that says whether the wait is worth it, and it is left out when no
+  /// tracker answered (see [formatSwarm]).
+  static List<String> peerSearch(TorrentStats stats) {
+    final found = stats.peerDiscovery.seen;
+    final connecting = stats.peerDiscovery.connecting;
+    final swarm = stats.swarmSeeders;
+    return [
+      if (found == 0)
+        'No peers found yet'
+      else ...[
+        '$found found',
+        if (connecting > 0) '$connecting connecting',
+      ],
+      if (swarm != null) '$swarm ${swarm == 1 ? 'seed' : 'seeds'} in the swarm',
+    ];
+  }
+
+  /// Whether nothing is connected yet, so the search for peers is the news.
+  static bool searchingForPeers(TorrentStats stats) =>
+      stats.peerDiscovery.live == 0 && stats.peers == 0;
+
   /// A label with the percentage appended when there is one to append.
   static String withPercent(String label, double? progress) =>
       progress == null ? label : '$label ${(progress * 100).round()}%';
@@ -167,9 +199,13 @@ class TorrentProgressCard extends StatelessWidget {
   /// Which piece it is comes from the server, so it is the piece's index in the
   /// torrent rather than a number this counted itself. The bytes are the
   /// piece's own, which is why a short last piece reads honestly.
-  static String piecePosition(InFlightPiece piece) =>
+  static String piecePosition(InFlightPiece piece) => '${pieceWaitOf(piece)}…';
+
+  /// The same, stated rather than waited on: `Waiting for piece 137, 6.3 of
+  /// 16.0 MiB`. What a download row and the notification say.
+  static String pieceWaitOf(InFlightPiece piece) =>
       'Waiting for piece ${piece.index}, '
-      '${formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}…';
+      '${formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}';
 
   /// `6.3 of 16.0 MiB`: two byte counts in the unit the larger of them
   /// takes, named once. Binary units, like [formatPieceSize], because
