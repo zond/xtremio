@@ -75,7 +75,7 @@ flutter test > /tmp/flutter-test.log 2>&1; echo EXIT=$?
 # also passes on a tree whose regenerated bindings are not committed yet):
 flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs; echo EXIT=$?
 # Kotlin with no device in it (FrameRateMode, DownloadsProgressBar,
-# CastPicture, InstallOutcome):
+# DownloadsNotificationText, CastPicture, InstallOutcome):
 (cd android && ./gradlew :app:testDebugUnitTest); echo EXIT=$?
 ```
 

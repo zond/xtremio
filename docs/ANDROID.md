@@ -423,17 +423,40 @@ running. The service hosts nothing.
   `requestNotificationPermission` and `takePendingOpen`; the platform calls
   back `open` (notification tapped), `cancelAll` and `timedOut`.
 - **When it runs**: `DownloadsForegroundService`
-  (`lib/features/downloads/downloads_service.dart`) puts it up while any
-  entry is on its way, and takes it down when none is. On its way means not
-  complete, paused, gone or errored (an errored entry has no engine behind
-  it). It reacts
-  to the progress feed and to the client's own removal events; nothing is
+  (`lib/features/downloads/downloads_service.dart`) puts it up when the first
+  entry is on its way and takes it down after the last. On its way means not
+  complete, paused, gone or errored (`isOnItsWay`; an errored entry has no
+  engine behind it). It reacts to the progress feed, to the client's own
+  removal events and to the detail poller's numbers. The listing is not
   re-read on a timer.
+- **How long it lives**: exactly as long as a download is on its way, with
+  the app in front or not. It survives the app being backgrounded and the
+  screen going off. It does not survive the app being swiped from recents
+  or the process being killed: it is not sticky, and the next launch puts
+  it back up for whatever is still unfinished. On Android 15 it also ends
+  at the `dataSync` time budget (below).
 - **The notification**: one ongoing, low-importance notification
-  (`xtremio.downloads`, no sound or vibration): `Downloading 3 titles` over
-  `1.2 GB of 4.0 GB · 30%`, indeterminate while any download has no length
-  yet. Tapping opens the Downloads screen. Its one action is **Cancel all**,
-  since a pinned file has no pause.
+  (`xtremio.downloads`, no sound or vibration). Collapsed it says
+  `Downloading A Film` over `32% · 1.2 MB/s` (or `Downloading 3 titles`,
+  and the phase first when it is not plain downloading: `Finding peers ·
+  0%`). The bar is indeterminate while any download has no length yet.
+  Pulled open it is a `BigTextStyle` with what each download is doing, in
+  the words of the player's buffering card:
+
+  ```
+  Downloading 32%
+  1.2 MB/s · connected 14 · seeds 137 · swarm 539
+  612 MB of 1.9 GB
+  ```
+
+  With several downloads each gets a block headed by its title, up to five,
+  and the rest are counted (`And 3 more titles`). Dart builds every line
+  (`DownloadsNotice`); `DownloadsNotificationText.kt` only lays them out.
+  An update goes out only when the text changed, and at most every 2 s. Each
+  update re-posts the notification through `startForeground`, so one a user
+  dismissed (Android 14 allows it) comes back at the next. Tapping opens the
+  Downloads screen. Its one action is **Cancel all**, since a pinned file
+  has no pause. Only titles and numbers reach it, never a link.
 - **Permissions**: `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`,
   and `POST_NOTIFICATIONS` asked at runtime on API 33+ the first time a
   download actually starts, once a run. A refusal costs only the
@@ -448,8 +471,8 @@ running. The service hosts nothing.
   every case the pin set and the registry are on disk, and the next launch
   re-pins every unfinished entry.
 
-Checking it on a device (`DownloadsProgressBar` has a JVM test; the rest
-needs a device):
+Checking it on a device (`DownloadsProgressBar` and
+`DownloadsNotificationText` have JVM tests; the rest needs a device):
 
 ```bash
 adb shell dumpsys activity services com.zond.xtremio   # the service and its type

@@ -832,6 +832,24 @@ none, "Continue with last stream" disappears after an offline play until
 the title is played from an addon again. The next play then starts with no
 remembered subtitle or audio track.
 
+**What a download is doing** comes from one `DownloadDetailPoller`
+(`lib/features/downloads/download_detail.dart`), built in `XtremioApp` and
+handed down through `DownloadDetailScope`. It follows the registry like the
+foreground service does: one listing, the feed folded in, a fresh listing
+for a key no listing has named. While any download is on its way
+(`isOnItsWay`) it asks the server for each torrent's `stats.json` every 2 s,
+the stall card's cadence (`PlayerScreen.torrentStallStatsInterval`). With
+none on its way its timer stops and it asks nothing. An errored entry is
+never asked about. A link or Drive download has no stats, and the server's
+`DownloadInfo` carries no rate, so its speed is the rate the server's own
+byte count grew between two polls. Each download becomes a
+`DownloadDetail`: phase, transfer, bytes and the piece a reader waits on.
+Every phrase comes from `TorrentProgressCard` (the buffering card's phase
+words, `formatSpeed`, `formatSwarm`, `peerSearch`, `pieceWaitOf`) or
+`download_labels.dart`, so the card, a Downloads row and the notification
+say the same thing about the same numbers. The rows show
+`DownloadDetail.line`, and the notification shows `DownloadDetail.lines`.
+
 **Android keeps a download going while the app is away** with a `dataSync`
 foreground service (`DownloadsForegroundService`,
 `lib/features/downloads/downloads_service.dart`). See

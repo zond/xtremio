@@ -231,8 +231,14 @@ play of its own. A download that is no longer on the device says **Not on
 this device** and offers to fetch it again. A finished download plays with
 no network, and offline the player still records watch progress. There is
 no downloads folder to choose: torrent data has one root, named in Settings
-→ Server storage. On Android a foreground service with a notification
-(progress, **Cancel all**) keeps downloads going after the app is left.
+→ Server storage. A download on its way says under its bar what it is
+doing, in the words of the player's buffering card: `Downloading 32% ·
+1.2 MB/s · connected 14 · seeds 137 · swarm 539 · 612 MB of 1.9 GB`,
+`Finding peers · No peers found yet · 0 B of 1.9 GB`, or the piece a
+player is waiting for. On Android a foreground service keeps downloads
+going after the app is left, for as long as one is on its way. Its
+notification names the title, the percentage and the speed, and pulled
+open shows the same lines per download, with **Cancel all**.
 
 **Known issue, decided:** the first start of a build on the `media-cache`
 storage layout deletes the previous `rqbit-downloads` directory, and every
