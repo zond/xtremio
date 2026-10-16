@@ -4,6 +4,7 @@ import '../../core/core.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/poster_tile.dart';
 import '../player/player_screen.dart';
+import 'download_detail.dart';
 import 'download_labels.dart';
 import 'downloads_controller.dart';
 import 'offline_play.dart';
@@ -316,6 +317,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     // that is not an answer about what is downloaded, so nothing below
     // counts them or calls them nothing.
     final unreadable = registry.unreadable;
+    final details = DownloadDetailScope.maybeOf(context);
     final counted =
         downloads != null &&
         downloads.isLoaded &&
@@ -349,6 +351,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           for (final view in items)
             _DownloadRow(
               view: view,
+              detail: details?[view.key],
               onPlay: view.isComplete && widget.canPlay
                   ? () => _play(view)
                   : null,
@@ -420,6 +423,7 @@ enum _RowAction { play, retry, delete }
 class _DownloadRow extends StatelessWidget {
   const _DownloadRow({
     required this.view,
+    required this.detail,
     required this.onPlay,
     required this.onDelete,
     required this.onRetry,
@@ -427,6 +431,11 @@ class _DownloadRow extends StatelessWidget {
   });
 
   final DownloadView view;
+
+  /// What the download is doing right now, while it is on its way: the
+  /// same facts the buffering card over the player shows. Null for a
+  /// finished, stopped or gone row, which says its state instead.
+  final DownloadDetail? detail;
 
   /// Null until every piece is here: there is nothing to play off the
   /// device.
@@ -473,7 +482,7 @@ class _DownloadRow extends StatelessWidget {
           const SizedBox(height: 4),
           LinearProgressIndicator(value: view.progress ?? 0),
           const SizedBox(height: 4),
-          Text(status(view), style: theme.textTheme.bodySmall),
+          Text(detail?.line ?? status(view), style: theme.textTheme.bodySmall),
         ],
       ),
       onTap: onPlay,

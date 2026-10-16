@@ -9,6 +9,7 @@ import 'features/addons/addon_details_screen.dart';
 import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
 import 'features/cast/google_cast_client.dart';
+import 'features/downloads/download_detail.dart';
 import 'features/downloads/downloads_screen.dart';
 import 'features/drive/drive_match.dart';
 import 'features/downloads/downloads_service.dart';
@@ -115,6 +116,11 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// reads the embedded server over FFI ([RustSharingActivityClient]) unless
 /// [sharingActivity] hands it a fake.
 ///
+/// And the [DownloadDetailScope]: one [DownloadDetailPoller], which says what
+/// each download on its way is doing, for the Downloads rows and the
+/// downloads notification alike. It asks the server only while a download
+/// is on its way.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -136,6 +142,7 @@ class XtremioApp extends StatefulWidget {
     this.initInfo,
     this.engineBuilder,
     this.downloads,
+    this.downloadStats,
     this.cast,
     this.prefs,
     this.drive,
@@ -182,6 +189,10 @@ class XtremioApp extends StatefulWidget {
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
   final DownloadsClient? downloads;
+
+  /// The server's per-torrent stats behind what a download is doing
+  /// ([DownloadDetailPoller]), for tests that want a fake. FFI otherwise.
+  final TorrentStatsClient? downloadStats;
 
   /// The Cast sender, for tests that want a fake. Read once, when the app
   /// comes up, like [downloads].
@@ -293,6 +304,10 @@ class _XtremioAppState extends State<XtremioApp> {
   /// Built everywhere and inert off Android.
   late final DownloadsForegroundService _downloadsService;
 
+  /// What each download on its way is doing: one poller for the Downloads
+  /// rows and the notification, handed down through [DownloadDetailScope].
+  late final DownloadDetailPoller _downloadDetail;
+
   /// The one preferences value, and whether disposing it is ours to do —
   /// the same rule as [_downloads].
   late final AppPrefs _prefs;
@@ -364,6 +379,11 @@ class _XtremioAppState extends State<XtremioApp> {
       ..addListener(_onCtxForXervice);
     _ownsDownloads = widget.downloads == null;
     _downloads = widget.downloads ?? RustDownloadsClient();
+    _downloadDetail = DownloadDetailPoller(
+      client: _downloads,
+      stats: widget.downloadStats,
+    );
+    unawaited(_downloadDetail.start());
     _downloadsService = DownloadsForegroundService(
       client: _downloads,
       openDownloads: _openDownloads,
@@ -788,6 +808,7 @@ class _XtremioAppState extends State<XtremioApp> {
     // Takes the foreground service down before the client it reports on:
     // without this side there is nobody to move the notification on.
     unawaited(_downloadsService.dispose());
+    _downloadDetail.dispose();
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
     if (_ownsCast) _cast.dispose();
@@ -829,47 +850,52 @@ class _XtremioAppState extends State<XtremioApp> {
           client: widget.addonHealth,
           child: DownloadsScope(
             client: _downloads,
-            child: CastScope(
-              client: _cast,
-              lanMedia: _footprint,
-              child: PrefsScope(
-                prefs: _prefs,
-                // Under the preferences, because it reads them: the list of
-                // linked files and the dead-token flag are preferences, and
-                // only the token itself is anywhere else.
-                child: DriveAccountScope(
-                  account: _drive,
-                  child: LocalMediaScope(
-                    media: _localMedia,
-                    child: SharingScope(
-                      policy: _sharing,
-                      monitor: _activity,
-                      child: AppUpdatesScope(
-                        updates: _updates,
-                        child: PlaybackScope(
-                          createEngine: _createEngine,
-                          // Under the [PrefsScope] rather than above it, so that
-                          // the focus floor is rebuilt when the Bold switch is
-                          // flipped: the scope is an [InheritedNotifier] and this
-                          // builder reads it. Every other part of the theme is
-                          // settled before the app is built.
-                          child: Builder(
-                            builder: (context) => _showingFocus(
-                              isTv: isTv,
-                              child: MaterialApp(
-                                title: 'Xtremio',
-                                debugShowCheckedModeBanner: false,
-                                navigatorKey: _navigator,
-                                theme: XtremioApp.themeFor(
-                                  isTv: isTv,
-                                  emphasis: FocusHighlight.emphasisOf(context),
+            child: DownloadDetailScope(
+              poller: _downloadDetail,
+              child: CastScope(
+                client: _cast,
+                lanMedia: _footprint,
+                child: PrefsScope(
+                  prefs: _prefs,
+                  // Under the preferences, because it reads them: the list of
+                  // linked files and the dead-token flag are preferences, and
+                  // only the token itself is anywhere else.
+                  child: DriveAccountScope(
+                    account: _drive,
+                    child: LocalMediaScope(
+                      media: _localMedia,
+                      child: SharingScope(
+                        policy: _sharing,
+                        monitor: _activity,
+                        child: AppUpdatesScope(
+                          updates: _updates,
+                          child: PlaybackScope(
+                            createEngine: _createEngine,
+                            // Under the [PrefsScope] rather than above it, so that
+                            // the focus floor is rebuilt when the Bold switch is
+                            // flipped: the scope is an [InheritedNotifier] and this
+                            // builder reads it. Every other part of the theme is
+                            // settled before the app is built.
+                            child: Builder(
+                              builder: (context) => _showingFocus(
+                                isTv: isTv,
+                                child: MaterialApp(
+                                  title: 'Xtremio',
+                                  debugShowCheckedModeBanner: false,
+                                  navigatorKey: _navigator,
+                                  theme: XtremioApp.themeFor(
+                                    isTv: isTv,
+                                    emphasis: FocusHighlight.emphasisOf(
+                                      context,
+                                    ),
+                                  ),
+                                  builder: isTv ? TvMediaQuery.builder : null,
+                                  navigatorObservers: [
+                                    _routes,
+                                    if (kDebugMode) RouteLogObserver(),
+                                  ],
+                                  home: const RootShell(),
                                 ),
-                                builder: isTv ? TvMediaQuery.builder : null,
-                                navigatorObservers: [
-                                  _routes,
-                                  if (kDebugMode) RouteLogObserver(),
-                                ],
-                                home: const RootShell(),
                               ),
                             ),
                           ),

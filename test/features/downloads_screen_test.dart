@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/downloads/download_detail.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -267,6 +268,64 @@ void main() {
 
       expect(find.text('Downloaded · 49.2 kB'), findsOneWidget);
       expect(find.text('3 downloads · 81.9 kB on this device'), findsOneWidget);
+    });
+  });
+
+  group('what a download on its way is doing', () {
+    const connected = TorrentStats(
+      phase: TorrentPhase.buffering,
+      downloadSpeed: 1200000,
+      peers: 14,
+      swarmSeeders: 137,
+      swarmLeechers: 402,
+      peerDiscovery: PeerDiscovery(live: 14, seen: 80),
+    );
+
+    testWidgets('each row says it under its bar, and it moves', (tester) async {
+      useTallViewport(tester);
+      final semantics = tester.ensureSemantics();
+      final downloads = FakeDownloadsClient(registry: recorded());
+      addTearDown(downloads.dispose);
+      final stats = FakeTorrentStatsClient()..response = connected;
+      final poller = DownloadDetailPoller(client: downloads, stats: stats);
+      await poller.start();
+      await tester.pumpWidget(
+        DownloadDetailScope(
+          poller: poller,
+          child: harness(coreWithPlayer(), downloads),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Downloading 67% · 1.2 MB/s · connected 14 · seeds 137 · '
+          'swarm 539 · 32.8 kB of 49.2 kB',
+        ),
+        findsOneWidget,
+      );
+      // The finished row is not on its way and says what it said before.
+      expect(find.text('Downloaded · 32.8 kB'), findsOneWidget);
+
+      // The swarm goes quiet; the next poll says so.
+      stats.response = const TorrentStats(phase: TorrentPhase.buffering);
+      await tester.pump(DownloadDetailPoller.cadence);
+      await tester.pump();
+
+      expect(
+        find.text('Finding peers · No peers found yet · 32.8 kB of 49.2 kB'),
+        findsOneWidget,
+      );
+      // What a remote's reader, and the driver, hear for the row.
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Finding peers · No peers found yet · 32.8 kB of 49.2 kB'),
+        ),
+        findsOneWidget,
+      );
+
+      poller.dispose();
+      semantics.dispose();
     });
   });
 

@@ -5,14 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/downloads/download_detail.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/downloads_service.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/empty_board.dart';
 import 'support/fake_downloads_client.dart';
 import 'support/fake_sharing.dart';
+import 'support/fake_torrent_stats_client.dart';
 
 /// The client every screen under the shell would reach for.
 DownloadsClient downloadsOf(WidgetTester tester) =>
@@ -35,6 +38,50 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(downloadsOf(tester), same(downloads));
+  });
+
+  testWidgets('every screen reaches one detail poller, which asks about the '
+      'app\'s downloads and stops with the app', (tester) async {
+    final downloads = FakeDownloadsClient(
+      registry: DownloadsRegistry(
+        items: {
+          'tt1:tt1': DownloadView({
+            'metaId': 'tt1',
+            'videoId': 'tt1',
+            'infoHash': 'abcdabcdabcdabcdabcdabcdabcdabcdabcdabcd',
+            'fileIdx': 0,
+            'name': 'A Film',
+            'size': 100,
+            'downloaded': 25,
+            'state': 'downloading',
+          }),
+        },
+      ),
+    );
+    addTearDown(downloads.dispose);
+    final stats = FakeTorrentStatsClient()
+      ..response = const TorrentStats(phase: TorrentPhase.buffering);
+
+    await tester.pumpWidget(
+      XtremioApp(
+        core: emptyBoardCore(),
+        downloads: downloads,
+        downloadStats: stats,
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final poller = DownloadDetailScope.maybeOf(
+      tester.element(find.byType(RootShell)),
+    );
+    expect(poller?['tt1:tt1']?.status, 'Finding peers');
+    expect(stats.requests, isNotEmpty);
+
+    await tester.pumpWidget(const SizedBox());
+    final asked = stats.requests.length;
+    await tester.pump(DownloadDetailPoller.cadence * 3);
+    expect(stats.requests, hasLength(asked));
   });
 
   testWidgets('a client handed in is not the app\'s to dispose', (
