@@ -42,6 +42,9 @@ class MainActivity : FlutterActivity() {
     /** Typing by voice (SpeechInput.kt), alive for as long as the engine is. */
     private var speech: SpeechInput? = null
 
+    /** The developer's codec probe (HwProbe.kt), which only the driver calls. */
+    private var hwProbe: HwProbe? = null
+
     /**
      * What is telling Dart the rate this display is really refreshing at,
      * alive for as long as the engine is. Held so its `DisplayListener` can
@@ -163,6 +166,7 @@ class MainActivity : FlutterActivity() {
             EventChannel(flutterEngine.dartExecutor.binaryMessenger, SpeechInput.CHANNEL)
                 .setStreamHandler(it)
         }
+        hwProbe = HwProbe(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     // Hidden is the end of listening: nothing is recorded while the viewer
@@ -510,6 +514,8 @@ class MainActivity : FlutterActivity() {
         textEntry = null
         speech?.detach()
         speech = null
+        hwProbe?.detach()
+        hwProbe = null
         super.onDestroy()
     }
 

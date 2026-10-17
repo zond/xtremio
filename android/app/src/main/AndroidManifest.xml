@@ -46,6 +46,10 @@
          television with no microphone keeps the keyboard. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- The developer's codec probe (HwProbe.kt) holds a partial wake lock
+         for the length of a run, so a run with the screen off measures the
+         codecs rather than a sleeping CPU. Only the driver starts a run. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
