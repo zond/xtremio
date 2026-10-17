@@ -64,6 +64,7 @@ tool/drive seek 1:02:30                  # h:mm:ss, m:ss, seconds or N%
 tool/drive log 80                        # the last lines of the diagnostics ring (default 50)
 tool/drive streams x265 1080p --not 2160p  # every source of the open title, numbered
 tool/drive play 2                        # play stream #2 as a tap on its row would
+tool/drive hwprobe status                # the codec probe (below); tool/hwprobe wraps it
 tool/drive --json screen                 # the raw answer
 ```
 
@@ -153,3 +154,85 @@ The debug app plays as whatever account is signed in to it: a play is
 watch progress on that account, and a long press can mark something
 watched. On somebody's real account, play something they have not
 watched, and only for as long as the check needs.
+
+## The codec probe
+
+The codec probe measures the phone's video codecs. It exists to answer
+one question before the picture conversion is built: can this phone's
+hardware encoder re-encode a film while it casts? It is a developer
+tool. It goes, with its Kotlin and its script, when the real conversion
+is built.
+
+The probe is Kotlin (`HwProbe.kt`, its device-free parts in
+`HwProbeRules.kt`). The codec list and the heat and battery readings
+have no NDK equivalent, so it cannot be Rust. It drives the codecs the
+way the Rust side will: synchronous dequeue loops with a 10 ms wait, on
+one worker thread. Only the driver calls it, through
+`tool/drive hwprobe <method> [<json args>]`. `tool/hwprobe` wraps that
+and needs a driver session (`tool/drive-start -d <device>`).
+
+```bash
+tool/hwprobe codecs > codecs.json         # every video codec and what it claims
+tool/hwprobe push film.mkv                # copy a clip to the phone; prints its path
+tool/hwprobe run '{"path": "/sdcard/Download/hwprobe/film.mkv", "label": "4k-main10"}'
+tool/hwprobe stop                         # end the run; what it measured is kept
+tool/hwprobe instances '{"mime": "video/hevc", "width": 3840, "height": 2160, "encoders": 4, "decoders": 4}'
+tool/hwprobe pull 4k-main10               # the run's mp4, when it asked for one
+```
+
+`codecs` lists every codec whose types are video. For each it gives the
+profiles and levels by name, the sizes and frame rates it claims at 1080p
+and 2160p, the bitrate modes, the colour formats, and the features.
+
+`push` grants the debug app `READ_MEDIA_VIDEO` first, since the app opens
+the clip by its path. The clip goes to `/sdcard/Download/hwprobe/`.
+
+`run` starts a run, prints a line every 10 seconds, and saves the report
+to `build/hwprobe/<label>.json` when the run ends. Each line has the
+frames made, the speed, the thermal status, the battery temperature and
+current, and whether the screen is on. Ctrl-C stops the run and still
+saves the report. The summary at the end gives the speed overall and in
+the slowest 5 s window, the frames in and out, and the pts that went
+missing. For a per-slot run it also says whether each slot starts on a
+key frame and whether two runs made the same bytes.
+
+The speed is `madeX`: seconds of film made per second of wall time. The
+conversion has to stay above 1.0, so the slowest window matters more than
+the average. The battery current's sign is the phone maker's choice.
+
+A run's arguments (only `path` is required):
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `path` | | The clip: a file path or a `content://` URI. Its first video track is used. |
+| `label` | mode and file name | Names the report and the mp4. |
+| `mode` | `transcode` | `transcode`, `decodeOnly`, `perSlot` or `requestSync`. |
+| `mime` | `video/hevc` | What to encode to: `video/hevc` or `video/avc`. |
+| `profile` | `auto` | `main`, `main10`, `main10hdr10`, `high` (H.264). `auto` picks Main10 for a 10-bit source. |
+| `bitrate` | 12000000 | Bits per second. |
+| `bitrateMode` | `cbr` | `cbr`, `vbr` or `cq`. |
+| `seconds` | 600 | Film time to make. The clip loops until then. |
+| `slotSeconds` | 10 | `perSlot`: the shortest slot. A slot starts at a source key frame. |
+| `requestSyncAt` | `[100, 400, 700]` | `requestSync`: the frames a key frame is asked for at. |
+| `repeat` | 1 | Runs of the whole plan. Two shows whether the bytes come out the same. |
+| `iFrameInterval` | 1, or 3600 for `perSlot` | Seconds between the encoder's own key frames. |
+| `maxBframes` | 0 | B-frames the encoder may use. |
+| `wakeLock` | true | Holds the CPU awake for the run. |
+| `writeMp4` | false | Writes the first run's output to `Download/hwprobe/<label>.mp4`. |
+
+The modes:
+
+- `transcode` decodes into the encoder's input surface and drains the
+  encoder.
+- `decodeOnly` decodes alone, which gives the decoder's own speed.
+- `perSlot` starts a fresh encoder at every slot. The decoder moves to
+  the new encoder with `setOutputSurface`. If that throws, the decoder
+  is rebuilt at the slot's key frame instead, and the report says which
+  happened. Each slot records its frames, its encoder start time, its
+  bytes and their hash, and whether its first frame is a key frame.
+- `requestSync` asks the encoder for a key frame at the given frames and
+  reports how many frames later each one came. Give it a long
+  `iFrameInterval`, or the encoder's own key frames answer first.
+
+The probe needs Android 10 or later. Its channel is in every Android
+build, release too, but nothing in the app calls it.

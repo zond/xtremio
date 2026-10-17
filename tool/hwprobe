@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# The codec probe (android/.../HwProbe.kt), driven through tool/drive. A
+# developer tool: it goes when the real picture conversion is built. See
+# docs/DRIVING.md, "The codec probe". Needs a driver session first:
+# tool/drive-start -d <device>.
+#
+#   tool/hwprobe codecs > codecs.json     every video codec and what it claims
+#   tool/hwprobe push <clip>              copy a clip to the phone, print its path
+#   tool/hwprobe run '<json args>'        start a run, follow it, save the report
+#   tool/hwprobe stop                     end the run (it keeps what it measured)
+#   tool/hwprobe instances '<json args>'  how many codecs start side by side
+#   tool/hwprobe pull <label>             fetch a run's mp4 (writeMp4: true)
+#
+# Reports land in build/hwprobe/<label>.json. adb talks to
+# $XTREMIO_DRIVE_DEVICE when it is set, as tool/drive-start does.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+drive="$root/tool/drive"
+out="$root/build/hwprobe"
+package=com.zond.xtremio.debug
+remote=/sdcard/Download/hwprobe
+
+adb_() {
+  if [ -n "${XTREMIO_DRIVE_DEVICE:-}" ]; then
+    adb -s "$XTREMIO_DRIVE_DEVICE" "$@"
+  else
+    adb "$@"
+  fi
+}
+
+usage() {
+  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  exit 64
+}
+
+# One poll of `status` as a line: elapsed, frames out, speed, heat, battery.
+status_line() {
+  jq -r '
+    def n(x; d): if x == null then "-" else (x * pow(10; d) | round / pow(10; d) | tostring) end;
+    "\(n(.elapsedS; 0))s  frames out \(.totals.framesOut // 0)" +
+    "  madeX \(n(.window.madeX; 2)) (all \(n(.totals.madeX; 2)))" +
+    "  thermal \(.now.thermalName // "-")" +
+    "  battery \(n(.now.batteryC; 1))°C \(n(.now.currentMa; 0)) mA" +
+    "  screen \(if .now.screenOn then "on" else "off" end)" +
+    (if .error then "  error: \(.error)" else "" end)'
+}
+
+# The few numbers a run is for, out of its report.
+summary() {
+  jq -r '
+    def n(x; d): if x == null then "-" else (x * pow(10; d) | round / pow(10; d) | tostring) end;
+    def yn(x): if x == null then "-" elif x then "yes" else "NO" end;
+    (.repeats // []) as $r |
+    "label:            \(.label)",
+    (if .error then "error:            \(.error)" else empty end),
+    (if .stopped then "stopped early" else empty end),
+    ($r[] |
+      "repeat \(.repeat):",
+      "  madeX overall:  \(n(.totals.madeX; 2))  (min 5 s window \(n(.minWindowMadeX; 2)))",
+      "  frames in/out:  \(.totals.framesIn) / \(.totals.framesOut)",
+      "  pts:            \(.pts.outNotIn // "-") out not in, \(.pts.inNeverOut // "-") in never out",
+      "  decoder:        \(.decoder.name) (empty outputs \(.decoder.emptyOutputs), \(.decoder.inputEnd // "-"))",
+      (if .encoder then "  encoder:        \(.encoder.name), profile \(.encoder.outputFormat.profileName // .encoder.outputFormat.profile // "-")" +
+        ", colour \(.encoder.outputFormat.colorStandard // "-")/\(.encoder.outputFormat.colorTransfer // "-")/\(.encoder.outputFormat.colorRange // "-")" +
+        ", hdr-static-info \(if .encoder.outputFormat.hdrStaticInfo then "yes" else "no" end)" else empty end),
+      (if .slots then
+        "  slots:          \(.slots | length), strategy \(.slotStrategy // "-")\(if .setOutputSurfaceError then " (setOutputSurface: \(.setOutputSurfaceError))" else "" end)",
+        "  first key:      \([.slots[] | yn(.firstIsKey)] | join(" "))",
+        "  encoder start:  median \(n(.encoderSetupMsMedian; 1)) ms (first \(n(.encoderSetupMsFirst; 1)) ms)"
+      else empty end),
+      (if .stream then "  stream:         first key \(yn(.stream.firstIsKey)), \(.stream.keyFrames) key frames, \(.stream.bytes) bytes" else empty end),
+      (if .requestSync then "  sync requests:  \([.requestSync[] | "\(.requestedAt)->\(.keyAt // "none") (+\(.delta // "-"))"] | join(", "))" else empty end),
+      (if .mp4 then "  mp4:            \(.mp4.path // .mp4.uri) \(.mp4.bytes // "-") bytes" else empty end)
+    ),
+    (if (.identity.repeats // 0) > 1 then
+      "same bytes:       \(yn(.identity.allHashesMatch)) \(.identity.hashMatch | map(yn(.)) | join(" "))",
+      "same csd:         \(yn(.identity.allCsdMatch))"
+    else empty end)'
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || usage
+shift
+
+case "$cmd" in
+  codecs)
+    "$drive" --json hwprobe codecs
+    ;;
+  push)
+    [ $# -eq 1 ] || usage
+    clip="$1"
+    name="$(basename "$clip")"
+    echo "granting READ_MEDIA_VIDEO to $package, so the app can open the clip by its path" >&2
+    adb_ shell pm grant "$package" android.permission.READ_MEDIA_VIDEO
+    adb_ shell mkdir -p "$remote"
+    adb_ push "$clip" "$remote/$name" >&2
+    # Best effort: have the media index learn of the file.
+    adb_ shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+      -d "file://$remote/$name" >/dev/null 2>&1 || true
+    echo "$remote/$name"
+    ;;
+  run)
+    [ $# -eq 1 ] || usage
+    started="$("$drive" --json hwprobe start "$1")" || {
+      echo "$started" >&2
+      exit 1
+    }
+    label="$(jq -r .started <<<"$started")"
+    echo "started $label; Ctrl-C stops the run and still saves what it measured" >&2
+    trap '"$drive" hwprobe stop >/dev/null || true' INT
+    while true; do
+      sleep 10 || true
+      status="$("$drive" --json hwprobe status)" || {
+        echo "$status" >&2
+        continue
+      }
+      status_line <<<"$status"
+      [ "$(jq -r .done <<<"$status")" = true ] && break
+    done
+    trap - INT
+    mkdir -p "$out"
+    "$drive" --json hwprobe result >"$out/$label.json"
+    echo "report: $out/$label.json" >&2
+    summary <"$out/$label.json"
+    ;;
+  stop)
+    "$drive" hwprobe stop
+    ;;
+  instances)
+    [ $# -eq 1 ] || usage
+    "$drive" hwprobe instances "$1"
+    ;;
+  pull)
+    [ $# -eq 1 ] || usage
+    label="$1"
+    path="$remote/$label.mp4"
+    if [ -s "$out/$label.json" ]; then
+      path="$(jq -r --arg p "$path" '[.repeats[]?.mp4.path // empty][0] // $p' "$out/$label.json")"
+    fi
+    mkdir -p "$out"
+    adb_ pull "$path" "$out/"
+    ;;
+  -h | --help | help)
+    usage
+    ;;
+  *)
+    usage
+    ;;
+esac
