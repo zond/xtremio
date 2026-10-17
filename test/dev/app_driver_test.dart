@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/dev/driver/app_driver.dart';
@@ -607,6 +608,120 @@ void main() {
     expect(lines, hasLength(2));
     expect(lines.first, 'two');
     expect(lines.last, isNot(contains('secretkey')));
+  });
+
+  group('hwprobe', () {
+    const channel = MethodChannel('xtremio/hwprobe');
+    final calls = <MethodCall>[];
+
+    void answer(Future<Object?> Function(MethodCall call) handler) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) {
+            calls.add(call);
+            return handler(call);
+          });
+    }
+
+    tearDown(() {
+      calls.clear();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    testWidgets('passes the method and its args through, and answers what '
+        'the probe answers as JSON', (tester) async {
+      answer(
+        (_) async => {
+          'running': true,
+          'window': {
+            'madeX': 1.4,
+            // The thermal headroom is NaN where the phone has none.
+            'now': {'thermalHeadroom10s': double.nan, 'screenOn': false},
+          },
+          'slots': [
+            {'index': 0, 'firstIsKey': true},
+          ],
+        },
+      );
+      final driver = AppDriver(settle: () async {});
+
+      final reply = jsonDecode(
+        await driver.handle(
+          jsonEncode({
+            'cmd': 'hwprobe',
+            'method': 'start',
+            'args': {'path': '/sdcard/Download/hwprobe/clip.mp4', 'repeat': 2},
+          }),
+        ),
+      );
+
+      expect(calls.single.method, 'start');
+      expect(calls.single.arguments, {
+        'path': '/sdcard/Download/hwprobe/clip.mp4',
+        'repeat': 2,
+      });
+      expect(reply, {
+        'running': true,
+        'window': {
+          'madeX': 1.4,
+          'now': {'thermalHeadroom10s': null, 'screenOn': false},
+        },
+        'slots': [
+          {'index': 0, 'firstIsKey': true},
+        ],
+      });
+      driver.dispose();
+    });
+
+    testWidgets('a refusal from the probe is the error', (tester) async {
+      answer(
+        (_) async => throw PlatformException(
+          code: 'busy',
+          message: 'a run is going: perslot',
+        ),
+      );
+      final driver = AppDriver(settle: () async {});
+
+      final reply = await driver.command({'cmd': 'hwprobe', 'method': 'start'});
+
+      expect(reply, {'error': 'a run is going: perslot', 'code': 'busy'});
+      driver.dispose();
+    });
+
+    test('tool/drive takes a method and an optional JSON object', () {
+      expect(drive.messageOf(['hwprobe', 'status']), {
+        'cmd': 'hwprobe',
+        'method': 'status',
+      });
+      expect(
+        drive.messageOf([
+          'hwprobe',
+          'instances',
+          '{"mime":"video/hevc","encoders":3}',
+        ]),
+        {
+          'cmd': 'hwprobe',
+          'method': 'instances',
+          'args': {'mime': 'video/hevc', 'encoders': 3},
+        },
+      );
+      expect(() => drive.messageOf(['hwprobe']), throwsFormatException);
+      expect(
+        () => drive.messageOf(['hwprobe', 'start', '[1]']),
+        throwsFormatException,
+      );
+      expect(
+        () => drive.messageOf(['hwprobe', 'start', '{path']),
+        throwsFormatException,
+      );
+    });
+
+    test('tool/drive prints the answer as indented JSON', () {
+      expect(
+        drive.human('hwprobe', {'started': 'perslot'}),
+        '{\n  "started": "perslot"\n}\n',
+      );
+    });
   });
 }
 

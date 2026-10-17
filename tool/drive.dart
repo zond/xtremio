@@ -29,6 +29,9 @@ usage: tool/drive [--json] <command>
                                   built or not, numbered; filtered like find
   play <index>                    play stream <index> of `streams` as a tap
                                   on its row would
+  hwprobe <method> [<json args>]  call the codec probe (codecs, start, status,
+                                  stop, result, instances); tool/hwprobe
+                                  wraps it
 
 --json prints the raw answer.''';
 
@@ -70,9 +73,12 @@ Future<void> main(List<String> argv) async {
     logCommunicationToFile: false,
   );
   try {
-    final timeout = message['cmd'] == 'wait'
-        ? Duration(seconds: (message['timeout'] as int? ?? 20) + 30)
-        : const Duration(seconds: 60);
+    final timeout = switch (message['cmd']) {
+      'wait' => Duration(seconds: (message['timeout'] as int? ?? 20) + 30),
+      // Starting a handful of 4K codecs side by side takes a while.
+      'hwprobe' => const Duration(seconds: 180),
+      _ => const Duration(seconds: 60),
+    };
     final answer = jsonDecode(
       await driver.requestData(jsonEncode(message), timeout: timeout),
     ) as Map<String, dynamic>;
@@ -135,6 +141,20 @@ Map<String, Object?> messageOf(List<String> args) {
     case 'seek':
       if (rest.length != 1) throw const FormatException('seek <h:mm:ss|s|N%>');
       return {'cmd': 'seek', 'to': rest.single};
+    case 'hwprobe':
+      if (rest.isEmpty || rest.length > 2) {
+        throw const FormatException('hwprobe <method> [<json args>]');
+      }
+      final Object? args;
+      try {
+        args = rest.length == 2 ? jsonDecode(rest[1]) : null;
+      } on FormatException catch (error) {
+        throw FormatException('hwprobe args are not JSON: ${error.message}');
+      }
+      if (args != null && args is! Map) {
+        throw const FormatException('hwprobe args are a JSON object');
+      }
+      return {'cmd': 'hwprobe', 'method': rest.first, 'args': ?args};
     default:
       throw FormatException('unknown command: $cmd');
   }
@@ -146,6 +166,10 @@ String human(String cmd, Map<String, dynamic> answer) {
   final out = StringBuffer();
   if (answer['error'] != null) {
     out.writeln('error: ${answer['error']}');
+    return '$out';
+  }
+  if (cmd == 'hwprobe') {
+    out.writeln(const JsonEncoder.withIndent('  ').convert(answer));
     return '$out';
   }
   if (answer['played'] != null) {

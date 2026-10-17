@@ -4,6 +4,7 @@ import 'dart:ui' show CheckedState, SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/diagnostics_log.dart';
 import '../../core/core.dart' show StreamKind;
@@ -108,6 +109,8 @@ class AppDriver {
         return streams(_strings(message['text']), _strings(message['not']));
       case 'play':
         return play(_int(message['index']));
+      case 'hwprobe':
+        return hwprobe('${message['method']}', message['args']);
       default:
         throw FormatException('unknown command: $cmd');
     }
@@ -742,6 +745,37 @@ class AppDriver {
   }
 
   static List<String> _coreLogLines() => rust.diagnosticsSnapshot().logLines;
+
+  // --------------------------------------------------------------- hwprobe
+
+  static const _hwprobe = MethodChannel('xtremio/hwprobe');
+
+  /// One method of the developer's codec probe (HwProbe.kt on Android),
+  /// passed straight through: the answer is whatever the Kotlin side
+  /// answers, made fit for JSON. `tool/hwprobe` is what sends these.
+  Future<Map<String, Object?>> hwprobe(String method, Object? args) async {
+    try {
+      final answer = jsonable(
+        await _hwprobe.invokeMethod<Object?>(method, args),
+      );
+      return answer is Map<String, Object?> ? answer : {'result': answer};
+    } on PlatformException catch (error) {
+      return {'error': error.message ?? error.code, 'code': error.code};
+    } on MissingPluginException {
+      return {'error': 'this platform has no codec probe'};
+    }
+  }
+
+  /// [value] as JSON can carry it: maps keyed by strings, all the way
+  /// down, and no NaN or infinity, which `jsonEncode` refuses.
+  static Object? jsonable(Object? value) => switch (value) {
+    final Map<Object?, Object?> map => {
+      for (final MapEntry(:key, :value) in map.entries) '$key': jsonable(value),
+    },
+    final List<Object?> list => [for (final v in list) jsonable(v)],
+    final double d when !d.isFinite => null,
+    _ => value,
+  };
 
   // --------------------------------------------------------------- helpers
 
