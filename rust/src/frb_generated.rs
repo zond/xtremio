@@ -2694,10 +2694,12 @@ impl SseDecode for crate::api::media::PictureSupport {
         let mut var_decodes = <Vec<String>>::sse_decode(deserializer);
         let mut var_encodes = <Vec<String>>::sse_decode(deserializer);
         let mut var_tenBit = <bool>::sse_decode(deserializer);
+        let mut var_softwareDecodes = <Vec<String>>::sse_decode(deserializer);
         return crate::api::media::PictureSupport {
             decodes: var_decodes,
             encodes: var_encodes,
             ten_bit: var_tenBit,
+            software_decodes: var_softwareDecodes,
         };
     }
 }
@@ -3007,6 +3009,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::media::PictureSupport {
             self.decodes.into_into_dart().into_dart(),
             self.encodes.into_into_dart().into_dart(),
             self.ten_bit.into_into_dart().into_dart(),
+            self.software_decodes.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3204,6 +3207,7 @@ impl SseEncode for crate::api::media::PictureSupport {
         <Vec<String>>::sse_encode(self.decodes, serializer);
         <Vec<String>>::sse_encode(self.encodes, serializer);
         <bool>::sse_encode(self.ten_bit, serializer);
+        <Vec<String>>::sse_encode(self.software_decodes, serializer);
     }
 }
 

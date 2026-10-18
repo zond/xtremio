@@ -113,22 +113,29 @@ pub fn media_renditions_available() -> anyhow::Result<bool> {
     guarded_ok(crate::rendition::available)
 }
 
-/// What this device's hardware can convert a film's picture with, by the
-/// names the cast decision uses ("H.264", "HEVC", "AV1", "VP9").
+/// What this device can convert a film's picture with, by the names the
+/// cast decision uses ("H.264", "HEVC", "AV1", "VP9", "MPEG-4 Part 2",
+/// "DivX 3", "MPEG-2").
 pub struct PictureSupport {
-    /// The codecs a source's picture can be decoded from.
+    /// The codecs the hardware decodes a source's picture from.
     pub decodes: Vec<String>,
     /// The codecs a converted picture can be made as: H.264 and HEVC at
     /// most.
     pub encodes: Vec<String>,
     /// HEVC Main 10 can be made, with an HDR film's colours kept.
     pub ten_bit: bool,
+    /// The codecs the player's FFmpeg decodes in software for a
+    /// conversion: "MPEG-4 Part 2", "DivX 3" and "MPEG-2" at most. Up to
+    /// 1920x1080, 8-bit, made 8-bit.
+    pub software_decodes: Vec<String>,
 }
 
-/// What this device can convert a picture with. Only hardware codecs
-/// count. Empty everywhere when it cannot convert at all: on a desktop, or
-/// a phone older than Android 8. The first call makes and deletes a few
-/// codecs, so it runs on a worker; later calls answer the kept result.
+/// What this device can convert a picture with. Its decoders are the
+/// hardware's, and libavcodec's for what no hardware decodes. Empty
+/// everywhere when it cannot convert at all: on a desktop, or a phone older
+/// than Android 8. The software decoders are listed once a player has
+/// loaded libmpv. The first call makes and deletes a few codecs, so it runs
+/// on a worker; later calls answer the kept result.
 pub fn media_picture_support() -> anyhow::Result<PictureSupport> {
     guarded_ok(|| {
         let offered = crate::picture::support().offered();
@@ -137,6 +144,7 @@ pub fn media_picture_support() -> anyhow::Result<PictureSupport> {
             decodes: names(&offered.decodes),
             encodes: names(&offered.encodes),
             ten_bit: offered.ten_bit,
+            software_decodes: names(&offered.software_decodes),
         }
     })
 }
@@ -294,5 +302,6 @@ mod tests {
     fn a_desktop_is_told_it_converts_nothing() {
         let answer = media_picture_support().unwrap();
         assert!(answer.decodes.is_empty() && answer.encodes.is_empty() && !answer.ten_bit);
+        assert!(answer.software_decodes.is_empty());
     }
 }

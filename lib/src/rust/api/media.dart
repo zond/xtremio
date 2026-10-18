@@ -97,10 +97,12 @@ String? mediaCastNumbers({required String token}) =>
 bool mediaRenditionsAvailable() =>
     RustLib.instance.api.crateApiMediaMediaRenditionsAvailable();
 
-/// What this device can convert a picture with. Only hardware codecs
-/// count. Empty everywhere when it cannot convert at all: on a desktop, or
-/// a phone older than Android 8. The first call makes and deletes a few
-/// codecs, so it runs on a worker; later calls answer the kept result.
+/// What this device can convert a picture with. Its decoders are the
+/// hardware's, and libavcodec's for what no hardware decodes. Empty
+/// everywhere when it cannot convert at all: on a desktop, or a phone older
+/// than Android 8. The software decoders are listed once a player has
+/// loaded libmpv. The first call makes and deletes a few codecs, so it runs
+/// on a worker; later calls answer the kept result.
 Future<PictureSupport> mediaPictureSupport() =>
     RustLib.instance.api.crateApiMediaMediaPictureSupport();
 
@@ -211,10 +213,11 @@ Future<bool> mpvStreamRegister({
   libmpvPath: libmpvPath,
 );
 
-/// What this device's hardware can convert a film's picture with, by the
-/// names the cast decision uses ("H.264", "HEVC", "AV1", "VP9").
+/// What this device can convert a film's picture with, by the names the
+/// cast decision uses ("H.264", "HEVC", "AV1", "VP9", "MPEG-4 Part 2",
+/// "DivX 3", "MPEG-2").
 class PictureSupport {
-  /// The codecs a source's picture can be decoded from.
+  /// The codecs the hardware decodes a source's picture from.
   final List<String> decodes;
 
   /// The codecs a converted picture can be made as: H.264 and HEVC at
@@ -224,14 +227,24 @@ class PictureSupport {
   /// HEVC Main 10 can be made, with an HDR film's colours kept.
   final bool tenBit;
 
+  /// The codecs the player's FFmpeg decodes in software for a
+  /// conversion: "MPEG-4 Part 2", "DivX 3" and "MPEG-2" at most. Up to
+  /// 1920x1080, 8-bit, made 8-bit.
+  final List<String> softwareDecodes;
+
   const PictureSupport({
     required this.decodes,
     required this.encodes,
     required this.tenBit,
+    required this.softwareDecodes,
   });
 
   @override
-  int get hashCode => decodes.hashCode ^ encodes.hashCode ^ tenBit.hashCode;
+  int get hashCode =>
+      decodes.hashCode ^
+      encodes.hashCode ^
+      tenBit.hashCode ^
+      softwareDecodes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -240,5 +253,6 @@ class PictureSupport {
           runtimeType == other.runtimeType &&
           decodes == other.decodes &&
           encodes == other.encodes &&
-          tenBit == other.tenBit;
+          tenBit == other.tenBit &&
+          softwareDecodes == other.softwareDecodes;
 }

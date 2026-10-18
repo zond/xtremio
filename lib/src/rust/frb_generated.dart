@@ -2513,12 +2513,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PictureSupport dco_decode_picture_support(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return PictureSupport(
       decodes: dco_decode_list_String(arr[0]),
       encodes: dco_decode_list_String(arr[1]),
       tenBit: dco_decode_bool(arr[2]),
+      softwareDecodes: dco_decode_list_String(arr[3]),
     );
   }
 
@@ -2743,10 +2744,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_decodes = sse_decode_list_String(deserializer);
     var var_encodes = sse_decode_list_String(deserializer);
     var var_tenBit = sse_decode_bool(deserializer);
+    var var_softwareDecodes = sse_decode_list_String(deserializer);
     return PictureSupport(
       decodes: var_decodes,
       encodes: var_encodes,
       tenBit: var_tenBit,
+      softwareDecodes: var_softwareDecodes,
     );
   }
 
@@ -2987,6 +2990,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.decodes, serializer);
     sse_encode_list_String(self.encodes, serializer);
     sse_encode_bool(self.tenBit, serializer);
+    sse_encode_list_String(self.softwareDecodes, serializer);
   }
 
   @protected

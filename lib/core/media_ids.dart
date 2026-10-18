@@ -102,17 +102,21 @@ class MediaResolution {
   final bool sniffed;
 }
 
-/// What this phone's hardware can convert a film's picture with: the answer
-/// of `media_picture_support`. [decodes] and [encodes] use the names the cast
-/// check uses (`H.264`, `HEVC`, `AV1`, `VP9`) and list hardware codecs only.
-/// [tenBit] says the HEVC encoder makes 10-bit pictures from the decoder's
-/// 10-bit output, which an HDR film needs.
+/// What this phone can convert a film's picture with: the answer of
+/// `media_picture_support`. Every set uses the names the cast check uses
+/// (`H.264`, `HEVC`, `AV1`, `VP9`, `MPEG-4 Part 2`, `DivX 3`, `MPEG-2`).
+/// [decodes] and [encodes] list hardware codecs only. [tenBit] says the HEVC
+/// encoder makes 10-bit pictures from the decoder's 10-bit output, which an
+/// HDR film needs. [softwareDecodes] lists the codecs the player's own FFmpeg
+/// decodes for a conversion where the hardware has no decoder: 8-bit
+/// pictures up to 1920x1080, made 8-bit.
 @immutable
 final class PictureSupport {
   const PictureSupport({
     this.decodes = const {},
     this.encodes = const {},
     this.tenBit = false,
+    this.softwareDecodes = const {},
   });
 
   /// No conversion at all: a desktop, an old phone, or no answer.
@@ -121,24 +125,28 @@ final class PictureSupport {
   final Set<String> decodes;
   final Set<String> encodes;
   final bool tenBit;
+  final Set<String> softwareDecodes;
 
   @override
   bool operator ==(Object other) =>
       other is PictureSupport &&
       setEquals(other.decodes, decodes) &&
       setEquals(other.encodes, encodes) &&
-      other.tenBit == tenBit;
+      other.tenBit == tenBit &&
+      setEquals(other.softwareDecodes, softwareDecodes);
 
   @override
   int get hashCode => Object.hash(
     Object.hashAllUnordered(decodes),
     Object.hashAllUnordered(encodes),
     tenBit,
+    Object.hashAllUnordered(softwareDecodes),
   );
 
   @override
   String toString() =>
-      'PictureSupport(decodes: $decodes, encodes: $encodes, tenBit: $tenBit)';
+      'PictureSupport(decodes: $decodes, encodes: $encodes, tenBit: $tenBit, '
+      'softwareDecodes: $softwareDecodes)';
 }
 
 /// What a converted picture is made as: stream-server's `PictureTarget`.
@@ -469,6 +477,7 @@ class RustMediaIds implements MediaIds {
         decodes: answer.decodes.toSet(),
         encodes: answer.encodes.toSet(),
         tenBit: answer.tenBit,
+        softwareDecodes: answer.softwareDecodes.toSet(),
       );
     } catch (error) {
       DiagnosticsLog.warn(
