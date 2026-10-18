@@ -373,10 +373,13 @@ conversion also asks what this phone's hardware can do. See
 - **A picture is converted only where a copy will not do, and never made
   smaller.** `CastCompatibility.of` asks `choosePicture`
   (`lib/features/cast/picture_plan.dart`) only for a film played by id that
-  would otherwise be refused for its picture, whose codec the receiver
-  showed no picture for, or whose container is neither MP4 nor Matroska.
-  In that last case the sound is converted too, and nothing tells the
-  containers apart. It needs the phone's own word that it decodes the codec
+  would otherwise be refused for its picture, or whose codec the receiver
+  showed no picture for. A copy will not do either for a container that
+  carries no presentation times. A B-frame film copied from an AVI would
+  play in decode order, so a film from a container that is neither MP4 nor
+  Matroska is converted, its sound too. A transport stream does carry
+  presentation times and could be copied later. It is converted today
+  because nothing has measured a copy from one. It needs the phone's own word that it decodes the codec
   (`MediaIds.pictureSupport`): in hardware, or in software for 8-bit
   pictures up to 1920x1080 (`softwareDecodes`). HDR goes only to 10-bit
   HEVC, never to SDR. The receiver is judged by `atBest ?? row`, as a copy

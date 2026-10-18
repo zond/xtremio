@@ -460,9 +460,10 @@ decodes its codec, and it is one of these:
   ([A receiver that shows no picture](#a-receiver-that-shows-no-picture));
 - a film in a container other than MP4 or Matroska: an AVI, a transport
   stream. Its picture is converted whatever it is, and its sound is made
-  stereo AAC whatever it is. An AVI carries no presentation times, so its
-  picture cannot be copied. A transport stream's H.264 could be, but the
-  rule does not tell containers apart, so it is converted too.
+  stereo AAC whatever it is. An AVI carries no presentation times, so a
+  B-frame film copied from it would play in decode order. A transport
+  stream does carry them and could be copied later, but it is converted
+  today because nothing has measured a copy from one.
 
 The phone decodes a codec in its hardware (H.264, HEVC, AV1, VP9 on zond's
 phone), or with the player's own FFmpeg where its hardware has no decoder.

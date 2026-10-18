@@ -208,6 +208,10 @@ sealed class CastCompatibility {
       if (webm) return picture!;
       return const CastRefused._container('a Matroska (.mkv) file');
     }
+    // A copy will not do here. An AVI carries no presentation times, so a
+    // B-frame film copied from it would play in decode order. A transport
+    // stream carries them and could be copied later, but nothing has
+    // measured a copy from one, so it is converted too.
     if (foreign) {
       return converted ??
           CastRefused._container(_describeReader(readers.first));
