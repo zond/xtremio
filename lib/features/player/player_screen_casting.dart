@@ -260,6 +260,15 @@ extension _PlayerCasting on _PlayerScreenState {
     // what every model announcing that name has in common, and what the
     // best of them decodes is tried ([ReceiverTable.of]).
     final receiver = ReceiverTable.of(announced: device.model);
+    // A rendition needs the film's length for its playlist, and a device
+    // that can make one; asked now, since a player registering libmpv is
+    // what makes it so.
+    final canRepackage =
+        _duration > Duration.zero && (_mediaIds?.renditionsAvailable ?? false);
+    // What this phone's hardware can convert a picture with, asked only where
+    // a rendition could be made. The answer is kept for the app's run.
+    final conversion = canRepackage ? await _pictureSupport() : null;
+    if (!_stillOurs) return;
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,
@@ -268,12 +277,14 @@ extension _PlayerCasting on _PlayerScreenState {
       // name, no release's claim. Null until its first report, which the
       // check answers with a "not yet".
       stats: _lastStats,
-      // A rendition needs the film's length for its playlist, and a device
-      // that can make one; asked now, since a player registering libmpv is
-      // what makes it so.
-      canRepackage:
-          _duration > Duration.zero &&
-          (_mediaIds?.renditionsAvailable ?? false),
+      canRepackage: canRepackage,
+      conversion: conversion,
+      // The codecs this receiver showed no picture for this session: a
+      // conversion is made to another where it can be.
+      noPicture: {
+        for (final codec in ReceiverTable.deepestPicture.keys)
+          if (cast.pictureMemory.showedNoPicture(device.id, codec)) codec,
+      },
     );
     if (compatibility is CastRefused) {
       await _explainCast(compatibility.explanation, title: compatibility.title);
@@ -302,6 +313,13 @@ extension _PlayerCasting on _PlayerScreenState {
         'player',
         'trying $video on a receiver only some models with its name decode it '
             'on; its report of the picture decides',
+      );
+    }
+    if (compatibility case CastRendition(:final picture?, :final sourceVideo)) {
+      DiagnosticsLog.info(
+        'player',
+        'converting the picture from ${sourceVideo ?? 'its codec'} to '
+            '${picture.target.wire} at ${picture.bitrate} bit/s for a receiver',
       );
     }
     // Whatever session is running is about to be replaced, so its wait ends
@@ -423,6 +441,9 @@ extension _PlayerCasting on _PlayerScreenState {
           rendition: rendition,
           convertSound:
               compatibility is CastRendition && compatibility.convertsSound,
+          picture: compatibility is CastRendition
+              ? compatibility.picture
+              : null,
         );
       } catch (error) {
         // The server would not publish the stream: an id it let go, a
@@ -522,6 +543,10 @@ extension _PlayerCasting on _PlayerScreenState {
         rendition: rendition,
         convertsSound:
             compatibility is CastRendition && compatibility.convertsSound,
+        picture: compatibility is CastRendition ? compatibility.picture : null,
+        sourceVideo: compatibility is CastRendition
+            ? compatibility.sourceVideo
+            : null,
         sourceAudio: mpv?.audioCodec,
         sourceChannels: mpv?.audioChannels,
         reportsPicture: cast.reportsPicture,
@@ -536,6 +561,9 @@ extension _PlayerCasting on _PlayerScreenState {
         _ => null,
       };
       _castSent = switch (compatibility) {
+        CastRendition(picture: _?, convertsSound: true) =>
+          'the film with its picture and sound converted',
+        CastRendition(picture: _?) => 'the film with its picture converted',
         CastRendition(convertsSound: true) =>
           'the film repackaged, its sound converted',
         CastRendition() => 'the film repackaged',
@@ -848,6 +876,11 @@ extension _PlayerCasting on _PlayerScreenState {
   /// remote's seeks and this screen's `SEEK`s alike (stream-server
   /// `docs/design/renditions.md` §2.8).
   ///
+  /// **A rendition whose [picture] is converted keeps the phone awake**
+  /// ([KeepAwake]) from its publish until it is withdrawn ([_unpublishCast]).
+  /// The conversion runs on this phone's codecs whenever the receiver asks,
+  /// screen off or not.
+  ///
   /// A stream read over HTTP (an origin that will not serve ranges) is handed
   /// over as it is when it is on another internet host. When it is on this
   /// device it has no address a receiver could use.
@@ -856,6 +889,7 @@ extension _PlayerCasting on _PlayerScreenState {
     CastDevice device, {
     bool rendition = false,
     bool convertSound = false,
+    PicturePlan? picture,
   }) async {
     final id = mediaIdOf(local);
     if (id == null) return isEmbeddedServerHost(local.host) ? null : local;
@@ -884,14 +918,35 @@ extension _PlayerCasting on _PlayerScreenState {
           start: start,
           audioTrack: _castAudioTrack,
           convertSound: convertSound,
+          picture: picture,
         ),
       );
       _castToken = token;
+      if (picture != null) {
+        _castHeldAwake = true;
+        await _keepAwake?.hold();
+      }
       return base.resolve('cast/$token/stream.mp4');
     }
     final token = await ids.publish(id);
     _castToken = token;
     return base.resolve('cast/$token');
+  }
+
+  /// What this phone's hardware can convert a picture with
+  /// ([MediaIds.pictureSupport]), or null when it could not be asked. A
+  /// question that fails converts nothing: the cast is judged as before.
+  Future<PictureSupport?> _pictureSupport() async {
+    try {
+      return await _mediaIds?.pictureSupport();
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'player',
+        'could not ask what this phone converts pictures with: '
+            '${error.runtimeType}',
+      );
+      return null;
+    }
   }
 
   /// The audio track playing here, by its place among the film's audio tracks.
@@ -908,10 +963,15 @@ extension _PlayerCasting on _PlayerScreenState {
   /// Withdraws the publication the receiver was handed, if there is one:
   /// nothing more is served under its token, and a body in flight is cut.
   /// Every way out of a session comes through here ([_endLanMedia]), and so
-  /// does a switch of receivers and a new stream on this screen.
+  /// does a switch of receivers and a new stream on this screen. The phone is
+  /// let sleep again here, if a converted picture was keeping it awake.
   Future<void> _unpublishCast() async {
     final token = _castToken;
     _castToken = null;
+    if (_castHeldAwake) {
+      _castHeldAwake = false;
+      await _keepAwake?.release();
+    }
     if (token == null) return;
     try {
       await _mediaIds?.unpublish(token);

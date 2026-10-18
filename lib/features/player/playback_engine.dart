@@ -274,6 +274,7 @@ class PlaybackScope extends InheritedWidget {
     this.streamNumbers,
     this.hints,
     this.mediaIds,
+    this.keepAwake,
     required super.child,
   });
 
@@ -321,6 +322,10 @@ class PlaybackScope extends InheritedWidget {
   /// and what was published without reaching FFI.
   final MediaIds? mediaIds;
 
+  /// What keeps the phone awake while a cast's picture is converted.
+  /// Injectable so a test can see it held and let go.
+  final KeepAwake? keepAwake;
+
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
 
@@ -354,6 +359,9 @@ class PlaybackScope extends InheritedWidget {
   static MediaIds mediaIdsOf(BuildContext context) =>
       _maybeOf(context)?.mediaIds ?? const RustMediaIds();
 
+  static KeepAwake keepAwakeOf(BuildContext context) =>
+      _maybeOf(context)?.keepAwake ?? const ChannelKeepAwake();
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -365,7 +373,8 @@ class PlaybackScope extends InheritedWidget {
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
       hints != oldWidget.hints ||
-      mediaIds != oldWidget.mediaIds;
+      mediaIds != oldWidget.mediaIds ||
+      keepAwake != oldWidget.keepAwake;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

@@ -76,6 +76,12 @@ class MainActivity : FlutterActivity() {
      */
     private var appUpdate: AppUpdateChannel? = null
 
+    /**
+     * The wake lock a cast whose picture this phone converts holds
+     * (PowerChannel.kt). Held so it is let go with the activity.
+     */
+    private var power: PowerChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Answers `DeviceProfile.detect()` (lib/shell/device_profile.dart),
@@ -162,6 +168,7 @@ class MainActivity : FlutterActivity() {
         drivePicker = DrivePicker(this, flutterEngine.dartExecutor.binaryMessenger)
         localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         appUpdate = AppUpdateChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        power = PowerChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         speech = SpeechInput(this).also {
             EventChannel(flutterEngine.dartExecutor.binaryMessenger, SpeechInput.CHANNEL)
                 .setStreamHandler(it)
@@ -511,6 +518,8 @@ class MainActivity : FlutterActivity() {
         drivePicker = null
         appUpdate?.detach()
         appUpdate = null
+        power?.detach()
+        power = null
         textEntry = null
         speech?.detach()
         speech = null

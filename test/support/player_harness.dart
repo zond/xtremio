@@ -15,6 +15,7 @@ import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
 import 'fake_proxy_streams.dart';
 import 'fake_playback_hints.dart';
+import 'fake_keep_awake.dart';
 import 'fake_media_ids.dart';
 import 'fake_stream_numbers_client.dart';
 import 'fake_subtitle_match_client.dart';
@@ -127,6 +128,10 @@ class PlayerHarness {
   /// [FakeMediaIds].
   final FakeMediaIds mediaIds = FakeMediaIds();
 
+  /// What keeps the phone awake while a cast's picture is converted; see
+  /// [FakeKeepAwake].
+  final FakeKeepAwake keepAwake = FakeKeepAwake();
+
   /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
   /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
   /// `'close-streams'`, `'dispose'`), in the order they happened.
@@ -222,6 +227,7 @@ class PlayerHarness {
         streamNumbers: streamNumbers,
         hints: hints,
         mediaIds: mediaIds,
+        keepAwake: keepAwake,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and

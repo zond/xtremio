@@ -4,7 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart'
-    show CoreField, MediaResolution, RenditionReadiness, mediaIdUrl;
+    show
+        CoreField,
+        MediaResolution,
+        PicturePlan,
+        PictureSupport,
+        PictureTarget,
+        RenditionReadiness,
+        mediaIdUrl;
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -1220,6 +1227,167 @@ void main() {
       expect(cast.plays, 1);
       expect(harness.engine.playCalls, playedLocally);
       expect(harness.engine.pauseCalls, pausedLocally);
+    });
+  });
+
+  group('a film whose picture this phone converts', () {
+    /// An AV1 film at 720p with 5.1 Dolby Digital Plus, in Matroska: no copy
+    /// carries the picture.
+    const av1 = PlaybackStats(
+      fileFormat: 'mkv',
+      videoCodec: 'av1 (libdav1d)',
+      audioCodec: 'eac3',
+      audioChannels: 6,
+      width: 1280,
+      height: 720,
+      containerFps: 23.976,
+    );
+
+    const phone = PictureSupport(
+      decodes: {'H.264', 'HEVC', 'AV1', 'VP9'},
+      encodes: {'H.264', 'HEVC'},
+      tenBit: true,
+    );
+
+    Future<(PlayerHarness, FakeCastClient, FakeLanMediaControl)> playing(
+      WidgetTester tester, {
+      PlaybackStats mpv = av1,
+      PictureSupport support = phone,
+      bool reportsPicture = false,
+    }) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen])
+        ..reportsPicture = reportsPicture;
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, mpv: mpv);
+      harness.mediaIds
+        ..renditionsAvailable = true
+        ..pictureSupportAnswer = support;
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 90));
+      harness.engine.emitPosition(const Duration(minutes: 10));
+      await pumpEvents(tester);
+      return (harness, cast, lan);
+    }
+
+    testWidgets('is published converted, and keeps the phone awake until '
+        'Stop', (tester) async {
+      final (harness, cast, _) = await playing(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(harness.mediaIds.renditions.single.spec.toJson(), {
+        'durationMs': const Duration(minutes: 90).inMilliseconds,
+        'segmentMs': 6000,
+        'startMs': const Duration(minutes: 10).inMilliseconds,
+        'video': {
+          'convert': {'target': 'hevcMain', 'bitrate': 4000000},
+        },
+        'audio': {
+          'aacStereo': {'bitrate': 192000},
+        },
+        'audioTrack': 0,
+      });
+      expect(cast.loads.single.$1.url, lanBase.resolve('cast/t1/stream.mp4'));
+      expect(harness.keepAwake.calls, ['hold']);
+
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pumpAndSettle();
+
+      expect(harness.mediaIds.unpublished, ['t1']);
+      expect(harness.keepAwake.calls, ['hold', 'release']);
+    });
+
+    testWidgets('a switch of receivers lets go and holds again for the next '
+        'one', (tester) async {
+      final (harness, _, _) = await playing(tester);
+      await castTo(tester, livingRoom);
+      expect(harness.keepAwake.calls, ['hold']);
+
+      // A Nest Hub decodes no HEVC: the same film is made H.264 for it.
+      await castTo(tester, kitchen);
+
+      expect(harness.mediaIds.unpublished, ['t1']);
+      expect(
+        harness.mediaIds.renditions.last.spec.picture,
+        const PicturePlan(PictureTarget.h264High, 6000000),
+      );
+      expect(harness.keepAwake.calls, ['hold', 'release', 'hold']);
+    });
+
+    testWidgets('a picture that is copied keeps nothing awake', (tester) async {
+      final (harness, cast, _) = await playing(tester, mpv: mpvMkvH264Aac);
+
+      await castTo(tester, livingRoom);
+
+      expect(harness.mediaIds.renditions.single.spec.toJson()['video'], 'copy');
+      expect(cast.loads, hasLength(1));
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pumpAndSettle();
+      expect(harness.keepAwake.calls, isEmpty);
+    });
+
+    testWidgets('a phone that converts nothing refuses it as before', (
+      tester,
+    ) async {
+      final (harness, cast, _) = await playing(
+        tester,
+        support: PictureSupport.none,
+      );
+
+      await castTo(tester, livingRoom);
+
+      expect(
+        find.text(
+          "This film's video is AV1. This receiver can't play it, and "
+          "xtremio can't convert it for casting yet.",
+        ),
+        findsOneWidget,
+      );
+      expect(harness.mediaIds.renditions, isEmpty);
+      expect(cast.loads, isEmpty);
+      expect(harness.keepAwake.calls, isEmpty);
+    });
+
+    testWidgets('a receiver that shows no picture of it is told, and gets '
+        'H.264 next time', (tester) async {
+      final (harness, cast, lan) = await playing(tester, reportsPicture: true);
+      await castTo(tester, livingRoom);
+      lan
+        ..requestsServed = 3
+        ..bodiesServed = 1;
+      for (final seconds in [0, 2, 3]) {
+        cast.emitStatus(
+          CastStatus(
+            state: CastPlayerState.playing,
+            position: Duration(minutes: 10, seconds: seconds),
+            duration: const Duration(minutes: 90),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      expect(
+        find.text(
+          'Living Room TV played the sound but showed no picture. It cannot '
+          "show this film's picture (HEVC, 1280x720). It was sent the film "
+          'with its picture and sound converted. The film is playing here '
+          'again.',
+        ),
+        findsOneWidget,
+      );
+      expect(harness.keepAwake.calls, ['hold', 'release']);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(
+        harness.mediaIds.renditions.last.spec.picture,
+        const PicturePlan(PictureTarget.h264High, 6000000),
+      );
     });
   });
 

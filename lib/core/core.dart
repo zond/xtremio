@@ -25,6 +25,7 @@ export 'fields.dart';
 export 'focus_emphasis.dart';
 export 'image_cache_usage.dart';
 export 'image_disk_cache.dart';
+export 'keep_awake.dart';
 export 'prefs_client.dart';
 export 'internet_status.dart';
 export 'resource.dart';

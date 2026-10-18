@@ -595,6 +595,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// ([PlaybackScope.mediaIdsOf]).
   MediaIds? _mediaIds;
 
+  /// What keeps the phone awake while a cast's picture is converted
+  /// ([PlaybackScope.keepAwakeOf]).
+  KeepAwake? _keepAwake;
+
+  /// Whether [_keepAwake] is held for the publication [_castToken]: a
+  /// rendition whose picture is converted ([_PlayerCasting._castUrl]). Let go
+  /// with the publication ([_PlayerCasting._unpublishCast]).
+  bool _castHeldAwake = false;
+
   /// The media id the stream [_mediaIdSource] was registered as ([_register]),
   /// which mpv is handed as `xtremio://<id>`. It is kept across re-opens of the
   /// same stream (a retry, a false end), so the server's answer about it is
@@ -1173,6 +1182,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playbackHints = PlaybackScope.hintsOf(context);
     _mediaIds = PlaybackScope.mediaIdsOf(context);
+    _keepAwake = PlaybackScope.keepAwakeOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
