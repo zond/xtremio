@@ -42,6 +42,10 @@ def boxes(data):
     out = []
     at = 0
     while True:
+        if at == len(data) and out:
+            # The data ends exactly where the last header box does: a
+            # response to a range from byte 0 is cut at the header's end.
+            return out
         if at + 8 > len(data):
             raise Truncated(at + 16)
         size, kind = struct.unpack(">I4s", data[at : at + 8])
