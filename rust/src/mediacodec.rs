@@ -3,7 +3,7 @@
 //! FFmpeg's decoders but no encoder (`--disable-encoders`; stream-server
 //! `docs/design/renditions.md` §2.6).
 //!
-//! `libmediandk.so` is opened at run time ([`Ndk::load`]), never linked, so
+//! `libmediandk.so` is opened at run time ([`crate::ndk_media`]), never linked, so
 //! the crate builds and runs on a desktop, where loading it fails and the
 //! sound is encoded by FFmpeg's own AAC encoder instead
 //! ([`crate::libav::LibavAac`]). No Kotlin, no JNI: the NDK's C API is the
@@ -33,10 +33,15 @@
 //! waits. A codec that errors fails the run; one that is merely slow is
 //! waited for.
 
-use std::ffi::{c_char, c_long, c_void, CStr};
+use std::ffi::{c_void, CStr};
 
 use bytes::Bytes;
 
+use crate::ndk_media::{
+    ndk, BufferInfo, Ndk, BUFFER_FLAG_CODEC_CONFIG, BUFFER_FLAG_END_OF_STREAM,
+    CONFIGURE_FLAG_ENCODE, INFO_OUTPUT_BUFFERS_CHANGED, INFO_OUTPUT_FORMAT_CHANGED,
+    INFO_TRY_AGAIN_LATER,
+};
 use crate::sound::{to_s16le, AacEncoder, AUDIO_SPECIFIC_CONFIG};
 
 /// FDK's priming for AAC-LC with 1024-sample frames, in samples.
@@ -46,12 +51,6 @@ pub const FDK_NAME: &CStr = c"c2.android.aac.encoder";
 /// How long one dequeue waits for the codec, in microseconds.
 pub const DEQUEUE_WAIT_US: i64 = 10_000;
 
-const BUFFER_FLAG_CODEC_CONFIG: u32 = 2;
-const BUFFER_FLAG_END_OF_STREAM: u32 = 4;
-const INFO_TRY_AGAIN_LATER: isize = -1;
-const INFO_OUTPUT_FORMAT_CHANGED: isize = -2;
-const INFO_OUTPUT_BUFFERS_CHANGED: isize = -3;
-const CONFIGURE_FLAG_ENCODE: u32 = 1;
 /// `AACObjectLC`.
 const AAC_PROFILE_LC: i32 = 2;
 
@@ -201,82 +200,11 @@ impl<C: Codec + Send> AacEncoder for CodecAac<C> {
 
 // --- The NDK -----------------------------------------------------------------------
 
-/// `AMediaCodecBufferInfo`.
-#[repr(C)]
-#[derive(Default)]
-struct BufferInfo {
-    offset: i32,
-    size: i32,
-    presentation_time_us: i64,
-    flags: u32,
-}
-
-/// The `libmediandk.so` functions the encoder calls (API 21).
-struct Ndk {
-    create_codec_by_name: unsafe extern "C" fn(*const c_char) -> *mut c_void,
-    create_encoder_by_type: unsafe extern "C" fn(*const c_char) -> *mut c_void,
-    delete: unsafe extern "C" fn(*mut c_void) -> i32,
-    configure:
-        unsafe extern "C" fn(*mut c_void, *const c_void, *mut c_void, *mut c_void, u32) -> i32,
-    start: unsafe extern "C" fn(*mut c_void) -> i32,
-    stop: unsafe extern "C" fn(*mut c_void) -> i32,
-    dequeue_input_buffer: unsafe extern "C" fn(*mut c_void, i64) -> isize,
-    get_input_buffer: unsafe extern "C" fn(*mut c_void, usize, *mut usize) -> *mut u8,
-    /// `offset` is `off_t`: a `long` on Android, 32 bits on armv7.
-    queue_input_buffer: unsafe extern "C" fn(*mut c_void, usize, c_long, usize, u64, u32) -> i32,
-    dequeue_output_buffer: unsafe extern "C" fn(*mut c_void, *mut BufferInfo, i64) -> isize,
-    get_output_buffer: unsafe extern "C" fn(*mut c_void, usize, *mut usize) -> *mut u8,
-    release_output_buffer: unsafe extern "C" fn(*mut c_void, usize, bool) -> i32,
-    format_new: unsafe extern "C" fn() -> *mut c_void,
-    format_delete: unsafe extern "C" fn(*mut c_void) -> i32,
-    format_set_string: unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char),
-    format_set_int32: unsafe extern "C" fn(*mut c_void, *const c_char, i32),
-    _library: libloading::Library,
-}
-
-impl Ndk {
-    fn load() -> Result<Self, String> {
-        // SAFETY: the platform's media library; its initialisers have no
-        // preconditions, and each symbol is read as its `NdkMediaCodec.h` /
-        // `NdkMediaFormat.h` signature.
-        unsafe {
-            let library = libloading::Library::new("libmediandk.so")
-                .map_err(|error| format!("no libmediandk.so: {error}"))?;
-            macro_rules! symbol {
-                ($name:literal) => {
-                    *library
-                        .get(concat!($name, "\0").as_bytes())
-                        .map_err(|error| format!("{}: {error}", $name))?
-                };
-            }
-            Ok(Self {
-                create_codec_by_name: symbol!("AMediaCodec_createCodecByName"),
-                create_encoder_by_type: symbol!("AMediaCodec_createEncoderByType"),
-                delete: symbol!("AMediaCodec_delete"),
-                configure: symbol!("AMediaCodec_configure"),
-                start: symbol!("AMediaCodec_start"),
-                stop: symbol!("AMediaCodec_stop"),
-                dequeue_input_buffer: symbol!("AMediaCodec_dequeueInputBuffer"),
-                get_input_buffer: symbol!("AMediaCodec_getInputBuffer"),
-                queue_input_buffer: symbol!("AMediaCodec_queueInputBuffer"),
-                dequeue_output_buffer: symbol!("AMediaCodec_dequeueOutputBuffer"),
-                get_output_buffer: symbol!("AMediaCodec_getOutputBuffer"),
-                release_output_buffer: symbol!("AMediaCodec_releaseOutputBuffer"),
-                format_new: symbol!("AMediaFormat_new"),
-                format_delete: symbol!("AMediaFormat_delete"),
-                format_set_string: symbol!("AMediaFormat_setString"),
-                format_set_int32: symbol!("AMediaFormat_setInt32"),
-                _library: library,
-            })
-        }
-    }
-}
-
 /// **Android's AAC encoder** as a [`Codec`]: one `AMediaCodec`, configured
 /// for AAC-LC 48 kHz stereo at a bitrate, and its format kept for every
 /// restart.
 pub struct NdkAac {
-    ndk: Ndk,
+    ndk: &'static Ndk,
     codec: *mut c_void,
     format: *mut c_void,
 }
@@ -289,7 +217,7 @@ impl NdkAac {
     /// The encoder at `bitrate` bits a second, configured and started, and
     /// its priming; an error where this is no Android or no AAC encoder.
     pub fn open(bitrate: u32) -> Result<(Self, i64), String> {
-        let ndk = Ndk::load()?;
+        let ndk = ndk()?;
         // SAFETY: the NDK's documented sequence; the codec and format are
         // this value's, deleted in its `Drop` whatever fails below.
         unsafe {

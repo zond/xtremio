@@ -23,6 +23,7 @@
 //!   FFmpeg ABI
 //! - `rendition`: the producer behind a cast the receiver cannot take as
 //!   it is: the film's samples, repackaged for the server's HLS
+//! - `ndk_media`: Android's media library, opened once at run time
 //!
 //! The crate also owns the process's allocator, below.
 
@@ -66,6 +67,7 @@ pub mod media;
 pub mod mediacodec;
 pub mod model;
 pub mod mpv_stream;
+pub mod ndk_media;
 pub mod prefs;
 pub mod rendition;
 pub mod serde_fault;
