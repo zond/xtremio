@@ -166,27 +166,71 @@ fn software_fits(width: u32, height: u32) -> bool {
     width <= 1920 && height <= 1080
 }
 
-/// **Whether the run's picture is decoded in software**: when the
-/// hardware has no decoder for `video`'s codec (`hardware` names the ones
-/// it has), or when `force` says so. A picture decoded in software must be
-/// 8-bit-bound and no bigger than 1920x1080.
-pub fn decodes_in_software(
+/// **How the run's picture is decoded, and at what size it is encoded.**
+/// In software when the hardware has no decoder for `video`'s codec
+/// (`hardware` names the ones it has), or when `force` says so; by the
+/// hardware otherwise.
+///
+/// - The hardware path keeps the picture as it is, so a picture with
+///   stretched pixels is refused ([`STRETCHED_PIXELS`]).
+/// - The software path scales a picture with stretched pixels to square
+///   ones ([`square_size`]). It makes 8-bit pictures only, and refuses one
+///   whose encoded size is bigger than 1920x1080 ([`SOFTWARE_TOO_LARGE`]).
+pub fn picture_decoding(
     video: &StreamInfo,
     target: PictureTarget,
     hardware: &[&str],
     force: bool,
-) -> Result<bool, String> {
+) -> Result<Decoding, String> {
     let named = libav::codec_name(video.codec);
+    let sar = video.sample_aspect_ratio;
     if !force && named.is_some_and(|name| hardware.contains(&name)) {
-        return Ok(false);
+        if sar.num > 0 && sar.den > 0 && sar.num != sar.den {
+            return Err(STRETCHED_PIXELS.to_owned());
+        }
+        return Ok(Decoding {
+            software: false,
+            width: video.width,
+            height: video.height,
+        });
     }
     if target.ten_bit() {
         return Err(NO_PICTURE_CONVERTER.to_owned());
     }
-    if !software_fits(video.width, video.height) {
+    let (width, height) = square_size(video.width, video.height, sar);
+    if !software_fits(width, height) {
         return Err(SOFTWARE_TOO_LARGE.to_owned());
     }
-    Ok(true)
+    Ok(Decoding {
+        software: true,
+        width,
+        height,
+    })
+}
+
+/// What [`picture_decoding`] chose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Decoding {
+    /// libavcodec decodes the picture, not the hardware.
+    pub software: bool,
+    /// The size the picture is encoded at.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// **The size of a `width` by `height` picture with sample aspect ratio
+/// `sar`, in square pixels**: the width times the ratio, to the nearest
+/// even number, and the height as it is. A ratio below one narrows the
+/// picture rather than heightening it, so the height never grows; a ratio
+/// above one widens it (PAL 16:9's 64:45 makes 720x576 1024x576). A ratio
+/// the container leaves unsaid (`0/1`) is square.
+pub fn square_size(width: u32, height: u32, sar: libav::Rational) -> (u32, u32) {
+    if sar.num <= 0 || sar.den <= 0 || sar.num == sar.den {
+        return (width, height);
+    }
+    let wide = f64::from(width) * f64::from(sar.num) / f64::from(sar.den);
+    let even = ((wide / 2.0).round() as u32).max(1) * 2;
+    (even, height)
 }
 
 /// What a viewer is told when this device has nothing to encode AAC with.
@@ -378,13 +422,18 @@ pub trait Packets {
         from_us: i64,
     ) -> Result<SoundConverter, String>;
     /// What converts the picture `source` (the stream `video`) into what
-    /// `config` says, or the sentence for why this device cannot.
+    /// `config` says, decoding it in software when `software`, or the
+    /// sentence for why this device cannot.
     fn picture_converter(
         &self,
         video: &StreamInfo,
         source: PictureSource,
         config: EncoderConfig,
+        software: bool,
     ) -> Result<Box<dyn PictureConverter>, String>;
+    /// The codecs this device's hardware decodes, by the names
+    /// [`libav::codec_name`] gives.
+    fn hardware_decodes(&self) -> Vec<&'static str>;
 }
 
 impl<S: libav::Source> Packets for Demuxer<S> {
@@ -459,14 +508,17 @@ impl<S: libav::Source> Packets for Demuxer<S> {
         ))
     }
 
+    fn hardware_decodes(&self) -> Vec<&'static str> {
+        picture::support().decodes
+    }
+
     fn picture_converter(
         &self,
         video: &StreamInfo,
         source: PictureSource,
         config: EncoderConfig,
+        software: bool,
     ) -> Result<Box<dyn PictureConverter>, String> {
-        let support = picture::support();
-        let software = decodes_in_software(video, config.target, &support.decodes, false)?;
         let codecs = picture::NdkCodecs::new().map_err(|error| {
             tracing::warn!(%error, "no MediaCodec to convert a rendition's picture with");
             NO_PICTURE_CONVERTER.to_owned()
@@ -485,7 +537,7 @@ impl<S: libav::Source> Packets for Demuxer<S> {
             codec = video.codec,
             "a rendition's picture is decoded in software"
         );
-        let codecs = picture::SoftCodecs::new(codecs, par);
+        let codecs = picture::SoftCodecs::new(codecs, par, config.width, config.height);
         Ok(Box::new(picture::Converter::new(codecs, source, config)))
     }
 }
@@ -582,11 +634,16 @@ pub fn repackage<P: Packets, K: Sink>(
     segments: &SegmentPlan,
     sink: K,
 ) {
+    let hardware = match spec.video {
+        VideoPlan::Copy => Vec::new(),
+        VideoPlan::Convert { .. } => packets.hardware_decodes(),
+    };
     let mut chosen = match Chosen::of(
         packets.streams(),
         spec.audio_track,
         &spec.video,
         &spec.audio,
+        &hardware,
     ) {
         Ok(chosen) => chosen,
         Err(sentence) => {
@@ -663,6 +720,7 @@ pub fn repackage<P: Packets, K: Sink>(
                 &chosen.video,
                 picture.source.clone(),
                 picture.config.clone(),
+                picture.software,
             ) {
                 Ok(converter) => Some(converter),
                 Err(sentence) => {
@@ -921,6 +979,8 @@ struct Chosen {
 struct PicturePlan {
     source: PictureSource,
     config: EncoderConfig,
+    /// libavcodec decodes it ([`picture_decoding`]).
+    software: bool,
 }
 
 impl Chosen {
@@ -935,6 +995,7 @@ impl Chosen {
         audio_track: u32,
         video_plan: &VideoPlan,
         audio_plan: &AudioPlan,
+        hardware: &[&str],
     ) -> Result<Self, String> {
         let video = streams
             .iter()
@@ -944,7 +1005,7 @@ impl Chosen {
             VideoPlan::Copy => None,
             VideoPlan::Convert { target, bitrate } => Some((*target, *bitrate)),
         };
-        let (config, picture) = video_input(video, convert)?;
+        let (config, picture) = video_input(video, convert, hardware, false)?;
         let audio = streams
             .iter()
             .filter(|stream| stream.kind == Kind::Audio)
@@ -996,9 +1057,13 @@ impl Chosen {
 /// What a run reads `video` as: its samples' configuration, and when it is
 /// converted (`convert`: the target and bitrate) what its decoder and
 /// encoders are told. Or the sentence for why it cannot be read so.
+/// `hardware` names the codecs the hardware decodes, and `force` decodes in
+/// software whatever the codec ([`picture_decoding`]).
 fn video_input(
     video: &StreamInfo,
     convert: Option<(PictureTarget, u32)>,
+    hardware: &[&str],
+    force: bool,
 ) -> Result<(VideoConfig, Option<PicturePlan>), String> {
     let (config, mime) = match video.codec {
         libav::AV_CODEC_ID_H264 => (
@@ -1028,17 +1093,16 @@ fn video_input(
     let picture = match convert {
         None => None,
         Some((target, bitrate)) => {
-            let sar = video.sample_aspect_ratio;
-            if sar.num > 0 && sar.den > 0 && sar.num != sar.den {
-                return Err(STRETCHED_PIXELS.to_owned());
-            }
             if video.colour.hdr() && !target.ten_bit() {
                 return Err(HDR_TO_SDR.to_owned());
             }
             if target == PictureTarget::HevcMain10 && !main10_fits(video.width, video.height) {
                 return Err(MAIN10_TOO_LARGE.to_owned());
             }
-            Some(PicturePlan::of(video, &config, mime, target, bitrate))
+            let decoding = picture_decoding(video, target, hardware, force)?;
+            Some(PicturePlan::of(
+                video, &config, mime, target, bitrate, decoding,
+            ))
         }
     };
     Ok((config, picture))
@@ -1050,18 +1114,28 @@ fn video_input(
 pub struct PictureInput {
     pub source: PictureSource,
     pub config: EncoderConfig,
+    /// libavcodec decodes the picture ([`picture_decoding`]).
+    pub software: bool,
     video: VideoConfig,
 }
 
 impl PictureInput {
-    /// `video` converted to `target` at `bitrate`, or the sentence for why
-    /// it cannot be.
-    pub fn of(video: &StreamInfo, target: PictureTarget, bitrate: u32) -> Result<Self, String> {
-        let (video_config, plan) = video_input(video, Some((target, bitrate)))?;
+    /// `video` converted to `target` at `bitrate` on a device whose
+    /// hardware decodes `hardware` (in software whatever it is when
+    /// `force`), or the sentence for why it cannot be.
+    pub fn of(
+        video: &StreamInfo,
+        target: PictureTarget,
+        bitrate: u32,
+        hardware: &[&str],
+        force: bool,
+    ) -> Result<Self, String> {
+        let (video_config, plan) = video_input(video, Some((target, bitrate)), hardware, force)?;
         let plan = plan.ok_or("no conversion")?;
         Ok(Self {
             source: plan.source,
             config: plan.config,
+            software: plan.software,
             video: video_config,
         })
     }
@@ -1343,14 +1417,17 @@ impl VideoConfig {
 impl PicturePlan {
     /// The decoder's description of `video` (configured as `config`, of
     /// MIME type `mime`), and the encoders' keys for `target` at `bitrate`.
-    /// The size is the container's, the frame rate its average (30 when it
-    /// has none), the colours its tags.
+    /// The decoder is told the container's size, and the encoders are
+    /// given `decoding`'s (square pixels, on the software path). The frame
+    /// rate is the container's average (30 when it has none), the colours
+    /// its tags.
     fn of(
         video: &StreamInfo,
         config: &VideoConfig,
         mime: &'static str,
         target: PictureTarget,
         bitrate: u32,
+        decoding: Decoding,
     ) -> Self {
         let csd = match config {
             VideoConfig::H264(h264) => vec![h264.csd0.clone(), h264.csd1.clone()],
@@ -1378,13 +1455,14 @@ impl PicturePlan {
             },
             config: EncoderConfig {
                 target,
-                width: video.width,
-                height: video.height,
+                width: decoding.width,
+                height: decoding.height,
                 bitrate,
                 frame_rate,
                 colour,
                 hdr_static_info: None,
             },
+            software: decoding.software,
         }
     }
 }
@@ -1576,6 +1654,8 @@ mod tests {
         /// desktop, when `None`), and what it was asked.
         picture: Option<fn() -> Box<dyn PictureConverter>>,
         pictures: RefCell<Vec<(PictureSource, EncoderConfig)>>,
+        /// What [`Packets::hardware_decodes`] answers.
+        hardware: Vec<&'static str>,
     }
 
     impl Packets for FakePackets {
@@ -1618,11 +1698,15 @@ mod tests {
                 None => Err(audio_refusal(audio.codec)),
             }
         }
+        fn hardware_decodes(&self) -> Vec<&'static str> {
+            self.hardware.clone()
+        }
         fn picture_converter(
             &self,
             _: &StreamInfo,
             source: PictureSource,
             config: EncoderConfig,
+            _: bool,
         ) -> Result<Box<dyn PictureConverter>, String> {
             self.pictures.borrow_mut().push((source, config));
             match &self.picture {
@@ -1736,6 +1820,7 @@ mod tests {
             converted: RefCell::default(),
             picture: None,
             pictures: RefCell::default(),
+            hardware: vec!["H.264", "HEVC", "AV1", "VP9"],
         }
     }
 
@@ -2848,20 +2933,23 @@ mod tests {
         };
         let phone = ["H.264", "HEVC", "AV1", "VP9"];
         let hevc = PictureTarget::HevcMain;
+        let software = |film: &StreamInfo, hardware: &[&str], force: bool| {
+            picture_decoding(film, hevc, hardware, force).map(|decoding| decoding.software)
+        };
         let xvid = video(libav::AV_CODEC_ID_MPEG4, 720, 576);
-        assert_eq!(decodes_in_software(&xvid, hevc, &phone, false), Ok(true));
+        assert_eq!(software(&xvid, &phone, false), Ok(true));
         let h264 = video(libav::AV_CODEC_ID_H264, 1280, 720);
-        assert_eq!(decodes_in_software(&h264, hevc, &phone, false), Ok(false));
-        assert_eq!(decodes_in_software(&h264, hevc, &phone, true), Ok(true));
-        assert_eq!(decodes_in_software(&h264, hevc, &[], false), Ok(true));
+        assert_eq!(software(&h264, &phone, false), Ok(false));
+        assert_eq!(software(&h264, &phone, true), Ok(true));
+        assert_eq!(software(&h264, &[], false), Ok(true));
         for (width, height) in [(1920, 1080), (1440, 1080)] {
             let film = video(libav::AV_CODEC_ID_MPEG2VIDEO, width, height);
-            assert_eq!(decodes_in_software(&film, hevc, &phone, false), Ok(true));
+            assert_eq!(software(&film, &phone, false), Ok(true));
         }
         for (width, height) in [(1920, 1088), (2048, 1080), (3840, 2160)] {
             let film = video(libav::AV_CODEC_ID_MPEG4, width, height);
             assert_eq!(
-                decodes_in_software(&film, hevc, &phone, false),
+                software(&film, &phone, false),
                 Err(
                     "This phone can't convert this film's picture for casting fast enough."
                         .to_owned()
@@ -2870,14 +2958,92 @@ mod tests {
             );
         }
         let big_h264 = video(libav::AV_CODEC_ID_H264, 3840, 2160);
+        assert_eq!(software(&big_h264, &phone, false), Ok(false));
         assert_eq!(
-            decodes_in_software(&big_h264, hevc, &phone, false),
-            Ok(false)
-        );
-        assert_eq!(
-            decodes_in_software(&xvid, PictureTarget::HevcMain10, &phone, false),
+            picture_decoding(&xvid, PictureTarget::HevcMain10, &phone, false),
             Err(NO_PICTURE_CONVERTER.to_owned())
         );
+    }
+
+    /// **Stretched pixels are made square in software, and refused by the
+    /// hardware**: PAL's 16:15 makes 720x576 768x576, its 16:9 (64:45)
+    /// 1024x576, NTSC's 8:9 makes 720x480 640x480 (narrower, never taller).
+    /// The 1920x1080 limit is on the size encoded, after scaling.
+    #[test]
+    fn stretched_pixels_are_scaled_to_square_ones_in_software() {
+        let sar = |num, den| libav::Rational { num, den };
+        assert_eq!(square_size(720, 576, sar(16, 15)), (768, 576));
+        assert_eq!(square_size(720, 576, sar(64, 45)), (1024, 576));
+        assert_eq!(square_size(720, 480, sar(8, 9)), (640, 480));
+        assert_eq!(square_size(720, 480, sar(32, 27)), (854, 480));
+        assert_eq!(square_size(720, 576, sar(0, 1)), (720, 576));
+        assert_eq!(square_size(720, 576, sar(1, 1)), (720, 576));
+        let film = |codec: i32, width: u32, height: u32, num: i32, den: i32| StreamInfo {
+            width,
+            height,
+            sample_aspect_ratio: sar(num, den),
+            ..stream(1, Kind::Video, codec)
+        };
+        let phone = ["H.264", "HEVC", "AV1", "VP9"];
+        let hevc = PictureTarget::HevcMain;
+        let xvid = film(libav::AV_CODEC_ID_MPEG4, 720, 576, 16, 15);
+        assert_eq!(
+            picture_decoding(&xvid, hevc, &phone, false),
+            Ok(Decoding {
+                software: true,
+                width: 768,
+                height: 576
+            })
+        );
+        // 1800 wide at 16:15 is 1920: made. 1824 is 1946: too large.
+        let fits = film(libav::AV_CODEC_ID_MPEG2VIDEO, 1800, 1080, 16, 15);
+        assert_eq!(
+            picture_decoding(&fits, hevc, &phone, false).map(|d| (d.width, d.height)),
+            Ok((1920, 1080))
+        );
+        let over = film(libav::AV_CODEC_ID_MPEG2VIDEO, 1824, 1080, 16, 15);
+        assert_eq!(
+            picture_decoding(&over, hevc, &phone, false),
+            Err(SOFTWARE_TOO_LARGE.to_owned())
+        );
+        // The hardware path keeps its refusal; forced into software, the
+        // same picture is scaled.
+        let h264 = film(libav::AV_CODEC_ID_H264, 720, 576, 16, 15);
+        assert_eq!(
+            picture_decoding(&h264, hevc, &phone, false),
+            Err(STRETCHED_PIXELS.to_owned())
+        );
+        assert_eq!(
+            picture_decoding(&h264, hevc, &phone, true).map(|d| d.width),
+            Ok(768)
+        );
+    }
+
+    /// **A run converting a 16:15 Xvid picture**: the decoder is told the
+    /// container's 720x576, and the encoders are configured at 768x576, the
+    /// size the converted picture is described with.
+    #[test]
+    fn a_stretched_xvid_picture_is_encoded_at_its_square_size() {
+        let mut packets = film(vec![packet(1, 0, true, b"\x00\x00\x01\xb6")]);
+        packets.streams[1].codec = libav::AV_CODEC_ID_MPEG4;
+        packets.streams[1].width = 720;
+        packets.streams[1].height = 576;
+        packets.streams[1].sample_aspect_ratio = libav::Rational { num: 16, den: 15 };
+        packets.picture = Some(|| Box::new(EchoConverter::default()));
+        let sink = FakeSink::new(None);
+        repackage(
+            &mut packets,
+            &converting(PictureTarget::HevcMain),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        let asked = packets.pictures.borrow();
+        let (source, config) = &asked[0];
+        assert_eq!((source.width, source.height), (720, 576));
+        assert_eq!((config.width, config.height), (768, 576));
+        assert_eq!(sink.wrote.borrow().last(), Some(&Wrote::End));
     }
 
     /// **What is refused before anything is read**: stretched pixels, an

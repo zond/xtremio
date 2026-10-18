@@ -1643,8 +1643,8 @@ impl Drop for DecodeRun {
 /// samples at half the height. What an encoder's byte buffers take in
 /// 8 bits (`COLOR_FormatYUV420SemiPlanar`).
 const AV_PIX_FMT_NV12: c_int = 23;
-/// `SWS_BILINEAR`. The picture keeps its size, so the filter only matters
-/// to a source whose chroma is not 4:2:0; 4:2:0 to NV12 is a copy.
+/// `SWS_BILINEAR`: how a picture with stretched pixels is scaled to square
+/// ones. A 4:2:0 picture that keeps its size goes to NV12 as a copy.
 const SWS_BILINEAR: c_int = 2;
 
 /// Where an NV12 picture's samples are in a buffer: `stride` bytes from one

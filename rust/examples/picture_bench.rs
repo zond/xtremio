@@ -48,7 +48,7 @@ use xtremio_core::ndk_media::{ndk, MediaFormat};
 use xtremio_core::picture::{
     has_sei, Colour, Converter, EncoderConfig, NdkCodecs, PictureSource, SoftCodecs, VideoCodecs,
 };
-use xtremio_core::rendition::{decodes_in_software, PictureInput};
+use xtremio_core::rendition::PictureInput;
 
 /// How far before a segment's cut a run from it seeks: the server's
 /// `SEEK_BACK`.
@@ -560,10 +560,9 @@ fn open_libav(args: &Args, libmpv: &str) -> Result<Film, String> {
         .find(|stream| stream.kind == Kind::Video && !stream.attached_picture)
         .ok_or("the file has no video stream")?
         .clone();
-    let mut input = PictureInput::of(&video, args.target, args.bitrate)?;
     let hardware = xtremio_core::picture::support().decodes;
-    let software = decodes_in_software(&video, args.target, &hardware, args.software)?;
-    let software = if software {
+    let mut input = PictureInput::of(&video, args.target, args.bitrate, &hardware, args.software)?;
+    let software = if input.software {
         if !libav::decodes_picture(libav, video.codec) {
             return Err(format!("{libmpv} has no decoder for codec {}", video.codec));
         }
@@ -614,6 +613,7 @@ fn bench() -> Result<Value, String> {
     let (width, height, frame_rate, mime) =
         (source.width, source.height, source.frame_rate, source.mime);
     let decode_times = source.decode_times;
+    let encoded = (config.width, config.height);
     let frame_us = (1_000_000.0 / frame_rate) as i64;
 
     // The sync samples, and the grid that mirrors them.
@@ -663,7 +663,11 @@ fn bench() -> Result<Value, String> {
     };
     let converter: Box<dyn PictureConverter> = match software {
         None => Box::new(Converter::new(timed, source, config)),
-        Some(par) => Box::new(Converter::new(SoftCodecs::new(timed, par), source, config)),
+        Some(par) => {
+            let (width, height) = (config.width, config.height);
+            let codecs = SoftCodecs::new(timed, par, width, height);
+            Box::new(Converter::new(codecs, source, config))
+        }
     };
     let converter = Recording {
         converter,
@@ -766,6 +770,8 @@ fn bench() -> Result<Value, String> {
             "decodeTimes": decode_times,
             "width": width,
             "height": height,
+            "encodedWidth": encoded.0,
+            "encodedHeight": encoded.1,
             "frameRate": frame_rate,
             "durationUs": duration_us,
             "syncSamples": syncs.len(),

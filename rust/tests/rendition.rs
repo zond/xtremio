@@ -1359,7 +1359,8 @@ fn an_avis_xvid_picture_is_decoded_into_nv12_in_presentation_order() -> anyhow::
         .collect();
     assert!(keys.len() >= 3, "{keys:?}");
     let mut decode_from = |at_us: i64| -> Vec<Out> {
-        let mut soft = SoftDecoder::new(&par, &source).expect("a software decoder");
+        let mut soft =
+            SoftDecoder::new(&par, &source, video.width, video.height).expect("a software decoder");
         demuxer.seek_us(at_us).expect("sought");
         let mut outputs = Vec::new();
         loop {
@@ -1455,4 +1456,119 @@ fn take(soft: &mut xtremio_core::picture::SoftDecoder, outputs: &mut Vec<Out>) {
             }
         }
     }
+}
+
+/// **A 16:9 PAL Xvid picture is made square**: `ffmpeg -aspect 16:9` on a
+/// 720x576 picture writes a 64:45 pixel shape into the MPEG-4 VOL header,
+/// which libavformat reports. The producer's decision scales it to
+/// 1024x576, and the software decoder hands out pictures of that size, the
+/// size the encoders are configured with.
+#[test]
+fn a_stretched_xvid_picture_is_decoded_at_its_square_size() -> anyhow::Result<()> {
+    use xtremio_core::libav::{Demuxer, Kind, Libav, Next, Nv12Layout, Rational};
+    use xtremio_core::picture::{
+        Colour, NdkCodecs, PictureSource, SoftCodecs, SoftDecoder, VideoCodec, VideoCodecs,
+        VideoOutput,
+    };
+    use xtremio_core::rendition::{picture_decoding, Decoding};
+    let name = libmpv_name();
+    let libav = match Libav::load(&name) {
+        Ok(libav) => &*Box::leak(Box::new(libav)),
+        Err(error) => {
+            eprintln!("SKIPPED: no FFmpeg this build reads through {name}: {error}");
+            return Ok(());
+        }
+    };
+    let tmp = tempfile::tempdir()?;
+    let avi = tmp.path().join("pal-wide.avi");
+    let made = run(
+        "ffmpeg",
+        &[
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=720x576:rate=25:duration=1",
+            "-c:v",
+            "mpeg4",
+            "-vtag",
+            "XVID",
+            "-aspect",
+            "16:9",
+            avi.to_str().unwrap(),
+        ],
+    );
+    if !made.is_some_and(|out| out.status.success()) {
+        eprintln!("SKIPPED: no ffmpeg with its MPEG-4 encoder");
+        return Ok(());
+    }
+    let bytes = bytes::Bytes::from(std::fs::read(&avi)?);
+    let mut demuxer = Demuxer::open(libav, std::io::Cursor::new(bytes)).expect("the header reads");
+    let video = demuxer
+        .streams()
+        .iter()
+        .find(|stream| stream.kind == Kind::Video)
+        .expect("a picture")
+        .clone();
+    assert_eq!(video.sample_aspect_ratio, Rational { num: 64, den: 45 });
+    let decoding = picture_decoding(
+        &video,
+        stream_server::PictureTarget::HevcMain,
+        &["H.264", "HEVC", "AV1", "VP9"],
+        false,
+    );
+    assert_eq!(
+        decoding,
+        Ok(Decoding {
+            software: true,
+            width: 1024,
+            height: 576
+        })
+    );
+    let par = demuxer.codec_parameters(video.index).expect("parameters");
+    let source = PictureSource {
+        mime: "video/mp4v-es",
+        width: video.width,
+        height: video.height,
+        frame_rate: 25.0,
+        csd: Vec::new(),
+        colour: Colour::default(),
+        decode_times: true,
+    };
+    // Made the way the producer makes it: the software path's codecs at
+    // the encoders' size (the encoders are never asked for here).
+    let mut codecs = SoftCodecs::new(NdkCodecs::default(), par, 1024, 576);
+    let mut soft: SoftDecoder = codecs.decoder(&source, None, false).expect("a decoder");
+    let mut sizes = Vec::new();
+    let mut format = None;
+    loop {
+        let packet = match demuxer.read_packet() {
+            Next::Packet(packet) => packet,
+            Next::End => break,
+            Next::Failed(error) => panic!("{error}"),
+        };
+        if packet.stream != video.index {
+            continue;
+        }
+        soft.input_buffer(0).unwrap()[..packet.data.len()].copy_from_slice(&packet.data);
+        soft.queue_input(0, packet.data.len(), 0, false).unwrap();
+        loop {
+            match soft.dequeue_output(0).unwrap() {
+                VideoOutput::Nothing => break,
+                VideoOutput::FormatChanged => format = Some(soft.output_format().unwrap()),
+                VideoOutput::Buffer { index, size, .. } => {
+                    sizes.push(size);
+                    soft.release_output(index, None).unwrap();
+                }
+            }
+        }
+    }
+    let format = format.expect("a format");
+    assert_eq!((format.width, format.height), (1024, 576));
+    assert!(!sizes.is_empty());
+    let whole = Nv12Layout::for_size(1024, 576).bytes();
+    assert!(sizes.iter().all(|size| *size == whole), "{sizes:?}");
+    Ok(())
 }

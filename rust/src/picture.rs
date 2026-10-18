@@ -1536,13 +1536,22 @@ fn encoder_format(
 pub struct SoftCodecs<E: VideoCodecs> {
     encoders: E,
     par: CodecParameters,
+    /// The size the decoder's pictures are scaled to: the encoders'.
+    width: u32,
+    height: u32,
 }
 
 impl<E: VideoCodecs> SoftCodecs<E> {
-    /// Decodes what `par` describes in software, and encodes with
-    /// `encoders`.
-    pub fn new(encoders: E, par: CodecParameters) -> Self {
-        Self { encoders, par }
+    /// Decodes what `par` describes in software, its pictures scaled to
+    /// `width` by `height` (square pixels, `rendition::square_size`), and
+    /// encodes with `encoders`.
+    pub fn new(encoders: E, par: CodecParameters, width: u32, height: u32) -> Self {
+        Self {
+            encoders,
+            par,
+            width,
+            height,
+        }
     }
 }
 
@@ -1560,7 +1569,7 @@ impl<E: VideoCodecs> VideoCodecs for SoftCodecs<E> {
         if surface.is_some() || p010 {
             return Err("the software decoder writes 8-bit buffers only".to_owned());
         }
-        SoftDecoder::new(&self.par, source)
+        SoftDecoder::new(&self.par, source, self.width, self.height)
     }
 
     fn encoder(
@@ -1583,7 +1592,8 @@ impl<E: VideoCodecs> VideoCodecs for SoftCodecs<E> {
 /// **libavcodec as a [`VideoCodec`]**: one input buffer, decoded as soon as
 /// it is queued, and every picture it frees held as an NV12 output buffer
 /// ([`PictureDecoder`]) until the converter takes it. Its output format is
-/// [`COLOR_FORMAT_NV12`] at the container's size.
+/// [`COLOR_FORMAT_NV12`] at the size it was made for: the container's, or
+/// wider or narrower to make stretched pixels square.
 ///
 /// **Times.** A source with presentation times hands them to libavcodec as
 /// such, and each picture keeps its own. A source with decode times alone
@@ -1607,9 +1617,15 @@ pub struct SoftDecoder {
 }
 
 impl SoftDecoder {
-    /// A started decoder for `par`'s codec, its pictures `source`'s size.
-    pub fn new(par: &CodecParameters, source: &PictureSource) -> Result<Self, String> {
-        let decoder = PictureDecoder::open(par, source.width, source.height)?
+    /// A started decoder for `par`'s codec, its pictures scaled to `width`
+    /// by `height`.
+    pub fn new(
+        par: &CodecParameters,
+        source: &PictureSource,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, String> {
+        let decoder = PictureDecoder::open(par, width, height)?
             .ok_or("this FFmpeg has no decoder for the picture")?;
         let frame_us = if source.frame_rate.is_finite() && source.frame_rate > 0.0 {
             (1_000_000.0 / f64::from(source.frame_rate)).round() as i64
