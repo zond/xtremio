@@ -5,7 +5,9 @@
 /// empty list. A server that is busy or unreachable, a title it does not
 /// know, a catalogue that did not answer: all of them are a title with no
 /// row under it, which is the same thing a film nothing resembles looks
-/// like. **Nothing in this file throws.**
+/// like. **Nothing in this file throws.** The For you row does need to
+/// tell a failure from an empty answer, so `suggestionsFor` answers a
+/// failure with null.
 ///
 /// The order is deliberate and it is the whole design:
 ///
@@ -72,15 +74,16 @@ final class MoreLikeThis {
     // The suggestions are remembered across restarts and the *resolution*
     // is not: it is a handful of searches against whatever the catalogues
     // hold today, and a poster that changed is a poster that should change.
-    final suggestions = await suggestionsFor(type: type, id: id);
+    final suggestions = await suggestionsFor(type: type, id: id) ?? const [];
     return resolveSuggestions(suggestions, subjectId: id, search: search);
   }
 
   /// What the model said about this title: off the preferences file when
-  /// this device has asked before, off the server when it has not, and an
-  /// empty list when the ask failed. Unresolved: the For you row ranks
-  /// these before it asks the catalogue about the best of them.
-  Future<List<SuggestedTitle>> suggestionsFor({
+  /// this device has asked before, off the server when it has not, and null
+  /// when the ask failed. An answer with nothing in it is an empty list.
+  /// Unresolved: the For you row ranks these before it asks the catalogue
+  /// about the best of them.
+  Future<List<SuggestedTitle>?> suggestionsFor({
     required String type,
     required String id,
   }) async {
@@ -97,7 +100,7 @@ final class MoreLikeThis {
         'no suggestions for $type $id: '
             '${failure.trouble.describe}${failure.detail == null ? '' : ' (${failure.detail})'}',
       );
-      return const [];
+      return null;
     } on Object catch (error) {
       // A provider that threw something else is still just a row that
       // does not appear.
@@ -105,7 +108,7 @@ final class MoreLikeThis {
         'similar',
         'no suggestions for $type $id: ${error.runtimeType}',
       );
-      return const [];
+      return null;
     }
     // Written down even when it is empty: an answer with nothing in it is
     // an answer, and the server would only say it again.

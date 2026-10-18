@@ -1175,7 +1175,12 @@ which listings each is in and whether it is liked
 **When.** The result is kept (`forYou`: titles, their sources, when, and a
 signature of the sources) and drawn at once on the next start. It is
 worked out again when the signature changes, and otherwise at most once a
-day. The server's answers and the episode lists go four at a time, with
+day. A source whose ask failed is not an empty answer
+(`suggestionsFor` says null). Such a run replaces the row only when its row
+is at least as long, so a run with nothing answering leaves the row alone.
+It is kept as incomplete and worked out again after ten minutes
+(`retryAfter`), when the answers that did come in are read from memory and
+only the failed sources reach the server. The server's answers and the episode lists go four at a time, with
 the catalogue searches four at a time beside them. A first run with
 nothing kept draws the row from the first answers and fills it as the rest
 arrive. A tile is the poster and the name, as every row's is, and the

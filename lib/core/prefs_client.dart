@@ -232,8 +232,8 @@ class AppPrefs extends ChangeNotifier {
   static const String showEpisodesKey = 'showEpisodes';
 
   /// The `forYou` key: the For you row as last worked out -- its titles,
-  /// their reasons, when, and a signature of the sources
-  /// (`ForYouController`). Kept as the controller wrote it.
+  /// their reasons, when, a signature of the sources, and whether a source
+  /// did not answer (`ForYouController`). Kept as the controller wrote it.
   static const String forYouKey = 'forYou';
 
   /// The `titleRatings` key: the scores the server has told this device

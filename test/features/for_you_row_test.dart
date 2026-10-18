@@ -32,6 +32,12 @@ class _FakeAsk {
   /// While set, every suggestion waits for it.
   Completer<void>? gate;
 
+  /// Sources whose ask fails, as `MoreLikeThis.suggestionsFor` reports one.
+  final Set<String> failing = {};
+
+  /// While set, every ask throws, as no network does.
+  bool offline = false;
+
   final List<String> suggested = [];
   int inFlight = 0;
   int mostInFlight = 0;
@@ -57,6 +63,8 @@ class _FakeAsk {
       try {
         await gate?.future;
         await Future<void>.delayed(Duration.zero);
+        if (offline) throw StateError('offline');
+        if (failing.contains(id)) return null;
         return answers[id] ?? const [];
       } finally {
         inFlight--;
@@ -791,6 +799,123 @@ void main() {
       await controller.settled;
       expect(fake.suggested, hasLength(ForYouController.maxSources));
     });
+
+    /// A controller over [count] saved sources `tt-s<i>`, each suggesting
+    /// its own `Pick <i>`, and the clock it reads.
+    Future<(ForYouController, List<LibraryItemView>, void Function(Duration))>
+    sourced(int count) async {
+      final prefs = AppPrefs(client: FakePrefsClient());
+      await prefs.load();
+      var clock = DateTime.utc(2026, 10, 1, 12);
+      for (var i = 0; i < count; i++) {
+        fake
+          ..knows('Pick $i', 'tt7$i')
+          ..suggests('tt-s$i', ['Pick $i']);
+      }
+      final controller = ForYouController(
+        prefs: prefs,
+        ask: fake.ask,
+        now: () => clock,
+      );
+      addTearDown(controller.dispose);
+      final library = [
+        for (var i = 0; i < count; i++)
+          LibraryItemView(
+            libraryItemJson(
+              'tt-s$i',
+              added: DateTime.utc(2026, 1, 1 + i).toIso8601String(),
+            ),
+          ),
+      ];
+      return (controller, library, (Duration by) => clock = clock.add(by));
+    }
+
+    Future<void> run(
+      ForYouController controller,
+      List<LibraryItemView> library,
+    ) async {
+      controller.update(library: library, continueWatching: const {});
+      await controller.settled;
+    }
+
+    test('a source that fails does not thin the row the viewer has', () async {
+      final (controller, library, advance) = await sourced(3);
+      await run(controller, library);
+      expect(controller.titles, hasLength(3));
+
+      advance(ForYouController.refreshEvery);
+      fake.failing.add('tt-s1');
+      await run(controller, library);
+      expect(fake.suggested, contains('movie/tt-s1'), reason: 'asked again');
+      expect(controller.titles, hasLength(3));
+      expect(controller.prefs.forYou!['titles'], hasLength(3));
+    });
+
+    test(
+      'a run with a failed source is kept for retryAfter, not a day',
+      () async {
+        final (controller, library, advance) = await sourced(3);
+        fake.failing.add('tt-s1');
+        await run(controller, library);
+        expect(controller.prefs.forYou!['incomplete'], isTrue);
+
+        fake.suggested.clear();
+        advance(ForYouController.retryAfter - const Duration(minutes: 1));
+        await run(controller, library);
+        expect(fake.suggested, isEmpty);
+
+        advance(const Duration(minutes: 2));
+        await run(controller, library);
+        expect(fake.suggested, contains('movie/tt-s1'));
+      },
+    );
+
+    test('after retryAfter the failed source is asked again and the row '
+        'grows', () async {
+      final (controller, library, advance) = await sourced(3);
+      fake.failing.add('tt-s1');
+      await run(controller, library);
+      expect(controller.titles.map((t) => t.item.id), ['tt72', 'tt70']);
+
+      fake.failing.clear();
+      advance(ForYouController.retryAfter + const Duration(minutes: 1));
+      await run(controller, library);
+      expect(controller.titles.map((t) => t.item.id), ['tt72', 'tt71', 'tt70']);
+      expect(controller.prefs.forYou!['incomplete'], isNull);
+    });
+
+    test('a run where nothing answers keeps the row', () async {
+      final (controller, library, advance) = await sourced(2);
+      await run(controller, library);
+      expect(controller.titles, hasLength(2));
+
+      advance(ForYouController.refreshEvery);
+      fake.offline = true;
+      await run(controller, library);
+      expect(controller.titles, hasLength(2));
+      expect(controller.prefs.forYou!['titles'], hasLength(2));
+      expect(controller.prefs.forYou!['incomplete'], isTrue);
+    });
+
+    test(
+      'an answer with nothing in it is empty, and kept for the day',
+      () async {
+        final (controller, library, advance) = await sourced(2);
+        await run(controller, library);
+        expect(controller.titles, hasLength(2));
+
+        advance(ForYouController.refreshEvery);
+        fake.suggests('tt-s1', const []);
+        await run(controller, library);
+        expect(controller.titles.map((t) => t.item.id), ['tt70']);
+        expect(controller.prefs.forYou!['incomplete'], isNull);
+
+        fake.suggested.clear();
+        advance(ForYouController.retryAfter + const Duration(minutes: 1));
+        await run(controller, library);
+        expect(fake.suggested, isEmpty);
+      },
+    );
 
     test('at most max tasks run at once, and the rest in turn', () async {
       final limiter = TaskLimiter(2);

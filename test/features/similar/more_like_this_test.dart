@@ -135,6 +135,18 @@ void main() {
     expect(asked, hasLength(2));
   });
 
+  test('suggestionsFor answers a failure with null and an empty answer with '
+      'an empty list', () async {
+    captureDiagnostics();
+    answering = (_, _) =>
+        const SimilarTitlesFailure(SimilarTrouble.busy, '503');
+    expect(await feature().suggestionsFor(type: 'movie', id: 'tt1'), isNull);
+    answering = (_, _) => StateError('a bug in a provider');
+    expect(await feature().suggestionsFor(type: 'movie', id: 'tt1'), isNull);
+    answering = (_, _) => const <SuggestedTitle>[];
+    expect(await feature().suggestionsFor(type: 'movie', id: 'tt1'), isEmpty);
+  });
+
   test('a provider that throws something else is still an empty row', () async {
     captureDiagnostics();
     answering = (_, _) => StateError('a bug in a provider');

@@ -20,6 +20,12 @@
 /// row as soon as the first answers are in and fills it as the rest arrive. A
 /// later one swaps the whole row when it is done.
 ///
+/// **A source that did not answer.** A failed ask is not an empty answer. The
+/// run ranks what did answer, and its row replaces the viewer's only when it
+/// is at least as long. It is kept as incomplete, and worked out again after
+/// [ForYouController.retryAfter] instead of a day. A run where nothing
+/// answered (offline) leaves the row as it is.
+///
 /// **What is not asked twice.** A source's suggestions go through
 /// `MoreLikeThis` and its `similarSuggestions` memory, so a title already
 /// opened on its details page costs nothing here. A show's episodes are kept
@@ -39,7 +45,8 @@ import 'for_you_rules.dart';
 import 'show_episodes.dart';
 
 /// How a source's suggestions are asked for: `MoreLikeThis.suggestionsFor`.
-typedef SuggestionsAsk = Future<List<SuggestedTitle>> Function({
+/// Null when the ask failed, which is not an answer with nothing in it.
+typedef SuggestionsAsk = Future<List<SuggestedTitle>?> Function({
   required String type,
   required String id,
 });
@@ -153,6 +160,12 @@ class ForYouController extends ChangeNotifier {
   /// nothing having changed.
   static const Duration refreshEvery = Duration(days: 1);
 
+  /// How old a kept answer may be before it is worked out again when a
+  /// source did not answer. The answers that came in are in the
+  /// `similarSuggestions` memory by then, so only the failed sources reach
+  /// the server again.
+  static const Duration retryAfter = Duration(minutes: 10);
+
   /// The server's answers and the episode lists.
   final TaskLimiter _limiter;
 
@@ -251,7 +264,8 @@ class ForYouController extends ChangeNotifier {
     }
   }
 
-  ({DateTime at, String signature, List<ForYouTitle> titles})? _kept() {
+  ({DateTime at, String signature, List<ForYouTitle> titles, bool incomplete})?
+  _kept() {
     final json = prefs.forYou;
     final at = json?['computedAt'];
     final signature = json?['signature'];
@@ -261,6 +275,7 @@ class ForYouController extends ChangeNotifier {
       at: DateTime.fromMillisecondsSinceEpoch(at, isUtc: true),
       signature: signature,
       titles: [for (final title in titles) ?ForYouTitle.fromJson(title)],
+      incomplete: json?['incomplete'] == true,
     );
   }
 
@@ -291,7 +306,8 @@ class ForYouController extends ChangeNotifier {
     final kept = _kept();
     if (kept != null &&
         kept.signature == signature &&
-        now().toUtc().difference(kept.at) < refreshEvery) {
+        now().toUtc().difference(kept.at) <
+            (kept.incomplete ? retryAfter : refreshEvery)) {
       if (!identical(_worked, kept.titles) && _worked.isEmpty) {
         _worked = kept.titles;
         notifyListeners();
@@ -305,8 +321,10 @@ class ForYouController extends ChangeNotifier {
     }
     // Filled as it goes only when there is nothing to show meanwhile: a
     // row the viewer already has is swapped once, at the end.
-    final progressive = _worked.isEmpty;
+    final had = _worked;
+    final progressive = had.isEmpty;
     final answers = <String, List<SuggestedTitle>>{};
+    var failed = 0;
     Future<void> passes = Future.value();
     var queued = false;
     void schedulePass() {
@@ -322,6 +340,10 @@ class ForYouController extends ChangeNotifier {
     await Future.wait([
       for (final source in sources)
         _limiter.run(() => _suggestionsOf(source)).then((answer) {
+          if (answer == null) {
+            failed++;
+            return;
+          }
           answers[source.id] = answer;
           if (progressive) schedulePass();
         }),
@@ -330,15 +352,20 @@ class ForYouController extends ChangeNotifier {
     if (_disposed) return;
     final titles = await _pass(sources, answers);
     if (_disposed) return;
-    _publish(titles);
-    await _keep(signature, titles);
+    // A run with a failed source is short by that source's titles. It
+    // replaces the viewer's row only when it is at least as long. A run
+    // where nothing answered (offline) thus leaves the row as it is.
+    final shown = failed > 0 && titles.length < had.length ? had : titles;
+    _publish(shown);
+    await _keep(signature, shown, incomplete: failed > 0);
   }
 
-  Future<List<SuggestedTitle>> _suggestionsOf(ForYouSource source) async {
+  /// [source]'s suggestions, or null when the ask failed.
+  Future<List<SuggestedTitle>?> _suggestionsOf(ForYouSource source) async {
     try {
       return await ask.suggest(type: source.type, id: source.id);
     } on Object {
-      return const [];
+      return null;
     }
   }
 
@@ -440,12 +467,18 @@ class ForYouController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _keep(String signature, List<ForYouTitle> titles) =>
-      prefs.setForYou({
-        'computedAt': now().toUtc().millisecondsSinceEpoch,
-        'signature': signature,
-        'titles': [for (final title in titles) title.toJson()],
-      });
+  /// Keeps [titles] as the row for [signature]. An [incomplete] one had a
+  /// source that did not answer, and is worked out again after [retryAfter].
+  Future<void> _keep(
+    String signature,
+    List<ForYouTitle> titles, {
+    bool incomplete = false,
+  }) => prefs.setForYou({
+    'computedAt': now().toUtc().millisecondsSinceEpoch,
+    'signature': signature,
+    'titles': [for (final title in titles) title.toJson()],
+    if (incomplete) 'incomplete': true,
+  });
 
   @override
   void dispose() {
