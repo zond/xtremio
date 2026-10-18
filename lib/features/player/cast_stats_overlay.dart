@@ -22,6 +22,8 @@ final class CastFacts {
     this.direct = false,
     this.rendition = false,
     this.convertsSound = false,
+    this.picture,
+    this.sourceVideo,
     this.sourceAudio,
     this.sourceChannels,
     this.reportsPicture = false,
@@ -45,6 +47,12 @@ final class CastFacts {
   /// [convertsSound].
   final bool rendition;
   final bool convertsSound;
+
+  /// What the rendition's picture is converted to, null when it is copied;
+  /// and the film's own codec as the check judged it (`AV1`). [video] is
+  /// then the codec the receiver is sent.
+  final PicturePlan? picture;
+  final String? sourceVideo;
 
   /// The sound mpv was playing (`audio-codec-name`) and its channels as the
   /// container declares them.
@@ -213,14 +221,16 @@ class CastStatsOverlay extends StatefulWidget {
                 '${_seconds(madeTo - status.position < Duration.zero ? Duration.zero : madeTo - status.position)} ahead',
               if (filmMade != null && filmMade > 0)
                 '${(filmMade / 1000).toStringAsFixed(1)}x',
+              if (_conversionSpeed(facts, made) case final speed?)
+                'converting at ${speed.toStringAsFixed(1)}x',
             ])
             case final line?)
           'made     $line',
         'runs     ${[for (final run in made.runs) 'at ${run.from == null ? '?' : formatTime(run.from!)}, ${run.produced} ${run.produced == 1 ? 'slot' : 'slots'}', if (made.runs.isEmpty) 'none live', '${made.runsStarted} started'].join(' · ')}',
         if (made.slots case final slots?)
-          'layout   $slots slots'
+          'layout   ${['$slots slots'
               '${made.slotLength == null ? '' : ' of ${_seconds(made.slotLength!)}'}'
-              '${made.exact == null ? '' : ', ${made.exact! ? 'exact' : 'estimated'}'}',
+              '${made.exact == null ? '' : ', ${made.exact! ? 'exact' : 'estimated'}'}', if ((made.spilled ?? 0) > 0) '${made.spilled} spilled', if ((made.truncated ?? 0) > 0) '${made.truncated} truncated'].join(' · ')}',
       ],
       if (numbers != null && numbers.source.kind != null)
         'source   ${[numbers.source.kind!, if (read != null) PlaybackStatsOverlay.formatBitrate((read * 8).round()), '${numbers.source.opens} ${numbers.source.opens == 1 ? 'open' : 'opens'}', '${numbers.source.seeks} ${numbers.source.seeks == 1 ? 'seek' : 'seeks'}'].join(' · ')}',
@@ -251,7 +261,24 @@ class CastStatsOverlay extends StatefulWidget {
       ?facts.sourceAudio,
       if (facts.sourceChannels case final channels?) _channels(channels),
     ], separator: ' ');
-    final video = made?.videoCodec ?? facts.video?.toLowerCase();
+    final String? video;
+    if (rendition && _convertsPicture(facts, made)) {
+      final target = made?.videoTarget ?? facts.picture?.target.wire;
+      final bitrate = made?.videoBitrate ?? facts.picture?.bitrate;
+      final out = [
+        ?(target == null
+            ? made?.videoCodec ?? facts.video?.toLowerCase()
+            : _targetName(target)),
+        if (bitrate != null) PlaybackStatsOverlay.formatBitrate(bitrate),
+      ].join(' ');
+      final from = facts.sourceVideo?.toLowerCase();
+      video = from == null ? '→ $out' : '$from → $out';
+    } else {
+      final codec = made?.videoCodec ?? facts.video?.toLowerCase();
+      video = codec == null
+          ? null
+          : '$codec${rendition && (made?.videoCopied ?? true) ? ' copied' : ''}';
+    }
     final String? sound;
     if (!rendition) {
       sound = source;
@@ -272,10 +299,35 @@ class CastStatsOverlay extends StatefulWidget {
           : type == null
           ? 'as it is'
           : 'as it is ($type)',
-      if (video != null)
-        'video $video${rendition && (made?.videoCopied ?? true) ? ' copied' : ''}',
+      if (video != null) 'video $video',
       if (sound != null) 'audio $sound',
     ].join(' · ');
+  }
+
+  /// Whether the rendition's picture is converted: the server's word where
+  /// it has said, and what was decided at the hand-over where it has not.
+  static bool _convertsPicture(CastFacts facts, RenditionMade? made) =>
+      switch (made?.videoCopied) {
+        null => facts.picture != null,
+        final copied => !copied,
+      };
+
+  /// A converted picture's target as the row says it, by the server's name
+  /// for it; a name this build does not know, as the server wrote it.
+  static String _targetName(String wire) =>
+      switch (PictureTarget.fromWire(wire)) {
+        PictureTarget.h264High => 'h264',
+        PictureTarget.hevcMain => 'hevc',
+        PictureTarget.hevcMain10 => 'hevc 10-bit',
+        null => wire,
+      };
+
+  /// How many times faster than real time the newest live run converts the
+  /// picture (its film over its producer's working time). Null for a picture
+  /// that is copied, and before the run has reported both.
+  static double? _conversionSpeed(CastFacts facts, RenditionMade made) {
+    if (!_convertsPicture(facts, made) || made.runs.isEmpty) return null;
+    return made.runs.last.speed;
   }
 
   /// A channel count as a layout: `2.0`, `5.1`, `7.1`.

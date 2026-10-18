@@ -142,6 +142,8 @@ final class RenditionMade {
     required this.filmMade,
     this.videoCopied,
     this.videoCodec,
+    this.videoTarget,
+    this.videoBitrate,
     this.soundConverted,
     this.soundCodec,
     this.soundChannels,
@@ -150,12 +152,20 @@ final class RenditionMade {
     this.slotLength,
     this.exact,
     this.madeTo,
+    this.spilled,
+    this.truncated,
   });
 
   /// Whether the picture is the film's own samples, repackaged; and the
   /// codec the first run reported making.
   final bool? videoCopied;
   final String? videoCodec;
+
+  /// What a converted picture is made as, by the server's word for it
+  /// (`hevcMain10`, `PictureTarget.wire`), and at what bitrate in bits per
+  /// second (`video.convert`); null when the picture is copied.
+  final String? videoTarget;
+  final int? videoBitrate;
 
   /// Whether the sound is converted; what it is made as.
   final bool? soundConverted;
@@ -185,6 +195,11 @@ final class RenditionMade {
   /// made.
   final Duration? madeTo;
 
+  /// Slots whose samples overflowed into the next one, and slots cut short
+  /// because even that was not room enough, over the layout.
+  final int? spilled;
+  final int? truncated;
+
   static RenditionMade? fromJson(Object? value) {
     if (value is! Map) return null;
     final started = value['runsStarted'];
@@ -200,6 +215,11 @@ final class RenditionMade {
     final madeTo = value['madeToMs'];
     final converted = audio is Map ? audio['aacStereo'] : null;
     Object? field(Object? map, String key) => map is Map ? map[key] : null;
+    final picture = field(video, 'convert');
+    final target = field(picture, 'target');
+    final videoBitrate = field(picture, 'bitrate');
+    final spilled = value['spilled'];
+    final truncated = value['truncated'];
     final slotMs = field(layout, 'slotMs');
     final bitrate = field(converted, 'bitrate');
     final codec = field(videoOut, 'codec');
@@ -210,6 +230,8 @@ final class RenditionMade {
     return RenditionMade(
       videoCopied: video == null ? null : video == 'copy',
       videoCodec: codec is String ? codec : null,
+      videoTarget: target is String ? target : null,
+      videoBitrate: videoBitrate is int ? videoBitrate : null,
       soundConverted: audio == null ? null : audio != 'copy',
       soundCodec: soundCodec is String ? soundCodec : null,
       soundChannels: channels is int ? channels : null,
@@ -225,26 +247,51 @@ final class RenditionMade {
       slotsMade: made,
       filmMade: Duration(milliseconds: film),
       madeTo: madeTo is int ? Duration(milliseconds: madeTo) : null,
+      spilled: spilled is int ? spilled : null,
+      truncated: truncated is int ? truncated : null,
     );
   }
 }
 
-/// A live run of a rendition: where on the film it began, and how many
-/// slots it has made.
+/// A live run of a rendition: where on the film it began, how many slots it
+/// has made, and how long its producer worked for how much film.
 final class RenditionRun {
-  const RenditionRun({required this.produced, this.from});
+  const RenditionRun({
+    required this.produced,
+    this.from,
+    this.busy,
+    this.media,
+  });
 
   final Duration? from;
   final int produced;
+
+  /// The producer thread's working time (`busyMs`), and the film it made in
+  /// that time (`mediaMs`).
+  final Duration? busy;
+  final Duration? media;
+
+  /// How many times faster than real time the run makes film: [media] over
+  /// [busy]. Null until both are known and some work was done.
+  double? get speed {
+    final busy = this.busy;
+    final media = this.media;
+    if (busy == null || media == null || busy <= Duration.zero) return null;
+    return media.inMicroseconds / busy.inMicroseconds;
+  }
 
   static RenditionRun? fromJson(Object? value) {
     if (value is! Map) return null;
     final produced = value['produced'];
     if (produced is! int) return null;
     final from = value['fromMs'];
+    final busy = value['busyMs'];
+    final media = value['mediaMs'];
     return RenditionRun(
       from: from is int ? Duration(milliseconds: from) : null,
       produced: produced,
+      busy: busy is int ? Duration(milliseconds: busy) : null,
+      media: media is int ? Duration(milliseconds: media) : null,
     );
   }
 }

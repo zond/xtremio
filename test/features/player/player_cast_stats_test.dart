@@ -280,6 +280,200 @@ void main() {
     });
   });
 
+  group('a picture this phone converts', () {
+    final t0 = DateTime(2026, 10, 18, 20);
+    const playing = CastStatus(
+      state: CastPlayerState.playing,
+      position: Duration(minutes: 2, seconds: 10),
+      duration: Duration(hours: 2),
+    );
+
+    /// An AV1 film made 10-bit HEVC, its 5.1 E-AC-3 converted.
+    const converted = CastFacts(
+      deviceName: 'Living Room TV',
+      model: 'Chromecast',
+      video: 'HEVC',
+      tentative: true,
+      rendition: true,
+      convertsSound: true,
+      picture: PicturePlan(PictureTarget.hevcMain10, 16000000),
+      sourceVideo: 'AV1',
+      sourceAudio: 'eac3',
+      sourceChannels: 6,
+    );
+
+    CastNumbers numbers({
+      Object? video = const {
+        'convert': {'target': 'hevcMain10', 'bitrate': 16000000},
+      },
+      List<Map<String, Object?>> runs = const [
+        {'fromMs': 126040, 'produced': 67, 'busyMs': 20000, 'mediaMs': 62000},
+      ],
+      int filmMadeMs = 139800,
+      Map<String, Object?> extra = const {},
+    }) => CastNumbers.fromJson({
+      'kind': 'rendition',
+      'contentType': 'video/mp4',
+      'delivery': {
+        'requests': 5,
+        'bodiesBegun': 4,
+        'bodiesOpen': 1,
+        'bytes': 1000000,
+      },
+      'source': {
+        'kind': 'torrent',
+        'bytesRead': 2000000,
+        'opens': 2,
+        'seeks': 14,
+      },
+      'rendition': {
+        'video': video,
+        'audio': {
+          'aacStereo': {'bitrate': 192000},
+        },
+        'videoOut': {'codec': 'hevc'},
+        'audioOut': {'codec': 'aac', 'channels': 2},
+        'layout': {'slots': 3363, 'slotMs': null, 'exact': true},
+        'runs': runs,
+        'runsStarted': 2,
+        'slotsMade': 70,
+        'filmMadeMs': filmMadeMs,
+        'madeToMs': 166000,
+        ...extra,
+      },
+    })!;
+
+    List<String> rows(CastFacts facts, List<CastNumbers> answers) =>
+        CastStatsOverlay.describe(
+          facts: facts,
+          status: playing,
+          buffering: const CastBuffering(),
+          now: t0.add(Duration(seconds: answers.length)),
+          samples: [
+            for (final (i, answer) in answers.indexed)
+              (at: t0.add(Duration(seconds: i)), numbers: answer),
+          ],
+        );
+
+    test('the server reads as it writes a converted picture', () {
+      final made = numbers(extra: {'spilled': 3, 'truncated': 1}).made!;
+      expect(made.videoCopied, isFalse);
+      expect(made.videoTarget, 'hevcMain10');
+      expect(made.videoBitrate, 16000000);
+      expect(made.runs.single.busy, const Duration(seconds: 20));
+      expect(made.runs.single.media, const Duration(seconds: 62));
+      expect(made.runs.single.speed, closeTo(3.1, 1e-9));
+      expect(made.spilled, 3);
+      expect(made.truncated, 1);
+      // A copy, and a server that says nothing of these: all absent.
+      final copy = numbers(
+        video: 'copy',
+        runs: const [
+          {'fromMs': 0, 'produced': 1},
+        ],
+      ).made!;
+      expect(copy.videoCopied, isTrue);
+      expect(copy.videoTarget, isNull);
+      expect(copy.videoBitrate, isNull);
+      expect(copy.runs.single.busy, isNull);
+      expect(copy.runs.single.media, isNull);
+      expect(copy.runs.single.speed, isNull);
+      expect(copy.spilled, isNull);
+      expect(copy.truncated, isNull);
+    });
+
+    test('says what the picture is made as, and how fast', () {
+      final lines = rows(converted, [
+        numbers(filmMadeMs: 100000),
+        numbers(filmMadeMs: 101500),
+      ]);
+      expect(
+        lines,
+        contains(
+          'sending  rendition (video/mp4) · video av1 → hevc 10-bit 16.0 '
+          'Mbps · audio eac3 5.1 → aac 2.0 192 kbps',
+        ),
+      );
+      expect(
+        lines,
+        contains('made     36 s ahead · 1.5x · converting at 3.1x'),
+      );
+    });
+
+    test('before the server answers, what was decided at the hand-over', () {
+      final lines = rows(converted, const []);
+      expect(
+        lines,
+        contains(
+          'sending  rendition (video/mp4) · video av1 → hevc 10-bit 16.0 '
+          'Mbps · audio eac3 5.1 → aac 2.0',
+        ),
+      );
+      expect(
+        rows(
+          const CastFacts(
+            deviceName: 'Living Room TV',
+            video: 'H.264',
+            rendition: true,
+            picture: PicturePlan(PictureTarget.h264High, 12000000),
+            sourceVideo: 'HEVC',
+          ),
+          const [],
+        ),
+        contains(
+          'sending  rendition (video/mp4) · video hevc → h264 12.0 Mbps · '
+          'audio copied',
+        ),
+      );
+    });
+
+    test('a run that has not said how long it worked has no speed half', () {
+      final lines = rows(converted, [
+        numbers(
+          runs: const [
+            {'fromMs': 126040, 'produced': 0},
+          ],
+        ),
+      ]);
+      expect(lines, contains('made     36 s ahead'));
+      // And no live run at all is no half either.
+      expect(
+        rows(converted, [numbers(runs: const [])]),
+        contains('made     36 s ahead'),
+      );
+    });
+
+    test('a copied picture has no speed half, whatever the run says', () {
+      final lines = rows(rendition, [
+        numbers(video: 'copy', filmMadeMs: 100000),
+        numbers(video: 'copy', filmMadeMs: 101500),
+      ]);
+      expect(lines, contains('made     36 s ahead · 1.5x'));
+      expect(
+        lines,
+        contains(
+          'sending  rendition (video/mp4) · video hevc copied · audio eac3 '
+          '5.1 → aac 2.0 192 kbps',
+        ),
+      );
+    });
+
+    test('the layout row counts slots that overflowed, when any did', () {
+      expect(
+        rows(converted, [
+          numbers(extra: {'spilled': 3, 'truncated': 1}),
+        ]),
+        contains('layout   3363 slots, exact · 3 spilled · 1 truncated'),
+      );
+      expect(
+        rows(converted, [
+          numbers(extra: {'spilled': 0, 'truncated': 0}),
+        ]),
+        contains('layout   3363 slots, exact'),
+      );
+    });
+  });
+
   group('the buffering count', () {
     final t0 = DateTime(2026, 10, 5, 20);
     DateTime at(int seconds) => t0.add(Duration(seconds: seconds));
