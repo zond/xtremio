@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +11,9 @@ import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
+import '../support/fake_cast_client.dart';
 import '../support/fake_core_client.dart';
+import '../support/fake_media_ids.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
@@ -720,6 +723,252 @@ void main() {
       expect(
         drive.human('hwprobe', {'started': 'perslot'}),
         '{\n  "started": "perslot"\n}\n',
+      );
+    });
+  });
+
+  group('rendition', () {
+    late Directory cache;
+    late FakeMediaIds ids;
+    late FakeLanMediaControl lan;
+    late List<String> numbersAsked;
+    late int libmpvLoads;
+
+    setUpAll(TestWidgetsFlutterBinding.ensureInitialized);
+
+    setUp(() {
+      cache = Directory.systemTemp.createTempSync('driver-rendition');
+      ids = FakeMediaIds();
+      lan = FakeLanMediaControl(address: '0.0.0.0:41234');
+      numbersAsked = [];
+      libmpvLoads = 0;
+    });
+
+    tearDown(() => cache.deleteSync(recursive: true));
+
+    AppDriver driverFor({bool libmpvComes = true}) => AppDriver(
+      settle: () async {},
+      mediaIds: ids,
+      lanMedia: () => lan,
+      castNumbersJson: (token) {
+        numbersAsked.add(token);
+        return ids.unpublished.contains(token)
+            ? null
+            : '{"kind":"rendition","delivery":{"requests":3}}';
+      },
+      loadLibmpv: () async {
+        libmpvLoads++;
+        if (libmpvComes) ids.renditionsAvailable = true;
+      },
+      cacheDir: () async => cache,
+    );
+
+    File tokenFile() => File('${cache.path}/driver-rendition-token');
+
+    test('publishes the file with the spec asked for, and answers the port '
+        'alone while the token goes to a private file', () async {
+      final driver = driverFor();
+
+      final reply = jsonDecode(
+        await driver.handle(
+          jsonEncode({
+            'cmd': 'rendition',
+            'path': '/sdcard/Download/hwprobe/av1-4k.mp4',
+            'durationMs': 90000,
+            'target': 'hevcMain',
+            'bitrate': 16000000,
+            'convertSound': true,
+          }),
+        ),
+      );
+
+      expect(reply, {'port': 41234});
+      expect(libmpvLoads, 1);
+      expect(ids.registered, [Uri.file('/sdcard/Download/hwprobe/av1-4k.mp4')]);
+      expect(lan.toggles, [true]);
+      expect(ids.renditions.single.id, 'm1');
+      expect(ids.renditions.single.spec.toJson(), {
+        'durationMs': 90000,
+        'segmentMs': 6000,
+        'startMs': 0,
+        'video': {
+          'convert': {'target': 'hevcMain', 'bitrate': 16000000},
+        },
+        'audio': {
+          'aacStereo': {'bitrate': 192000},
+        },
+        'audioTrack': 0,
+      });
+      expect(tokenFile().readAsStringSync(), 't1');
+      expect(tokenFile().statSync().mode & 0x1ff, 0x180, reason: 'mode 600');
+      driver.dispose();
+    });
+
+    test('copy copies the picture and needs no player made when renditions '
+        'are already available', () async {
+      ids.renditionsAvailable = true;
+      final driver = driverFor();
+
+      await driver.rendition(
+        path: '/sdcard/clip.mp4',
+        duration: const Duration(seconds: 10),
+        target: 'copy',
+        bitrate: 0,
+        convertSound: false,
+      );
+
+      expect(libmpvLoads, 0);
+      expect(ids.renditions.single.spec.toJson()['video'], 'copy');
+      expect(ids.renditions.single.spec.toJson()['audio'], 'copy');
+    });
+
+    test('numbers answer the server\'s JSON; stop withdraws, deletes the '
+        'token and closes the listener', () async {
+      final driver = driverFor();
+      await driver.rendition(
+        path: '/sdcard/clip.mp4',
+        duration: const Duration(seconds: 10),
+        target: 'h264High',
+        bitrate: 8000000,
+        convertSound: false,
+      );
+
+      expect(jsonDecode(await driver.handle('{"cmd":"rendition-numbers"}')), {
+        'kind': 'rendition',
+        'delivery': {'requests': 3},
+      });
+      expect(numbersAsked, ['t1']);
+
+      expect(jsonDecode(await driver.handle('{"cmd":"rendition-stop"}')), {
+        'stopped': true,
+      });
+      expect(ids.unpublished, ['t1']);
+      expect(tokenFile().existsSync(), isFalse);
+      expect(lan.toggles, [true, false]);
+      expect(jsonDecode(await driver.handle('{"cmd":"rendition-numbers"}')), {
+        'error': 'Bad state: no rendition is published',
+      });
+      expect(jsonDecode(await driver.handle('{"cmd":"rendition-stop"}')), {
+        'stopped': false,
+      });
+      expect(lan.toggles, [true, false]);
+    });
+
+    test('a second rendition withdraws the first', () async {
+      final driver = driverFor();
+      for (final target in ['hevcMain', 'hevcMain10']) {
+        await driver.rendition(
+          path: '/sdcard/clip.mp4',
+          duration: const Duration(seconds: 10),
+          target: target,
+          bitrate: 8000000,
+          convertSound: false,
+        );
+      }
+
+      expect(ids.unpublished, ['t1']);
+      expect(tokenFile().readAsStringSync(), 't2');
+      expect(lan.toggles, [true, false, true]);
+    });
+
+    test('refuses an unknown target, and a device with no renditions, '
+        'before anything is published', () async {
+      final driver = driverFor(libmpvComes: false);
+
+      expect(
+        jsonDecode(
+          await driver.handle(
+            '{"cmd":"rendition","path":"/x.mp4","durationMs":1000,'
+            '"target":"vp9","bitrate":1}',
+          ),
+        ),
+        {
+          'error':
+              'FormatException: no target "vp9": copy, h264High, hevcMain, '
+              'hevcMain10',
+        },
+      );
+      final refused = jsonDecode(
+        await driver.handle(
+          '{"cmd":"rendition","path":"/x.mp4","durationMs":1000,'
+          '"target":"copy","bitrate":0}',
+        ),
+      );
+
+      expect(refused['error'], contains('renditions are not available'));
+      expect(libmpvLoads, 1);
+      expect(ids.registered, isEmpty);
+      expect(ids.renditions, isEmpty);
+      expect(lan.toggles, isEmpty);
+      expect(tokenFile().existsSync(), isFalse);
+    });
+
+    test('tool/drive takes a path, duration, target and bitrate, and '
+        '--sound', () {
+      expect(
+        drive.messageOf([
+          'rendition',
+          '/sdcard/a.mp4',
+          '90000',
+          'hevcMain10',
+          '20000000',
+        ]),
+        {
+          'cmd': 'rendition',
+          'path': '/sdcard/a.mp4',
+          'durationMs': 90000,
+          'target': 'hevcMain10',
+          'bitrate': 20000000,
+          'convertSound': false,
+        },
+      );
+      expect(
+        drive.messageOf([
+          'rendition',
+          '/sdcard/a.mp4',
+          '--sound',
+          'convert',
+          '90000',
+          'copy',
+          '0',
+        ])['convertSound'],
+        isTrue,
+      );
+      expect(drive.messageOf(['rendition-numbers']), {
+        'cmd': 'rendition-numbers',
+      });
+      expect(drive.messageOf(['rendition-stop']), {'cmd': 'rendition-stop'});
+      for (final bad in [
+        ['rendition', '/a.mp4', '90000', 'hevcMain'],
+        ['rendition', '/a.mp4', 'long', 'hevcMain', '1'],
+        ['rendition', '/a.mp4', '90000', 'hevcMain', '1', '--sound', 'loud'],
+        ['rendition-stop', 'now'],
+      ]) {
+        expect(
+          () => drive.messageOf(bad),
+          throwsFormatException,
+          reason: '$bad',
+        );
+      }
+    });
+
+    test('tool/drive says where the token is, never what it is', () {
+      expect(
+        drive.human('rendition', {'port': 41234}),
+        'published; the LAN listener is on port 41234, and the token is in '
+        'the app\'s cache/driver-rendition-token\n',
+      );
+      expect(
+        drive.human('rendition-stop', {'stopped': true}),
+        'withdrawn; the LAN listener is off\n',
+      );
+      expect(
+        drive.human('rendition-stop', {'stopped': false}),
+        'no rendition was published\n',
+      );
+      expect(
+        drive.human('rendition-numbers', {'kind': 'rendition'}),
+        '{\n  "kind": "rendition"\n}\n',
       );
     });
   });

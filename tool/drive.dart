@@ -32,6 +32,15 @@ usage: tool/drive [--json] <command>
   hwprobe <method> [<json args>]  call the codec probe (codecs, start, status,
                                   stop, result, instances); tool/hwprobe
                                   wraps it
+  rendition <path> <durationMs> <target> <bitrate> [--sound convert|copy]
+                                  publish a rendition of a file on the device
+                                  (target copy, h264High, hevcMain or
+                                  hevcMain10; bitrate in bit/s); answers the
+                                  LAN listener's port, and the token goes to
+                                  the app's cache only; tool/rendition-fetch
+                                  wraps it
+  rendition-numbers               what the published rendition served and made
+  rendition-stop                  withdraw it and stop the LAN listener
 
 --json prints the raw answer.''';
 
@@ -77,6 +86,8 @@ Future<void> main(List<String> argv) async {
       'wait' => Duration(seconds: (message['timeout'] as int? ?? 20) + 30),
       // Starting a handful of 4K codecs side by side takes a while.
       'hwprobe' => const Duration(seconds: 180),
+      // The first one in an app run makes a player to load libmpv.
+      'rendition' => const Duration(seconds: 120),
       _ => const Duration(seconds: 60),
     };
     final answer = jsonDecode(
@@ -101,6 +112,11 @@ Map<String, Object?> messageOf(List<String> args) {
   switch (cmd) {
     case 'screen':
     case 'player':
+    case 'rendition-numbers':
+    case 'rendition-stop':
+      if (cmd.startsWith('rendition') && rest.isNotEmpty) {
+        throw FormatException('$cmd takes nothing');
+      }
       return {'cmd': cmd};
     case 'act':
       if (rest.length < 2) throw const FormatException('act <id> <action>');
@@ -155,6 +171,36 @@ Map<String, Object?> messageOf(List<String> args) {
         throw const FormatException('hwprobe args are a JSON object');
       }
       return {'cmd': 'hwprobe', 'method': rest.first, 'args': ?args};
+    case 'rendition':
+      const shape =
+          'rendition <path> <durationMs> <target> <bitrate> '
+          '[--sound convert|copy]';
+      final words = [...rest];
+      var convertSound = false;
+      final sound = words.indexOf('--sound');
+      if (sound >= 0) {
+        if (sound + 1 >= words.length) throw const FormatException(shape);
+        convertSound = switch (words[sound + 1]) {
+          'convert' => true,
+          'copy' => false,
+          _ => throw const FormatException(shape),
+        };
+        words.removeRange(sound, sound + 2);
+      }
+      if (words.length != 4) throw const FormatException(shape);
+      final durationMs = int.tryParse(words[1]);
+      final bitrate = int.tryParse(words[3]);
+      if (durationMs == null || bitrate == null) {
+        throw const FormatException(shape);
+      }
+      return {
+        'cmd': 'rendition',
+        'path': words[0],
+        'durationMs': durationMs,
+        'target': words[2],
+        'bitrate': bitrate,
+        'convertSound': convertSound,
+      };
     default:
       throw FormatException('unknown command: $cmd');
   }
@@ -168,8 +214,23 @@ String human(String cmd, Map<String, dynamic> answer) {
     out.writeln('error: ${answer['error']}');
     return '$out';
   }
-  if (cmd == 'hwprobe') {
+  if (cmd == 'hwprobe' || cmd == 'rendition-numbers') {
     out.writeln(const JsonEncoder.withIndent('  ').convert(answer));
+    return '$out';
+  }
+  if (cmd == 'rendition') {
+    out.writeln(
+      'published; the LAN listener is on port ${answer['port']}, and the '
+      'token is in the app\'s cache/driver-rendition-token',
+    );
+    return '$out';
+  }
+  if (cmd == 'rendition-stop') {
+    out.writeln(
+      answer['stopped'] == true
+          ? 'withdrawn; the LAN listener is off'
+          : 'no rendition was published',
+    );
     return '$out';
   }
   if (answer['played'] != null) {

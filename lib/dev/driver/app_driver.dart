@@ -1,19 +1,27 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' show CheckedState, SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart' show Player;
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/diagnostics_log.dart';
 import '../../core/core.dart' show StreamKind;
+import '../../core/media_ids.dart';
+import '../../core/server_client.dart';
+import '../../features/cast/cast_client.dart' show CastScope;
 import '../../features/details/meta_details_screen.dart';
 import '../../features/details/stream_facts.dart' show StreamPresentation;
 import '../../features/details/stream_list.dart' show SourceRow;
 import '../../features/diagnostics/diagnostics_report.dart' show redactSecrets;
+import '../../features/player/playback_engine.dart' show MediaKitEngine;
 import '../../features/player/player_screen.dart' show PlayerProbe;
 import '../../src/rust/api/diagnostics.dart' as rust;
+import '../../src/rust/api/media.dart' as rust_media;
 
 /// Builds the page `go details` pushes: the details screen the app's own
 /// lists push, unless a test hands in something lighter.
@@ -40,13 +48,28 @@ class AppDriver {
     Future<void> Function()? settle,
     DetailsPageBuilder? details,
     List<String> Function()? logLines,
+    MediaIds? mediaIds,
+    LanMediaControl Function()? lanMedia,
+    String? Function(String token)? castNumbersJson,
+    Future<void> Function()? loadLibmpv,
+    Future<Directory> Function()? cacheDir,
   }) : _settle = settle ?? settleFrames,
        _details = details ?? _metaDetails,
-       _logLines = logLines ?? _coreLogLines;
+       _logLines = logLines ?? _coreLogLines,
+       _mediaIds = mediaIds ?? const RustMediaIds(),
+       _lanMedia = lanMedia ?? _appLanMedia,
+       _castNumbersJson = castNumbersJson ?? _rustCastNumbers,
+       _loadLibmpv = loadLibmpv ?? _loadPlayerLibmpv,
+       _cacheDir = cacheDir ?? getTemporaryDirectory;
 
   final Future<void> Function() _settle;
   final DetailsPageBuilder _details;
   final List<String> Function() _logLines;
+  final MediaIds _mediaIds;
+  final LanMediaControl Function() _lanMedia;
+  final String? Function(String token) _castNumbersJson;
+  final Future<void> Function() _loadLibmpv;
+  final Future<Directory> Function() _cacheDir;
 
   /// Kept for the life of the driver: the semantics tree is built only
   /// while somebody holds one of these.
@@ -111,6 +134,18 @@ class AppDriver {
         return play(_int(message['index']));
       case 'hwprobe':
         return hwprobe('${message['method']}', message['args']);
+      case 'rendition':
+        return rendition(
+          path: '${message['path']}',
+          duration: Duration(milliseconds: _int(message['durationMs'])),
+          target: '${message['target']}',
+          bitrate: message['bitrate'] == null ? 0 : _int(message['bitrate']),
+          convertSound: message['convertSound'] == true,
+        );
+      case 'rendition-stop':
+        return renditionStop();
+      case 'rendition-numbers':
+        return renditionNumbers();
       default:
         throw FormatException('unknown command: $cmd');
     }
@@ -776,6 +811,172 @@ class AppDriver {
     final double d when !d.isFinite => null,
     _ => value,
   };
+
+  // ------------------------------------------------------------ rendition
+
+  /// The file in the app's cache (`cache/` under its data directory, which
+  /// `run-as` reaches) that holds the published rendition's token for
+  /// `tool/rendition-fetch`. Mode 600, and gone after [renditionStop].
+  static const renditionTokenFile = 'driver-rendition-token';
+
+  /// The rendition [rendition] published, while it is: a URL into this
+  /// device. **Never answered, printed or logged.**
+  String? _renditionToken;
+
+  /// Whether [rendition] turned the LAN listener on.
+  bool _renditionLan = false;
+
+  /// Publishes a rendition of the file at [path] on this device, as a cast
+  /// would (`_castUrl`), for `tool/rendition-fetch` to read over the LAN
+  /// listener without a television. It registers the path, starts the
+  /// listener, publishes with [target] (`copy` or a [PictureTarget] wire
+  /// name) at [bitrate], and writes the token to [renditionTokenFile].
+  /// Answers the listener's port and nothing else. A rendition published
+  /// before is withdrawn first.
+  ///
+  /// A rendition reads with the FFmpeg of the libmpv a player loaded. With
+  /// no player opened yet in this app run, one is made and let go first.
+  Future<Map<String, Object?>> rendition({
+    required String path,
+    required Duration duration,
+    required String target,
+    required int bitrate,
+    required bool convertSound,
+  }) async {
+    final PicturePlan? picture;
+    if (target == 'copy') {
+      picture = null;
+    } else {
+      final wanted = PictureTarget.fromWire(target);
+      if (wanted == null) {
+        throw FormatException(
+          'no target "$target": copy, '
+          '${PictureTarget.values.map((t) => t.wire).join(', ')}',
+        );
+      }
+      if (bitrate <= 0) throw const FormatException('a bitrate above zero');
+      picture = PicturePlan(wanted, bitrate);
+    }
+    if (duration <= Duration.zero) {
+      throw const FormatException('a duration above zero');
+    }
+    await renditionStop();
+    if (!_mediaIds.renditionsAvailable) await _loadLibmpv();
+    if (!_mediaIds.renditionsAvailable) {
+      throw StateError(
+        'renditions are not available: no player has loaded libmpv, or its '
+        'FFmpeg is not the one this build is bound to',
+      );
+    }
+    final id = _mediaIds.registerLocalPath(path);
+    final lan = _lanMedia();
+    final address = await lan.setLanMedia(enabled: true);
+    _renditionLan = true;
+    final port = int.tryParse(address?.split(':').last ?? '');
+    if (port == null) {
+      await renditionStop();
+      throw StateError('the LAN listener answered no port: $address');
+    }
+    final token = await _mediaIds.publishRendition(
+      id,
+      RenditionSpec(
+        duration: duration,
+        start: Duration.zero,
+        convertSound: convertSound,
+        picture: picture,
+      ),
+    );
+    _renditionToken = token;
+    try {
+      await _writeToken(token);
+    } catch (_) {
+      await renditionStop();
+      rethrow;
+    }
+    return {'port': port};
+  }
+
+  /// Writes [token] where `tool/rendition-fetch` reads it: an empty file
+  /// made private before the token goes in.
+  Future<void> _writeToken(String token) async {
+    final file = File('${(await _cacheDir()).path}/$renditionTokenFile');
+    if (file.existsSync()) file.deleteSync();
+    file.createSync(recursive: true);
+    final chmod = await Process.run('chmod', ['600', file.path]);
+    if (chmod.exitCode != 0 || file.statSync().mode & 0x3f != 0) {
+      file.deleteSync();
+      throw StateError('could not make $renditionTokenFile private');
+    }
+    file.writeAsStringSync(token, flush: true);
+  }
+
+  /// Withdraws the rendition [rendition] published, deletes its token file
+  /// and stops the LAN listener it started. Answers whether one was
+  /// published.
+  Future<Map<String, Object?>> renditionStop() async {
+    final token = _renditionToken;
+    _renditionToken = null;
+    if (token != null) await _mediaIds.unpublish(token);
+    final file = File('${(await _cacheDir()).path}/$renditionTokenFile');
+    if (file.existsSync()) file.deleteSync();
+    if (_renditionLan) {
+      _renditionLan = false;
+      await _lanMedia().setLanMedia(enabled: false);
+    }
+    return {'stopped': token != null};
+  }
+
+  /// What the published rendition has served and made: the server's
+  /// `CastNumbers` as `media_cast_numbers` answers it, which holds no
+  /// token.
+  Map<String, Object?> renditionNumbers() {
+    final token = _renditionToken;
+    if (token == null) throw StateError('no rendition is published');
+    final json = _castNumbersJson(token);
+    if (json == null) {
+      throw StateError('the rendition is not published any more');
+    }
+    return (jsonDecode(json) as Map).cast<String, Object?>();
+  }
+
+  /// The LAN listener the app's cast uses: the [CastScope]'s, which is
+  /// `ServerFootprint`, so the server stays at full footprint while it runs.
+  static LanMediaControl _appLanMedia() {
+    LanMediaControl? found;
+    void visit(Element element) {
+      if (found != null) return;
+      final widget = element.widget;
+      if (widget is CastScope) {
+        found = widget.lanMedia;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(visit);
+    return found ?? const ServerClient();
+  }
+
+  static String? _rustCastNumbers(String token) =>
+      rust_media.mediaCastNumbers(token: token);
+
+  /// Makes a player and lets it go: registering the `xtremio://` protocol
+  /// on it is what tells Rust which libmpv, and so which FFmpeg, to read
+  /// with, and that is kept for the app run.
+  static Future<void> _loadPlayerLibmpv() async {
+    final player = Player();
+    try {
+      // Meant for tests, which is what a driver is: the engine's own
+      // registration, without an engine around it.
+      // ignore: invalid_use_of_visible_for_testing_member
+      await MediaKitEngine.registerMediaIdProtocolOn(
+        player.platform,
+        rust_media.mpvStreamRegister,
+      );
+    } finally {
+      await player.dispose();
+    }
+  }
 
   // --------------------------------------------------------------- helpers
 
