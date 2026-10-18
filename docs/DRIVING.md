@@ -65,6 +65,7 @@ tool/drive log 80                        # the last lines of the diagnostics rin
 tool/drive streams x265 1080p --not 2160p  # every source of the open title, numbered
 tool/drive play 2                        # play stream #2 as a tap on its row would
 tool/drive hwprobe status                # the codec probe (below); tool/hwprobe wraps it
+tool/drive rendition-numbers             # a published rendition (below); tool/rendition-fetch wraps it
 tool/drive --json screen                 # the raw answer
 ```
 
@@ -245,3 +246,73 @@ The modes:
 
 The probe needs Android 10 or later. Its channel is in every Android
 build, release too, but nothing in the app calls it.
+
+## Renditions without a television
+
+A cast that is a rendition can be checked without a receiver. The driver
+publishes a rendition of a clip on the phone, as `_castUrl` does. The
+desktop fetches it through `adb forward` to the LAN listener, as a
+receiver would. Three driver commands do the phone's part:
+
+```bash
+tool/drive rendition /sdcard/Download/hwprobe/av1-4k.mp4 90000 hevcMain 16000000 [--sound convert|copy]
+tool/drive rendition-numbers             # the server's CastNumbers for it, as JSON
+tool/drive rendition-stop                # withdraw it, delete the token, stop the listener
+```
+
+`rendition` takes the path on the phone, the duration in milliseconds,
+the target and the bitrate in bits a second. The target is `copy`,
+`h264High`, `hevcMain` or `hevcMain10`. It registers the path
+(`MediaIds.registerLocalPath`), starts the LAN listener through the
+app's `ServerFootprint`, and publishes from the film's start. It answers
+the listener's port and nothing else. A rendition published before is
+withdrawn first.
+
+**The token is never printed.** It goes to `cache/driver-rendition-token`
+in the app's data directory, made mode 600 before the token is written.
+`tool/rendition-fetch` reads it with `run-as` into a shell variable and
+hands the URL to `curl` on stdin, so it is on no command line either.
+The numbers hold no token.
+
+A rendition reads with the FFmpeg of the libmpv a player loaded
+(`rendition::available`). In an app run where nothing has played yet,
+`rendition` makes a player and lets it go first, which loads it.
+
+`tool/rendition-fetch` does a whole fetch:
+
+```bash
+tool/rendition-fetch /sdcard/Download/hwprobe/av1-4k.mp4 hevcMain 16000000
+tool/rendition-fetch /sdcard/Download/hwprobe/av1-4k.mp4 hevcMain 16000000 --from-slot 40
+tool/rendition-check build/rendition/av1-4k-hevcMain.mp4 ~/projects/strem/hwclips/av1-4k.mp4
+```
+
+It takes the duration from `ffprobe` on the desktop original, found by
+name under `~/projects/strem/hwclips` (`$XTREMIO_CLIPS`). The whole file
+goes to `build/rendition/<clip>-<target>.mp4`. It then prints the
+numbers and withdraws the rendition.
+
+`--from-slot k` publishes again and fetches the header, then one `Range`
+from slot k's offset to the end. The offset comes from the header's
+`sidx` (`tool/rendition_slots.py`, run with `python3 -I`). The two parts
+are saved as `<clip>-<target>-from<k>.head` and `.tail`. When the whole
+file is already there, it compares both with it and prints PASS or FAIL.
+Those bytes must be identical: a slot is the same whichever run made it.
+
+`tool/rendition-check <out.mp4> <source.mp4>` prints one PASS, FAIL or
+INFO line per check, and exits 1 when any failed:
+
+- `picture`: codec, profile and `pix_fmt` for the target, read from the
+  file name (`--target` to say it).
+- `transfer`: kept for an HDR source (`smpte2084`, `arib-std-b67`).
+- `b-frames`: `has_b_frames=0` for a converted picture.
+- `frames` and `pts`: as many frames as the source, each at a source
+  time within one tick. A constant shift is named on the line.
+- `slot keys`: the first picture of every slot is a key.
+- `decode`: `ffmpeg -v error -i out.mp4 -f null -` prints nothing.
+- `ssim`: at least 0.95 against the source, in 10 bits when either side
+  is 10-bit. `--no-ssim` skips it.
+
+stream-server's `tools/lavf-harness/compare.py --converted <source>
+<out.mp4>` is the check against three FFmpeg versions. The numbers'
+`mediaMs` over `busyMs` for a run is its speed, and `spilled` and
+`truncated` say whether a slot overflowed.

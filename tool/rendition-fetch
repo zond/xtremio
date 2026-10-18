@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Publishes a rendition of a clip on the phone and fetches it the way a
+# receiver would, over the LAN listener through adb forward. A developer
+# tool for the picture conversion; see docs/DRIVING.md, "Renditions without
+# a television". Needs a driver session first: tool/drive-start -d <device>.
+#
+#   tool/rendition-fetch <clip-on-device> <target> <bitrate> [--from-slot k]
+#                        [--sound convert|copy]
+#
+# <clip-on-device> is a path on the phone (/sdcard/Download/hwprobe/x.mp4).
+# Its desktop original, found by name under $XTREMIO_CLIPS (default
+# ~/projects/strem/hwclips), gives the duration. <target> is copy, h264High,
+# hevcMain or hevcMain10; <bitrate> is in bits a second (ignored for copy).
+#
+# Whole: saves build/rendition/<clip>-<target>.mp4.
+# --from-slot k: saves the header and the bytes from slot k's offset to the
+# end, from a fresh publication, as build/rendition/<clip>-<target>-from<k>.
+# {head,tail}. When the whole file is already there it compares the two.
+# Then prints the publication's numbers (tool/drive rendition-numbers) and
+# withdraws it.
+#
+# The publication's token stays on the phone and in this script's memory:
+# it is read with run-as into a variable, handed to curl on stdin, and never
+# printed. adb talks to $XTREMIO_DRIVE_DEVICE when it is set.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+drive="$root/tool/drive"
+slots=(python3 -I "$root/tool/rendition_slots.py")
+out="$root/build/rendition"
+clips="${XTREMIO_CLIPS:-$HOME/projects/strem/hwclips}"
+package=com.zond.xtremio.debug
+
+adb_() {
+  if [ -n "${XTREMIO_DRIVE_DEVICE:-}" ]; then
+    adb -s "$XTREMIO_DRIVE_DEVICE" "$@"
+  else
+    adb "$@"
+  fi
+}
+
+usage() {
+  sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  exit 64
+}
+
+[ $# -ge 3 ] || usage
+clip="$1" target="$2" bitrate="$3"
+shift 3
+from_slot="" sound=copy
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --from-slot) from_slot="$2"; shift 2 ;;
+    --sound) sound="$2"; shift 2 ;;
+    *) usage ;;
+  esac
+done
+case "$target" in copy | h264High | hevcMain | hevcMain10) ;; *) usage ;; esac
+case "$sound" in copy | convert) ;; *) usage ;; esac
+[[ "$bitrate" =~ ^[0-9]+$ ]] || usage
+[ -z "$from_slot" ] || [[ "$from_slot" =~ ^[0-9]+$ ]] || usage
+
+name="$(basename "$clip")"
+original="$clips/$name"
+[ -s "$original" ] || { echo "no desktop original at $original" >&2; exit 1; }
+seconds="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$original")"
+duration_ms="$(awk -v s="$seconds" 'BEGIN { printf "%d", s * 1000 }')"
+base="$out/${name%.*}-$target"
+mkdir -p "$out"
+
+local_port=""
+cleanup() {
+  [ -z "$local_port" ] || adb_ forward --remove "tcp:$local_port" >/dev/null 2>&1 || true
+  "$drive" rendition-stop >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+echo "publishing $name as $target at $bitrate bit/s, sound $sound, ${duration_ms} ms"
+port="$("$drive" --json rendition "$clip" "$duration_ms" "$target" "$bitrate" --sound "$sound" |
+  python3 -I -c 'import json,sys; a=json.load(sys.stdin); print(a.get("port") or ""); sys.exit(0 if a.get("port") else (sys.stderr.write("error: %s\n" % a.get("error")) or 1))')"
+local_port="$(adb_ forward tcp:0 "tcp:$port")"
+token="$(adb_ exec-out run-as "$package" cat cache/driver-rendition-token)"
+[ -n "$token" ] || { echo "the app wrote no token" >&2; exit 1; }
+
+# One request: the URL goes to curl on stdin (printf is a builtin, so the
+# token is on no command line), the body to $1, extra curl options after.
+# Prints the status; a refusal's body is the server's JSON and holds no token.
+fetch() {
+  local file="$1"
+  shift
+  printf 'url = "http://127.0.0.1:%s/cast/%s/stream.mp4"\n' "$local_port" "$token" |
+    curl -sS -K - -o "$file" -w '%{http_code}' "$@"
+}
+
+ok() {
+  case "$1" in
+    200 | 206) ;;
+    *) echo "the server answered $1: $(head -c 400 "$2")" >&2; exit 1 ;;
+  esac
+}
+
+started=$SECONDS
+if [ -z "$from_slot" ]; then
+  status="$(fetch "$base.mp4")"
+  ok "$status" "$base.mp4"
+  echo "saved $base.mp4: $(stat -c %s "$base.mp4") bytes in $((SECONDS - started)) s"
+  echo "slots: $("${slots[@]}" list "$base.mp4" | wc -l)"
+else
+  head_file="$base-from$from_slot.head"
+  tail_file="$base-from$from_slot.tail"
+  want=65536
+  while :; do
+    status="$(fetch "$head_file" -r "0-$((want - 1))")"
+    ok "$status" "$head_file"
+    if need="$("${slots[@]}" header-len "$head_file" 2>/dev/null)"; then
+      break
+    elif [ $? -eq 2 ] && [ "$need" -gt "$want" ]; then
+      want="$need"
+    else
+      "${slots[@]}" header-len "$head_file" >/dev/null
+      exit 1
+    fi
+  done
+  truncate -s "$need" "$head_file"
+  offset="$("${slots[@]}" offset "$head_file" "$from_slot")"
+  status="$(fetch "$tail_file" -r "$offset-")"
+  ok "$status" "$tail_file"
+  echo "saved $head_file ($need bytes) and $tail_file (from byte $offset:" \
+    "$(stat -c %s "$tail_file") bytes) in $((SECONDS - started)) s"
+  if [ -s "$base.mp4" ]; then
+    if cmp -s -n "$need" "$base.mp4" "$head_file"; then
+      echo "PASS  header     the same bytes as $base.mp4"
+    else
+      echo "FAIL  header     differs from $base.mp4"
+    fi
+    if cmp "$tail_file" <(tail -c "+$((offset + 1))" "$base.mp4"); then
+      echo "PASS  same bytes from slot $from_slot (byte $offset) to the end"
+    else
+      echo "FAIL  bytes from slot $from_slot (byte $offset) differ from $base.mp4"
+    fi
+  else
+    echo "no $base.mp4 to compare with: fetch it whole first"
+  fi
+fi
+
+echo "-- numbers"
+"$drive" rendition-numbers

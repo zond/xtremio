@@ -1,0 +1,259 @@
+#!/usr/bin/env -S python3 -I
+"""Checks a fetched rendition against the film it was made from.
+
+    tool/rendition-check <out.mp4> <source.mp4> [--target T] [--no-ssim]
+
+<out.mp4> is a whole rendition as `tool/rendition-fetch` saves it
+(build/rendition/<clip>-<target>.mp4). T is what the picture was made as
+(copy, h264High, hevcMain, hevcMain10); by default it is read from the file
+name's last `-` part. Every check prints one PASS, FAIL or INFO line with
+its values, and the exit code is 1 when any check failed.
+
+  picture      codec, profile, pix_fmt for T; color_transfer kept for an
+               HDR source; has_b_frames 0 for a converted picture
+  frames       the frame count equals the source's
+  pts          every frame's time is one of the source's, within one tick
+  slot keys    the first picture of every slot is a key (slots from the sidx)
+  decode       `ffmpeg -v error -i out -f null -` prints nothing
+  ssim         SSIM against the source, >= 0.95, compared in 10 bits when
+               either side is 10-bit
+
+Needs ffprobe and ffmpeg on the PATH. docs/DRIVING.md has the session.
+"""
+
+import importlib.util
+import json
+import pathlib
+import re
+import subprocess
+import sys
+from fractions import Fraction
+
+TARGETS = {
+    "h264High": ("h264", "High", "yuv420p"),
+    "hevcMain": ("hevc", "Main", "yuv420p"),
+    "hevcMain10": ("hevc", "Main 10", "yuv420p10le"),
+}
+HDR_TRANSFERS = ("smpte2084", "arib-std-b67")
+SSIM_FLOOR = 0.95
+
+failed = False
+
+
+def line(verdict, name, text):
+    global failed
+    if verdict == "FAIL":
+        failed = True
+    print(f"{verdict:4}  {name:10}  {text}")
+
+
+def check(name, ok, text):
+    line("PASS" if ok else "FAIL", name, text)
+
+
+def load_slots():
+    """tool/rendition_slots.py, beside this script, loaded by path: -I keeps
+    the script's directory off sys.path."""
+    path = pathlib.Path(__file__).resolve().parent / "rendition_slots.py"
+    spec = importlib.util.spec_from_file_location("rendition_slots", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def probe(path, *args):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-of", "json", *args, path],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return json.loads(out)
+
+
+def video_stream(path):
+    streams = probe(
+        path,
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=codec_name,profile,pix_fmt,color_transfer,has_b_frames,time_base",
+    )["streams"]
+    if not streams:
+        raise SystemExit(f"{path} has no video stream")
+    return streams[0]
+
+
+def video_packets(path):
+    """Every video packet: (pts as a Fraction of seconds, pos, key)."""
+    stream = video_stream(path)
+    base = Fraction(stream["time_base"])
+    packets = probe(
+        path,
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "packet=pts,pos,flags",
+    )["packets"]
+    out = []
+    for p in packets:
+        if p.get("pts") is None:
+            continue
+        out.append(
+            (
+                Fraction(int(p["pts"])) * base,
+                int(p.get("pos", -1)),
+                "K" in p.get("flags", ""),
+            )
+        )
+    return out, base
+
+
+def ten_bit(pix_fmt):
+    return bool(re.search(r"p1[02]", pix_fmt or ""))
+
+
+def main(argv):
+    args = [a for a in argv if not a.startswith("--")]
+    target = None
+    if "--target" in argv:
+        at = argv.index("--target")
+        target = argv[at + 1]
+        args.remove(target)
+    if len(args) != 2:
+        sys.stderr.write(__doc__)
+        return 64
+    out, source = args
+    if target is None:
+        target = pathlib.Path(out).stem.rsplit("-", 1)[-1]
+    if target != "copy" and target not in TARGETS:
+        sys.stderr.write(f"unknown target {target!r}: pass --target\n")
+        return 64
+
+    o = video_stream(out)
+    s = video_stream(source)
+    print(
+        f"out:    {o['codec_name']} {o.get('profile')} {o.get('pix_fmt')} "
+        f"transfer={o.get('color_transfer')} has_b_frames={o.get('has_b_frames')}"
+    )
+    print(
+        f"source: {s['codec_name']} {s.get('profile')} {s.get('pix_fmt')} "
+        f"transfer={s.get('color_transfer')}"
+    )
+
+    # 1. The picture is what T says.
+    if target == "copy":
+        want = (s["codec_name"], s.get("profile"), s.get("pix_fmt"))
+    else:
+        want = TARGETS[target]
+    got = (o["codec_name"], o.get("profile"), o.get("pix_fmt"))
+    check("picture", got == want, f"{' '.join(map(str, got))} (want {' '.join(want)})")
+    if s.get("color_transfer") in HDR_TRANSFERS:
+        check(
+            "transfer",
+            o.get("color_transfer") == s.get("color_transfer"),
+            f"{o.get('color_transfer')} (source {s.get('color_transfer')})",
+        )
+    else:
+        line("INFO", "transfer", f"{o.get('color_transfer')} (source {s.get('color_transfer')}, not HDR)")
+    if target == "copy":
+        line("INFO", "b-frames", f"has_b_frames={o.get('has_b_frames')} (copied)")
+    else:
+        check("b-frames", int(o.get("has_b_frames", -1)) == 0, f"has_b_frames={o.get('has_b_frames')}")
+
+    # 2. Every frame, at the source's times.
+    out_packets, out_base = video_packets(out)
+    src_packets, src_base = video_packets(source)
+    check("frames", len(out_packets) == len(src_packets), f"{len(out_packets)} (source {len(src_packets)})")
+    tick = max(out_base, src_base)
+    src_times = sorted(p[0] for p in src_packets)
+    out_times = sorted(p[0] for p in out_packets)
+    misses = [t for t in out_times if not near(src_times, t, tick)]
+    offset = ""
+    if misses and len(out_times) == len(src_times):
+        shifts = {a - b for a, b in zip(out_times, src_times)}
+        if len(shifts) == 1:
+            offset = f", every one shifted by {float(shifts.pop()):.6f} s"
+    check(
+        "pts",
+        not misses,
+        f"{len(out_times) - len(misses)} of {len(out_times)} at a source time "
+        f"(tick {float(tick):.6f} s){offset}"
+        + (f"; first miss {float(misses[0]):.6f} s" if misses else ""),
+    )
+
+    # 3. A key at every slot start.
+    with open(out, "rb") as f:
+        head = f.read(4 << 20)
+    try:
+        slots = load_slots().slots(head)
+    except ValueError as error:
+        check("slot keys", False, f"no slots: {error}")
+        slots = []
+    by_pos = sorted((pos, key) for _, pos, key in out_packets if pos >= 0)
+    unkeyed, empty = [], []
+    for k, slot in enumerate(slots):
+        end = slot["offset"] + slot["size"]
+        first = next(((pos, key) for pos, key in by_pos if slot["offset"] <= pos < end), None)
+        if first is None:
+            empty.append(k)
+        elif not first[1]:
+            unkeyed.append(k)
+    if slots:
+        check(
+            "slot keys",
+            not unkeyed,
+            f"{len(slots) - len(unkeyed) - len(empty)} of {len(slots)} slots open on a key"
+            + (f"; not a key: {unkeyed[:10]}" if unkeyed else ""),
+        )
+    if empty:
+        line("INFO", "slot keys", f"{len(empty)} slots hold no picture: {empty[:10]}")
+
+    # 4. It decodes clean.
+    decode = subprocess.run(
+        ["ffmpeg", "-nostdin", "-v", "error", "-i", out, "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+    )
+    errors = decode.stderr.strip().splitlines()
+    check(
+        "decode",
+        decode.returncode == 0 and not errors,
+        f"exit {decode.returncode}, {len(errors)} error lines"
+        + (f"; first: {errors[0]}" if errors else ""),
+    )
+
+    # 5. It looks like the source.
+    if "--no-ssim" in argv:
+        line("INFO", "ssim", "skipped")
+    else:
+        fmt = "yuv420p10le" if ten_bit(o.get("pix_fmt")) or ten_bit(s.get("pix_fmt")) else "yuv420p"
+        graph = (
+            f"[0:v]setpts=PTS-STARTPTS,format={fmt}[a];"
+            f"[1:v]setpts=PTS-STARTPTS,format={fmt}[b];[a][b]ssim"
+        )
+        run = subprocess.run(
+            ["ffmpeg", "-nostdin", "-hide_banner", "-i", out, "-i", source, "-lavfi", graph, "-f", "null", "-"],
+            capture_output=True,
+            text=True,
+        )
+        found = re.findall(r"SSIM .* All:([0-9.]+)", run.stderr)
+        if not found:
+            check("ssim", False, f"no SSIM line (ffmpeg exit {run.returncode})")
+        else:
+            value = float(found[-1])
+            check("ssim", value >= SSIM_FLOOR, f"{value:.4f} in {fmt} (floor {SSIM_FLOOR})")
+
+    return 1 if failed else 0
+
+
+def near(sorted_times, t, tick):
+    """Whether a time within `tick` of `t` is in `sorted_times`."""
+    import bisect
+
+    i = bisect.bisect_left(sorted_times, t - tick)
+    return i < len(sorted_times) and sorted_times[i] <= t + tick
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
