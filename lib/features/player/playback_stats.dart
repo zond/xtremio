@@ -48,6 +48,7 @@ class PlaybackStats {
     this.height,
     this.pixelFormat,
     this.hwPixelFormat,
+    this.transfer,
     this.videoBitrate,
     this.cacheDuration,
     this.pausedForCache,
@@ -76,6 +77,7 @@ class PlaybackStats {
     'video-params/h',
     'video-params/pixelformat',
     'video-params/hw-pixelformat',
+    'video-params/gamma',
     'video-bitrate',
     'demuxer-cache-duration',
     'paused-for-cache',
@@ -128,6 +130,7 @@ class PlaybackStats {
       height: integer('video-params/h'),
       pixelFormat: text('video-params/pixelformat'),
       hwPixelFormat: text('video-params/hw-pixelformat'),
+      transfer: text('video-params/gamma'),
       videoBitrate: integer('video-bitrate'),
       cacheDuration: cache == null
           ? null
@@ -221,6 +224,19 @@ class PlaybackStats {
   /// `p010`), or null for a picture decoded in software or a surface that
   /// does not say.
   final String? hwPixelFormat;
+
+  /// `video-params/gamma`: the picture's transfer as mpv reads it from the
+  /// file (`pq` for HDR10, `hlg`, `bt.1886` for ordinary video, `auto` when
+  /// the file does not say). Not shown anywhere. The cast check reads it to
+  /// know an HDR picture, which only a 10-bit HEVC conversion keeps.
+  final String? transfer;
+
+  /// Whether [transfer] is an HDR one (PQ or HLG). Anything else, unknown
+  /// included, is taken as ordinary video.
+  bool get hdr => switch (transfer?.toLowerCase()) {
+    'pq' || 'hlg' => true,
+    _ => false,
+  };
 
   /// Video bitrate estimate in bits per second (`video-bitrate`).
   final int? videoBitrate;
@@ -333,6 +349,7 @@ class PlaybackStats {
       other.height == height &&
       other.pixelFormat == pixelFormat &&
       other.hwPixelFormat == hwPixelFormat &&
+      other.transfer == transfer &&
       other.videoBitrate == videoBitrate &&
       other.cacheDuration == cacheDuration &&
       other.pausedForCache == pausedForCache &&
@@ -361,6 +378,7 @@ class PlaybackStats {
     height,
     pixelFormat,
     hwPixelFormat,
+    transfer,
     videoBitrate,
     cacheDuration,
     pausedForCache,
@@ -378,7 +396,7 @@ class PlaybackStats {
       ', hwdec: $hwdec, codec: $videoCodec'
       '/$audioCodec ($audioChannels ch), track: $videoTrack, '
       'format: $fileFormat, '
-      '${width}x$height $pixelFormat/$hwPixelFormat, bitrate: $videoBitrate, cache: $cacheDuration, '
+      '${width}x$height $pixelFormat/$hwPixelFormat $transfer, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
       'seekable: $seekable, partiallySeekable: $partiallySeekable, '
       'ranges: $seekableRanges)';

@@ -89,6 +89,28 @@ void main() {
     );
   });
 
+  test("the picture's transfer is polled, and PQ and HLG are HDR", () {
+    // The cast check converts an HDR picture only to 10-bit HEVC, so mpv is
+    // asked what the file's transfer is.
+    expect(PlaybackStats.mpvProperties, contains('video-params/gamma'));
+    final hdr10 = PlaybackStats.fromMpv({'video-params/gamma': 'pq'});
+    expect(hdr10.transfer, 'pq');
+    expect(hdr10.hdr, isTrue);
+    expect(PlaybackStats.fromMpv({'video-params/gamma': 'hlg'}).hdr, isTrue);
+    for (final sdr in ['bt.1886', 'srgb', 'auto', '']) {
+      expect(
+        PlaybackStats.fromMpv({'video-params/gamma': sdr}).hdr,
+        isFalse,
+        reason: sdr,
+      );
+    }
+    expect(const PlaybackStats().hdr, isFalse);
+    expect(
+      const PlaybackStats(transfer: 'pq'),
+      isNot(const PlaybackStats(transfer: 'bt.1886')),
+    );
+  });
+
   test('treats empty, missing and unparsable properties as unknown', () {
     // Before the first frame mpv returns "" for most of these.
     final stats = PlaybackStats.fromMpv({

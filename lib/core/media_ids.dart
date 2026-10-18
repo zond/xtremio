@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../src/rust/api/media.dart' as rust;
@@ -100,20 +101,115 @@ class MediaResolution {
   final bool sniffed;
 }
 
+/// What this phone's hardware can convert a film's picture with: the answer
+/// of `media_picture_support`. [decodes] and [encodes] use the names the cast
+/// check uses (`H.264`, `HEVC`, `AV1`, `VP9`) and list hardware codecs only.
+/// [tenBit] says the HEVC encoder makes 10-bit pictures from the decoder's
+/// 10-bit output, which an HDR film needs.
+@immutable
+final class PictureSupport {
+  const PictureSupport({
+    this.decodes = const {},
+    this.encodes = const {},
+    this.tenBit = false,
+  });
+
+  /// No conversion at all: a desktop, an old phone, or no answer.
+  static const PictureSupport none = PictureSupport();
+
+  final Set<String> decodes;
+  final Set<String> encodes;
+  final bool tenBit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PictureSupport &&
+      setEquals(other.decodes, decodes) &&
+      setEquals(other.encodes, encodes) &&
+      other.tenBit == tenBit;
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAllUnordered(decodes),
+    Object.hashAllUnordered(encodes),
+    tenBit,
+  );
+
+  @override
+  String toString() =>
+      'PictureSupport(decodes: $decodes, encodes: $encodes, tenBit: $tenBit)';
+}
+
+/// What a converted picture is made as: stream-server's `PictureTarget`.
+enum PictureTarget {
+  /// H.264 High, 8-bit 4:2:0.
+  h264High('h264High', 'H.264'),
+
+  /// HEVC Main, 8-bit 4:2:0.
+  hevcMain('hevcMain', 'HEVC'),
+
+  /// HEVC Main 10, 10-bit 4:2:0, with the source's colours and transfer
+  /// (HDR10, HLG) kept.
+  hevcMain10('hevcMain10', 'HEVC');
+
+  const PictureTarget(this.wire, this.codec);
+
+  /// The name on the wire (`"target": "hevcMain10"`).
+  final String wire;
+
+  /// The codec a receiver is sent, by the name the cast check uses.
+  final String codec;
+
+  /// The target [wire] names, or null for a name this build does not know.
+  static PictureTarget? fromWire(String wire) {
+    for (final target in values) {
+      if (target.wire == wire) return target;
+    }
+    return null;
+  }
+}
+
+/// **A film's picture converted for a receiver**: what it is made as and at
+/// what bitrate, in bits per second. Chosen by `choosePicture`
+/// (`lib/features/cast/picture_plan.dart`) and carried in
+/// [RenditionSpec.picture].
+@immutable
+final class PicturePlan {
+  const PicturePlan(this.target, this.bitrate);
+
+  final PictureTarget target;
+  final int bitrate;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PicturePlan &&
+      other.target == target &&
+      other.bitrate == bitrate;
+
+  @override
+  int get hashCode => Object.hash(target, bitrate);
+
+  @override
+  String toString() => 'PicturePlan(${target.wire}, $bitrate)';
+}
+
 /// What a rendition is to be: stream-server's `RenditionSpec`, the
 /// stream the server makes from a film for a receiver that cannot take it
 /// as it is (stream-server `docs/design/renditions.md`).
 ///
-/// The picture is always copied: the film's own H.264 or HEVC samples, moved
-/// into fragmented MP4. The sound is copied when it is AAC, or converted to
-/// stereo AAC ([convertSound], step F3) for Dolby, DTS and the rest, which
-/// zond's television plays silent or not at all.
+/// The picture is copied, the film's own H.264 or HEVC samples moved into
+/// fragmented MP4, unless [picture] says what to convert it to (step F4: this
+/// phone's hardware decodes it and encodes it again). The sound is copied
+/// when it is AAC, or converted to stereo AAC ([convertSound], step F3) for
+/// Dolby, DTS and the rest, which zond's television plays silent or not at
+/// all.
 final class RenditionSpec {
   const RenditionSpec({
     required this.duration,
     required this.start,
     this.audioTrack = 0,
     this.convertSound = false,
+    this.picture,
     this.segment = defaultSegment,
   });
 
@@ -137,13 +233,21 @@ final class RenditionSpec {
   /// The sound is converted to stereo AAC rather than copied.
   final bool convertSound;
 
+  /// What the picture is converted to, or null to copy it.
+  final PicturePlan? picture;
+
   final Duration segment;
 
   Map<String, Object> toJson() => {
     'durationMs': duration.inMilliseconds,
     'segmentMs': segment.inMilliseconds,
     'startMs': start.inMilliseconds,
-    'video': 'copy',
+    'video': switch (picture) {
+      null => 'copy',
+      final picture => {
+        'convert': {'target': picture.target.wire, 'bitrate': picture.bitrate},
+      },
+    },
     'audio': convertSound
         ? {
             'aacStereo': {'bitrate': soundBitrate},
@@ -253,6 +357,11 @@ abstract interface class MediaIds {
   /// for. Asked when a cast is decided, never cached.
   bool get renditionsAvailable;
 
+  /// What this phone's hardware can convert a film's picture with, found out
+  /// once an app run and kept. Asked when a cast that could be a rendition is
+  /// decided. Answers [PictureSupport.none] where nothing converts.
+  Future<PictureSupport> pictureSupport();
+
   /// Publishes a rendition of [id] for a cast and answers the token its
   /// stream is under (`<lan base>/cast/<token>/stream.mp4`). **Never
   /// log it.** Throws as [publish] does.
@@ -341,6 +450,19 @@ class RustMediaIds implements MediaIds {
 
   @override
   bool get renditionsAvailable => rust.mediaRenditionsAvailable();
+
+  /// The one answer of this app run, asked the first time it is wanted: the
+  /// Rust side makes and deletes codecs to find it out.
+  static Future<PictureSupport>? _pictureSupport;
+
+  @override
+  Future<PictureSupport> pictureSupport() =>
+      _pictureSupport ??= _askPictureSupport();
+
+  static Future<PictureSupport> _askPictureSupport() async {
+    // TODO(picture): rust.mediaPictureSupport()
+    return PictureSupport.none;
+  }
 
   @override
   Future<String> publishRendition(String id, RenditionSpec spec) =>

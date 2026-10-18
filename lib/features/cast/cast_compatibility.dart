@@ -1,16 +1,20 @@
 import '../../core/core.dart';
 import '../player/playback_stats.dart';
+import 'picture_plan.dart';
 import 'receiver_table.dart';
 
 /// Whether a stream can be handed to a receiver as it is, repackaged, or
 /// not at all, and why.
 ///
-/// **The picture is never decoded or encoded.** A cast sends the bytes the
-/// server already serves, or the same picture in another container with its
-/// sound copied or converted to stereo AAC ([CastRendition]). So a video codec
-/// the receiver cannot decode is not a slower cast: it is a black screen. The
-/// gate therefore has to answer honestly, and a refusal has to say what is
-/// wrong rather than let the cast fail on the television.
+/// **The picture is converted only where this phone's hardware can.** A cast
+/// sends the bytes the server already serves, or the same picture in another
+/// container with its sound copied or converted to stereo AAC
+/// ([CastRendition]). Where the receiver cannot take the picture that way, a
+/// phone whose hardware decodes it converts it to HEVC or H.264
+/// ([CastRendition.picture], [choosePicture]). Otherwise a video codec the
+/// receiver cannot decode is not a slower cast: it is a black screen. The gate
+/// therefore has to answer honestly, and a refusal has to say what is wrong
+/// rather than let the cast fail on the television.
 ///
 /// **mpv is the only authority on what the file is** (zond, 2026-10-05: "always
 /// use the mpv info"). A cast starts from the player, where mpv is reading the
@@ -85,6 +89,16 @@ sealed class CastCompatibility {
   /// refused up front is what no model announcing the name decodes: for a name
   /// that names one model, anything beyond that model's row.
   ///
+  /// **A picture the receiver cannot take as it is or as a copy is converted**
+  /// where this phone can ([conversion], `MediaIds.pictureSupport`): its
+  /// hardware decodes the film's codec and encodes one the receiver decodes at
+  /// the film's size and rate ([choosePicture]). That covers a codec the
+  /// receiver does not decode, one a copy cannot carry (AV1, VP9), 10-bit
+  /// H.264, and a codec the receiver showed no picture for this session
+  /// ([noPicture]). The answer is then a [CastRendition] whose [CastRendition.picture]
+  /// says what it is made as. Without [conversion], or for a codec the phone
+  /// does not decode, the refusals stand as they were.
+  ///
   /// A file mpv reads no video track in at all (audio alone) is judged by
   /// its container and sound.
   factory CastCompatibility.of({
@@ -92,6 +106,8 @@ sealed class CastCompatibility {
     required ReceiverRow receiver,
     PlaybackStats? stats,
     bool canRepackage = false,
+    PictureSupport? conversion,
+    Set<String> noPicture = const {},
   }) {
     final proxied = _proxyPrefix(url);
     if (proxied != null) return CastRefused._proxy(proxied);
@@ -110,13 +126,38 @@ sealed class CastCompatibility {
       return const CastRefused._pending();
     }
     if (video == null) return _soundAlone(readers, audio!);
-    // A picture no receiver decodes, whatever it is: 10-bit H.264 and the
-    // like. As it is or repackaged alike, since a rendition copies it.
-    final unpictured = _pictureFormatRefusal(video, stats);
-    if (unpictured != null) return unpictured;
-
     final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
+    // What converting the picture on this phone answers, asked only where a
+    // copy will not do: null where it is no answer at all, so the refusal a
+    // copy gets stands.
+    late final converted = repackages && conversion != null
+        ? _convertedPicture(
+            receiver: receiver,
+            video: video,
+            stats: stats,
+            support: conversion,
+            noPicture: noPicture,
+            convertsSound: _convertsSound(audio, surround),
+          )
+        : null;
+    // A copy of a codec the receiver showed no picture for this session goes
+    // converted to another where it can. Otherwise it stays, for the player
+    // to refuse with the sentence that says so.
+    CastCompatibility remembered(CastCompatibility copy) {
+      if (!noPicture.contains(video)) return copy;
+      final other = converted;
+      return other is CastRendition && !noPicture.contains(other.video)
+          ? other
+          : copy;
+    }
+
+    // A picture no receiver decodes, whatever it is: 10-bit H.264 and the
+    // like. As it is or repackaged alike, since a rendition copies it, unless
+    // this phone converts it.
+    final unpictured = _pictureFormatRefusal(video, stats);
+    if (unpictured != null) return converted ?? unpictured;
+
     // What the receiver makes of the picture: null when it shows it. One
     // known only by name is held to the best model with that name, and a
     // cast that needs more than every such model decodes is a trial.
@@ -142,12 +183,14 @@ sealed class CastCompatibility {
       final webm =
           _webmVideo.contains(video) &&
           (audio == null || _webm.audio.contains(audio));
-      if (webm && picture == null) return ready(_webm.contentType);
+      if (webm && picture == null) return remembered(ready(_webm.contentType));
       if (repackages && _repackagedVideo.contains(video)) {
-        return picture ??
-            rendition(convertsSound: _convertsSound(audio, surround));
+        if (picture != null) return converted ?? picture;
+        return remembered(
+          rendition(convertsSound: _convertsSound(audio, surround)),
+        );
       }
-      if (repackages) return _renditionRefusal(row, video);
+      if (repackages) return converted ?? _renditionRefusal(row, video);
       if (webm) return picture!;
       return const CastRefused._container('a Matroska (.mkv) file');
     }
@@ -155,14 +198,15 @@ sealed class CastCompatibility {
       return CastRefused._container(_describeReader(readers.first));
     }
 
-    if (picture != null) return picture;
+    if (picture != null) return converted ?? picture;
     if (audio != null && !_mp4.audio.contains(audio)) {
       // An MP4 whose sound the receiver will not take (or will play
       // silent): the same picture, the sound converted.
       if (repackages && _repackagedVideo.contains(video)) {
-        return rendition(convertsSound: true);
+        return remembered(rendition(convertsSound: true));
       }
-      return CastRefused._audio(audio, _describeAudioSupport(_mp4));
+      return converted ??
+          CastRefused._audio(audio, _describeAudioSupport(_mp4));
     }
     // AAC the receiver takes, but in more than two channels: zond's
     // television sends its sound over Bluetooth, and multichannel AAC is not
@@ -170,9 +214,9 @@ sealed class CastCompatibility {
     // be. Where no rendition can be made it goes as it is, AAC being a
     // sound the receiver decodes.
     if (surround && repackages && _repackagedVideo.contains(video)) {
-      return rendition(convertsSound: true);
+      return remembered(rendition(convertsSound: true));
     }
-    return ready(_mp4.contentType);
+    return remembered(ready(_mp4.contentType));
   }
 
   /// Whether the stream can be cast as it is.
@@ -198,19 +242,30 @@ final class CastReady extends CastCompatibility {
   final bool tentative;
 }
 
-/// The stream goes to a receiver as a rendition: the same H.264 or HEVC,
-/// repackaged by the server into one fragmented MP4 the receiver plays as a
-/// file (`MediaIds.publishRendition`), its sound copied when it is stereo
-/// (or mono) AAC and converted to stereo AAC when [convertsSound].
+/// The stream goes to a receiver as a rendition: one fragmented MP4 the
+/// server makes and the receiver plays as a file
+/// (`MediaIds.publishRendition`). Its picture is the same H.264 or HEVC,
+/// repackaged, or converted by this phone's hardware when [picture] says to.
+/// Its sound is copied when it is stereo (or mono) AAC and converted to
+/// stereo AAC when [convertsSound].
 final class CastRendition extends CastCompatibility {
   const CastRendition({
     this.convertsSound = false,
     this.video,
     this.tentative = false,
+    this.picture,
+    this.sourceVideo,
   });
 
-  /// The picture's codec as judged (`H.264` or `HEVC`).
+  /// The codec the receiver is sent (`H.264` or `HEVC`): the film's own, or
+  /// what [picture] makes. What the receiver's picture report is watched for.
   final String? video;
+
+  /// What the picture is converted to, or null when it is copied.
+  final PicturePlan? picture;
+
+  /// The film's own codec as judged (`AV1`), where [picture] converts it.
+  final String? sourceVideo;
 
   /// As [CastReady.tentative].
   final bool tentative;
@@ -267,6 +322,31 @@ final class CastRefused extends CastCompatibility {
         'the picture as it is, so this receiver cannot show it.',
       );
 
+  /// Bigger or faster than anything the receiver decodes that this phone
+  /// could convert the picture to.
+  const CastRefused._notSmaller(String subject, String limit, String film)
+    : this._(
+        CastRefusal.pictureSize,
+        '$subject plays $limit. This film\'s picture is $film. xtremio '
+        "doesn't make pictures smaller, so this receiver cannot show it.",
+      );
+
+  /// An HDR picture for a receiver that decodes no 10-bit HEVC.
+  const CastRefused._hdrReceiver(String subject)
+    : this._(
+        CastRefusal.hdr,
+        "$subject can't show HDR pictures, and xtremio doesn't convert HDR "
+        'to SDR.',
+      );
+
+  /// An HDR picture, and this phone makes no 10-bit HEVC.
+  const CastRefused._hdrPhone()
+    : this._(
+        CastRefusal.hdr,
+        "This phone can't convert HDR pictures for casting, and xtremio "
+        "doesn't convert HDR to SDR.",
+      );
+
   const CastRefused._audio(String codec, String supported)
     : this._(
         CastRefusal.audioCodec,
@@ -309,8 +389,9 @@ final class CastRefused extends CastCompatibility {
 /// that would be repackaged but whose picture a copy cannot carry (what a
 /// transcode, step F4 of the renditions design, would answer). A rendition's
 /// sound is never refused here, since it is converted when it is not AAC.
-/// [proxied] is never castable. [pending] is not an answer yet: ask again when
-/// mpv has reported what the file is.
+/// [hdr] is an HDR picture this phone would have to convert and cannot keep
+/// HDR for this receiver. [proxied] is never castable. [pending] is not an
+/// answer yet: ask again when mpv has reported what the file is.
 enum CastRefusal {
   proxied,
   pending,
@@ -320,6 +401,7 @@ enum CastRefusal {
   pictureFormat,
   audioCodec,
   renditionVideo,
+  hdr,
 }
 
 /// What a receiver plays, by container: the MIME type to declare, how a
@@ -439,21 +521,86 @@ CastRefused? _pictureRefusal(
   if (receiver.fits(video, width: width, height: height, fps: fps)) {
     return null;
   }
-  final size = width == null || height == null ? null : '${width}x$height';
-  final rate = fps == null ? null : '${fps.round()} frames a second';
   return CastRefused._pictureSize(
     receiver.subject,
     receiver.describeLimit(video),
-    [?size, ?rate].join(' at '),
+    _filmPicture(stats),
   );
 }
+
+/// The film's picture as a refusal says it: "1920x1080 at 24 frames a
+/// second", with what mpv has not reported left out.
+String _filmPicture(PlaybackStats? stats) {
+  final width = stats?.width;
+  final height = stats?.height;
+  final fps = stats?.containerFps;
+  final size = width == null || height == null ? null : '${width}x$height';
+  final rate = fps == null ? null : '${fps.round()} frames a second';
+  return [?size, ?rate].join(' at ');
+}
+
+/// **The film's [video] picture converted for [receiver]** by this phone
+/// ([support], [choosePicture]): a [CastRendition] that says what it is made
+/// as, or the refusal that says why it cannot be. Null where conversion is no
+/// answer: the phone does not decode [video], the picture is one its hardware
+/// does not take (beyond 10 bits, or not 4:2:0), or it makes nothing the
+/// receiver decodes.
+CastCompatibility? _convertedPicture({
+  required ReceiverRow receiver,
+  required String video,
+  required PlaybackStats? stats,
+  required PictureSupport support,
+  required Set<String> noPicture,
+  required bool convertsSound,
+}) {
+  if (!support.decodes.contains(video)) return null;
+  final pixels = _pixelsOfStats(stats);
+  if (pixels != null && (pixels.chroma != '4:2:0' || pixels.depth > 10)) {
+    return null;
+  }
+  final row = receiver.atBest ?? receiver;
+  final choice = choosePicture(
+    receiver: receiver,
+    support: support,
+    width: stats?.width,
+    height: stats?.height,
+    fps: stats?.containerFps,
+    hdr: stats?.hdr ?? false,
+    depth: pixels?.depth,
+    noPicture: noPicture,
+  );
+  return switch (choice) {
+    null => null,
+    PictureChosen(:final plan, :final tentative) => CastRendition(
+      convertsSound: convertsSound,
+      video: plan.target.codec,
+      sourceVideo: video,
+      picture: plan,
+      tentative: tentative,
+    ),
+    PictureRefused(shortfall: PictureShortfall.hdrReceiver) =>
+      CastRefused._hdrReceiver(row.subject),
+    PictureRefused(shortfall: PictureShortfall.hdrPhone) =>
+      const CastRefused._hdrPhone(),
+    PictureRefused(shortfall: PictureShortfall.size, :final codec) =>
+      CastRefused._notSmaller(
+        row.subject,
+        row.describeLimit(codec ?? 'H.264'),
+        _filmPicture(stats),
+      ),
+  };
+}
+
+/// What mpv says the picture is ([_pixelsOf]): its own name for the pixels,
+/// else what a hardware surface holds.
+({int depth, String chroma})? _pixelsOfStats(PlaybackStats? stats) =>
+    _pixelsOf(stats?.pixelFormat) ?? _pixelsOf(stats?.hwPixelFormat);
 
 /// The refusal for a [video] picture no receiver decodes, by mpv's pixel format
 /// ([_pixelsOf]). Null for one some receiver does, and for one mpv has not
 /// described, which is not held against the film.
 CastRefused? _pictureFormatRefusal(String video, PlaybackStats? stats) {
-  final pixels =
-      _pixelsOf(stats?.pixelFormat) ?? _pixelsOf(stats?.hwPixelFormat);
+  final pixels = _pixelsOfStats(stats);
   if (pixels == null) return null;
   final (:depth, :chroma) = pixels;
   if (ReceiverTable.decodesPicture(video, depth: depth, chroma: chroma)) {

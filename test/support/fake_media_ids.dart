@@ -145,6 +145,18 @@ class FakeMediaIds implements MediaIds {
     return 't${published.length}';
   }
 
+  /// What this "phone" converts pictures with: nothing unless a test says.
+  PictureSupport pictureSupportAnswer = PictureSupport.none;
+
+  /// How many times [pictureSupport] was asked.
+  int pictureSupportAsks = 0;
+
+  @override
+  Future<PictureSupport> pictureSupport() async {
+    pictureSupportAsks++;
+    return pictureSupportAnswer;
+  }
+
   /// Every token whose preparation was asked for, in order.
   final List<String> prepared = [];
 
