@@ -129,6 +129,22 @@ pub const STRETCHED_PIXELS: &str =
     "This film's picture has stretched pixels, which xtremio can't convert for casting yet.";
 /// An HDR picture asked to be converted to an 8-bit one.
 pub const HDR_TO_SDR: &str = "This film's picture is HDR, and xtremio doesn't convert HDR to SDR.";
+/// An HDR picture bigger than 1920x1080 asked for Main 10
+/// ([`main10_fits`]).
+pub const MAIN10_TOO_LARGE: &str = "This phone can't convert a 4K HDR picture for casting fast \
+                                    enough, and xtremio doesn't convert HDR to SDR.";
+
+/// Whether a `width` by `height` picture may be converted to Main 10: no
+/// bigger than 1920x1080. The app's `main10Fits` draws the same line.
+///
+/// Main 10 goes through the buffer path, which copies the decoder's P010
+/// pictures into the encoder. The phone bench measured it at 0.81x real
+/// time at 3840x2160 and 1.58x at 1920x1080. A run slower than real time
+/// fails the rendition. The 8-bit surface path runs 2.4x at 4K.
+fn main10_fits(width: u32, height: u32) -> bool {
+    width <= 1920 && height <= 1080
+}
+
 /// What a viewer is told when this device has nothing to encode AAC with.
 pub const NO_AAC_ENCODER: &str =
     "This device cannot convert the film's sound for the television: it has no AAC encoder \
@@ -871,6 +887,9 @@ impl Chosen {
                 }
                 if video.colour.hdr() && !target.ten_bit() {
                     return Err(HDR_TO_SDR.to_owned());
+                }
+                if target == PictureTarget::HevcMain10 && !main10_fits(video.width, video.height) {
+                    return Err(MAIN10_TOO_LARGE.to_owned());
                 }
                 Some(PicturePlan::of(video, &config, mime, target, bitrate))
             }
@@ -2576,7 +2595,8 @@ mod tests {
     }
 
     /// **What is refused before anything is read**: stretched pixels, an
-    /// HDR picture asked for 8 bits, and a device with no converter.
+    /// HDR picture asked for 8 bits, Main 10 above 1920x1080, and a device
+    /// with no converter.
     #[test]
     fn a_conversion_is_refused_with_a_sentence() {
         let refused = |change: &dyn Fn(&mut FakePackets), target: PictureTarget| -> Vec<Wrote> {
@@ -2619,6 +2639,32 @@ mod tests {
         );
         let main10 = refused(&pq, PictureTarget::HevcMain10);
         assert_eq!(main10.last(), Some(&Wrote::End), "Main 10 keeps it");
+        // Main 10 above 1920x1080 is too slow on the phone, whatever an
+        // older app asks.
+        for (width, height) in [(3840, 2160), (1920, 1088), (2048, 1080)] {
+            let large = move |film: &mut FakePackets| {
+                film.streams[1].width = width;
+                film.streams[1].height = height;
+            };
+            assert_eq!(
+                refused(&large, PictureTarget::HevcMain10),
+                vec![Wrote::Fail(
+                    "This phone can't convert a 4K HDR picture for casting fast enough, and \
+                     xtremio doesn't convert HDR to SDR."
+                        .to_owned()
+                )],
+                "{width}x{height}"
+            );
+        }
+        let full_hd = |film: &mut FakePackets| {
+            film.streams[1].width = 1920;
+            film.streams[1].height = 1080;
+        };
+        assert_eq!(
+            refused(&full_hd, PictureTarget::HevcMain10).last(),
+            Some(&Wrote::End),
+            "1080p Main 10 is made"
+        );
         // Square pixels, said either way, are not stretched.
         let square = |film: &mut FakePackets| {
             film.streams[1].sample_aspect_ratio = libav::Rational { num: 1, den: 1 }
