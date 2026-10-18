@@ -1679,9 +1679,13 @@ mod tests {
         world: Shared,
     }
 
+    // A drop while the test holds the world (an assertion failing with
+    // its guard alive) counts nothing rather than aborting the test.
     impl Drop for FakeSurface {
         fn drop(&mut self) {
-            let mut world = self.world.lock().unwrap();
+            let Ok(mut world) = self.world.try_lock() else {
+                return;
+            };
             world.live_windows -= 1;
             world.log.push(format!("release window {}", self.id));
         }
@@ -1689,7 +1693,9 @@ mod tests {
 
     impl Drop for FakeCodec {
         fn drop(&mut self) {
-            let mut world = self.world.lock().unwrap();
+            let Ok(mut world) = self.world.try_lock() else {
+                return;
+            };
             world.live_codecs -= 1;
             let role = match self.role {
                 Role::Decoder { .. } => "decoder",
