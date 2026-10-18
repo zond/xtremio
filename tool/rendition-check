@@ -95,10 +95,44 @@ def video_packets(path):
         "-show_entries",
         "packet=pts,pos,flags",
     )["packets"]
+    if any(p.get("pts") is None for p in packets):
+        # A container without presentation times (an AVI): the times are
+        # what a decoder makes of it, so count and time the decoded frames.
+        frames = probe(
+            path,
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "frame=best_effort_timestamp,pkt_pos,key_frame",
+        )["frames"]
+        out = []
+        for f in frames:
+            if f.get("best_effort_timestamp") is None:
+                continue
+            out.append(
+                (
+                    Fraction(int(f["best_effort_timestamp"])) * base,
+                    int(f.get("pkt_pos", -1)),
+                    int(f.get("key_frame", 0)) == 1,
+                )
+            )
+        # Decoded frames can lack a time at the very start; count them all
+        # and lay the missing ones on the frame grid, since that is what
+        # the producer does with a time it was not given.
+        counted = probe(
+            path, "-select_streams", "v:0", "-count_frames",
+            "-show_entries", "stream=nb_read_frames,r_frame_rate",
+        )["streams"][0]
+        total = int(counted.get("nb_read_frames", len(out)))
+        rate = Fraction(counted.get("r_frame_rate", "25/1"))
+        if rate and total > len(out):
+            have = {t for t, _, _ in out}
+            grid = (Fraction(i) / rate for i in range(total))
+            out.extend((t, -1, False) for t in grid if t not in have)
+            out = out[:total]
+        return out, base
     out = []
     for p in packets:
-        if p.get("pts") is None:
-            continue
         out.append(
             (
                 Fraction(int(p["pts"])) * base,
