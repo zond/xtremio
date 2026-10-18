@@ -268,6 +268,29 @@ class HwProbe(
                 runCatching { range(video?.getSupportedFrameRatesFor(w, h)) }.getOrNull()
             fun achievable(w: Int, h: Int): List<Double>? =
                 runCatching { range(video?.getAchievableFrameRatesFor(w, h)) }.getOrNull()
+            // Whether the codec says yes to P010 buffers at the 10-bit
+            // profile, asked the way configure would be.
+            val tenBitProfile = when (type) {
+                "video/hevc" -> CodecProfileLevel.HEVCProfileMain10
+                "video/avc" -> CodecProfileLevel.AVCProfileHigh10
+                else -> null
+            }
+            fun p010(w: Int, h: Int): Boolean? = runCatching {
+                caps.isFormatSupported(
+                    MediaFormat.createVideoFormat(type, w, h).apply {
+                        setInteger(MediaFormat.KEY_COLOR_FORMAT, HwProbeRules.COLOR_P010)
+                        if (tenBitProfile != null) setInteger(MediaFormat.KEY_PROFILE, tenBitProfile)
+                    },
+                )
+            }.getOrNull()
+            val p010Support = if (info.isEncoder && tenBitProfile != null) {
+                mapOf(
+                    "supportsP010Main10at1080" to p010(1920, 1080),
+                    "supportsP010Main10at2160" to p010(3840, 2160),
+                )
+            } else {
+                emptyMap()
+            }
             return mapOf(
                 "type" to type,
                 "profileLevels" to caps.profileLevels.map {
@@ -311,7 +334,7 @@ class HwProbe(
                 "features" to featureTable.filter { Build.VERSION.SDK_INT >= it.second }
                     .associate { (name, _) -> name to caps.isFeatureSupported(name) },
                 "maxInstances" to caps.maxSupportedInstances,
-            )
+            ) + p010Support
         }
 
         /** What the phone is doing right now: heat, battery, screen. */
