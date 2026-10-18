@@ -31,6 +31,11 @@ import 'receiver_table.dart';
 ///   says the receiver showed no picture for it.
 /// - **The picture keeps its size.** A film bigger or faster than any target
 ///   the row decodes is refused ([PictureShortfall.size]).
+/// - **A picture decoded in software** ([software]: the phone's hardware has
+///   no decoder for its codec, and the player's FFmpeg does,
+///   [PictureSupport.softwareDecodes]) is 8-bit video no bigger than
+///   1920x1080, made 8-bit. A bigger one is refused
+///   ([PictureShortfall.tooSlow]), and HDR or 10-bit gets no answer here.
 ///
 /// Null when conversion is no answer at all: the phone encodes nothing the
 /// row decodes, so the refusal a copy would get stands.
@@ -43,13 +48,20 @@ PictureChoice? choosePicture({
   bool hdr = false,
   int? depth,
   Set<String> noPicture = const {},
+  bool software = false,
 }) {
+  if (software) {
+    if (hdr || (depth ?? 8) > 8) return null;
+    if (!softwareFits(width: width, height: height)) {
+      return const PictureRefused(PictureShortfall.tooSlow);
+    }
+  }
   final row = receiver.atBest ?? receiver;
   bool fits(String codec) =>
       row.fits(codec, width: width, height: height, fps: fps);
   bool makes(String codec) => support.encodes.contains(codec);
   final hevc = makes('HEVC') && fits('HEVC');
-  final tenBit = hevc && support.tenBit;
+  final tenBit = hevc && support.tenBit && !software;
   final mainTen = tenBit && main10Fits(width: width, height: height);
   final targets = <PictureTarget>[
     if (hdr) ...[
@@ -106,6 +118,16 @@ PictureChoice? choosePicture({
 bool main10Fits({int? width, int? height}) =>
     (width ?? 0) <= 1920 && (height ?? 0) <= 1080;
 
+/// Whether this phone converts a picture of [width] by [height] decoded in
+/// software fast enough: no bigger than 1920x1080. A size mpv has not
+/// reported passes here. The producer checks the size again once it reads
+/// the film, with the same sentence.
+///
+/// libavcodec decodes on one thread of the phone's, and the picture is copied
+/// through memory twice on its way to the hardware encoder.
+bool softwareFits({int? width, int? height}) =>
+    (width ?? 0) <= 1920 && (height ?? 0) <= 1080;
+
 /// What [choosePicture] answered.
 sealed class PictureChoice {
   const PictureChoice();
@@ -146,6 +168,10 @@ enum PictureShortfall {
   /// Bigger or faster than anything the receiver decodes that the phone
   /// makes. Pictures are never made smaller.
   size,
+
+  /// Decoded in software and bigger than 1920x1080, which this phone does not
+  /// convert fast enough ([softwareFits]).
+  tooSlow,
 }
 
 /// **The bitrate a converted picture is made at**, in bits per second, by the

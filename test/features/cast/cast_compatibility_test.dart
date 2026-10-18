@@ -195,8 +195,7 @@ void main() {
       expect(
         result.explanation,
         'A Chromecast plays MP4 and WebM files. This stream is a Matroska '
-        '(.mkv) file. Casting it would need a conversion this app cannot do '
-        'yet.',
+        "(.mkv) file, and xtremio can't convert this one for casting.",
       );
     });
   });
@@ -424,8 +423,8 @@ void main() {
       expect(result.reason, CastRefusal.container);
       expect(
         result.explanation,
-        'A Chromecast plays MP4 and WebM files. This stream is an AVI file. '
-        'Casting it would need a conversion this app cannot do yet.',
+        'A Chromecast plays MP4 and WebM files. This stream is an AVI file, '
+        "and xtremio can't convert this one for casting.",
       );
     });
 
@@ -446,7 +445,7 @@ void main() {
         expect(result.reason, CastRefusal.container, reason: reader);
         expect(
           result.explanation,
-          contains('This stream is $name.'),
+          contains('This stream is $name,'),
           reason: reader,
         );
       }

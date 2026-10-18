@@ -6,15 +6,17 @@ import 'receiver_table.dart';
 /// Whether a stream can be handed to a receiver as it is, repackaged, or
 /// not at all, and why.
 ///
-/// **The picture is converted only where this phone's hardware can.** A cast
-/// sends the bytes the server already serves, or the same picture in another
-/// container with its sound copied or converted to stereo AAC
-/// ([CastRendition]). Where the receiver cannot take the picture that way, a
-/// phone whose hardware decodes it converts it to HEVC or H.264
-/// ([CastRendition.picture], [choosePicture]). Otherwise a video codec the
-/// receiver cannot decode is not a slower cast: it is a black screen. The gate
-/// therefore has to answer honestly, and a refusal has to say what is wrong
-/// rather than let the cast fail on the television.
+/// **The picture is converted only where this phone can.** A cast sends the
+/// bytes the server already serves, or the same picture in another container
+/// with its sound copied or converted to stereo AAC ([CastRendition]). Where
+/// the receiver cannot take the picture that way, a phone that decodes it
+/// converts it to HEVC or H.264 ([CastRendition.picture], [choosePicture]).
+/// Its hardware decodes the picture, or for a codec the hardware has no
+/// decoder for (MPEG-4 Part 2, DivX 3, MPEG-2) the player's own FFmpeg does,
+/// up to 1920x1080. Otherwise a video codec the receiver cannot decode is not
+/// a slower cast: it is a black screen. The gate therefore has to answer
+/// honestly, and a refusal has to say what is wrong rather than let the cast
+/// fail on the television.
 ///
 /// **mpv is the only authority on what the file is** (zond, 2026-10-05: "always
 /// use the mpv info"). A cast starts from the player, where mpv is reading the
@@ -37,7 +39,12 @@ import 'receiver_table.dart';
 ///   are WebM's (VP8 or VP9 with Opus or Vorbis), and goes as `video/webm`.
 ///   With anything else it is a Matroska file, which a receiver does not take
 ///   as it is;
-/// - anything else (AVI, a transport stream) no receiver takes.
+/// - anything else (AVI, a transport stream) no receiver takes. Played by id,
+///   such a file is converted where this phone can: its picture made HEVC or
+///   H.264 and its sound stereo AAC, whatever they were. An AVI carries no
+///   presentation times, so its picture is never copied, and its sound is
+///   never passed through. Where the phone cannot convert the picture, the
+///   file is refused for its container.
 ///
 /// A stream this device reads by URL through the server's `/proxy` (or `/ftp`)
 /// route cannot be cast, whatever the file is. Such a stream is an origin that
@@ -128,6 +135,11 @@ sealed class CastCompatibility {
     if (video == null) return _soundAlone(readers, audio!);
     final surround = (stats?.audioChannels ?? 0) > 2;
     final repackages = canRepackage && mediaIdOf(url) != null;
+    // A file neither family's reader opened (AVI, a transport stream): a
+    // receiver takes none of it, so all of it is converted or none.
+    final foreign =
+        !readers.any(_matroskaReaders.contains) &&
+        !readers.any(_mp4Readers.contains);
     // What converting the picture on this phone answers, asked only where a
     // copy will not do: null where it is no answer at all, so the refusal a
     // copy gets stands.
@@ -138,7 +150,9 @@ sealed class CastCompatibility {
             stats: stats,
             support: conversion,
             noPicture: noPicture,
-            convertsSound: _convertsSound(audio, surround),
+            convertsSound: foreign
+                ? audio != null
+                : _convertsSound(audio, surround),
           )
         : null;
     // A copy of a codec the receiver showed no picture for this session goes
@@ -194,8 +208,9 @@ sealed class CastCompatibility {
       if (webm) return picture!;
       return const CastRefused._container('a Matroska (.mkv) file');
     }
-    if (!readers.any(_mp4Readers.contains)) {
-      return CastRefused._container(_describeReader(readers.first));
+    if (foreign) {
+      return converted ??
+          CastRefused._container(_describeReader(readers.first));
     }
 
     if (picture != null) return converted ?? picture;
@@ -304,8 +319,8 @@ final class CastRefused extends CastCompatibility {
   const CastRefused._container(String description)
     : this._(
         CastRefusal.container,
-        'A Chromecast plays MP4 and WebM files. This stream is $description. '
-        'Casting it would need a conversion this app cannot do yet.',
+        'A Chromecast plays MP4 and WebM files. This stream is $description, '
+        "and xtremio can't convert this one for casting.",
       );
 
   const CastRefused._video(String subject, String supported, String codec)
@@ -345,6 +360,15 @@ final class CastRefused extends CastCompatibility {
         CastRefusal.hdr,
         "This phone can't convert HDR pictures for casting, and xtremio "
         "doesn't convert HDR to SDR.",
+      );
+
+  /// A picture decoded in software bigger than 1920x1080, which this phone
+  /// does not convert fast enough.
+  const CastRefused._tooSlow()
+    : this._(
+        CastRefusal.tooSlow,
+        "This phone can't convert this film's picture for casting fast "
+        'enough.',
       );
 
   /// An HDR picture bigger than 1920x1080, which this phone does not
@@ -400,8 +424,10 @@ final class CastRefused extends CastCompatibility {
 /// sound is never refused here, since it is converted when it is not AAC.
 /// [hdr] is an HDR picture this phone would have to convert and cannot keep
 /// HDR for this receiver. [hdrTooLarge] is an HDR picture bigger than
-/// 1920x1080, which this phone does not convert fast enough. [proxied] is never castable. [pending] is not an
-/// answer yet: ask again when mpv has reported what the file is.
+/// 1920x1080, which this phone does not convert fast enough. [tooSlow] is a
+/// picture this phone would decode in software, bigger than 1920x1080.
+/// [proxied] is never castable. [pending] is not an answer yet: ask again when
+/// mpv has reported what the file is.
 enum CastRefusal {
   proxied,
   pending,
@@ -413,6 +439,7 @@ enum CastRefusal {
   renditionVideo,
   hdr,
   hdrTooLarge,
+  tooSlow,
 }
 
 /// What a receiver plays, by container: the MIME type to declare, how a
@@ -552,10 +579,12 @@ String _filmPicture(PlaybackStats? stats) {
 
 /// **The film's [video] picture converted for [receiver]** by this phone
 /// ([support], [choosePicture]): a [CastRendition] that says what it is made
-/// as, or the refusal that says why it cannot be. Null where conversion is no
-/// answer: the phone does not decode [video], the picture is one its hardware
-/// does not take (beyond 10 bits, or not 4:2:0), or it makes nothing the
-/// receiver decodes.
+/// as, or the refusal that says why it cannot be. Its hardware decodes
+/// [video], or failing that the player's FFmpeg does
+/// ([PictureSupport.softwareDecodes]). Null where conversion is no answer:
+/// the phone decodes [video] neither way, the picture is one it does not take
+/// (beyond 10 bits, not 4:2:0, or HDR or 10-bit for the software decoder), or
+/// it makes nothing the receiver decodes.
 CastCompatibility? _convertedPicture({
   required ReceiverRow receiver,
   required String video,
@@ -564,7 +593,10 @@ CastCompatibility? _convertedPicture({
   required Set<String> noPicture,
   required bool convertsSound,
 }) {
-  if (!support.decodes.contains(video)) return null;
+  final software =
+      !support.decodes.contains(video) &&
+      support.softwareDecodes.contains(video);
+  if (!support.decodes.contains(video) && !software) return null;
   final pixels = _pixelsOfStats(stats);
   if (pixels != null && (pixels.chroma != '4:2:0' || pixels.depth > 10)) {
     return null;
@@ -579,6 +611,7 @@ CastCompatibility? _convertedPicture({
     hdr: stats?.hdr ?? false,
     depth: pixels?.depth,
     noPicture: noPicture,
+    software: software,
   );
   return switch (choice) {
     null => null,
@@ -595,6 +628,8 @@ CastCompatibility? _convertedPicture({
       const CastRefused._hdrPhone(),
     PictureRefused(shortfall: PictureShortfall.hdrTooLarge) =>
       const CastRefused._hdrTooLarge(),
+    PictureRefused(shortfall: PictureShortfall.tooSlow) =>
+      const CastRefused._tooSlow(),
     PictureRefused(shortfall: PictureShortfall.size, :final codec) =>
       CastRefused._notSmaller(
         row.subject,
@@ -704,6 +739,8 @@ String? _canonicalVideo(String? codec) {
   if (text.startsWith('vp9')) return 'VP9';
   if (text.startsWith('vp8')) return 'VP8';
   if (text.startsWith('mpeg4')) return 'MPEG-4 Part 2';
+  // libavcodec's MPEG-4 "Microsoft variant version 3": DivX 3's.
+  if (text.startsWith('msmpeg4v3')) return 'DivX 3';
   if (text.startsWith('mpeg2')) return 'MPEG-2';
   // Something we have no name for, reported by the decoder that is playing
   // it: the first word is the codec, and it is not one of ours.

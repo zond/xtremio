@@ -798,7 +798,10 @@ void main() {
 
       expect(find.byType(CastRefusedDialog), findsOneWidget);
       expect(find.textContaining('Matroska'), findsOneWidget);
-      expect(find.textContaining('conversion'), findsOneWidget);
+      expect(
+        find.textContaining("can't convert this one for casting"),
+        findsOneWidget,
+      );
       expect(cast.loads, isEmpty);
       expect(cast.connectAttempts, isEmpty);
       // Nothing was opened to the network for a cast that never happened.

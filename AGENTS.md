@@ -373,9 +373,12 @@ conversion also asks what this phone's hardware can do. See
 - **A picture is converted only where a copy will not do, and never made
   smaller.** `CastCompatibility.of` asks `choosePicture`
   (`lib/features/cast/picture_plan.dart`) only for a film played by id that
-  would otherwise be refused for its picture, or whose codec the receiver
-  showed no picture for. It needs the phone's own word that its hardware
-  decodes the codec (`MediaIds.pictureSupport`). HDR goes only to 10-bit
+  would otherwise be refused for its picture, whose codec the receiver
+  showed no picture for, or whose container is neither MP4 nor Matroska.
+  In that last case the sound is converted too, and nothing tells the
+  containers apart. It needs the phone's own word that it decodes the codec
+  (`MediaIds.pictureSupport`): in hardware, or in software for 8-bit
+  pictures up to 1920x1080 (`softwareDecodes`). HDR goes only to 10-bit
   HEVC, never to SDR. The receiver is judged by `atBest ?? row`, as a copy
   is. Tests: `test/features/cast/picture_conversion_test.dart`.
 - **A converted cast holds the wake lock from its publish to its

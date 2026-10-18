@@ -16,6 +16,15 @@ const phone = PictureSupport(
   tenBit: true,
 );
 
+/// zond's phone as it is: the player's FFmpeg decodes what its hardware does
+/// not.
+const softwarePhone = PictureSupport(
+  decodes: {'H.264', 'HEVC', 'AV1', 'VP9'},
+  encodes: {'H.264', 'HEVC'},
+  tenBit: true,
+  softwareDecodes: {'MPEG-4 Part 2', 'DivX 3', 'MPEG-2'},
+);
+
 /// The same phone without 10-bit encoding.
 const eightBitPhone = PictureSupport(
   decodes: {'H.264', 'HEVC', 'AV1', 'VP9'},
@@ -413,6 +422,151 @@ void main() {
       final result = judge(film(video: 'hevc (Main 10)'));
       expect((result as CastRendition).picture, isNull);
       expect(result.sourceVideo, isNull);
+    });
+  });
+
+  group('a film in another container is converted, picture and sound', () {
+    /// An AVI as zond's first try was: Xvid, MP3 in stereo, 720x576 at 25.
+    PlaybackStats avi({
+      String video = 'mpeg4 (MPEG-4 part 2)',
+      String audio = 'mp3',
+      int width = 720,
+      int height = 576,
+      String format = 'avi',
+    }) => film(
+      format: format,
+      video: video,
+      audio: audio,
+      channels: 2,
+      width: width,
+      height: height,
+      fps: 25,
+      pixels: 'yuv420p',
+    );
+
+    test('Xvid in an AVI to the Google TV is made HEVC, and tried', () {
+      final result = judge(avi(), conversion: softwarePhone);
+      expect(result, isA<CastRendition>());
+      result as CastRendition;
+      expect(
+        result.picture,
+        const PicturePlan(PictureTarget.hevcMain, 2500000),
+      );
+      expect(result.sourceVideo, 'MPEG-4 Part 2');
+      expect(result.video, 'HEVC');
+      expect(result.convertsSound, isTrue, reason: 'MP3 never passes through');
+      expect(result.tentative, isTrue);
+    });
+
+    test('Xvid at 1920x1080 is made too', () {
+      final result = judge(
+        avi(width: 1920, height: 1080),
+        conversion: softwarePhone,
+      );
+      expect(
+        (result as CastRendition).picture,
+        const PicturePlan(PictureTarget.hevcMain, 8000000),
+      );
+    });
+
+    test(
+      'Xvid above 1920x1080 is refused: too slow to decode on the phone',
+      () {
+        for (final (width, height) in [
+          (1920, 1088),
+          (2560, 1080),
+          (3840, 2160),
+        ]) {
+          final result = judge(
+            avi(width: width, height: height),
+            conversion: softwarePhone,
+            receiver: ultra,
+          );
+          expect(result, isA<CastRefused>(), reason: '${width}x$height');
+          result as CastRefused;
+          expect(result.reason, CastRefusal.tooSlow);
+          expect(
+            result.explanation,
+            "This phone can't convert this film's picture for casting fast "
+            'enough.',
+          );
+        }
+      },
+    );
+
+    test('DivX 3 and MPEG-2 are decoded the same way', () {
+      for (final (video, name) in [
+        ('msmpeg4v3 (MPEG-4 part 2 Microsoft variant version 3)', 'DivX 3'),
+        ('mpeg2video (MPEG-2 video)', 'MPEG-2'),
+      ]) {
+        final result = judge(avi(video: video), conversion: softwarePhone);
+        expect((result as CastRendition).sourceVideo, name);
+        expect(result.picture?.target, PictureTarget.hevcMain);
+      }
+    });
+
+    test('H.264 in an AVI is converted by the hardware, its sound too', () {
+      for (final audio in ['ac3', 'aac']) {
+        final result = judge(
+          avi(video: 'h264 (High)', audio: audio, width: 1280, height: 720),
+          conversion: phone,
+        );
+        expect(result, isA<CastRendition>(), reason: audio);
+        result as CastRendition;
+        expect(
+          result.picture,
+          const PicturePlan(PictureTarget.hevcMain, 4000000),
+        );
+        expect(result.sourceVideo, 'H.264');
+        expect(result.convertsSound, isTrue, reason: audio);
+      }
+    });
+
+    test('an AVI on a phone without software decoders keeps the container '
+        'refusal', () {
+      for (final conversion in [phone, null, PictureSupport.none]) {
+        final result = judge(avi(), conversion: conversion);
+        expect(result, isA<CastRefused>());
+        result as CastRefused;
+        expect(result.reason, CastRefusal.container);
+        expect(
+          result.explanation,
+          'A Chromecast plays MP4 and WebM files. This stream is an AVI file, '
+          "and xtremio can't convert this one for casting.",
+        );
+      }
+    });
+
+    test('a transport stream with H.264 is converted too', () {
+      final result = judge(
+        avi(
+          format: 'mpegts',
+          video: 'h264 (High)',
+          audio: 'aac',
+          width: 1920,
+          height: 1080,
+        ),
+        conversion: phone,
+      );
+      expect(result, isA<CastRendition>());
+      result as CastRendition;
+      expect(result.picture?.target, PictureTarget.hevcMain);
+      expect(result.convertsSound, isTrue);
+    });
+
+    test('software decoding is for 8-bit pictures alone: a deeper one keeps '
+        'the container refusal', () {
+      final result = judge(
+        film(
+          format: 'avi',
+          video: 'mpeg4',
+          width: 720,
+          height: 576,
+          pixels: 'yuv420p10',
+        ),
+        conversion: softwarePhone,
+      );
+      expect((result as CastRefused).reason, CastRefusal.container);
     });
   });
 
