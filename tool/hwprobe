@@ -69,6 +69,7 @@ summary() {
         "  first key:      \([.slots[] | yn(.firstIsKey)] | join(" "))",
         "  encoder start:  median \(n(.encoderSetupMsMedian; 1)) ms (first \(n(.encoderSetupMsFirst; 1)) ms)"
       else empty end),
+      (if .p010 then "  p010 copy:      \(.p010.copyPath // "-"), median \(n(.p010.copyMsMedian; 2)) ms, max \(n(.p010.copyMsMax; 2)) ms; decoder out \(.decoder.outputFormat.colorFormatName // .decoder.outputFormat.colorFormat // "-")" else empty end),
       (if .stream then "  stream:         first key \(yn(.stream.firstIsKey)), \(.stream.keyFrames) key frames, \(.stream.bytes) bytes" else empty end),
       (if .requestSync then "  sync requests:  \([.requestSync[] | "\(.requestedAt)->\(.keyAt // "none") (+\(.delta // "-"))"] | join(", "))" else empty end),
       (if .mp4 then "  mp4:            \(.mp4.path // .mp4.uri) \(.mp4.bytes // "-") bytes" else empty end)

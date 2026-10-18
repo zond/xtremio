@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.ImageFormat
+import android.media.Image
 import android.media.ImageReader
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -386,6 +387,8 @@ class HwProbe(
                 "height" to int(MediaFormat.KEY_HEIGHT),
                 "crop" to listOf("crop-left", "crop-top", "crop-right", "crop-bottom").map { int(it) }
                     .takeIf { c -> c.any { it != null } },
+                "stride" to int(MediaFormat.KEY_STRIDE),
+                "sliceHeight" to int(MediaFormat.KEY_SLICE_HEIGHT),
                 "colorFormat" to colorFormat,
                 "colorFormatName" to colorFormat?.let { HwProbeRules.colorFormatName(it) },
                 "colorStandard" to int(MediaFormat.KEY_COLOR_STANDARD),
@@ -435,7 +438,13 @@ class ProbeArgs(private val m: Map<*, *>) {
     }
     val profile: String = (m["profile"] as? String ?: "auto").also {
         require(it in PROFILES) { "profile is one of ${PROFILES.joinToString()}" }
+        require(mode != "transcodeP010" || it in setOf("auto", "main10", "main10hdr10")) {
+            "transcodeP010 encodes 10-bit: profile is auto, main10 or main10hdr10"
+        }
     }
+
+    /** A fresh encoder per slot: the `perSlot` mode, or `perSlot: true` with `transcodeP010`. */
+    val perSlot: Boolean = mode == "perSlot" || (mode == "transcodeP010" && m["perSlot"] as? Boolean == true)
     val bitrate: Int = num("bitrate")?.toInt() ?: 12_000_000
     val bitrateMode: String = (m["bitrateMode"] as? String ?: "cbr").also {
         require(it in setOf("cbr", "vbr", "cq")) { "bitrateMode is cbr, vbr or cq" }
@@ -445,13 +454,13 @@ class ProbeArgs(private val m: Map<*, *>) {
     val requestSyncAt: List<Int> = (m["requestSyncAt"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
         ?: listOf(100, 400, 700)
     val repeat: Int = (num("repeat")?.toInt() ?: 1).coerceAtLeast(1)
-    val iFrameInterval: Float = num("iFrameInterval")?.toFloat() ?: if (mode == "perSlot") 3600f else 1f
+    val iFrameInterval: Float = num("iFrameInterval")?.toFloat() ?: if (perSlot) 3600f else 1f
     val maxBframes: Int = num("maxBframes")?.toInt() ?: 0
     val wakeLock: Boolean = m["wakeLock"] as? Boolean ?: true
     val writeMp4: Boolean = m["writeMp4"] as? Boolean ?: false
 
     companion object {
-        val MODES = setOf("transcode", "decodeOnly", "perSlot", "requestSync")
+        val MODES = setOf("transcode", "decodeOnly", "perSlot", "requestSync", "transcodeP010")
         val PROFILES = setOf("auto", "main", "main10", "main10hdr10", "high")
     }
 }
@@ -520,13 +529,14 @@ private class EncodeStats(val index: Int) {
     )
 }
 
-private class Encoder(val codec: MediaCodec, val surface: Surface, val stats: EncodeStats) {
+/** An encoder and its input surface; a byte-buffer encoder has none. */
+private class Encoder(val codec: MediaCodec, val surface: Surface?, val stats: EncodeStats) {
     var eos = false
 
     fun release() {
         runCatching { codec.stop() }
         runCatching { codec.release() }
-        runCatching { surface.release() }
+        runCatching { surface?.release() }
     }
 }
 
@@ -712,6 +722,13 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
 
     private fun profileValue(tenBit: Boolean): Int {
         val hevc = args.mime == "video/hevc"
+        if (args.mode == "transcodeP010") {
+            return when {
+                !hevc -> CodecProfileLevel.AVCProfileHigh10
+                args.profile == "main10hdr10" -> CodecProfileLevel.HEVCProfileMain10HDR10
+                else -> CodecProfileLevel.HEVCProfileMain10
+            }
+        }
         val chosen = if (args.profile == "auto") (if (tenBit) "main10" else "main") else args.profile
         return when {
             hevc && chosen == "main10" -> CodecProfileLevel.HEVCProfileMain10
@@ -723,9 +740,16 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
         }
     }
 
-    private fun encoderFormat(track: MediaFormat, width: Int, height: Int, fps: Float, profile: Int): MediaFormat =
+    private fun encoderFormat(
+        track: MediaFormat,
+        width: Int,
+        height: Int,
+        fps: Float,
+        profile: Int,
+        colorFormat: Int,
+    ): MediaFormat =
         MediaFormat.createVideoFormat(args.mime, width, height).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat)
             setInteger(MediaFormat.KEY_BIT_RATE, args.bitrate)
             setInteger(
                 MediaFormat.KEY_BITRATE_MODE,
@@ -754,12 +778,13 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             }
         }
 
-    private fun newEncoder(index: Int, format: MediaFormat): Encoder {
+    /** A started encoder; with an input surface unless [buffers]. */
+    private fun newEncoder(index: Int, format: MediaFormat, buffers: Boolean): Encoder {
         val t0 = System.nanoTime()
         val codec = MediaCodec.createEncoderByType(args.mime)
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            val surface = codec.createInputSurface()
+            val surface = if (buffers) null else codec.createInputSurface()
             codec.start()
             val stats = EncodeStats(index)
             stats.setupMs = (System.nanoTime() - t0) / 1e6
@@ -782,7 +807,8 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
         val fps: Float
         val frameUs: Long
         val totalUs = (args.seconds * 1e6).toLong()
-        val perSlot = args.mode == "perSlot"
+        val perSlot = args.perSlot
+        val p010 = args.mode == "transcodeP010"
         val decodeOnly = args.mode == "decodeOnly"
         val requestSync = args.mode == "requestSync"
         val tenBitReason: String?
@@ -823,6 +849,17 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
         var decoderRebuilds = 0
         var inputEos: String? = null
 
+        // transcodeP010: the two sides' layouts as first seen, and the copy's cost.
+        var decoderImage: Map<String, Any?>? = null
+        var encoderImage: Map<String, Any?>? = null
+        var encoderInputFormat: Map<String, Any?>? = null
+        var decoderBufferSize: Int? = null
+        var encoderInputCapacity: Int? = null
+        var encoderQueuedSize: Int? = null
+        var copyPath: String? = null
+        val copyMs = ArrayList<Double>()
+        val inputWaitMs = ArrayList<Double>()
+
         val repeatStartNs = System.nanoTime()
         var windowStartNs = repeatStartNs
         var windowFramesIn = 0
@@ -850,7 +887,7 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             }
             val hdr = track.containsKey(MediaFormat.KEY_HDR_STATIC_INFO)
             var reason = HwProbeRules.tenBitReason(srcMime, trackProfile, hdr, transfer, null)
-            if (reason == null && args.profile == "auto" && !decodeOnly) {
+            if (reason == null && args.profile == "auto" && !decodeOnly && !p010) {
                 val probed = probeDecoderOutput(extractor, track)
                 decoderProbeFormat = probed?.let { HwProbe.describeFormat(it) }
                 val colorFormat = probed?.takeIf { it.containsKey(MediaFormat.KEY_COLOR_FORMAT) }
@@ -859,19 +896,20 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             }
             tenBitReason = reason
             profile = profileValue(reason != null)
-            encFormat = if (decodeOnly) null else encoderFormat(track, width, height, fps, profile)
+            val colorFormat = if (p010) HwProbeRules.COLOR_P010 else CodecCapabilities.COLOR_FormatSurface
+            encFormat = if (decodeOnly) null else encoderFormat(track, width, height, fps, profile, colorFormat)
         }
 
         fun run(): Map<String, Any?> {
             try {
                 if (args.writeMp4 && index == 0 && !decodeOnly) openMuxer()
-                val surface: Surface
+                val surface: Surface?
                 if (decodeOnly) {
                     val r = ImageReader.newInstance(width, height, ImageFormat.PRIVATE, 4)
                     reader = r
                     surface = r.surface
                 } else {
-                    val enc = newEncoder(0, encFormat!!)
+                    val enc = newEncoder(0, encFormat!!, buffers = p010)
                     encoder = enc
                     slots.add(enc.stats)
                     surface = enc.surface
@@ -890,10 +928,20 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             return summary()
         }
 
-        fun newDecoder(surface: Surface): MediaCodec {
+        /**
+         * A started decoder into [surface]. With no surface it decodes to
+         * buffers and is asked for P010 the Android 13 way: the colour
+         * format on the format it is configured with.
+         */
+        fun newDecoder(surface: Surface?): MediaCodec {
             val codec = MediaCodec.createDecoderByType(srcMime)
             try {
-                codec.configure(track, surface, null, 0)
+                val format = if (surface == null) {
+                    MediaFormat(track).apply { setInteger(MediaFormat.KEY_COLOR_FORMAT, HwProbeRules.COLOR_P010) }
+                } else {
+                    track
+                }
+                codec.configure(format, surface, null, 0)
                 codec.start()
             } catch (t: Throwable) {
                 runCatching { codec.release() }
@@ -974,6 +1022,9 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             }
             val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
             val pts = info.presentationTimeUs
+            // A cut drains the old encoder into [info], so the copy takes these now.
+            val offset = info.offset
+            val size = info.size
             if (info.size == 0 && !eos) {
                 emptyOutputs++
                 dec.releaseOutputBuffer(o, false)
@@ -1001,6 +1052,10 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
                 dec.releaseOutputBuffer(o, true)
                 reader?.acquireLatestImage()?.close()
                 countOut(pts)
+            } else if (p010) {
+                copyToEncoder(dec, o, pts, offset, size)
+                dec.releaseOutputBuffer(o, false)
+                encoder?.stats?.frameIn(pts)
             } else {
                 dec.releaseOutputBuffer(o, pts * 1000)
                 encoder?.stats?.frameIn(pts)
@@ -1084,6 +1139,10 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
          * frames out as went in, then signals the end and drains.
          */
         fun finishEncoder(enc: Encoder) {
+            if (enc.surface == null) {
+                finishBufferEncoder(enc)
+                return
+            }
             val waitStart = System.nanoTime()
             while (enc.stats.framesOut < enc.stats.framesIn) {
                 checkStop()
@@ -1113,13 +1172,20 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             val old = encoder!!
             finishEncoder(old)
             old.release()
-            val enc = newEncoder(slots.size, encFormat!!)
+            val enc = newEncoder(slots.size, encFormat!!, buffers = p010)
             encoder = enc
             slots.add(enc.stats)
+            if (p010) {
+                // The decoder writes to buffers, so it has nothing to move.
+                strategy = "byteBuffers"
+                enc.stats.decoderStrategy = strategy
+                codecNames = mapOf("decoder" to decoder?.name, "encoder" to enc.codec.name)
+                return true
+            }
             val dec = decoder!!
             if (strategy != "recreateDecoder") {
                 try {
-                    dec.setOutputSurface(enc.surface)
+                    dec.setOutputSurface(enc.surface!!)
                     strategy = "setOutputSurface"
                     enc.stats.decoderStrategy = strategy
                     return true
@@ -1135,7 +1201,7 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             runCatching { dec.stop() }
             runCatching { dec.release() }
             decoder = null
-            decoder = newDecoder(enc.surface)
+            decoder = newDecoder(enc.surface!!)
             decoderRebuilds++
             extractor.seekTo(b.srcUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             loopOffsetUs = b.loopOffsetUs
@@ -1145,6 +1211,167 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
             inputDone = false
             codecNames = mapOf("decoder" to decoder?.name, "encoder" to enc.codec.name)
             return false
+        }
+
+        // -------------------------------------------------- P010 buffers
+
+        /**
+         * An input buffer from [enc], draining it while it has none. Gives
+         * up after 10 s, which only a stuck encoder takes.
+         */
+        fun encoderInput(enc: Encoder): Int {
+            val start = System.nanoTime()
+            while (true) {
+                checkStop()
+                val i = enc.codec.dequeueInputBuffer(10_000)
+                if (i >= 0) {
+                    inputWaitMs.add((System.nanoTime() - start) / 1e6)
+                    return i
+                }
+                drainEncoder(enc, 0)
+                if (System.nanoTime() - start > 10_000_000_000L) {
+                    throw IllegalStateException("the encoder gave no input buffer for 10 s")
+                }
+            }
+        }
+
+        /**
+         * Copies the decoder's output buffer [o] into an input buffer of the
+         * encoder and queues it at [pts]. Each side is read through its Image
+         * planes when the codec gives one. Otherwise it is read through the
+         * raw buffer, laid out by the format's stride and slice height. A
+         * decoder that does not put out 16-bit samples ends the run.
+         */
+        fun copyToEncoder(dec: MediaCodec, o: Int, pts: Long, offset: Int, size: Int) {
+            val enc = encoder!!
+            val outFormat = dec.getOutputFormat(o)
+            val colorFormat = intOf(outFormat, MediaFormat.KEY_COLOR_FORMAT)
+            if (decoderOutputFormat == null) decoderOutputFormat = HwProbe.describeFormat(outFormat)
+            if (decoderBufferSize == null) decoderBufferSize = size
+            val image = dec.getOutputImage(o)
+            try {
+                if (decoderImage == null) decoderImage = image?.let { describeImage(it) }
+                val yPixelStride = image?.planes?.getOrNull(0)?.pixelStride
+                if (colorFormat != HwProbeRules.COLOR_P010 && yPixelStride != 2) {
+                    throw IllegalStateException(
+                        "the decoder does not put out 10-bit: colour format $colorFormat " +
+                            "(${colorFormat?.let { HwProbeRules.colorFormatName(it) }}), " +
+                            "Y pixel stride ${yPixelStride ?: "unknown, no image"}",
+                    )
+                }
+                val src = if (image != null) {
+                    imagePlanes(image)
+                } else {
+                    val buffer = dec.getOutputBuffer(o) ?: throw IllegalStateException("no decoder output buffer")
+                    rawPlanes(buffer, offset, outFormat)
+                }
+                val i = encoderInput(enc)
+                val inFormat = enc.codec.inputFormat
+                if (encoderInputFormat == null) encoderInputFormat = HwProbe.describeFormat(inFormat)
+                val capacity = enc.codec.getInputBuffer(i)?.capacity() ?: 0
+                if (encoderInputCapacity == null) encoderInputCapacity = capacity
+                val inputImage = enc.codec.getInputImage(i)
+                val start = System.nanoTime()
+                val queued = try {
+                    val dst = if (inputImage != null) {
+                        if (encoderImage == null) encoderImage = describeImage(inputImage)
+                        val ps = inputImage.planes[0].pixelStride
+                        if (ps != 2) {
+                            throw IllegalStateException(
+                                "the encoder's input image is not 16-bit: " +
+                                    "image format ${inputImage.format}, Y pixel stride $ps",
+                            )
+                        }
+                        imagePlanes(inputImage)
+                    } else {
+                        val buffer = enc.codec.getInputBuffer(i)
+                            ?: throw IllegalStateException("no encoder input buffer")
+                        rawPlanes(buffer, 0, inFormat)
+                    }
+                    if (copyPath == null) {
+                        copyPath = "decoder ${if (image != null) "image" else "buffer"}, " +
+                            "encoder ${if (inputImage != null) "image" else "buffer"}"
+                    }
+                    for (p in 0 until 3) {
+                        val w = if (p == 0) width else width / 2
+                        val h = if (p == 0) height else height / 2
+                        HwProbeRules.copyPlane(src[p], dst[p], w, h, 2)
+                    }
+                    rawFrameSize(inFormat).coerceAtMost(capacity)
+                } finally {
+                    inputImage?.close()
+                }
+                copyMs.add((System.nanoTime() - start) / 1e6)
+                if (encoderQueuedSize == null) encoderQueuedSize = queued
+                enc.codec.queueInputBuffer(i, 0, queued, pts, 0)
+            } finally {
+                image?.close()
+            }
+        }
+
+        /** Y, U and V of a P010 [image], from its crop rectangle's corner. */
+        fun imagePlanes(image: Image): List<HwProbeRules.Plane> {
+            val crop = image.cropRect
+            return image.planes.take(3).mapIndexed { p, plane ->
+                val sub = if (p == 0) 1 else 2
+                val buffer = plane.buffer
+                HwProbeRules.Plane(
+                    buffer,
+                    buffer.position() + (crop.top / sub) * plane.rowStride + (crop.left / sub) * plane.pixelStride,
+                    plane.rowStride,
+                    plane.pixelStride,
+                )
+            }
+        }
+
+        /** Y, U and V of a raw P010 buffer: Y rows, then interleaved UV rows below the slice height. */
+        fun rawPlanes(buffer: ByteBuffer, offset: Int, format: MediaFormat): List<HwProbeRules.Plane> {
+            val rowBytes = HwProbeRules.p010RowBytes(intOf(format, MediaFormat.KEY_STRIDE), width)
+            val slice = intOf(format, MediaFormat.KEY_SLICE_HEIGHT)?.takeIf { it >= height } ?: height
+            val uv = offset + rowBytes * slice
+            return listOf(
+                HwProbeRules.Plane(buffer, offset, rowBytes, 2),
+                HwProbeRules.Plane(buffer, uv, rowBytes, 4),
+                HwProbeRules.Plane(buffer, uv + 2, rowBytes, 4),
+            )
+        }
+
+        /** The bytes of one raw P010 picture as [format] lays it out. */
+        fun rawFrameSize(format: MediaFormat): Int {
+            val rowBytes = HwProbeRules.p010RowBytes(intOf(format, MediaFormat.KEY_STRIDE), width)
+            val slice = intOf(format, MediaFormat.KEY_SLICE_HEIGHT)?.takeIf { it >= height } ?: height
+            return rowBytes * slice + rowBytes * ((height + 1) / 2)
+        }
+
+        fun intOf(format: MediaFormat, key: String): Int? =
+            if (format.containsKey(key)) runCatching { format.getInteger(key) }.getOrNull() else null
+
+        fun describeImage(image: Image): Map<String, Any?> = mapOf(
+            "format" to image.format,
+            "width" to image.width,
+            "height" to image.height,
+            "crop" to image.cropRect.let { listOf(it.left, it.top, it.right, it.bottom) },
+            "planes" to image.planes.map {
+                mapOf("rowStride" to it.rowStride, "pixelStride" to it.pixelStride, "bytes" to it.buffer.remaining())
+            },
+        )
+
+        /**
+         * Ends a byte-buffer encoder's stream: an empty input buffer marked
+         * as the end, then a drain of up to 3 s.
+         */
+        fun finishBufferEncoder(enc: Encoder) {
+            val waitStart = System.nanoTime()
+            val i = encoderInput(enc)
+            enc.codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+            enc.stats.eosWaitMs = (System.nanoTime() - waitStart) / 1e6
+            val drainStart = System.nanoTime()
+            while (!enc.eos) {
+                checkStop()
+                if (System.nanoTime() - drainStart > 3_000_000_000L) break
+                drainEncoder(enc, 10_000)
+            }
+            enc.stats.drainMs = (System.nanoTime() - drainStart) / 1e6
         }
 
         // ------------------------------------------------------- windows
@@ -1311,6 +1538,24 @@ private class ProbeRun(private val context: Context, private val args: ProbeArgs
                 "pts" to if (decodeOnly) mapOf("in" to inputs.size) else HwProbeRules.comparePts(inputs, outputs),
                 "slots" to if (perSlot) slots.map { it.toMap() } else null,
                 "stream" to if (!perSlot && !decodeOnly) slots.firstOrNull()?.toMap() else null,
+                "p010" to if (p010) {
+                    mapOf(
+                        "copyPath" to copyPath,
+                        "decoderImage" to decoderImage,
+                        "encoderImage" to encoderImage,
+                        "encoderInputFormat" to encoderInputFormat,
+                        "decoderBufferSize" to decoderBufferSize,
+                        "encoderInputCapacity" to encoderInputCapacity,
+                        "encoderQueuedSize" to encoderQueuedSize,
+                        "copies" to copyMs.size,
+                        "copyMsMedian" to HwProbeRules.median(copyMs),
+                        "copyMsMax" to copyMs.maxOrNull(),
+                        "inputWaitMsMedian" to HwProbeRules.median(inputWaitMs),
+                        "inputWaitMsMax" to inputWaitMs.maxOrNull(),
+                    )
+                } else {
+                    null
+                },
                 "slotStrategy" to strategy,
                 "setOutputSurfaceError" to setOutputSurfaceError,
                 "encoderSetupMsMedian" to HwProbeRules.median(setups),
