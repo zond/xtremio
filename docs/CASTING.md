@@ -467,8 +467,9 @@ model does.
 - An HDR film (mpv's `video-params/gamma` is `pq` or `hlg`) becomes 10-bit
   HEVC that keeps its colours and HDR. That needs a receiver that decodes
   HEVC at the film's size and rate, and a phone that makes 10-bit HEVC.
-- A 10-bit film that is not HDR becomes 10-bit HEVC on such a phone, and
-  8-bit otherwise.
+  HDR films up to 1080p are converted. Larger HDR films are not yet.
+- A 10-bit film that is not HDR becomes 10-bit HEVC on such a phone, up
+  to 1920x1080. Otherwise it becomes 8-bit.
 - Anything else becomes HEVC where the receiver decodes it at the film's
   size and rate, and H.264 where it does not.
 - A codec the receiver showed no picture for is skipped. A film whose only
@@ -501,12 +502,18 @@ frames a second, never more than 24 Mbit/s (`pictureBitrate`):
 - **HDR on a phone that makes no 10-bit HEVC**: "This phone can't convert
   HDR pictures for casting, and xtremio doesn't convert HDR to SDR."
   (`CastRefusal.hdr`).
+- **HDR larger than 1920x1080.** The phone converts 10-bit pictures through
+  memory, which is too slow at that size (`main10Fits`): "This phone can't
+  convert a 4K HDR picture for casting fast enough, and xtremio doesn't
+  convert HDR to SDR." (`CastRefusal.hdrTooLarge`).
 - **A codec this phone's hardware does not decode**, a picture that is
   4:2:2, 4:4:4 or 12-bit, a phone with no hardware encoder, or a film not
   played by id. Those get the refusal a copy would get, unchanged.
 
 The producer on the Rust side refuses what the app cannot see: a film with
-stretched pixels, and an HDR film handed a target that is not 10-bit HEVC.
+stretched pixels, an HDR film handed a target that is not 10-bit HEVC,
+and a 10-bit HEVC target for a picture larger than 1920x1080
+(`MAIN10_TOO_LARGE`, the app's sentence, for an older app that asks).
 Its sentence comes back through the preparation, as Dolby Vision profile 5
 does. The HDR one is "This film's picture is HDR, and xtremio doesn't
 convert HDR to SDR." (`HDR_TO_SDR`, `rust/src/rendition.rs`).

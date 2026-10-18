@@ -205,15 +205,57 @@ void main() {
       expect((result as CastRendition).picture?.target, PictureTarget.hevcMain);
     });
 
-    test('HDR is made 10-bit HEVC, with its transfer kept', () {
+    test('HDR up to 1080p is made 10-bit HEVC, with its transfer kept', () {
       for (final transfer in ['pq', 'hlg']) {
-        final result = judge(film(pixels: 'yuv420p10', transfer: transfer));
+        final result = judge(
+          film(
+            width: 1920,
+            height: 1080,
+            pixels: 'yuv420p10',
+            transfer: transfer,
+          ),
+        );
         expect(
           (result as CastRendition).picture,
-          const PicturePlan(PictureTarget.hevcMain10, 16000000),
+          const PicturePlan(PictureTarget.hevcMain10, 8000000),
           reason: transfer,
         );
       }
+    });
+
+    test('HDR above 1080p is refused: the phone is too slow at that size', () {
+      for (final (width, height) in [
+        (3840, 2160),
+        (2560, 1440),
+        (1920, 1088),
+      ]) {
+        final result = judge(
+          film(
+            width: width,
+            height: height,
+            pixels: 'yuv420p10',
+            transfer: 'pq',
+          ),
+        );
+        expect(
+          (result as CastRefused).reason,
+          CastRefusal.hdrTooLarge,
+          reason: '${width}x$height',
+        );
+        expect(
+          result.explanation,
+          "This phone can't convert a 4K HDR picture for casting fast enough, "
+          "and xtremio doesn't convert HDR to SDR.",
+        );
+      }
+    });
+
+    test('10-bit ordinary video above 1080p is made 8-bit HEVC', () {
+      final result = judge(film(pixels: 'yuv420p10'));
+      expect(
+        (result as CastRendition).picture,
+        const PicturePlan(PictureTarget.hevcMain, 16000000),
+      );
     });
 
     test('HDR to a receiver that shows no HEVC is refused', () {

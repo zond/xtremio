@@ -19,8 +19,10 @@ import 'receiver_table.dart';
 ///   keeps its colours and transfer. That needs a row that decodes HEVC at
 ///   the film's size and rate, and a phone whose HEVC encoder makes 10-bit
 ///   pictures ([PictureSupport.tenBit]). Nothing here turns HDR into SDR.
-/// - **10-bit ordinary video** goes to 10-bit HEVC on such a phone, and
-///   otherwise as 8-bit video does.
+///   The picture must also be no bigger than 1920x1080 ([main10Fits]).
+///   A bigger HDR picture is refused ([PictureShortfall.hdrTooLarge]).
+/// - **10-bit ordinary video** goes to 10-bit HEVC on such a phone, up to
+///   1920x1080, and otherwise as 8-bit video does.
 /// - **8-bit video** goes to HEVC where the row decodes it at the film's size
 ///   and the phone encodes it, and to H.264 otherwise.
 /// - **A codec the receiver showed no picture for** this session (`noPicture`)
@@ -48,11 +50,12 @@ PictureChoice? choosePicture({
   bool makes(String codec) => support.encodes.contains(codec);
   final hevc = makes('HEVC') && fits('HEVC');
   final tenBit = hevc && support.tenBit;
+  final mainTen = tenBit && main10Fits(width: width, height: height);
   final targets = <PictureTarget>[
     if (hdr) ...[
-      if (tenBit) PictureTarget.hevcMain10,
+      if (mainTen) PictureTarget.hevcMain10,
     ] else ...[
-      if (tenBit && depth == 10) PictureTarget.hevcMain10,
+      if (mainTen && depth == 10) PictureTarget.hevcMain10,
       if (hevc) PictureTarget.hevcMain,
       if (makes('H.264') && fits('H.264')) PictureTarget.h264High,
     ],
@@ -65,7 +68,8 @@ PictureChoice? choosePicture({
       if (!fits('HEVC')) {
         return const PictureRefused(PictureShortfall.size, codec: 'HEVC');
       }
-      return const PictureRefused(PictureShortfall.hdrPhone);
+      if (!tenBit) return const PictureRefused(PictureShortfall.hdrPhone);
+      return const PictureRefused(PictureShortfall.hdrTooLarge);
     }
     // The first codec the phone makes and the row decodes at some size: the
     // one whose limit the size refusal names.
@@ -90,6 +94,17 @@ PictureChoice? choosePicture({
     ),
   );
 }
+
+/// Whether this phone converts a picture of [width] by [height] to 10-bit
+/// HEVC fast enough: no bigger than 1920x1080. A size mpv has not reported
+/// passes here. The producer checks the size again once it reads the film.
+///
+/// The 10-bit path copies the decoder's pictures into the encoder through
+/// memory. The phone bench measured it at 0.81x real time at 3840x2160 and
+/// 1.58x at 1920x1080. A run slower than real time fails. The 8-bit path
+/// hands the pictures over on the GPU and runs 2.4x at 4K.
+bool main10Fits({int? width, int? height}) =>
+    (width ?? 0) <= 1920 && (height ?? 0) <= 1080;
 
 /// What [choosePicture] answered.
 sealed class PictureChoice {
@@ -123,6 +138,10 @@ enum PictureShortfall {
 
   /// HDR, and this phone makes no 10-bit HEVC.
   hdrPhone,
+
+  /// HDR bigger than 1920x1080, which this phone does not convert to 10-bit
+  /// HEVC fast enough ([main10Fits]).
+  hdrTooLarge,
 
   /// Bigger or faster than anything the receiver decodes that the phone
   /// makes. Pictures are never made smaller.

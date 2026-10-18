@@ -347,6 +347,15 @@ final class CastRefused extends CastCompatibility {
         "doesn't convert HDR to SDR.",
       );
 
+  /// An HDR picture bigger than 1920x1080, which this phone does not
+  /// convert fast enough.
+  const CastRefused._hdrTooLarge()
+    : this._(
+        CastRefusal.hdrTooLarge,
+        "This phone can't convert a 4K HDR picture for casting fast enough, "
+        "and xtremio doesn't convert HDR to SDR.",
+      );
+
   const CastRefused._audio(String codec, String supported)
     : this._(
         CastRefusal.audioCodec,
@@ -390,7 +399,8 @@ final class CastRefused extends CastCompatibility {
 /// transcode, step F4 of the renditions design, would answer). A rendition's
 /// sound is never refused here, since it is converted when it is not AAC.
 /// [hdr] is an HDR picture this phone would have to convert and cannot keep
-/// HDR for this receiver. [proxied] is never castable. [pending] is not an
+/// HDR for this receiver. [hdrTooLarge] is an HDR picture bigger than
+/// 1920x1080, which this phone does not convert fast enough. [proxied] is never castable. [pending] is not an
 /// answer yet: ask again when mpv has reported what the file is.
 enum CastRefusal {
   proxied,
@@ -402,6 +412,7 @@ enum CastRefusal {
   audioCodec,
   renditionVideo,
   hdr,
+  hdrTooLarge,
 }
 
 /// What a receiver plays, by container: the MIME type to declare, how a
@@ -582,6 +593,8 @@ CastCompatibility? _convertedPicture({
       CastRefused._hdrReceiver(row.subject),
     PictureRefused(shortfall: PictureShortfall.hdrPhone) =>
       const CastRefused._hdrPhone(),
+    PictureRefused(shortfall: PictureShortfall.hdrTooLarge) =>
+      const CastRefused._hdrTooLarge(),
     PictureRefused(shortfall: PictureShortfall.size, :final codec) =>
       CastRefused._notSmaller(
         row.subject,
