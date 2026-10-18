@@ -274,6 +274,20 @@ with nothing measured is absent, never a dash (the rule is in
 casting, the same button shows the cast panel instead
 ([CASTING.md](CASTING.md#the-stats-panel-while-casting)).
 
+**A cast whose picture the phone converts** shows it in two rows of that
+panel ([Converting the picture](CASTING.md#converting-the-picture)):
+
+```
+sending  rendition (video/mp4) · video av1 → hevc 10-bit 16.0 Mbps · audio eac3 5.1 → aac 2.0 192 kbps
+made     36 s ahead · 1.5x · converting at 3.1x
+```
+
+`sending` names the film's codec, what it is made as (`h264`, `hevc`,
+`hevc 10-bit`) and the bitrate. `converting at` is how much film the newest
+run makes per second of the phone's work. Below 1.0x the phone cannot keep
+up, and the receiver will stop to buffer. It is absent for a copied picture
+and until the run has reported, never a dash.
+
 The panel's mpv rows are one `mpv      collecting…` row until mpv's first
 sample. The server's rows below are drawn as usual, since what is on the
 disk is what is worth watching in a stream that has not started yet.

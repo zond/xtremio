@@ -12,10 +12,12 @@ channels. A repackaged film is the same picture as one fragmented MP4, made
 as the receiver reads it. Its sound is copied when it is AAC and
 **converted to stereo AAC** otherwise
 ([Renditions](#renditions-the-picture-repackaged-the-sound-converted)).
-While the television plays, the player screen is a remote. The
-picture is never decoded or encoded for a receiver yet, so the honest part
-of this is still the refusal. The button is never built on Android TV: a TV
-is a receiver, not a sender.
+Or, when the receiver cannot show the film's picture at all, the phone
+**converts the picture** to HEVC or H.264 with its own hardware, where it
+can ([Converting the picture](#converting-the-picture)). While the
+television plays, the player screen is a remote. A picture the phone cannot
+convert is still refused, with a sentence that says why. The button is
+never built on Android TV: a TV is a receiver, not a sender.
 
 Receivers are looked for with the platform's passive search while a
 player is open. An active scan runs too while the receiver list is on
@@ -63,6 +65,9 @@ mpv is reading the bytes.
   (`ReceiverTable.deepestPicture`, all 4:2:0). The sentence names it:
   "This film's video is 10-bit H.264. No Chromecast can play it, and
   xtremio can't convert it for casting yet." (`CastRefusal.pictureFormat`).
+  A phone that converts pictures makes 10-bit H.264 into HEVC instead
+  ([Converting the picture](#converting-the-picture)). 4:2:2, 4:4:4 and
+  12-bit pictures are refused either way.
   **mpv says which by its pixels**, not a profile. The libmpv this app
   ships (v0.36.0-549) names no profile anywhere. Its `video-codec` is the
   decoder and its description, `h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4
@@ -161,7 +166,10 @@ as it is and for a rendition alike (a rendition copies the picture):
   H.264 up to 1280x720 at 60 frames a second. This film's picture is
   1920x1080 at 24 frames a second. ...'.
 
-A size or rate mpv has not reported is not held against a film.
+A size or rate mpv has not reported is not held against a film. A film
+refused here for its codec can still go converted, when the phone converts
+pictures ([Converting the picture](#converting-the-picture)). One refused
+for its size cannot, since a picture is never made smaller.
 
 **There is no lookup of the exact model.** The receiver's own setup
 endpoint would name it (`https://<receiver>:8443/setup/eureka_info`), but
@@ -233,7 +241,9 @@ H.264 and HEVC (Main and Main 10, so HDR10 and HLG too). The receiver's row
 says whether it decodes the picture at its size and rate
 ([The receiver table](#the-receiver-table)).
 
-**When it would be repackaged and its picture cannot be**, the refusal
+**When it would be repackaged and its picture cannot be**, the phone
+converts the picture where it can
+([Converting the picture](#converting-the-picture)). Otherwise the refusal
 names it and why (the sound is never the reason: it converts):
 
 - video the receiver decodes but a copy does not carry (VP8, VP9):
@@ -241,7 +251,7 @@ names it and why (the sound is never the reason: it converts):
   yet.";
 - video the receiver cannot decode (AV1, MPEG-4 Part 2, MPEG-2, VC-1):
   "This film's video is AV1. This receiver can't play it, and xtremio
-  can't convert it for casting yet." (step F4).
+  can't convert it for casting yet."
 
 The producer catches one thing mpv cannot see while the cast is prepared:
 **Dolby Vision**. mpv reports it as HEVC, and the libmpv this app ships
@@ -425,9 +435,98 @@ when a fresh rendition's run is started at it, and a seek one jump.
 `cargo test --test rendition_sound serve -- --ignored --nocapture` serves a
 converted rendition for a television.
 
-Video that is neither H.264 nor HEVC, and readers other than the MP4 and
-Matroska families, are still refused. Converting the picture is step F4
-of the renditions design.
+### Converting the picture
+
+Step F4 of stream-server's `docs/design/renditions.md`. Some receivers
+cannot show a film's picture as it is, and a copy into MP4 does not help.
+A phone with the right hardware then decodes the picture and encodes it
+again as HEVC or H.264, at the same size, for as long as the cast runs.
+
+**What is converted.** A film played by id, which would be refused for its
+picture, is converted when this phone's hardware decodes its codec:
+
+- AV1 or VP9 that the receiver does not decode, or that a copy cannot carry;
+- 10-bit H.264, which no Chromecast decodes;
+- H.264 or HEVC at a size the receiver takes, but in a codec it does not;
+- a codec the receiver showed no picture for earlier in the session
+  ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
+
+Nothing is converted for a film a receiver takes as it is or as a copy.
+The decision is `choosePicture` (`lib/features/cast/picture_plan.dart`),
+asked by `CastCompatibility.of` with what the phone can do
+(`MediaIds.pictureSupport`, one answer per app run: the hardware codecs
+only, and whether its HEVC encoder makes 10-bit pictures). Its answer is a
+`CastRendition` whose `picture` (a `PicturePlan`) goes into
+`RenditionSpec` as `"video": {"convert": {"target": "hevcMain", "bitrate":
+8000000}}`.
+
+**What it is made as.** The receiver is judged as for a copy: by what the
+best model with its name decodes, and the cast is a trial when only that
+model does.
+
+- An HDR film (mpv's `video-params/gamma` is `pq` or `hlg`) becomes 10-bit
+  HEVC that keeps its colours and HDR. That needs a receiver that decodes
+  HEVC at the film's size and rate, and a phone that makes 10-bit HEVC.
+- A 10-bit film that is not HDR becomes 10-bit HEVC on such a phone, and
+  8-bit otherwise.
+- Anything else becomes HEVC where the receiver decodes it at the film's
+  size and rate, and H.264 where it does not.
+- A codec the receiver showed no picture for is skipped. A film whose only
+  fitting codec is that one is refused with the "showed no picture"
+  sentence. An HEVC film the receiver showed no picture for becomes H.264
+  where H.264 fits.
+
+The bitrate goes by the film's height, and is 1.4 times as much above 30
+frames a second, never more than 24 Mbit/s (`pictureBitrate`):
+
+| Height up to | HEVC (8 or 10 bits) | H.264 |
+| --- | --- | --- |
+| 576 | 2.5 Mbit/s | 3.5 Mbit/s |
+| 720 | 4 Mbit/s | 6 Mbit/s |
+| 1080 | 8 Mbit/s | 12 Mbit/s |
+| 1440 | 12 Mbit/s | 18 Mbit/s |
+| 2160 | 16 Mbit/s | 24 Mbit/s |
+
+**What is still refused, and why.** The viewer reads one of these:
+
+- **A picture bigger or faster than the receiver shows.** xtremio never
+  makes a picture smaller, so a 4K film stays refused on a 1080p receiver:
+  'Every receiver that calls itself "..." plays HEVC up to 1920x1080 at 60
+  frames a second. This film's picture is 3840x2160 at 24 frames a second.
+  xtremio doesn't make pictures smaller, so this receiver cannot show it.'
+  (`CastRefusal.pictureSize`).
+- **HDR for a receiver that shows no HEVC.** HDR is only kept in HEVC, and
+  xtremio does not turn it into an ordinary picture: '... can't show HDR
+  pictures, and xtremio doesn't convert HDR to SDR.' (`CastRefusal.hdr`).
+- **HDR on a phone that makes no 10-bit HEVC**: "This phone can't convert
+  HDR pictures for casting, and xtremio doesn't convert HDR to SDR."
+  (`CastRefusal.hdr`).
+- **A codec this phone's hardware does not decode**, a picture that is
+  4:2:2, 4:4:4 or 12-bit, a phone with no hardware encoder, or a film not
+  played by id. Those get the refusal a copy would get, unchanged.
+
+The producer on the Rust side refuses what the app cannot see: a film with
+stretched pixels, and an HDR film handed a target that is not 10-bit HEVC.
+Its sentence comes back through the preparation, as Dolby Vision profile 5
+does.
+
+**The phone is kept awake** while a converted cast is published. The
+receiver asks for more film whenever it wants it, usually with the phone's
+screen off. The cast's foreground service keeps the app alive but not the
+processor running. So `_castUrl` holds a partial wake lock (`KeepAwake`,
+`lib/core/keep_awake.dart`, over `PowerChannel.kt` on `xtremio/power`) once
+the rendition is published, and `_unpublishCast` lets it go. Every way out
+of a cast passes there: Stop, a session that ended elsewhere, a switch of
+receivers, leaving the player. The lock is not counted, has a six-hour
+safety timeout and goes with the activity. A cast whose picture is copied
+holds nothing.
+
+**On the stats panel** the `sending` row says what the picture is made as
+(`video av1 → hevc 10-bit 16.0 Mbps`), and the `made` row says how fast the
+newest run converts (`converting at 3.1x`)
+([The stats panel while casting](#the-stats-panel-while-casting)).
+
+Readers other than the MP4 and Matroska families are still refused.
 
 ## The URL and the address the receiver is given
 
@@ -594,7 +693,10 @@ source   torrent · 16.0 Mbps · 2 opens · 14 seeks
   straight over, `as it is` with the type the receiver is answered with, or
   `rendition (video/mp4)`; the picture and the sound, mpv's word on the
   source's sound (taken when the cast was handed over) beside what the
-  server makes of it.
+  server makes of it. A converted picture reads `video av1 → hevc 10-bit
+  16.0 Mbps`: the film's codec, then what it is made as (`h264`, `hevc`,
+  `hevc 10-bit`) and its bitrate, from the server's `video.convert` and
+  from what was decided at the hand-over before the server has answered.
 - `position`: the receiver's, of its length.
 - `buffered`: how often the receiver stopped to buffer since the cast
   began, and for how long in all, a stop still going included. The load
@@ -608,10 +710,15 @@ source   torrent · 16.0 Mbps · 2 opens · 14 seeks
 - For a rendition: `made`, how much film past the receiver's position is
   made, unbroken, from where it last asked, and the production speed as a
   multiple of real time (absent while the run waits at its lookahead and
-  makes nothing); `runs`, each live run's start and the slots it has made,
-  and how many runs were started (one more for each seek); `layout`, the
-  slots, their length when they are all one, and whether they mirror the
-  film's index (`exact`) or are estimated.
+  makes nothing). For a converted picture it adds `converting at 3.1x`:
+  the newest live run's film over its producer's working time
+  (`runs[].mediaMs` over `busyMs`), which is what the phone could keep up
+  with. It is absent for a copied picture and before the run has said
+  both. `runs`, each live run's start and the slots it has made, and how
+  many runs were started (one more for each seek); `layout`, the slots,
+  their length when they are all one, and whether they mirror the film's
+  index (`exact`) or are estimated, then `N spilled` and `N truncated` when
+  any slot overflowed (`spilled`, `truncated`).
 - `source`: what was read for the receiver (the kind of source, the read
   rate, the opens and the seeks), and for a torrent the swarm rows the
   local panel shows.
@@ -675,16 +782,20 @@ What a cast still gets wrong, knowingly:
 `ReceiverPictureMemory`, the types), `google_cast_client.dart` (over
 [`flutter_chrome_cast`](https://pub.dev/packages/flutter_chrome_cast)),
 `cast_compatibility.dart`, `receiver_table.dart`, `direct_cast.dart`,
-`cast_widgets.dart` (the receiver sheet, the remote, the preparing card).
+`cast_widgets.dart` (the receiver sheet, the remote, the preparing card),
+`picture_plan.dart` (what a converted picture is made as).
 The session is in `PlayerScreen` (`player_screen_casting.dart`), its panel
 in `lib/features/player/cast_stats_overlay.dart`. `RenditionSpec` and the
 publishing calls are in `lib/core/media_ids.dart`, and `LanMediaControl`
-is on `ServerClient`. On Android there are `CastPictureChannel.kt` and
-`MainActivity.castDeviceAddress`. Widget tests use `FakeCastClient` /
-`FakeLanMediaControl` (`test/support/`), in `test/features/cast/`
-(`cast_compatibility_test.dart`, `direct_cast_test.dart`,
-`google_cast_client_test.dart`, `player_cast_test.dart`,
-`player_direct_cast_test.dart`, `player_cast_stats_test.dart`).
+is on `ServerClient`. `KeepAwake` is in `lib/core/keep_awake.dart`. On
+Android there are `CastPictureChannel.kt`, `PowerChannel.kt` (the wake
+lock) and `MainActivity.castDeviceAddress`. Widget tests use
+`FakeCastClient` / `FakeLanMediaControl` / `FakeKeepAwake`
+(`test/support/`), in `test/features/cast/` (`cast_compatibility_test.dart`,
+`picture_conversion_test.dart`, `direct_cast_test.dart`,
+`google_cast_client_test.dart`) and `test/features/player/`
+(`player_cast_test.dart`, `player_direct_cast_test.dart`,
+`player_cast_stats_test.dart`).
 `CastPictureTest.kt` is the JVM test of the picture report's parsing.
 `rust/tests/lan_media.rs` drives the listener, and `rust/tests/rendition.rs`
 and `rendition_sound.rs` the renditions. The manifest entries are in

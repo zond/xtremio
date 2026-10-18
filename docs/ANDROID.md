@@ -162,6 +162,9 @@ renderer for them.
     ([ARCHITECTURE.md](ARCHITECTURE.md#local-videos)).
   - `xtremio/update`: `AppUpdateChannel.kt`, installing a downloaded
     release and measuring the room for it (`room`) (below).
+  - `xtremio/power`: `PowerChannel.kt`, the partial wake lock (`WAKE_LOCK`)
+    a cast holds while the phone converts its picture
+    ([CASTING.md](CASTING.md#converting-the-picture)).
 - **`REQUEST_INSTALL_PACKAGES`** and the unexported `InstallStatusReceiver`
   are the in-app update's: see
   [Updating from inside the app](#updating-from-inside-the-app).

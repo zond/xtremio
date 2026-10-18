@@ -352,8 +352,9 @@ and its cast twin `cast_stats_overlay.dart`. Tests:
 
 `CastCompatibility.of` (`lib/features/cast/cast_compatibility.dart`) decides
 from two things: mpv's report (the reader that opened the file, the codecs,
-the pixel format) and the model name the receiver announces
-(`ReceiverTable.of`, `lib/features/cast/receiver_table.dart`). See
+the pixel format, the transfer) and the model name the receiver announces
+(`ReceiverTable.of`, `lib/features/cast/receiver_table.dart`). A
+conversion also asks what this phone's hardware can do. See
 [What can be cast](docs/CASTING.md#what-can-be-cast). Tests:
 `test/features/cast/cast_compatibility_test.dart`,
 `test/features/cast/receiver_table_test.dart`.
@@ -368,6 +369,19 @@ the pixel format) and the model name the receiver announces
 - **A picture no receiver decodes is refused up front**
   (`ReceiverTable.deepestPicture`; 10-bit H.264 among them), whether the
   film would go as it is or repackaged: a rendition copies the picture.
+  The one way past it is a conversion.
+- **A picture is converted only where a copy will not do, and never made
+  smaller.** `CastCompatibility.of` asks `choosePicture`
+  (`lib/features/cast/picture_plan.dart`) only for a film played by id that
+  would otherwise be refused for its picture, or whose codec the receiver
+  showed no picture for. It needs the phone's own word that its hardware
+  decodes the codec (`MediaIds.pictureSupport`). HDR goes only to 10-bit
+  HEVC, never to SDR. The receiver is judged by `atBest ?? row`, as a copy
+  is. Tests: `test/features/cast/picture_conversion_test.dart`.
+- **A converted cast holds the wake lock from its publish to its
+  unpublish** (`_castUrl`, `_unpublishCast`, `KeepAwake`). Nothing else
+  takes or lets go of it. Tests: `player_cast_test.dart`, "a film whose
+  picture this phone converts".
 
 ## The addon health record keys on a hash, never the URL
 
