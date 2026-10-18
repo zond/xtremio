@@ -9,7 +9,7 @@
 //! segment, so every segment opens with a sync picture and its bytes do not
 //! depend on where the run began.
 //!
-//! **Two paths.**
+//! **Three paths.**
 //! - **The surface path** (H.264 High and HEVC Main). The decoder renders
 //!   into the open encoder's input surface. At a cut the old encoder is
 //!   ended and deleted, a fresh one is made, and the decoder is moved onto
@@ -21,6 +21,22 @@
 //!   ([`copy_p010`]). The encoders take their colour keys and
 //!   `hdr-static-info` from the decoder's first output format where the
 //!   container says nothing. It needs API 33.
+//! - **The software path** (H.264 High and HEVC Main from a codec the
+//!   phone has no hardware decoder for: MPEG-4 Part 2, DivX 3, MPEG-2).
+//!   libavcodec decodes on the run's thread ([`SoftDecoder`]) into NV12,
+//!   and each picture is copied into an encoder input buffer
+//!   ([`copy_nv12`]) as on the buffer path, with `color-format` 21.
+//!
+//! **Decode times.** An AVI's packets carry when each picture is decoded,
+//! not when it is shown ([`PictureSource::decode_times`]). Pictures leave a
+//! decoder in the order they are shown, so their times are worked out
+//! again on the way out. The software decoder takes libavcodec's best
+//! effort time: the decode time of the packet that freed the picture,
+//! which comes out the same for a run from any sync picture. A hardware
+//! decoder echoes each picture's own input time, so the converter gives
+//! each picture the earliest input time not yet given out. That holds
+//! while the decoder drops nothing: an open GOP's leading pictures after a
+//! seek would shift the times by their count.
 //!
 //! **One thread.** The run's thread feeds and drains both codecs, waiting
 //! at most [`DEQUEUE_WAIT_US`] at a time. No Java looper, no callbacks. A
@@ -31,6 +47,8 @@
 //! The codecs sit behind [`VideoCodecs`] and [`VideoCodec`]: the NDK's
 //! `AMediaCodec` in the app ([`NdkCodecs`]), fakes in the tests.
 
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::ffi::{c_void, CStr};
 use std::sync::OnceLock;
 
@@ -39,7 +57,7 @@ use stream_server::{
     PictureConverter, PictureEvent, PictureTarget, Route, Segments, SourcePicture,
 };
 
-use crate::libav::ColourTags;
+use crate::libav::{CodecParameters, ColourTags, Nv12Layout, PictureDecoder};
 use crate::mediacodec::DEQUEUE_WAIT_US;
 use crate::ndk_media::{
     ndk, AndroidWindow, BufferInfo, MediaFormat, Ndk, BUFFER_FLAG_CODEC_CONFIG,
@@ -59,6 +77,11 @@ pub const END_WAITS: u32 = 300;
 pub const COLOR_FORMAT_SURFACE: i32 = 0x7F00_0789;
 /// `COLOR_FormatYUVP010`.
 pub const COLOR_FORMAT_P010: i32 = 54;
+/// `COLOR_FormatYUV420SemiPlanar`: NV12, what the software path hands the
+/// encoder.
+pub const COLOR_FORMAT_NV12: i32 = 21;
+/// Decoded pictures a [`SoftDecoder`] holds before it takes no more input.
+pub const SOFT_READY_PICTURES: usize = 4;
 /// The encoder's sync picture interval, in seconds. Every segment's first
 /// picture is a sync picture anyway, since each segment has its own
 /// encoder.
@@ -180,10 +203,12 @@ pub trait VideoCodec {
     fn signal_end_of_input(&mut self) -> Result<(), String>;
 }
 
-/// **What makes the codecs**: [`NdkCodecs`], or a fake. A codec's drop
-/// stops and deletes it. A surface's drop releases the window.
+/// **What makes the codecs**: [`NdkCodecs`], [`SoftCodecs`], or a fake. A
+/// codec's drop stops and deletes it. A surface's drop releases the window.
 pub trait VideoCodecs: Send {
+    /// An encoder.
     type Codec: VideoCodec + Send;
+    type Decoder: VideoCodec + Send;
     type Surface: Send;
     /// A started decoder for `source`: rendering into `surface`, or writing
     /// P010 buffers when `p010`, or writing buffers in its own format.
@@ -192,7 +217,7 @@ pub trait VideoCodecs: Send {
         source: &PictureSource,
         surface: Option<&Self::Surface>,
         p010: bool,
-    ) -> Result<Self::Codec, String>;
+    ) -> Result<Self::Decoder, String>;
     /// A started encoder for `config`, with its input surface when
     /// `surface`.
     fn encoder(
@@ -203,9 +228,14 @@ pub trait VideoCodecs: Send {
     /// Moves `decoder`'s output onto `surface`.
     fn set_output_surface(
         &mut self,
-        decoder: &mut Self::Codec,
+        decoder: &mut Self::Decoder,
         surface: &Self::Surface,
     ) -> Result<(), String>;
+    /// Whether the decoder is software, writing NV12 buffers: the software
+    /// path.
+    fn decodes_in_software(&self) -> bool {
+        false
+    }
 }
 
 /// The source's picture as the decoder is told it.
@@ -221,6 +251,9 @@ pub struct PictureSource {
     pub csd: Vec<Bytes>,
     /// From the container's tags.
     pub colour: Colour,
+    /// The pictures' times are when each is decoded, not shown: an AVI's,
+    /// whose packets carry no presentation time.
+    pub decode_times: bool,
 }
 
 /// What every encoder of a run is configured with. The keys are the same
@@ -289,13 +322,16 @@ struct Decoding<C> {
 /// then the decoder. Nothing is drained on a drop.
 pub struct Converter<K: VideoCodecs> {
     open: Option<OpenEncoder<K::Codec, K::Surface>>,
-    decoder: Option<Decoding<K::Codec>>,
+    decoder: Option<Decoding<K::Decoder>>,
     codecs: K,
     source: PictureSource,
     config: EncoderConfig,
     /// The buffer path's encoder keys took the decoder's where the
     /// container said nothing.
     settled: bool,
+    /// The input times no picture has been given yet, when a hardware
+    /// decoder's pictures are timed again ([`Self::restamps`]).
+    times: BinaryHeap<Reverse<i64>>,
 }
 
 impl<K: VideoCodecs> Converter<K> {
@@ -308,6 +344,7 @@ impl<K: VideoCodecs> Converter<K> {
             source,
             config,
             settled: false,
+            times: BinaryHeap::new(),
         }
     }
 
@@ -316,15 +353,41 @@ impl<K: VideoCodecs> Converter<K> {
         &self.config
     }
 
+    /// The software path: a software decoder writing NV12.
+    fn software(&self) -> bool {
+        self.codecs.decodes_in_software()
+    }
+
+    /// Pictures reach the encoder through byte buffers: the buffer path and
+    /// the software path.
     fn buffers(&self) -> bool {
-        self.config.target.ten_bit()
+        self.config.target.ten_bit() || self.software()
+    }
+
+    /// Bytes per sample in the buffers: P010's two, NV12's one.
+    fn sample_bytes(&self) -> usize {
+        if self.config.target.ten_bit() {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// The pictures of a hardware decoder fed decode times are timed again
+    /// on the way out. The software decoder times its own.
+    fn restamps(&self) -> bool {
+        self.source.decode_times && !self.software()
     }
 
     /// The decoder, and on the surface path the encoder for the run's
     /// first segment, whose surface the decoder renders into.
     fn start(&mut self, segments: &Segments) -> Result<(), String> {
+        if self.software() && self.config.target.ten_bit() {
+            return Err("the software decoder makes 8-bit pictures only".to_owned());
+        }
         if self.buffers() {
-            let codec = self.codecs.decoder(&self.source, None, true)?;
+            let p010 = self.config.target.ten_bit();
+            let codec = self.codecs.decoder(&self.source, None, p010)?;
             self.decoder = Some(Decoding {
                 codec,
                 layout: None,
@@ -344,7 +407,7 @@ impl<K: VideoCodecs> Converter<K> {
         Ok(())
     }
 
-    fn decoder(&mut self) -> Result<&mut K::Codec, String> {
+    fn decoder(&mut self) -> Result<&mut K::Decoder, String> {
         Ok(&mut self.decoder.as_mut().ok_or("no decoder")?.codec)
     }
 
@@ -362,7 +425,7 @@ impl<K: VideoCodecs> Converter<K> {
             match codec.input_format() {
                 Ok(format) => Some(format),
                 Err(error) => {
-                    tracing::debug!(%error, "no encoder input format; assuming a packed P010");
+                    tracing::debug!(%error, "no encoder input format; assuming a packed picture");
                     None
                 }
             }
@@ -407,6 +470,9 @@ impl<K: VideoCodecs> Converter<K> {
                 })?;
                 room.copy_from_slice(&picture.data);
                 decoder.queue_input(index, len, picture.pts_us, false)?;
+                if self.restamps() {
+                    self.times.push(Reverse(picture.pts_us));
+                }
                 queued = true;
             }
             let wait = if queued { 0 } else { DEQUEUE_WAIT_US };
@@ -500,10 +566,18 @@ impl<K: VideoCodecs> Converter<K> {
     }
 
     /// The decoder's output format. On the buffer path it must be P010,
-    /// and the first one fills in the encoders' colour keys.
+    /// and the first one fills in the encoders' colour keys. On the
+    /// software path it must be NV12.
     fn read_layout(&mut self) -> Result<(), String> {
         let format = self.decoder()?.output_format()?;
-        if self.buffers() {
+        if self.software() {
+            if format.color_format != Some(COLOR_FORMAT_NV12) {
+                return Err(format!(
+                    "the software decoder gives no NV12 pictures (color-format {:?})",
+                    format.color_format
+                ));
+            }
+        } else if self.buffers() {
             if format.color_format != Some(COLOR_FORMAT_P010) {
                 return Err(format!(
                     "the decoder gives no 10-bit pictures (color-format {:?})",
@@ -537,6 +611,13 @@ impl<K: VideoCodecs> Converter<K> {
         if size == 0 {
             return self.decoder()?.release_output(index, None);
         }
+        let pts_us = if self.restamps() {
+            self.times
+                .pop()
+                .map_or(pts_us, |Reverse(earliest)| earliest)
+        } else {
+            pts_us
+        };
         let segment = match segments.route(pts_us) {
             Route::Drop => {
                 return self.decoder()?.release_output(index, None);
@@ -574,8 +655,8 @@ impl<K: VideoCodecs> Converter<K> {
         Ok(())
     }
 
-    /// The buffer path: decoder buffer `index` copied into an encoder
-    /// input buffer and queued at `pts_us`.
+    /// The buffer and software paths: decoder buffer `index` copied into an
+    /// encoder input buffer and queued at `pts_us`.
     fn encode_buffer(
         &mut self,
         index: usize,
@@ -601,14 +682,15 @@ impl<K: VideoCodecs> Converter<K> {
             stall(&mut empty, encoded, "the encoder took no picture")?;
         };
         let (width, height) = (self.config.width, self.config.height);
+        let sample = self.sample_bytes();
         let (Some(decoder), Some(open)) = (self.decoder.as_mut(), self.open.as_mut()) else {
             return Err("no decoder or no encoder".to_owned());
         };
         let layout = decoder.layout.as_ref().ok_or("no decoder format")?;
-        let from = PlaneLayout::of(layout, width, height);
+        let from = PlaneLayout::of(layout, width, height, sample);
         let to = match &open.input {
-            Some(format) => PlaneLayout::of(format, width, height),
-            None => PlaneLayout::packed(width, height),
+            Some(format) => PlaneLayout::of(format, width, height, sample),
+            None => PlaneLayout::packed(width, height, sample),
         };
         let source = decoder.codec.output_buffer(index)?;
         let source = source
@@ -617,7 +699,7 @@ impl<K: VideoCodecs> Converter<K> {
         // The decoder's buffer is borrowed until it is released, and the
         // encoder's until it is queued: copy between the two at once.
         let target = open.codec.input_buffer(input)?;
-        let len = copy_p010(source, from, target, to, width, height)?;
+        let len = copy_picture(source, from, target, to, width, height, sample)?;
         open.codec.queue_input(input, len, pts_us, false)?;
         decoder.codec.release_output(index, None)?;
         open.pictures_in += 1;
@@ -801,11 +883,11 @@ impl<K: VideoCodecs> PictureConverter for Converter<K> {
     }
 }
 
-// --- P010 pictures ----------------------------------------------------------------
+// --- Pictures in buffers ----------------------------------------------------------
 
-/// Where a P010 picture's samples are in a buffer: 16-bit luma rows, then
-/// below the slice height the interleaved 16-bit chroma rows, at half the
-/// height.
+/// Where a semi-planar 4:2:0 picture's samples are in a buffer (P010's
+/// 16-bit ones, NV12's 8-bit ones): luma rows, then below the slice height
+/// the interleaved chroma rows, at half the height.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlaneLayout {
     /// Bytes from one row to the next.
@@ -818,16 +900,16 @@ pub struct PlaneLayout {
 }
 
 impl PlaneLayout {
-    /// The layout `format` describes, for a picture `width`×`height`. A
-    /// stride smaller than a row of 16-bit samples is in samples, as some
-    /// codecs give it (the probe's `p010RowBytes`). A slice height shorter
-    /// than the picture is not one.
-    pub fn of(format: &VideoFormat, width: u32, height: u32) -> Self {
+    /// The layout `format` describes, for a picture `width`×`height` of
+    /// `sample`-byte samples. A stride smaller than a row of samples is in
+    /// samples, as some codecs give it (the probe's `p010RowBytes`). A
+    /// slice height shorter than the picture is not one.
+    pub fn of(format: &VideoFormat, width: u32, height: u32, sample: usize) -> Self {
         let width = width as usize;
         let height = height as usize;
         let row_bytes = match format.stride.map(|stride| stride as usize) {
-            None | Some(0) => width * 2,
-            Some(stride) if stride < width * 2 => stride * 2,
+            None | Some(0) => width * sample,
+            Some(stride) if stride < width * sample => stride * sample,
             Some(stride) => stride,
         };
         let slice_height = format
@@ -846,10 +928,10 @@ impl PlaneLayout {
         }
     }
 
-    /// A picture with nothing between its rows.
-    pub fn packed(width: u32, height: u32) -> Self {
+    /// A picture of `sample`-byte samples with nothing between its rows.
+    pub fn packed(width: u32, height: u32, sample: usize) -> Self {
         Self {
-            row_bytes: width as usize * 2,
+            row_bytes: width as usize * sample,
             slice_height: height as usize,
             left: 0,
             top: 0,
@@ -864,11 +946,8 @@ impl PlaneLayout {
     }
 }
 
-/// **A P010 picture copied between layouts**: the `width`×`height`
-/// picture at `from` in `source` into `to` in `target`. Layouts that match,
-/// both at the buffer's corner, go as one copy; otherwise row by row, the
-/// luma rows and then the chroma rows. Answers how many bytes of `target`
-/// make the picture, which is what the encoder is handed.
+/// **A P010 picture copied between layouts**: [`copy_picture`] of 16-bit
+/// samples.
 pub fn copy_p010(
     source: &[u8],
     from: PlaneLayout,
@@ -877,14 +956,45 @@ pub fn copy_p010(
     width: u32,
     height: u32,
 ) -> Result<usize, String> {
+    copy_picture(source, from, target, to, width, height, 2)
+}
+
+/// **An NV12 picture copied between layouts**: [`copy_picture`] of 8-bit
+/// samples.
+pub fn copy_nv12(
+    source: &[u8],
+    from: PlaneLayout,
+    target: &mut [u8],
+    to: PlaneLayout,
+    width: u32,
+    height: u32,
+) -> Result<usize, String> {
+    copy_picture(source, from, target, to, width, height, 1)
+}
+
+/// **A semi-planar picture copied between layouts**: the `width`×`height`
+/// picture of `sample`-byte samples at `from` in `source` into `to` in
+/// `target`. Layouts that match, both at the buffer's corner, go as one
+/// copy; otherwise row by row, the luma rows and then the chroma rows.
+/// Answers how many bytes of `target` make the picture, which is what the
+/// encoder is handed.
+pub fn copy_picture(
+    source: &[u8],
+    from: PlaneLayout,
+    target: &mut [u8],
+    to: PlaneLayout,
+    width: u32,
+    height: u32,
+    sample: usize,
+) -> Result<usize, String> {
     let queued = to.picture_bytes(height).min(target.len());
-    let luma_bytes = width as usize * 2;
-    let chroma_bytes = (width as usize).div_ceil(2) * 4;
+    let luma_bytes = width as usize * sample;
+    let chroma_bytes = (width as usize).div_ceil(2) * 2 * sample;
     let chroma_rows = (height as usize).div_ceil(2);
     // The last chroma row ends here, in either layout.
     let end = |layout: PlaneLayout| {
         layout.row_bytes * (layout.slice_height + layout.top / 2 + chroma_rows - 1)
-            + layout.left * 2
+            + layout.left * sample
             + chroma_bytes
     };
     if source.len() < end(from) {
@@ -909,8 +1019,9 @@ pub fn copy_p010(
     let mut copy_rows =
         |plane_from: usize, plane_to: usize, rows: usize, bytes: usize, sub: usize| {
             for row in 0..rows {
-                let at_from = plane_from + (from.top / sub + row) * from.row_bytes + from.left * 2;
-                let at_to = plane_to + (to.top / sub + row) * to.row_bytes + to.left * 2;
+                let at_from =
+                    plane_from + (from.top / sub + row) * from.row_bytes + from.left * sample;
+                let at_to = plane_to + (to.top / sub + row) * to.row_bytes + to.left * sample;
                 target[at_to..at_to + bytes].copy_from_slice(&source[at_from..at_from + bytes]);
             }
         };
@@ -1286,6 +1397,7 @@ impl Drop for NdkCodec {
 
 impl VideoCodecs for NdkCodecs {
     type Codec = NdkCodec;
+    type Decoder = NdkCodec;
     type Surface = AndroidWindow;
 
     fn decoder(
@@ -1361,9 +1473,22 @@ impl VideoCodecs for NdkCodecs {
     }
 }
 
+/// How an encoder for `target` takes its pictures: by surface, or in
+/// buffers of P010 for Main 10 and of NV12 otherwise (the software path).
+pub fn input_color_format(target: PictureTarget, surface: bool) -> i32 {
+    if surface {
+        COLOR_FORMAT_SURFACE
+    } else if target.ten_bit() {
+        COLOR_FORMAT_P010
+    } else {
+        COLOR_FORMAT_NV12
+    }
+}
+
 /// An encoder's configure format for `config`: CBR at the bitrate, no
 /// B-frames (so pictures come out in the order they went in), the
-/// container's colour keys.
+/// container's colour keys. Its pictures come by surface, or in buffers:
+/// P010 for Main 10, NV12 otherwise (the software path).
 fn encoder_format(
     ndk: &'static Ndk,
     config: &EncoderConfig,
@@ -1374,14 +1499,7 @@ fn encoder_format(
     format.set_string(c"mime", &mime);
     format.set_i32(c"width", config.width as i32);
     format.set_i32(c"height", config.height as i32);
-    format.set_i32(
-        c"color-format",
-        if surface {
-            COLOR_FORMAT_SURFACE
-        } else {
-            COLOR_FORMAT_P010
-        },
-    );
+    format.set_i32(c"color-format", input_color_format(config.target, surface));
     format.set_i32(
         c"bitrate",
         i32::try_from(config.bitrate).unwrap_or(i32::MAX),
@@ -1411,6 +1529,229 @@ fn encoder_format(
     Ok(format)
 }
 
+// --- The software decoder --------------------------------------------------------
+
+/// **The software path's codecs**: a [`SoftDecoder`] over the stream's own
+/// codec parameters, and `E`'s encoders ([`NdkCodecs`] in the app).
+pub struct SoftCodecs<E: VideoCodecs> {
+    encoders: E,
+    par: CodecParameters,
+}
+
+impl<E: VideoCodecs> SoftCodecs<E> {
+    /// Decodes what `par` describes in software, and encodes with
+    /// `encoders`.
+    pub fn new(encoders: E, par: CodecParameters) -> Self {
+        Self { encoders, par }
+    }
+}
+
+impl<E: VideoCodecs> VideoCodecs for SoftCodecs<E> {
+    type Codec = E::Codec;
+    type Decoder = SoftDecoder;
+    type Surface = E::Surface;
+
+    fn decoder(
+        &mut self,
+        source: &PictureSource,
+        surface: Option<&Self::Surface>,
+        p010: bool,
+    ) -> Result<SoftDecoder, String> {
+        if surface.is_some() || p010 {
+            return Err("the software decoder writes 8-bit buffers only".to_owned());
+        }
+        SoftDecoder::new(&self.par, source)
+    }
+
+    fn encoder(
+        &mut self,
+        config: &EncoderConfig,
+        surface: bool,
+    ) -> Result<(Self::Codec, Option<Self::Surface>), String> {
+        self.encoders.encoder(config, surface)
+    }
+
+    fn set_output_surface(&mut self, _: &mut SoftDecoder, _: &Self::Surface) -> Result<(), String> {
+        Err("the software decoder renders into no surface".to_owned())
+    }
+
+    fn decodes_in_software(&self) -> bool {
+        true
+    }
+}
+
+/// **libavcodec as a [`VideoCodec`]**: one input buffer, decoded as soon as
+/// it is queued, and every picture it frees held as an NV12 output buffer
+/// ([`PictureDecoder`]) until the converter takes it. Its output format is
+/// [`COLOR_FORMAT_NV12`] at the container's size.
+///
+/// **Times.** A source with presentation times hands them to libavcodec as
+/// such, and each picture keeps its own. A source with decode times alone
+/// ([`PictureSource::decode_times`]) hands them over as decode times, and a
+/// picture takes the decode time of the packet that freed it
+/// (`best_effort_timestamp`). Either way a picture with no time, or with
+/// one no later than the last picture's, takes the last one's plus a frame
+/// ([`next_time`]): the end's flush frees pictures that no packet did.
+pub struct SoftDecoder {
+    decoder: PictureDecoder,
+    decode_times: bool,
+    frame_us: i64,
+    last: Option<i64>,
+    input: Vec<u8>,
+    ready: VecDeque<(i64, Vec<u8>)>,
+    out: HashMap<usize, Vec<u8>>,
+    next_out: usize,
+    told_format: bool,
+    ending: bool,
+    ended: bool,
+}
+
+impl SoftDecoder {
+    /// A started decoder for `par`'s codec, its pictures `source`'s size.
+    pub fn new(par: &CodecParameters, source: &PictureSource) -> Result<Self, String> {
+        let decoder = PictureDecoder::open(par, source.width, source.height)?
+            .ok_or("this FFmpeg has no decoder for the picture")?;
+        let frame_us = if source.frame_rate.is_finite() && source.frame_rate > 0.0 {
+            (1_000_000.0 / f64::from(source.frame_rate)).round() as i64
+        } else {
+            33_333
+        };
+        let input = MIN_INPUT_BYTES.max(source.width.saturating_mul(source.height)) as usize;
+        Ok(Self {
+            decoder,
+            decode_times: source.decode_times,
+            frame_us,
+            last: None,
+            input: vec![0; input],
+            ready: VecDeque::new(),
+            out: HashMap::new(),
+            next_out: 0,
+            told_format: false,
+            ending: false,
+            ended: false,
+        })
+    }
+
+    fn layout(&self) -> Nv12Layout {
+        self.decoder.layout()
+    }
+}
+
+/// When a picture the decoder timed `time` is shown, after one shown at
+/// `last`, at `frame_us` a picture: its own time when it is later than the
+/// last, and otherwise the last plus a frame. The first picture with no
+/// time is shown at `first`.
+pub fn next_time(time: Option<i64>, last: Option<i64>, frame_us: i64, first: i64) -> i64 {
+    match (time, last) {
+        (Some(time), Some(last)) if time > last => time,
+        (_, Some(last)) => last + frame_us,
+        (Some(time), None) => time,
+        (None, None) => first,
+    }
+}
+
+impl VideoCodec for SoftDecoder {
+    fn dequeue_input(&mut self, _: i64) -> Result<Option<usize>, String> {
+        Ok((!self.ending && self.ready.len() < SOFT_READY_PICTURES).then_some(0))
+    }
+
+    fn input_buffer(&mut self, _: usize) -> Result<&mut [u8], String> {
+        Ok(&mut self.input)
+    }
+
+    fn queue_input(&mut self, _: usize, len: usize, pts_us: i64, end: bool) -> Result<(), String> {
+        let pictures = if end {
+            self.ending = true;
+            self.decoder.decode(None)?
+        } else {
+            let data = self.input.get(..len).ok_or("more input than its buffer")?;
+            let (pts, dts) = if self.decode_times {
+                (crate::libav::NOPTS, pts_us)
+            } else {
+                (pts_us, crate::libav::NOPTS)
+            };
+            self.decoder.decode(Some((data, pts, dts)))?
+        };
+        for picture in pictures {
+            let time = next_time(picture.time, self.last, self.frame_us, pts_us);
+            self.last = Some(time);
+            self.ready.push_back((time, picture.nv12));
+        }
+        Ok(())
+    }
+
+    fn dequeue_output(&mut self, _: i64) -> Result<VideoOutput, String> {
+        if self.ended {
+            return Ok(VideoOutput::Nothing);
+        }
+        if !self.told_format && !self.ready.is_empty() {
+            self.told_format = true;
+            return Ok(VideoOutput::FormatChanged);
+        }
+        let index = self.next_out;
+        if let Some((pts_us, picture)) = self.ready.pop_front() {
+            self.next_out += 1;
+            let size = picture.len();
+            self.out.insert(index, picture);
+            return Ok(VideoOutput::Buffer {
+                index,
+                offset: 0,
+                size,
+                pts_us,
+                flags: 0,
+            });
+        }
+        if self.ending {
+            self.ended = true;
+            self.next_out += 1;
+            self.out.insert(index, Vec::new());
+            return Ok(VideoOutput::Buffer {
+                index,
+                offset: 0,
+                size: 0,
+                pts_us: 0,
+                flags: BUFFER_FLAG_END_OF_STREAM,
+            });
+        }
+        Ok(VideoOutput::Nothing)
+    }
+
+    fn output_buffer(&mut self, index: usize) -> Result<&[u8], String> {
+        self.out
+            .get(&index)
+            .map(Vec::as_slice)
+            .ok_or_else(|| "no such picture".to_owned())
+    }
+
+    fn release_output(&mut self, index: usize, render_at_us: Option<i64>) -> Result<(), String> {
+        if render_at_us.is_some() {
+            return Err("the software decoder renders into no surface".to_owned());
+        }
+        self.out.remove(&index).ok_or("released twice")?;
+        Ok(())
+    }
+
+    fn output_format(&mut self) -> Result<VideoFormat, String> {
+        let layout = self.layout();
+        Ok(VideoFormat {
+            color_format: Some(COLOR_FORMAT_NV12),
+            width: layout.width,
+            height: layout.height,
+            stride: u32::try_from(layout.stride).ok(),
+            slice_height: Some(layout.height),
+            ..VideoFormat::default()
+        })
+    }
+
+    fn input_format(&mut self) -> Result<VideoFormat, String> {
+        Err("the software decoder has no input format".to_owned())
+    }
+
+    fn signal_end_of_input(&mut self) -> Result<(), String> {
+        Err("the software decoder has no input surface".to_owned())
+    }
+}
+
 // --- What this device can do --------------------------------------------------------
 
 /// What this device's hardware can convert, by the names the cast decision
@@ -1426,6 +1767,9 @@ pub struct DeviceSupport {
     pub decodes: Vec<&'static str>,
     /// The codecs with a hardware encoder: H.264 and HEVC at most.
     pub encodes: Vec<&'static str>,
+    /// The codecs the software path decodes ([`SOFTWARE_CODECS`]): those
+    /// the player's FFmpeg has a decoder for.
+    pub software_decodes: Vec<&'static str>,
 }
 
 impl DeviceSupport {
@@ -1440,6 +1784,16 @@ impl DeviceSupport {
     }
 }
 
+/// The names and FFmpeg codec ids of the codecs the software path decodes.
+/// No phone has a hardware decoder worth the name for them: AOSP's own
+/// MPEG-4 decoder takes the Simple profile alone, and Xvid is Advanced
+/// Simple.
+pub const SOFTWARE_CODECS: [(&str, std::ffi::c_int); 3] = [
+    ("MPEG-4 Part 2", crate::libav::AV_CODEC_ID_MPEG4),
+    ("DivX 3", crate::libav::AV_CODEC_ID_MSMPEG4V3),
+    ("MPEG-2", crate::libav::AV_CODEC_ID_MPEG2VIDEO),
+];
+
 /// The names and MIME types of the codecs a source's picture can be.
 pub const SOURCE_CODECS: [(&str, &str); 4] = [
     ("H.264", "video/avc"),
@@ -1450,10 +1804,26 @@ pub const SOURCE_CODECS: [(&str, &str); 4] = [
 
 static SUPPORT: OnceLock<DeviceSupport> = OnceLock::new();
 
-/// What this device can convert, asked of its codecs once a process (it
-/// makes and deletes a few). Nothing on a desktop.
+/// What this device can convert. Its hardware is asked once a process (it
+/// makes and deletes a few codecs). The software decoders are asked of the
+/// player's FFmpeg each time, since there is none until a player has
+/// loaded libmpv. Nothing on a desktop.
 pub fn support() -> DeviceSupport {
-    SUPPORT.get_or_init(probe_support).clone()
+    let mut support = SUPPORT.get_or_init(probe_support).clone();
+    if let Ok(libav) = crate::libav::Libav::registered() {
+        support.software_decodes = software_decodes(libav);
+    }
+    support
+}
+
+/// The [`SOFTWARE_CODECS`] `libav` decodes into what the software path
+/// takes.
+pub fn software_decodes(libav: &crate::libav::Libav) -> Vec<&'static str> {
+    SOFTWARE_CODECS
+        .iter()
+        .filter(|(_, codec)| crate::libav::decodes_picture(libav, *codec))
+        .map(|(name, _)| *name)
+        .collect()
 }
 
 /// Whether a codec is the hardware's: not one of AOSP's software codecs.
@@ -1494,6 +1864,7 @@ fn probe_support() -> DeviceSupport {
         ten_bit,
         decodes,
         encodes,
+        software_decodes: Vec::new(),
     };
     tracing::info!(?support, api = ndk.api_level, "picture conversion");
     support
@@ -1566,6 +1937,25 @@ mod tests {
         /// Each picture an encoder was handed on the buffer path: its time,
         /// whether every visible sample was the decoder's, and the length.
         copies: Vec<(i64, bool, usize)>,
+        /// The decoder is software, writing NV12: the software path.
+        software: bool,
+        /// A picture's data names when it is shown (`shown`), and the
+        /// decoder echoes the time it went in with, as a hardware decoder
+        /// fed an AVI's decode times does.
+        echoes: bool,
+        /// The times pictures were rendered into a window stamped with.
+        rendered: Vec<i64>,
+    }
+
+    impl World {
+        /// Bytes per sample in a buffer: NV12's one, P010's two.
+        fn bytes(&self) -> usize {
+            if self.software {
+                1
+            } else {
+                2
+            }
+        }
     }
 
     type Shared = Arc<Mutex<World>>;
@@ -1586,52 +1976,70 @@ mod tests {
         (value as u16 & 0x3ff).wrapping_shl(6).to_le_bytes()
     }
 
-    /// The picture at `pts`, `width`×`height`, in `layout`; padding is 0xee.
-    fn picture_in(layout: PlaneLayout, width: usize, height: usize, pts: i64) -> Vec<u8> {
+    /// [`sample`] in `size` bytes: P010's two, or NV12's one (its high
+    /// byte).
+    fn sample_in(size: usize, pts: i64, plane: usize, x: usize, y: usize) -> Vec<u8> {
+        sample(pts, plane, x, y)[2 - size..].to_vec()
+    }
+
+    /// The picture at `pts`, `width`×`height`, in `layout`, of `size`-byte
+    /// samples; padding is 0xee.
+    fn picture_in(
+        layout: PlaneLayout,
+        width: usize,
+        height: usize,
+        pts: i64,
+        size: usize,
+    ) -> Vec<u8> {
         let rows = layout.slice_height * 2 + layout.top + 2;
         let mut out = vec![0xee; layout.row_bytes * rows];
         for y in 0..height {
             for x in 0..width {
-                let at = (layout.top + y) * layout.row_bytes + (layout.left + x) * 2;
-                out[at..at + 2].copy_from_slice(&sample(pts, 0, x, y));
+                let at = (layout.top + y) * layout.row_bytes + (layout.left + x) * size;
+                out[at..at + size].copy_from_slice(&sample_in(size, pts, 0, x, y));
             }
         }
         let chroma = layout.row_bytes * layout.slice_height;
         for y in 0..height.div_ceil(2) {
             for x in 0..width.div_ceil(2) * 2 {
-                let at = chroma + (layout.top / 2 + y) * layout.row_bytes + layout.left * 2 + x * 2;
-                out[at..at + 2].copy_from_slice(&sample(pts, 1, x, y));
+                let at = chroma
+                    + (layout.top / 2 + y) * layout.row_bytes
+                    + layout.left * size
+                    + x * size;
+                out[at..at + size].copy_from_slice(&sample_in(size, pts, 1, x, y));
             }
         }
         out
     }
 
-    /// Whether `buffer` holds the picture at `pts` where `layout` says.
+    /// Whether `buffer` holds the picture at `pts` of `size`-byte samples
+    /// where `layout` says.
     fn holds_picture(
         buffer: &[u8],
         layout: PlaneLayout,
         width: usize,
         height: usize,
         pts: i64,
+        size: usize,
     ) -> bool {
-        let expected = picture_in(layout, width, height, pts);
+        let expected = picture_in(layout, width, height, pts, size);
         let luma = (0..height).all(|y| {
-            let at = (layout.top + y) * layout.row_bytes + layout.left * 2;
-            buffer[at..at + width * 2] == expected[at..at + width * 2]
+            let at = (layout.top + y) * layout.row_bytes + layout.left * size;
+            buffer[at..at + width * size] == expected[at..at + width * size]
         });
         let chroma_at = layout.row_bytes * layout.slice_height;
         let chroma = (0..height.div_ceil(2)).all(|y| {
-            let at = chroma_at + (layout.top / 2 + y) * layout.row_bytes + layout.left * 2;
-            let bytes = width.div_ceil(2) * 4;
+            let at = chroma_at + (layout.top / 2 + y) * layout.row_bytes + layout.left * size;
+            let bytes = width.div_ceil(2) * 2 * size;
             buffer[at..at + bytes] == expected[at..at + bytes]
         });
         luma && chroma
     }
 
-    /// A decoder's whole P010 buffer: the luma plane to the slice height,
-    /// then chroma for every row of the buffer.
-    fn decoded_bytes(format: &VideoFormat) -> usize {
-        let layout = PlaneLayout::of(format, WIDTH, HEIGHT);
+    /// A decoder's whole buffer of `size`-byte samples: the luma plane to
+    /// the slice height, then chroma for every row of the buffer.
+    fn decoded_bytes(format: &VideoFormat, size: usize) -> usize {
+        let layout = PlaneLayout::of(format, WIDTH, HEIGHT, size);
         layout.row_bytes * (layout.slice_height + (format.height as usize).div_ceil(2))
     }
 
@@ -1646,7 +2054,8 @@ mod tests {
             /// The run began at a CRA, whose leading pictures cannot be
             /// decoded; until the next IRAP.
             leading_dropped: bool,
-            held: Vec<i64>,
+            /// (when it is shown, the time it went in with).
+            held: Vec<(i64, i64)>,
             ready: VecDeque<i64>,
             ending: bool,
             told_format: bool,
@@ -1739,7 +2148,8 @@ mod tests {
             let size = match &self.role {
                 Role::Decoder { .. } => 64,
                 Role::Encoder { .. } => {
-                    PlaneLayout::of(&world.encoder_input, WIDTH, HEIGHT).picture_bytes(HEIGHT)
+                    PlaneLayout::of(&world.encoder_input, WIDTH, HEIGHT, world.bytes())
+                        .picture_bytes(HEIGHT)
                 }
             };
             drop(world);
@@ -1762,7 +2172,7 @@ mod tests {
                     if end {
                         *ending = true;
                         held.sort_unstable();
-                        ready.extend(held.drain(..));
+                        ready.extend(held.drain(..).map(|(_, pts)| pts));
                         return Ok(());
                     }
                     let kind = self.input[0];
@@ -1775,10 +2185,15 @@ mod tests {
                     if kind == b'R' && *leading_dropped {
                         return Ok(());
                     }
-                    held.push(pts);
+                    let shown = if world.echoes {
+                        i64::from_le_bytes(self.input[4..12].try_into().unwrap())
+                    } else {
+                        pts
+                    };
+                    held.push((shown, pts));
                     if held.len() > reorder {
                         held.sort_unstable();
-                        ready.push_back(held.remove(0));
+                        ready.push_back(held.remove(0).1);
                     }
                 }
                 Role::Encoder {
@@ -1792,9 +2207,16 @@ mod tests {
                             .push(format!("end of input by buffer {}", self.id));
                         return Ok(());
                     }
-                    let layout = PlaneLayout::of(&world.encoder_input, WIDTH, HEIGHT);
-                    let ok =
-                        holds_picture(&self.input, layout, WIDTH as usize, HEIGHT as usize, pts);
+                    let size = world.bytes();
+                    let layout = PlaneLayout::of(&world.encoder_input, WIDTH, HEIGHT, size);
+                    let ok = holds_picture(
+                        &self.input,
+                        layout,
+                        WIDTH as usize,
+                        HEIGHT as usize,
+                        pts,
+                        size,
+                    );
                     world.copies.push((pts, ok, len));
                     pending.push_back(pts);
                 }
@@ -1823,8 +2245,8 @@ mod tests {
                         return Ok(VideoOutput::FormatChanged);
                     }
                     if let Some(pts) = ready.pop_front() {
-                        let size = if *p010 {
-                            decoded_bytes(&world.decoded)
+                        let size = if *p010 || world.software {
+                            decoded_bytes(&world.decoded, world.bytes())
                         } else {
                             1
                         };
@@ -1901,11 +2323,15 @@ mod tests {
         fn output_buffer(&mut self, index: usize) -> Result<&[u8], String> {
             let pts = *self.out.get(&index).ok_or("no such output buffer")?;
             if let Role::Decoder { p010, .. } = self.role {
-                assert!(p010, "a surface decoder's buffers are not read");
-                let layout = PlaneLayout::of(&self.world.lock().unwrap().decoded, WIDTH, HEIGHT);
-                self.output = picture_in(layout, WIDTH as usize, HEIGHT as usize, pts);
-                self.output
-                    .truncate(decoded_bytes(&self.world.lock().unwrap().decoded));
+                let world = self.world.lock().unwrap();
+                assert!(
+                    p010 || world.software,
+                    "a surface decoder's buffers are not read"
+                );
+                let size = world.bytes();
+                let layout = PlaneLayout::of(&world.decoded, WIDTH, HEIGHT, size);
+                self.output = picture_in(layout, WIDTH as usize, HEIGHT as usize, pts, size);
+                self.output.truncate(decoded_bytes(&world.decoded, size));
             }
             Ok(&self.output)
         }
@@ -1917,16 +2343,19 @@ mod tests {
         ) -> Result<(), String> {
             let pts = self.out.remove(&index).ok_or("released twice")?;
             if let (Role::Decoder { window, .. }, Some(at)) = (&self.role, render_at_us) {
-                assert_eq!(at, pts, "rendered stamped with its own time");
                 let window = window.expect("a surface decoder");
                 let mut world = self.world.lock().unwrap();
+                if !world.echoes {
+                    assert_eq!(at, pts, "rendered stamped with its own time");
+                }
+                world.rendered.push(at);
                 let delay = world.surface_delay;
                 world
                     .in_flight
                     .entry(window)
                     .or_default()
-                    .push_back((pts, delay));
-                world.log.push(format!("render {pts} into window {window}"));
+                    .push_back((at, delay));
+                world.log.push(format!("render {at} into window {window}"));
             }
             Ok(())
         }
@@ -1980,6 +2409,7 @@ mod tests {
 
     impl VideoCodecs for FakeCodecs {
         type Codec = FakeCodec;
+        type Decoder = FakeCodec;
         type Surface = FakeSurface;
 
         fn decoder(
@@ -2059,6 +2489,10 @@ mod tests {
                 .push(format!("decoder {} onto window {}", decoder.id, surface.id));
             Ok(())
         }
+
+        fn decodes_in_software(&self) -> bool {
+            self.0.lock().unwrap().software
+        }
     }
 
     // --- A film -------------------------------------------------------------------
@@ -2113,6 +2547,7 @@ mod tests {
             frame_rate: 25.0,
             csd: vec![Bytes::from_static(b"\0\0\0\x01vps")],
             colour: Colour::default(),
+            decode_times: false,
         }
     }
 
@@ -2445,7 +2880,7 @@ mod tests {
         let events = convert(&mut converter, &closed_film(2), &segments(2, 0)).unwrap();
         let world = world.lock().unwrap();
         assert_eq!(world.copies.len(), 50);
-        let packed = PlaneLayout::packed(WIDTH, HEIGHT).picture_bytes(HEIGHT);
+        let packed = PlaneLayout::packed(WIDTH, HEIGHT, 2).picture_bytes(HEIGHT);
         assert!(
             world
                 .copies
@@ -2479,6 +2914,199 @@ mod tests {
             assert_eq!(config.hdr_static_info.as_deref(), Some(&T9_STATIC_INFO[..]));
         }
         assert_eq!(pictures_of(&events).len(), 50);
+    }
+
+    // --- The software path --------------------------------------------------------
+
+    /// The software decoder's NV12 layout, padded: a stride wider than a
+    /// row, a crop off the corner, a slice height past the picture.
+    fn padded_nv12() -> VideoFormat {
+        VideoFormat {
+            color_format: Some(COLOR_FORMAT_NV12),
+            width: WIDTH + 16,
+            height: HEIGHT + 8,
+            stride: Some(WIDTH + 40),
+            slice_height: Some(HEIGHT + 12),
+            crop: Some((6, 2, 6 + WIDTH - 1, 2 + HEIGHT - 1)),
+            ..VideoFormat::default()
+        }
+    }
+
+    fn software_world() -> Shared {
+        let world = world();
+        {
+            let mut world = world.lock().unwrap();
+            world.software = true;
+            world.decoded = padded_nv12();
+            // The encoder's input is padded another way.
+            world.encoder_input = VideoFormat {
+                stride: Some(WIDTH + 16),
+                slice_height: Some(HEIGHT + 4),
+                ..VideoFormat::default()
+            };
+        }
+        world
+    }
+
+    /// **The software path**: the decoder's pictures leave in the order
+    /// they are shown, though B-frames came in decode order, and each one
+    /// reaches its encoder whole as NV12: from the decoder's padded,
+    /// cropped layout into the encoder's padded one, byte for byte, queued
+    /// at the encoder's picture length. Every encoder takes buffers, ends
+    /// with an empty buffer marked as the end, and makes 8-bit pictures.
+    #[test]
+    fn the_software_path_copies_nv12_in_presentation_order_and_ends_by_an_empty_buffer() {
+        let world = software_world();
+        let film = closed_film(2);
+        let segments = segments(2, 0);
+        let events = convert(
+            &mut converter(&world, PictureTarget::HevcMain),
+            &film,
+            &segments,
+        )
+        .unwrap();
+        let world = world.lock().unwrap();
+        let mut shown: Vec<i64> = film.iter().map(|picture| picture.pts_us).collect();
+        shown.sort_unstable();
+        let decoded: Vec<i64> = world.copies.iter().map(|(pts, ..)| *pts).collect();
+        assert_eq!(decoded, shown, "in the order they are shown");
+        let padded = PlaneLayout::of(&world.encoder_input, WIDTH, HEIGHT, 1);
+        assert_eq!(padded.row_bytes, WIDTH as usize + 16);
+        let length = padded.picture_bytes(HEIGHT);
+        assert!(
+            world
+                .copies
+                .iter()
+                .all(|(_, whole, len)| *whole && *len == length),
+            "{:?}",
+            world.copies
+        );
+        assert_eq!(world.sources, vec![(source(), false)], "no P010 asked");
+        assert!(
+            world.log[0].starts_with("create decoder"),
+            "{:?}",
+            world.log
+        );
+        assert_eq!(
+            world
+                .log
+                .iter()
+                .filter(|entry| entry.ends_with("with buffers"))
+                .count(),
+            2
+        );
+        assert_eq!(
+            world
+                .log
+                .iter()
+                .filter(|entry| entry.starts_with("end of input by buffer"))
+                .count(),
+            2
+        );
+        assert!(!world.log.iter().any(|entry| entry.contains("window")));
+        assert!(world
+            .configs
+            .iter()
+            .all(|config| config.target == PictureTarget::HevcMain));
+        let pictures: Vec<i64> = pictures_of(&events)
+            .iter()
+            .map(|(_, pts, _)| *pts)
+            .collect();
+        assert_eq!(pictures, shown);
+        assert_eq!(
+            input_color_format(PictureTarget::HevcMain, false),
+            COLOR_FORMAT_NV12
+        );
+        assert_eq!(
+            input_color_format(PictureTarget::H264High, false),
+            COLOR_FORMAT_NV12
+        );
+        assert_eq!(
+            input_color_format(PictureTarget::HevcMain10, false),
+            COLOR_FORMAT_P010
+        );
+        assert_eq!(
+            input_color_format(PictureTarget::HevcMain, true),
+            COLOR_FORMAT_SURFACE
+        );
+    }
+
+    /// The software path refuses a decoder that does not write NV12, and a
+    /// 10-bit target.
+    #[test]
+    fn the_software_path_wants_nv12_and_eight_bits() {
+        let world = software_world();
+        world.lock().unwrap().decoded.color_format = Some(COLOR_FORMAT_P010);
+        let error = convert(
+            &mut converter(&world, PictureTarget::HevcMain),
+            &closed_film(1),
+            &segments(1, 0),
+        )
+        .unwrap_err();
+        assert!(
+            error.starts_with("the software decoder gives no NV12 pictures"),
+            "{error}"
+        );
+        let error = convert(
+            &mut converter(&software_world(), PictureTarget::HevcMain10),
+            &closed_film(1),
+            &segments(1, 0),
+        )
+        .unwrap_err();
+        assert_eq!(error, "the software decoder makes 8-bit pictures only");
+    }
+
+    /// **A hardware decoder fed an AVI's decode times**: it hands each
+    /// picture back with the time it went in with, in the order pictures
+    /// are shown, so B-frames come out with times out of order. The
+    /// converter gives each the earliest input time not yet given out:
+    /// the pictures go to the encoder and out of it with times that only
+    /// increase, and the server's driver takes them.
+    #[test]
+    fn a_hardware_decoders_pictures_fed_decode_times_are_timed_again() {
+        let world = world();
+        world.lock().unwrap().echoes = true;
+        // The closed film in decode order, each picture timed by when it
+        // is decoded, its data naming when it is shown.
+        let film: Vec<SourcePicture> = closed_film(2)
+            .into_iter()
+            .enumerate()
+            .map(|(n, picture)| {
+                let mut data = picture.data.to_vec();
+                data.extend_from_slice(&picture.pts_us.to_le_bytes());
+                SourcePicture {
+                    pts_us: n as i64 * FRAME_US,
+                    key: picture.key,
+                    data: data.into(),
+                }
+            })
+            .collect();
+        let mut source = source();
+        source.decode_times = true;
+        let make = || {
+            Converter::new(
+                FakeCodecs(world.clone()),
+                source.clone(),
+                config(PictureTarget::HevcMain),
+            )
+        };
+        let segments = segments(2, 0);
+        let mut driver = ConvertedPicture::new(make(), segments.clone(), PictureTarget::HevcMain);
+        let mut converted = Vec::new();
+        for picture in film.clone() {
+            converted.extend(driver.push(picture).unwrap());
+        }
+        converted.extend(driver.finish().unwrap());
+        let times: Vec<i64> = converted
+            .iter()
+            .filter_map(|item| match item {
+                Converted::Sample(sample) => Some(sample.pts_us),
+                Converted::Format(_) => None,
+            })
+            .collect();
+        let expected: Vec<i64> = (0..50).map(|n| n * FRAME_US).collect();
+        assert_eq!(times, expected);
+        assert_eq!(world.lock().unwrap().rendered, expected);
     }
 
     /// **HDR10's SEI goes into the configuration only when the encoder
@@ -2577,8 +3205,8 @@ mod tests {
             left: 2,
             top: 2,
         };
-        let packed = PlaneLayout::packed(width as u32, height as u32);
-        let source = picture_in(padded, width, height, 80_000);
+        let packed = PlaneLayout::packed(width as u32, height as u32, 2);
+        let source = picture_in(padded, width, height, 80_000, 2);
         let mut target = vec![0u8; packed.picture_bytes(height as u32)];
         let len = copy_p010(
             &source,
@@ -2614,14 +3242,14 @@ mod tests {
             height as u32,
         )
         .unwrap();
-        assert!(holds_picture(&back, padded, width, height, 80_000));
+        assert!(holds_picture(&back, padded, width, height, 80_000, 2));
 
         let corner = PlaneLayout {
             left: 0,
             top: 0,
             ..padded
         };
-        let source = picture_in(corner, width, height, 40_000);
+        let source = picture_in(corner, width, height, 40_000, 2);
         let mut same = vec![0u8; source.len()];
         let len = copy_p010(
             &source,
@@ -2638,6 +3266,72 @@ mod tests {
         assert!(copy_p010(&source[..100], corner, &mut same, corner, 10, 6).is_err());
     }
 
+    /// **An NV12 copy is exact between any two layouts**: a padded stride,
+    /// a crop off the corner and a tall slice on one side, packed on the
+    /// other.
+    #[test]
+    fn copy_nv12_moves_exactly_the_picture() {
+        let (width, height) = (10usize, 6usize);
+        let padded = PlaneLayout {
+            row_bytes: 16,
+            slice_height: 9,
+            left: 2,
+            top: 2,
+        };
+        let packed = PlaneLayout::packed(width as u32, height as u32, 1);
+        let source = picture_in(padded, width, height, 80_000, 1);
+        let mut target = vec![0u8; packed.picture_bytes(height as u32)];
+        let len = copy_nv12(
+            &source,
+            padded,
+            &mut target,
+            packed,
+            width as u32,
+            height as u32,
+        )
+        .unwrap();
+        assert_eq!(len, 10 * (6 + 3));
+        // Built independently: each luma row, then each chroma row of
+        // interleaved U and V.
+        let mut expected = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                expected.push(sample(80_000, 0, x, y)[1]);
+            }
+        }
+        for y in 0..height / 2 {
+            for x in 0..width {
+                expected.push(sample(80_000, 1, x, y)[1]);
+            }
+        }
+        assert_eq!(target, expected);
+        let mut back = vec![0xeeu8; padded.picture_bytes(height as u32) + padded.row_bytes];
+        copy_nv12(
+            &target,
+            packed,
+            &mut back,
+            padded,
+            width as u32,
+            height as u32,
+        )
+        .unwrap();
+        assert!(holds_picture(&back, padded, width, height, 80_000, 1));
+        assert!(copy_nv12(&source[..50], padded, &mut back, packed, 10, 6).is_err());
+    }
+
+    /// **A software decoder's picture times**: its own when later than the
+    /// last, else the last plus a frame (no time at all, or one no later),
+    /// and the input's time for a first picture with none.
+    #[test]
+    fn a_software_pictures_time_is_its_own_or_a_frame_after_the_last() {
+        assert_eq!(next_time(Some(80), Some(40), 40, 0), 80);
+        assert_eq!(next_time(None, Some(80), 40, 0), 120);
+        assert_eq!(next_time(Some(80), Some(80), 40, 0), 120);
+        assert_eq!(next_time(Some(40), Some(80), 40, 0), 120);
+        assert_eq!(next_time(Some(40), None, 40, 7), 40);
+        assert_eq!(next_time(None, None, 40, 7), 7);
+    }
+
     /// The probe's stride rule: a stride smaller than a row of 16-bit
     /// samples is in samples. A slice height shorter than the picture is
     /// not one.
@@ -2651,15 +3345,15 @@ mod tests {
             crop: Some((0, 0, 3839, 2159)),
             ..VideoFormat::default()
         };
-        let layout = PlaneLayout::of(&t9, 3840, 2160);
-        assert_eq!(layout, PlaneLayout::packed(3840, 2160));
+        let layout = PlaneLayout::of(&t9, 3840, 2160, 2);
+        assert_eq!(layout, PlaneLayout::packed(3840, 2160, 2));
         assert_eq!(layout.picture_bytes(2160), 24_883_200, "t9's buffer size");
         let samples = VideoFormat {
             stride: Some(4096),
             slice_height: Some(16),
             ..t9
         };
-        let layout = PlaneLayout::of(&samples, 3840, 2160);
+        let layout = PlaneLayout::of(&samples, 3840, 2160, 2);
         assert_eq!((layout.row_bytes, layout.slice_height), (8192, 2160));
     }
 
@@ -2839,6 +3533,7 @@ mod tests {
             ten_bit: true,
             decodes: vec!["H.264", "AV1"],
             encodes: vec!["HEVC"],
+            software_decodes: vec!["MPEG-4 Part 2"],
         };
         assert_eq!(phone.clone().offered(), phone);
         let old = DeviceSupport {

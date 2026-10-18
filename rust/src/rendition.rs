@@ -10,9 +10,13 @@
 //! samples moved into the server's fMP4 as they are. `Copy`/`AacStereo` is
 //! the same with the sound decoded, mixed down and encoded as stereo AAC
 //! ([`crate::sound`]), the same bytes whichever run makes them.
-//! `Convert` decodes the picture (H.264, HEVC, AV1 or VP9) and encodes it
-//! again with Android's MediaCodec ([`crate::picture`]), one encoder per
-//! segment. The sound waits until the encoder has described the picture.
+//! `Convert` decodes the picture and encodes it again with Android's
+//! MediaCodec ([`crate::picture`]), one encoder per segment. H.264, HEVC,
+//! AV1 and VP9 are decoded by the phone's hardware where it has a decoder
+//! for them. MPEG-4 Part 2 (Xvid), DivX 3 and MPEG-2, and any codec the
+//! hardware lacks, are decoded by libavcodec ([`picture::SoftCodecs`]), up
+//! to 1920x1080. The sound waits until the encoder has described the
+//! picture.
 //!
 //! # A run
 //!
@@ -36,6 +40,10 @@
 //!   presentation time takes its decode time, and failing that the last
 //!   one's plus its duration (laced Matroska audio). The server derives
 //!   decode times itself (`mux.rs`), so only presentation times cross.
+//!   An AVI carries decode times alone, at the stream's constant rate. A
+//!   converted picture whose first packet has no presentation time is
+//!   therefore timed again as it leaves the decoder
+//!   ([`PictureSource::decode_times`]).
 //! - **Codec configuration**: Matroska carries H.264 as an `avcC` and its
 //!   samples length-prefixed. The server's muxer wants `csd-0`/`csd-1`
 //!   (SPS and PPS in Annex-B). It takes a sample as length-prefixed only
@@ -143,6 +151,42 @@ pub const MAIN10_TOO_LARGE: &str = "This phone can't convert a 4K HDR picture fo
 /// fails the rendition. The 8-bit surface path runs 2.4x at 4K.
 fn main10_fits(width: u32, height: u32) -> bool {
     width <= 1920 && height <= 1080
+}
+
+/// A picture the phone decodes in software, bigger than 1920x1080
+/// ([`software_fits`]).
+pub const SOFTWARE_TOO_LARGE: &str =
+    "This phone can't convert this film's picture for casting fast enough.";
+
+/// Whether a `width` by `height` picture may be decoded in software: no
+/// bigger than 1920x1080. The app's `choosePicture` draws the same line.
+/// libavcodec decodes on the run's one thread, and the picture is copied
+/// twice through memory on its way to the encoder.
+fn software_fits(width: u32, height: u32) -> bool {
+    width <= 1920 && height <= 1080
+}
+
+/// **Whether the run's picture is decoded in software**: when the
+/// hardware has no decoder for `video`'s codec (`hardware` names the ones
+/// it has), or when `force` says so. A picture decoded in software must be
+/// 8-bit-bound and no bigger than 1920x1080.
+pub fn decodes_in_software(
+    video: &StreamInfo,
+    target: PictureTarget,
+    hardware: &[&str],
+    force: bool,
+) -> Result<bool, String> {
+    let named = libav::codec_name(video.codec);
+    if !force && named.is_some_and(|name| hardware.contains(&name)) {
+        return Ok(false);
+    }
+    if target.ten_bit() {
+        return Err(NO_PICTURE_CONVERTER.to_owned());
+    }
+    if !software_fits(video.width, video.height) {
+        return Err(SOFTWARE_TOO_LARGE.to_owned());
+    }
+    Ok(true)
 }
 
 /// What a viewer is told when this device has nothing to encode AAC with.
@@ -333,10 +377,11 @@ pub trait Packets {
         bitrate: u32,
         from_us: i64,
     ) -> Result<SoundConverter, String>;
-    /// What converts the picture `source` into what `config` says, or the
-    /// sentence for why this device cannot.
+    /// What converts the picture `source` (the stream `video`) into what
+    /// `config` says, or the sentence for why this device cannot.
     fn picture_converter(
         &self,
+        video: &StreamInfo,
         source: PictureSource,
         config: EncoderConfig,
     ) -> Result<Box<dyn PictureConverter>, String>;
@@ -416,13 +461,31 @@ impl<S: libav::Source> Packets for Demuxer<S> {
 
     fn picture_converter(
         &self,
+        video: &StreamInfo,
         source: PictureSource,
         config: EncoderConfig,
     ) -> Result<Box<dyn PictureConverter>, String> {
+        let support = picture::support();
+        let software = decodes_in_software(video, config.target, &support.decodes, false)?;
         let codecs = picture::NdkCodecs::new().map_err(|error| {
             tracing::warn!(%error, "no MediaCodec to convert a rendition's picture with");
             NO_PICTURE_CONVERTER.to_owned()
         })?;
+        if !software {
+            return Ok(Box::new(picture::Converter::new(codecs, source, config)));
+        }
+        if !libav::decodes_picture(self.libav(), video.codec) {
+            return Err(video_refusal(video.codec));
+        }
+        let par = self.codec_parameters(video.index).map_err(|error| {
+            tracing::warn!(%error, "no FFmpeg to decode a rendition's picture with");
+            UNAVAILABLE.to_owned()
+        })?;
+        tracing::info!(
+            codec = video.codec,
+            "a rendition's picture is decoded in software"
+        );
+        let codecs = picture::SoftCodecs::new(codecs, par);
         Ok(Box::new(picture::Converter::new(codecs, source, config)))
     }
 }
@@ -574,11 +637,33 @@ pub fn repackage<P: Packets, K: Sink>(
             }
         }
     };
+    // A converted picture whose first packet has no presentation time (an
+    // AVI's) is timed by decode order. The packet is read ahead, and handed
+    // out again by a run that does not seek, as the ADTS frame is.
+    if let Some(plan) = &mut chosen.picture {
+        let video = chosen.video.index;
+        let first = |next: &Next| match next {
+            Next::Packet(packet) if packet.stream == video => Some(packet.pts == libav::NOPTS),
+            Next::Packet(_) => None,
+            Next::End | Next::Failed(_) => Some(false),
+        };
+        let mut found = pending.iter().find_map(first);
+        while found.is_none() {
+            let next = packets.read_packet();
+            found = first(&next);
+            pending.push_back(next);
+        }
+        plan.source.decode_times = found.unwrap_or(false);
+    }
     // The same for the picture.
     let picture_converter = match &chosen.picture {
         None => None,
         Some(picture) => {
-            match packets.picture_converter(picture.source.clone(), picture.config.clone()) {
+            match packets.picture_converter(
+                &chosen.video,
+                picture.source.clone(),
+                picture.config.clone(),
+            ) {
                 Ok(converter) => Some(converter),
                 Err(sentence) => {
                     sink.fail(sentence);
@@ -842,7 +927,8 @@ impl Chosen {
     /// The film's video (the first video stream that is not a cover picture)
     /// and the `audio_track`-th audio stream, or the sentence for why not.
     /// The video must be a codec `video_plan` can carry: H.264 or HEVC for a
-    /// copy, AV1 and VP9 too for a conversion. The audio must be one a copy
+    /// copy; AV1, VP9, MPEG-4 Part 2, DivX 3 and MPEG-2 too for a
+    /// conversion. The audio must be one a copy
     /// carries unless `audio_plan` converts it.
     fn of(
         streams: &[StreamInfo],
@@ -858,42 +944,7 @@ impl Chosen {
             VideoPlan::Copy => None,
             VideoPlan::Convert { target, bitrate } => Some((*target, *bitrate)),
         };
-        let (config, mime) = match video.codec {
-            libav::AV_CODEC_ID_H264 => (
-                VideoConfig::H264(H264Config::of(&video.extradata).ok_or(UNREADABLE)?),
-                "video/avc",
-            ),
-            libav::AV_CODEC_ID_HEVC => {
-                if let Some(sentence) = dolby_vision_refusal(video.dolby_vision) {
-                    return Err(sentence);
-                }
-                (
-                    VideoConfig::Hevc(HevcConfig::of(&video.extradata).ok_or(UNREADABLE)?),
-                    "video/hevc",
-                )
-            }
-            libav::AV_CODEC_ID_AV1 if convert.is_some() => (VideoConfig::Raw, "video/av01"),
-            libav::AV_CODEC_ID_VP9 if convert.is_some() => {
-                (VideoConfig::Raw, "video/x-vnd.on2.vp9")
-            }
-            other => return Err(video_refusal(other)),
-        };
-        let picture = match convert {
-            None => None,
-            Some((target, bitrate)) => {
-                let sar = video.sample_aspect_ratio;
-                if sar.num > 0 && sar.den > 0 && sar.num != sar.den {
-                    return Err(STRETCHED_PIXELS.to_owned());
-                }
-                if video.colour.hdr() && !target.ten_bit() {
-                    return Err(HDR_TO_SDR.to_owned());
-                }
-                if target == PictureTarget::HevcMain10 && !main10_fits(video.width, video.height) {
-                    return Err(MAIN10_TOO_LARGE.to_owned());
-                }
-                Some(PicturePlan::of(video, &config, mime, target, bitrate))
-            }
-        };
+        let (config, picture) = video_input(video, convert)?;
         let audio = streams
             .iter()
             .filter(|stream| stream.kind == Kind::Audio)
@@ -939,6 +990,86 @@ impl Chosen {
         if let TrackFormat::Aac { csd0, .. } = &mut self.audio_format {
             *csd0 = config;
         }
+    }
+}
+
+/// What a run reads `video` as: its samples' configuration, and when it is
+/// converted (`convert`: the target and bitrate) what its decoder and
+/// encoders are told. Or the sentence for why it cannot be read so.
+fn video_input(
+    video: &StreamInfo,
+    convert: Option<(PictureTarget, u32)>,
+) -> Result<(VideoConfig, Option<PicturePlan>), String> {
+    let (config, mime) = match video.codec {
+        libav::AV_CODEC_ID_H264 => (
+            VideoConfig::H264(H264Config::of(&video.extradata).ok_or(UNREADABLE)?),
+            "video/avc",
+        ),
+        libav::AV_CODEC_ID_HEVC => {
+            if let Some(sentence) = dolby_vision_refusal(video.dolby_vision) {
+                return Err(sentence);
+            }
+            (
+                VideoConfig::Hevc(HevcConfig::of(&video.extradata).ok_or(UNREADABLE)?),
+                "video/hevc",
+            )
+        }
+        libav::AV_CODEC_ID_AV1 if convert.is_some() => (VideoConfig::Raw, "video/av01"),
+        libav::AV_CODEC_ID_VP9 if convert.is_some() => (VideoConfig::Raw, "video/x-vnd.on2.vp9"),
+        // What only the software path decodes. The MIME types are
+        // MediaCodec's names for them, for the log; DivX 3 has none.
+        libav::AV_CODEC_ID_MPEG4 if convert.is_some() => (VideoConfig::Raw, "video/mp4v-es"),
+        libav::AV_CODEC_ID_MSMPEG4V3 if convert.is_some() => {
+            (VideoConfig::Raw, "video/x-msmpeg4v3")
+        }
+        libav::AV_CODEC_ID_MPEG2VIDEO if convert.is_some() => (VideoConfig::Raw, "video/mpeg2"),
+        other => return Err(video_refusal(other)),
+    };
+    let picture = match convert {
+        None => None,
+        Some((target, bitrate)) => {
+            let sar = video.sample_aspect_ratio;
+            if sar.num > 0 && sar.den > 0 && sar.num != sar.den {
+                return Err(STRETCHED_PIXELS.to_owned());
+            }
+            if video.colour.hdr() && !target.ten_bit() {
+                return Err(HDR_TO_SDR.to_owned());
+            }
+            if target == PictureTarget::HevcMain10 && !main10_fits(video.width, video.height) {
+                return Err(MAIN10_TOO_LARGE.to_owned());
+            }
+            Some(PicturePlan::of(video, &config, mime, target, bitrate))
+        }
+    };
+    Ok((config, picture))
+}
+
+/// **A converted picture's input, as a run makes it**: what its decoder
+/// and encoders are told, and its samples as the decoder takes them. The
+/// bench builds its converter from it.
+pub struct PictureInput {
+    pub source: PictureSource,
+    pub config: EncoderConfig,
+    video: VideoConfig,
+}
+
+impl PictureInput {
+    /// `video` converted to `target` at `bitrate`, or the sentence for why
+    /// it cannot be.
+    pub fn of(video: &StreamInfo, target: PictureTarget, bitrate: u32) -> Result<Self, String> {
+        let (video_config, plan) = video_input(video, Some((target, bitrate)))?;
+        let plan = plan.ok_or("no conversion")?;
+        Ok(Self {
+            source: plan.source,
+            config: plan.config,
+            video: video_config,
+        })
+    }
+
+    /// A sample as the decoder takes it: H.264 and HEVC in Annex-B, the
+    /// rest as the container has it.
+    pub fn sample(&self, data: Bytes) -> Bytes {
+        self.video.sample(data)
     }
 }
 
@@ -1175,7 +1306,8 @@ fn hvcc_units(hvcc: &[u8]) -> Option<(Vec<&[u8]>, usize)> {
 enum VideoConfig {
     H264(H264Config),
     Hevc(HevcConfig),
-    /// AV1 or VP9, whose samples go to a decoder as the container has them.
+    /// AV1, VP9, MPEG-4 Part 2, DivX 3 or MPEG-2, whose samples go to a
+    /// decoder as the container has them.
     Raw,
 }
 
@@ -1241,6 +1373,8 @@ impl PicturePlan {
                 frame_rate,
                 csd,
                 colour,
+                // Known once the first packet is read (`repackage`).
+                decode_times: false,
             },
             config: EncoderConfig {
                 target,
@@ -1486,6 +1620,7 @@ mod tests {
         }
         fn picture_converter(
             &self,
+            _: &StreamInfo,
             source: PictureSource,
             config: EncoderConfig,
         ) -> Result<Box<dyn PictureConverter>, String> {
@@ -1589,12 +1724,14 @@ mod tests {
                 stream(4, Kind::Audio, libav::AV_CODEC_ID_AAC),
             ],
             start_us: -23_000,
+            // A seek puts the demuxer back on what it reads, as a real one
+            // does: a run that read ahead reads it again.
+            rewinds_to: Some(queue.clone()),
             queue,
             seeks: Vec::new(),
             reads: 0,
             index: Vec::new(),
             indexed: Vec::new(),
-            rewinds_to: None,
             sound: None,
             converted: RefCell::default(),
             picture: None,
@@ -2565,12 +2702,12 @@ mod tests {
         assert_eq!(sources[0].mime, "video/x-vnd.on2.vp9");
         assert!(sources[0].csd.is_empty());
         assert_eq!(wrote.last(), Some(&Wrote::End));
-        let (wrote, sources) = run(2, b"");
+        let (wrote, sources) = run(70, b"");
         assert!(sources.is_empty());
         assert_eq!(
             wrote,
             vec![Wrote::Fail(
-                "This film's video is MPEG-2, which xtremio can't convert for casting yet."
+                "This film's video is VC-1, which xtremio can't convert for casting yet."
                     .to_owned()
             )]
         );
@@ -2591,6 +2728,155 @@ mod tests {
             vec![Wrote::Fail(
                 "This film's video is VP9, which xtremio can't convert for casting yet.".to_owned()
             )]
+        );
+    }
+
+    /// **What only the software path decodes is converted too**: MPEG-4
+    /// Part 2 (Xvid), DivX 3 and MPEG-2, their samples as the container has
+    /// them and the MPEG-4 VOL header as the decoder's configuration. A
+    /// film whose first picture has no presentation time (an AVI's) is
+    /// timed by decode order, and its pictures go out on the decode times
+    /// the container gives. One with presentation times is not.
+    #[test]
+    fn a_conversion_reads_what_only_software_decodes() {
+        let avi_packet = |pts: i64, dts: i64, key: bool| {
+            Next::Packet(libav::Packet {
+                stream: 1,
+                pts,
+                dts,
+                duration: 40,
+                key,
+                data: Bytes::from_static(b"\x00\x00\x01\xb6"),
+            })
+        };
+        let run = |codec: i32, queue: Vec<Next>| -> (Vec<Wrote>, Vec<PictureSource>) {
+            let mut packets = film(queue);
+            packets.streams[1].codec = codec;
+            packets.streams[1].extradata = Bytes::from_static(b"\x00\x00\x01\xb0vol");
+            packets.picture = Some(|| Box::new(EchoConverter::default()));
+            let sink = FakeSink::new(None);
+            repackage(
+                &mut packets,
+                &converting(PictureTarget::HevcMain),
+                Duration::ZERO,
+                false,
+                &plan(),
+                sink.clone(),
+            );
+            let sources = packets
+                .pictures
+                .borrow()
+                .iter()
+                .map(|(source, _)| source.clone())
+                .collect();
+            (sink.wrote.take(), sources)
+        };
+        let avi = || {
+            vec![
+                packet(3, 0, true, b"mp3"),
+                avi_packet(libav::NOPTS, 0, true),
+                avi_packet(libav::NOPTS, 40, false),
+                avi_packet(80, 80, false),
+            ]
+        };
+        for (codec, mime) in [
+            (libav::AV_CODEC_ID_MPEG4, "video/mp4v-es"),
+            (libav::AV_CODEC_ID_MSMPEG4V3, "video/x-msmpeg4v3"),
+            (libav::AV_CODEC_ID_MPEG2VIDEO, "video/mpeg2"),
+        ] {
+            let (wrote, sources) = run(codec, avi());
+            assert_eq!(sources.len(), 1, "{mime}");
+            assert_eq!(sources[0].mime, mime);
+            assert_eq!(
+                sources[0].csd,
+                vec![Bytes::from_static(b"\x00\x00\x01\xb0vol")]
+            );
+            assert!(
+                sources[0].decode_times,
+                "{mime}: an AVI's first picture is untimed"
+            );
+            let pictures: Vec<i64> = wrote
+                .iter()
+                .filter_map(|wrote| match wrote {
+                    Wrote::Sample(TrackKind::Video, pts, ..) => Some(*pts),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(pictures, vec![23_000, 63_000, 103_000], "{mime}");
+            assert_eq!(wrote.last(), Some(&Wrote::End), "{mime}");
+        }
+        let timed = vec![
+            avi_packet(0, libav::NOPTS, true),
+            avi_packet(40, libav::NOPTS, false),
+        ];
+        let (_, sources) = run(libav::AV_CODEC_ID_MPEG2VIDEO, timed);
+        assert!(
+            !sources[0].decode_times,
+            "a transport stream's pictures are timed"
+        );
+        // A copy takes none of them.
+        let mut packets = film(Vec::new());
+        packets.streams[1].codec = libav::AV_CODEC_ID_MPEG4;
+        let sink = FakeSink::new(None);
+        repackage(
+            &mut packets,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        assert_eq!(
+            sink.wrote.take(),
+            vec![Wrote::Fail(
+                "This film's video is MPEG-4 Part 2, which xtremio can't convert for casting yet."
+                    .to_owned()
+            )]
+        );
+    }
+
+    /// **Which decoder a run's picture gets**: the hardware's where it
+    /// decodes the codec, and libavcodec otherwise, or when told to. A
+    /// picture decoded in software is refused above 1920x1080 with the
+    /// app's sentence, and for a 10-bit target.
+    #[test]
+    fn a_picture_the_hardware_cannot_decode_is_decoded_in_software_up_to_1080p() {
+        let video = |codec: i32, width: u32, height: u32| StreamInfo {
+            width,
+            height,
+            ..stream(1, Kind::Video, codec)
+        };
+        let phone = ["H.264", "HEVC", "AV1", "VP9"];
+        let hevc = PictureTarget::HevcMain;
+        let xvid = video(libav::AV_CODEC_ID_MPEG4, 720, 576);
+        assert_eq!(decodes_in_software(&xvid, hevc, &phone, false), Ok(true));
+        let h264 = video(libav::AV_CODEC_ID_H264, 1280, 720);
+        assert_eq!(decodes_in_software(&h264, hevc, &phone, false), Ok(false));
+        assert_eq!(decodes_in_software(&h264, hevc, &phone, true), Ok(true));
+        assert_eq!(decodes_in_software(&h264, hevc, &[], false), Ok(true));
+        for (width, height) in [(1920, 1080), (1440, 1080)] {
+            let film = video(libav::AV_CODEC_ID_MPEG2VIDEO, width, height);
+            assert_eq!(decodes_in_software(&film, hevc, &phone, false), Ok(true));
+        }
+        for (width, height) in [(1920, 1088), (2048, 1080), (3840, 2160)] {
+            let film = video(libav::AV_CODEC_ID_MPEG4, width, height);
+            assert_eq!(
+                decodes_in_software(&film, hevc, &phone, false),
+                Err(
+                    "This phone can't convert this film's picture for casting fast enough."
+                        .to_owned()
+                ),
+                "{width}x{height}"
+            );
+        }
+        let big_h264 = video(libav::AV_CODEC_ID_H264, 3840, 2160);
+        assert_eq!(
+            decodes_in_software(&big_h264, hevc, &phone, false),
+            Ok(false)
+        );
+        assert_eq!(
+            decodes_in_software(&xvid, PictureTarget::HevcMain10, &phone, false),
+            Err(NO_PICTURE_CONVERTER.to_owned())
         );
     }
 
@@ -2703,6 +2989,7 @@ mod tests {
                 ten_bit: false,
                 decodes: vec!["AV1"],
                 encodes: vec!["HEVC"],
+                software_decodes: Vec::new(),
             }
         }
         fn everything() -> DeviceSupport {

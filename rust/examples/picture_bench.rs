@@ -1,12 +1,12 @@
 //! **The picture converter's bench, on a phone**: a file read with the
-//! NDK's `AMediaExtractor`, its picture converted segment by segment by
-//! `xtremio_core::picture::Converter` over Android's codecs, through the
-//! server's own driver (`stream_server::ConvertedPicture`). It prints one
-//! JSON object.
+//! NDK's `AMediaExtractor` (or libavformat, `--libmpv`), its picture
+//! converted segment by segment by `xtremio_core::picture::Converter` over
+//! Android's codecs, through the server's own driver
+//! (`stream_server::ConvertedPicture`). It prints one JSON object.
 //!
 //! ```text
 //! picture_bench <path> <target> <bitrate> [--grid-ms N] [--operating-rate R]
-//!               [--priority P] [--from-segment K]
+//!               [--priority P] [--from-segment K] [--libmpv PATH] [--software]
 //! ```
 //!
 //! - `target` is the wire name: `h264High`, `hevcMain` or `hevcMain10`.
@@ -19,6 +19,13 @@
 //!   are decoded and dropped. Compare the segment hashes with a run from
 //!   the start.
 //! - `--operating-rate` and `--priority` go on every codec's format.
+//! - `--libmpv PATH` reads the file with the libavformat inside that
+//!   libmpv (the app's, pushed to the phone), as a rendition run does. That
+//!   is the way to read an AVI, which `AMediaExtractor` does not open. The
+//!   picture is decoded in software where the phone has no hardware
+//!   decoder for its codec (MPEG-4 Part 2, DivX 3, MPEG-2), as the producer
+//!   decides it.
+//! - `--software` decodes in software whatever the codec (with `--libmpv`).
 //!
 //! Build: `cargo ndk -t arm64-v8a build --release --example picture_bench`.
 //! On a desktop it says there is no NDK and exits 1.
@@ -36,10 +43,12 @@ use stream_server::{
     Converted, ConvertedPicture, PictureConverter, PictureEvent, PictureTarget, Segments,
     SourcePicture,
 };
+use xtremio_core::libav::{self, Demuxer, Kind, Libav, Next, StreamInfo};
 use xtremio_core::ndk_media::{ndk, MediaFormat};
 use xtremio_core::picture::{
-    has_sei, Colour, Converter, EncoderConfig, NdkCodecs, PictureSource, VideoCodecs,
+    has_sei, Colour, Converter, EncoderConfig, NdkCodecs, PictureSource, SoftCodecs, VideoCodecs,
 };
+use xtremio_core::rendition::{decodes_in_software, PictureInput};
 
 /// How far before a segment's cut a run from it seeks: the server's
 /// `SEEK_BACK`.
@@ -63,11 +72,13 @@ struct Args {
     operating_rate: Option<f32>,
     priority: Option<i32>,
     from_segment: u64,
+    libmpv: Option<String>,
+    software: bool,
 }
 
 fn args() -> Result<Args, String> {
     let usage = "picture_bench <path> <target> <bitrate> [--grid-ms N] [--operating-rate R] \
-                 [--priority P] [--from-segment K]";
+                 [--priority P] [--from-segment K] [--libmpv PATH] [--software]";
     let mut all = std::env::args().skip(1);
     let mut positional = Vec::new();
     let mut parsed = Args {
@@ -78,6 +89,8 @@ fn args() -> Result<Args, String> {
         operating_rate: None,
         priority: None,
         from_segment: 0,
+        libmpv: None,
+        software: false,
     };
     while let Some(arg) = all.next() {
         let mut value = |name: &str| all.next().ok_or(format!("{name} needs a value; {usage}"));
@@ -88,6 +101,8 @@ fn args() -> Result<Args, String> {
             }
             "--priority" => parsed.priority = Some(number(&value("--priority")?)?),
             "--from-segment" => parsed.from_segment = number(&value("--from-segment")?)?,
+            "--libmpv" => parsed.libmpv = Some(value("--libmpv")?),
+            "--software" => parsed.software = true,
             _ => positional.push(arg),
         }
     }
@@ -98,6 +113,11 @@ fn args() -> Result<Args, String> {
     parsed.bitrate = number(&bitrate)?;
     if parsed.grid_ms <= 0 {
         return Err("--grid-ms must be positive".to_owned());
+    }
+    if parsed.software && parsed.libmpv.is_none() {
+        return Err(
+            "--software needs --libmpv: the software decoder is libmpv's FFmpeg".to_owned(),
+        );
     }
     Ok(parsed)
 }
@@ -272,6 +292,7 @@ struct Timed {
 
 impl VideoCodecs for Timed {
     type Codec = <NdkCodecs as VideoCodecs>::Codec;
+    type Decoder = <NdkCodecs as VideoCodecs>::Decoder;
     type Surface = <NdkCodecs as VideoCodecs>::Surface;
 
     fn decoder(
@@ -355,8 +376,116 @@ fn sei_types(annex_b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn bench() -> Result<Value, String> {
-    let args = args()?;
+// --- libavformat --------------------------------------------------------------
+
+/// A file as libavformat reads it.
+struct FileSource {
+    file: std::fs::File,
+    len: u64,
+}
+
+impl libav::Source for FileSource {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        std::io::Read::read(&mut self.file, buf)
+    }
+
+    fn seek(&mut self, offset: u64) -> std::io::Result<u64> {
+        std::io::Seek::seek(&mut self.file, std::io::SeekFrom::Start(offset))
+    }
+
+    fn length(&self) -> u64 {
+        self.len
+    }
+}
+
+/// What the bench reads the film's pictures with.
+enum Reader {
+    Extractor {
+        extractor: Extractor,
+        buffer: Vec<u8>,
+    },
+    /// libavformat, as a rendition run reads: each picture on the film's
+    /// clock, a packet without a presentation time at its decode time, and
+    /// failing that the last one's plus its duration.
+    Libav {
+        demuxer: Demuxer<FileSource>,
+        video: Box<StreamInfo>,
+        input: Box<PictureInput>,
+        last: Option<(i64, i64)>,
+    },
+}
+
+impl Reader {
+    fn seek(&mut self, at_us: i64) -> Result<(), String> {
+        match self {
+            Self::Extractor { extractor, .. } => {
+                extractor.seek(at_us);
+                Ok(())
+            }
+            Self::Libav { demuxer, last, .. } => {
+                *last = None;
+                demuxer.seek_us(at_us)
+            }
+        }
+    }
+
+    /// The next picture, or `None` at the end.
+    fn next(&mut self) -> Option<SourcePicture> {
+        match self {
+            Self::Extractor { extractor, buffer } => {
+                let (pts_us, key, size) = extractor.sample(buffer)?;
+                let picture = SourcePicture {
+                    pts_us,
+                    key,
+                    data: Bytes::copy_from_slice(&buffer[..size]),
+                };
+                // At the end the next read answers nothing.
+                extractor.next();
+                Some(picture)
+            }
+            Self::Libav {
+                demuxer,
+                video,
+                input,
+                last,
+            } => loop {
+                let packet = match demuxer.read_packet() {
+                    Next::Packet(packet) => packet,
+                    Next::End | Next::Failed(_) => return None,
+                };
+                if packet.stream != video.index {
+                    continue;
+                }
+                let duration = libav::to_us(packet.duration, video.time_base).filter(|d| *d > 0);
+                let Some(pts) = libav::to_us(packet.pts, video.time_base)
+                    .or_else(|| libav::to_us(packet.dts, video.time_base))
+                    .or_else(|| last.map(|(pts, duration)| pts + duration))
+                else {
+                    continue;
+                };
+                *last = Some((pts, duration.or(last.map(|(_, d)| d)).unwrap_or(0)));
+                return Some(SourcePicture {
+                    pts_us: pts - demuxer.start_us(),
+                    key: packet.key,
+                    data: input.sample(packet.data),
+                });
+            },
+        }
+    }
+}
+
+/// What the bench converts: the reader, the decoder's and encoders' keys,
+/// the codec parameters when the picture is decoded in software, and what
+/// the report says of the source.
+struct Film {
+    reader: Reader,
+    source: PictureSource,
+    config: EncoderConfig,
+    software: Option<libav::CodecParameters>,
+    duration_us: Option<i64>,
+}
+
+fn open_extractor(args: &Args) -> Result<Film, String> {
     let extractor = Extractor::open(&args.path)?;
     let (track, format, mime) = extractor.video()?;
     extractor.select(track)?;
@@ -367,7 +496,6 @@ fn bench() -> Result<Value, String> {
         .map(|rate| rate as f32)
         .or_else(|| extractor.float(&format, c"frame-rate"))
         .unwrap_or(30.0);
-    let frame_us = (1_000_000.0 / frame_rate) as i64;
     let duration_us = extractor.int64(&format, c"durationUs");
     let colour = Colour {
         standard: int(c"color-standard"),
@@ -383,19 +511,116 @@ fn bench() -> Result<Value, String> {
         "video/hevc" => "video/hevc",
         "video/av01" => "video/av01",
         "video/x-vnd.on2.vp9" => "video/x-vnd.on2.vp9",
-        other => return Err(format!("the bench does not read {other}")),
+        other => {
+            return Err(format!(
+                "the extractor reads {other}, which no hardware decoder here takes; pass --libmpv"
+            ))
+        }
     };
     let max_input = int(c"max-input-size").unwrap_or(0).max(4 << 20) as usize;
-    let mut buffer = vec![0u8; max_input];
+    let source = PictureSource {
+        mime,
+        width,
+        height,
+        frame_rate,
+        csd,
+        colour,
+        decode_times: false,
+    };
+    let config = EncoderConfig {
+        target: args.target,
+        width,
+        height,
+        bitrate: args.bitrate,
+        frame_rate,
+        colour,
+        hdr_static_info: format.buffer(c"hdr-static-info").map(Bytes::from),
+    };
+    Ok(Film {
+        reader: Reader::Extractor {
+            extractor,
+            buffer: vec![0u8; max_input],
+        },
+        source,
+        config,
+        software: None,
+        duration_us,
+    })
+}
+
+fn open_libav(args: &Args, libmpv: &str) -> Result<Film, String> {
+    let libav: &'static Libav = Box::leak(Box::new(Libav::load(libmpv)?));
+    let file =
+        std::fs::File::open(&args.path).map_err(|error| format!("{}: {error}", args.path))?;
+    let len = file.metadata().map_err(|error| error.to_string())?.len();
+    let mut demuxer = Demuxer::open(libav, FileSource { file, len })?;
+    let video = demuxer
+        .streams()
+        .iter()
+        .find(|stream| stream.kind == Kind::Video && !stream.attached_picture)
+        .ok_or("the file has no video stream")?
+        .clone();
+    let mut input = PictureInput::of(&video, args.target, args.bitrate)?;
+    let hardware = xtremio_core::picture::support().decodes;
+    let software = decodes_in_software(&video, args.target, &hardware, args.software)?;
+    let software = if software {
+        if !libav::decodes_picture(libav, video.codec) {
+            return Err(format!("{libmpv} has no decoder for codec {}", video.codec));
+        }
+        Some(demuxer.codec_parameters(video.index)?)
+    } else {
+        None
+    };
+    // As the producer does: a first picture without a presentation time
+    // (an AVI's) means the pictures are timed by decode order.
+    input.source.decode_times = loop {
+        match demuxer.read_packet() {
+            Next::Packet(packet) if packet.stream == video.index => {
+                break packet.pts == libav::NOPTS;
+            }
+            Next::Packet(_) => continue,
+            Next::End | Next::Failed(_) => break false,
+        }
+    };
+    demuxer.seek_us(0)?;
+    let duration_us = demuxer.duration_us();
+    let (source, config) = (input.source.clone(), input.config.clone());
+    Ok(Film {
+        reader: Reader::Libav {
+            demuxer,
+            video: Box::new(video),
+            input: Box::new(input),
+            last: None,
+        },
+        source,
+        config,
+        software,
+        duration_us,
+    })
+}
+
+fn bench() -> Result<Value, String> {
+    let args = args()?;
+    let Film {
+        mut reader,
+        source,
+        config,
+        software,
+        duration_us,
+    } = match &args.libmpv {
+        None => open_extractor(&args)?,
+        Some(libmpv) => open_libav(&args, libmpv)?,
+    };
+    let (width, height, frame_rate, mime) =
+        (source.width, source.height, source.frame_rate, source.mime);
+    let decode_times = source.decode_times;
+    let frame_us = (1_000_000.0 / frame_rate) as i64;
 
     // The sync samples, and the grid that mirrors them.
     let mut syncs = Vec::new();
-    while let Some((time, sync, _)) = extractor.sample(&mut buffer) {
-        if sync {
-            syncs.push(time);
-        }
-        if !extractor.next() {
-            break;
+    while let Some(picture) = reader.next() {
+        if picture.key {
+            syncs.push(picture.pts_us);
         }
     }
     let grid_us = args.grid_ms * 1000;
@@ -420,39 +645,28 @@ fn bench() -> Result<Value, String> {
     } else {
         cuts[args.from_segment as usize] - SEEK_BACK_US
     };
-    extractor.seek(from_us.max(0));
+    reader.seek(from_us.max(0))?;
 
-    let source = PictureSource {
-        mime,
-        width,
-        height,
-        frame_rate,
-        csd,
-        colour,
-    };
-    let config = EncoderConfig {
-        target: args.target,
-        width,
-        height,
-        bitrate: args.bitrate,
-        frame_rate,
-        colour,
-        hdr_static_info: format.buffer(c"hdr-static-info").map(Bytes::from),
-    };
     let setup_ms = Arc::new(Mutex::new(Vec::new()));
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut codecs = NdkCodecs::new()?;
     codecs.operating_rate = args.operating_rate;
     codecs.priority = args.priority;
+    let timed = Timed {
+        codecs,
+        setup_ms: setup_ms.clone(),
+    };
+    let decoder = if software.is_some() {
+        "software"
+    } else {
+        "hardware"
+    };
+    let converter: Box<dyn PictureConverter> = match software {
+        None => Box::new(Converter::new(timed, source, config)),
+        Some(par) => Box::new(Converter::new(SoftCodecs::new(timed, par), source, config)),
+    };
     let converter = Recording {
-        converter: Converter::new(
-            Timed {
-                codecs,
-                setup_ms: setup_ms.clone(),
-            },
-            source,
-            config,
-        ),
+        converter,
         events: events.clone(),
     };
     let mut driver = ConvertedPicture::new(converter, segments.clone(), args.target);
@@ -460,17 +674,9 @@ fn bench() -> Result<Value, String> {
     let started = Instant::now();
     let mut samples = 0usize;
     let mut converted = Vec::new();
-    while let Some((pts_us, key, size)) = extractor.sample(&mut buffer) {
-        let picture = SourcePicture {
-            pts_us,
-            key,
-            data: Bytes::copy_from_slice(&buffer[..size]),
-        };
+    while let Some(picture) = reader.next() {
         converted.extend(driver.push(picture)?);
         samples += 1;
-        if !extractor.next() {
-            break;
-        }
     }
     converted.extend(driver.finish()?);
     let wall_s = started.elapsed().as_secs_f64();
@@ -556,6 +762,8 @@ fn bench() -> Result<Value, String> {
         "priority": args.priority,
         "source": {
             "mime": mime,
+            "decoder": decoder,
+            "decodeTimes": decode_times,
             "width": width,
             "height": height,
             "frameRate": frame_rate,

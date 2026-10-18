@@ -1203,3 +1203,256 @@ fn the_demuxer_reports_frame_rate_colour_and_pixel_shape() -> anyhow::Result<()>
     assert_eq!(video.sample_aspect_ratio, Rational { num: 4, den: 3 });
     Ok(())
 }
+
+/// **An AVI's Xvid picture through the software decoder**: an MPEG-4 Part 2
+/// film with B-frames, made by `ffmpeg` into an AVI, opened with the libav
+/// demuxer and decoded by `PictureDecoder` the way the producer feeds it:
+/// an AVI's packets carry decode times alone. Every picture comes out, in
+/// order, at the encoder's NV12 size, each later than the one before. The
+/// first is byte for byte what `ffmpeg` itself makes of it in NV12.
+#[test]
+fn an_avis_xvid_picture_is_decoded_into_nv12_in_presentation_order() -> anyhow::Result<()> {
+    use xtremio_core::libav::{
+        Demuxer, Kind, Libav, Next, PictureDecoder, AV_CODEC_ID_MPEG4, NOPTS,
+    };
+    let name = libmpv_name();
+    let libav = match Libav::load(&name) {
+        Ok(libav) => &*Box::leak(Box::new(libav)),
+        Err(error) => {
+            eprintln!("SKIPPED: no FFmpeg this build reads through {name}: {error}");
+            return Ok(());
+        }
+    };
+    let tmp = tempfile::tempdir()?;
+    let avi = tmp.path().join("xvid.avi");
+    let avi_path = avi.to_str().unwrap();
+    let made = run(
+        "ffmpeg",
+        &[
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=176x144:rate=25:duration=2",
+            "-c:v",
+            "mpeg4",
+            "-vtag",
+            "XVID",
+            "-bf",
+            "2",
+            "-g",
+            "12",
+            "-q:v",
+            "4",
+            avi_path,
+        ],
+    );
+    if !made.is_some_and(|out| out.status.success()) {
+        eprintln!("SKIPPED: no ffmpeg with its MPEG-4 encoder");
+        return Ok(());
+    }
+    let bytes = bytes::Bytes::from(std::fs::read(&avi)?);
+    let mut demuxer = Demuxer::open(libav, std::io::Cursor::new(bytes)).expect("the header reads");
+    assert_eq!(demuxer.format_name(), "avi");
+    let video = demuxer
+        .streams()
+        .iter()
+        .find(|stream| stream.kind == Kind::Video)
+        .expect("a picture")
+        .clone();
+    assert_eq!(video.codec, AV_CODEC_ID_MPEG4);
+    let par = demuxer.codec_parameters(video.index).expect("parameters");
+    let mut decoder = PictureDecoder::open(&par, video.width, video.height)
+        .expect("opens")
+        .expect("this FFmpeg decodes MPEG-4 Part 2");
+    let layout = decoder.layout();
+    let mut pictures = Vec::new();
+    let mut packets = 0;
+    let mut untimed = 0;
+    loop {
+        let packet = match demuxer.read_packet() {
+            Next::Packet(packet) => packet,
+            Next::End => break,
+            Next::Failed(error) => panic!("{error}"),
+        };
+        if packet.stream != video.index {
+            continue;
+        }
+        packets += 1;
+        if packet.pts == NOPTS {
+            untimed += 1;
+        }
+        // What the producer hands over for a source whose packets carry
+        // decode times: the time as the decode time, no presentation time.
+        pictures.extend(
+            decoder
+                .decode(Some((&packet.data, NOPTS, packet.dts)))
+                .unwrap(),
+        );
+    }
+    pictures.extend(decoder.decode(None).unwrap());
+    assert!(
+        untimed > 0,
+        "an AVI's key pictures carry no presentation time"
+    );
+    assert_eq!(pictures.len(), packets, "every picture comes out");
+    assert!(pictures
+        .iter()
+        .all(|picture| picture.nv12.len() == layout.bytes()));
+    let times: Vec<i64> = pictures.iter().filter_map(|picture| picture.time).collect();
+    // The last pictures come out at the end, when no packet frees them.
+    assert!(times.len() >= packets - 2, "{times:?}");
+    assert!(times.windows(2).all(|pair| pair[0] < pair[1]), "{times:?}");
+
+    let out = run(
+        "ffmpeg",
+        &[
+            "-v",
+            "error",
+            "-i",
+            avi_path,
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "nv12",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+    )
+    .expect("ffmpeg ran");
+    assert!(out.status.success());
+    let (width, height) = (video.width as usize, video.height as usize);
+    assert_eq!(out.stdout.len(), width * height * 3 / 2);
+    let first = &pictures[0].nv12;
+    for row in 0..height + height / 2 {
+        assert_eq!(
+            first[row * layout.stride..row * layout.stride + width],
+            out.stdout[row * width..(row + 1) * width],
+            "row {row}"
+        );
+    }
+
+    // The same through the converter's side of it: `SoftDecoder`, fed what
+    // the producer feeds it, microseconds of decode time. Its first output
+    // is its format, NV12 at the film's size; every picture follows at a
+    // later time, the ones the end frees too; then its end.
+    use xtremio_core::picture::{
+        Colour, PictureSource, SoftDecoder, VideoCodec, COLOR_FORMAT_NV12,
+    };
+    let source = PictureSource {
+        mime: "video/mp4v-es",
+        width: video.width,
+        height: video.height,
+        frame_rate: 25.0,
+        csd: Vec::new(),
+        colour: Colour::default(),
+        decode_times: true,
+    };
+    let keys: Vec<i64> = demuxer
+        .index_entries(video.index)
+        .iter()
+        .filter(|entry| entry.keyframe)
+        .filter_map(|entry| xtremio_core::libav::to_us(entry.timestamp, video.time_base))
+        .collect();
+    assert!(keys.len() >= 3, "{keys:?}");
+    let mut decode_from = |at_us: i64| -> Vec<Out> {
+        let mut soft = SoftDecoder::new(&par, &source).expect("a software decoder");
+        demuxer.seek_us(at_us).expect("sought");
+        let mut outputs = Vec::new();
+        loop {
+            let packet = match demuxer.read_packet() {
+                Next::Packet(packet) => packet,
+                Next::End => break,
+                Next::Failed(error) => panic!("{error}"),
+            };
+            if packet.stream != video.index {
+                continue;
+            }
+            let dts_us = xtremio_core::libav::to_us(packet.dts, video.time_base).unwrap();
+            let index = soft.dequeue_input(0).unwrap().expect("room");
+            soft.input_buffer(index).unwrap()[..packet.data.len()].copy_from_slice(&packet.data);
+            soft.queue_input(index, packet.data.len(), dts_us, false)
+                .unwrap();
+            take(&mut soft, &mut outputs);
+        }
+        soft.queue_input(0, 0, 0, true).unwrap();
+        take(&mut soft, &mut outputs);
+        outputs
+    };
+    let pictures_of = |outputs: &[Out]| -> Vec<(i64, Vec<u8>)> {
+        outputs
+            .iter()
+            .filter_map(|output| match output {
+                Out::Picture(pts, bytes) => Some((*pts, bytes.clone())),
+                _ => None,
+            })
+            .collect()
+    };
+    let outputs = decode_from(0);
+    assert_eq!(outputs.first(), Some(&Out::Format(COLOR_FORMAT_NV12)));
+    assert_eq!(outputs.last(), Some(&Out::End));
+    let through = pictures_of(&outputs);
+    assert!(through
+        .iter()
+        .all(|(_, bytes)| bytes.len() == layout.bytes()));
+    let soft_times: Vec<i64> = through.iter().map(|(pts, _)| *pts).collect();
+    assert_eq!(soft_times.len(), packets);
+    assert!(
+        soft_times.windows(2).all(|pair| pair[0] < pair[1]),
+        "{soft_times:?}"
+    );
+    assert_eq!(soft_times.last(), Some(&(packets as i64 * 40_000)));
+
+    let later = pictures_of(&decode_from(keys[2]));
+    assert!(later.len() < through.len() - 20, "the run began later");
+    for (pts, bytes) in &later {
+        let same = through.iter().find(|(_, other)| other == bytes);
+        assert_eq!(
+            same.map(|(time, _)| *time),
+            Some(*pts),
+            "a picture at {pts}"
+        );
+    }
+    Ok(())
+}
+
+/// What a `SoftDecoder` handed out, its pictures read whole.
+#[derive(Debug, PartialEq)]
+enum Out {
+    Format(i32),
+    Picture(i64, Vec<u8>),
+    End,
+}
+
+/// Every output `soft` has, its buffers read and released.
+fn take(soft: &mut xtremio_core::picture::SoftDecoder, outputs: &mut Vec<Out>) {
+    use xtremio_core::picture::{VideoCodec, VideoOutput};
+    loop {
+        match soft.dequeue_output(0).unwrap() {
+            VideoOutput::Nothing => return,
+            VideoOutput::FormatChanged => {
+                let format = soft.output_format().unwrap();
+                outputs.push(Out::Format(format.color_format.unwrap()));
+            }
+            VideoOutput::Buffer {
+                index,
+                size,
+                pts_us,
+                flags,
+                ..
+            } => {
+                let bytes = soft.output_buffer(index).unwrap().to_vec();
+                assert_eq!(bytes.len(), size);
+                soft.release_output(index, None).unwrap();
+                outputs.push(if flags & 4 != 0 {
+                    Out::End
+                } else {
+                    Out::Picture(pts_us, bytes)
+                });
+            }
+        }
+    }
+}
