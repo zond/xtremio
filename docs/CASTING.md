@@ -539,9 +539,17 @@ frames a second, never more than 24 Mbit/s (`pictureBitrate`):
   container's.
 
 The producer on the Rust side refuses what the app cannot see: a film with
-stretched pixels, an HDR film handed a target that is not 10-bit HEVC,
+stretched pixels decoded by the hardware, an HDR film handed a target that
+is not 10-bit HEVC,
 and a 10-bit HEVC target for a picture larger than 1920x1080
-(`MAIN10_TOO_LARGE`, the app's sentence, for an older app that asks).
+(`MAIN10_TOO_LARGE`, the app's sentence, for an older app that asks). The
+software path makes stretched pixels square instead (`square_size`): the
+width times the pixel shape, to an even number, and the height as it is.
+A 720x576 PAL picture with 16:15 pixels is made 768x576, one with 16:9's
+64:45 pixels 1024x576, and NTSC's 8:9 makes 720x480 640x480. The encoders
+work at that size, and the 1920x1080 limit is on it. The app judges the
+size mpv reports, so a picture that only goes past 1920x1080 once scaled
+is refused by the producer, with the same sentence.
 Its sentence comes back through the preparation, as Dolby Vision profile 5
 does. The HDR one is "This film's picture is HDR, and xtremio doesn't
 convert HDR to SDR." (`HDR_TO_SDR`, `rust/src/rendition.rs`).
