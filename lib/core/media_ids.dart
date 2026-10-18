@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../src/rust/api/media.dart' as rust;
+import 'diagnostics_log.dart';
 import 'state/cast_numbers.dart';
 
 /// The scheme of the URL mpv is handed for a stream played by id:
@@ -459,9 +460,24 @@ class RustMediaIds implements MediaIds {
   Future<PictureSupport> pictureSupport() =>
       _pictureSupport ??= _askPictureSupport();
 
+  /// A question that fails answers [PictureSupport.none]: nothing is
+  /// converted and the cast is judged as before.
   static Future<PictureSupport> _askPictureSupport() async {
-    // TODO(picture): rust.mediaPictureSupport()
-    return PictureSupport.none;
+    try {
+      final answer = await rust.mediaPictureSupport();
+      return PictureSupport(
+        decodes: answer.decodes.toSet(),
+        encodes: answer.encodes.toSet(),
+        tenBit: answer.tenBit,
+      );
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'media',
+        'could not ask what this phone converts pictures with: '
+            '${error.runtimeType}',
+      );
+      return PictureSupport.none;
+    }
   }
 
   @override

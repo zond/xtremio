@@ -508,7 +508,8 @@ frames a second, never more than 24 Mbit/s (`pictureBitrate`):
 The producer on the Rust side refuses what the app cannot see: a film with
 stretched pixels, and an HDR film handed a target that is not 10-bit HEVC.
 Its sentence comes back through the preparation, as Dolby Vision profile 5
-does.
+does. The HDR one is "This film's picture is HDR, and xtremio doesn't
+convert HDR to SDR." (`HDR_TO_SDR`, `rust/src/rendition.rs`).
 
 **The phone is kept awake** while a converted cast is published. The
 receiver asks for more film whenever it wants it, usually with the phone's
