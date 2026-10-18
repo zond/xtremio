@@ -3,6 +3,7 @@ package com.zond.xtremio
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.nio.ByteBuffer
 
 /**
  * The codec probe's rules with no device in them (HwProbeRules.kt). The
@@ -143,5 +144,73 @@ class HwProbeRulesTest {
     @Test
     fun `hex is lower case, two digits a byte`() {
         assertEquals("00ff10", HwProbeRules.hex(byteArrayOf(0, -1, 16)))
+    }
+
+    /** A plane over [bytes] as a ByteBuffer, for the copy tests. */
+    private fun plane(bytes: ByteArray, offset: Int, rowStride: Int, pixelStride: Int) =
+        HwProbeRules.Plane(ByteBuffer.wrap(bytes), offset, rowStride, pixelStride)
+
+    @Test
+    fun `a packed plane is copied row by row across different strides`() {
+        // 3 samples of 2 bytes on 2 rows. The source rows are 8 bytes apart,
+        // the destination's 10, and the padding on both sides is 0x7f.
+        val src = ByteArray(16) { 0x7f }
+        for (y in 0 until 2) for (i in 0 until 6) src[y * 8 + i] = (y * 10 + i).toByte()
+        val dst = ByteArray(20) { 0x55 }
+        HwProbeRules.copyPlane(plane(src, 0, 8, 2), plane(dst, 0, 10, 2), 3, 2, 2)
+        val expected = ByteArray(20) { 0x55 }
+        for (y in 0 until 2) for (i in 0 until 6) expected[y * 10 + i] = (y * 10 + i).toByte()
+        assertEquals(expected.toList(), dst.toList())
+    }
+
+    @Test
+    fun `an interleaved chroma plane is copied as U then V`() {
+        // UVUV at 4 bytes a pair: 2 pairs on 2 rows, source rows 9 bytes
+        // apart from index 1, destination rows 12 apart from index 3.
+        val src = ByteArray(1 + 9 * 2) { 0x7f }
+        for (y in 0 until 2) for (i in 0 until 8) src[1 + y * 9 + i] = (0x10 * (y + 1) + i).toByte()
+        val dst = ByteArray(3 + 12 * 2) { 0x55 }
+        HwProbeRules.copyPlane(plane(src, 1, 9, 4), plane(dst, 3, 12, 4), 2, 2, 2)
+        HwProbeRules.copyPlane(plane(src, 3, 9, 4), plane(dst, 5, 12, 4), 2, 2, 2)
+        val expected = ByteArray(3 + 12 * 2) { 0x55 }
+        for (y in 0 until 2) for (i in 0 until 8) expected[3 + y * 12 + i] = (0x10 * (y + 1) + i).toByte()
+        assertEquals(expected.toList(), dst.toList())
+    }
+
+    @Test
+    fun `copying U into an interleaved plane leaves V where it was`() {
+        // Planar U (pixel stride 2) into a UV plane (pixel stride 4) whose V
+        // samples are already there.
+        val u = byteArrayOf(1, 2, 3, 4, 5, 6)
+        val dst = byteArrayOf(0, 0, 9, 9, 0, 0, 8, 8, 0, 0, 7, 7)
+        HwProbeRules.copyPlane(plane(u, 0, 6, 2), plane(dst, 0, 12, 4), 3, 1, 2)
+        assertEquals(listOf<Byte>(1, 2, 9, 9, 3, 4, 8, 8, 5, 6, 7, 7), dst.toList())
+    }
+
+    @Test
+    fun `the copy moves no buffer position or limit`() {
+        val src = ByteBuffer.wrap(ByteArray(8) { it.toByte() })
+        src.position(3)
+        src.limit(5)
+        val dst = ByteBuffer.wrap(ByteArray(8))
+        HwProbeRules.copyPlane(
+            HwProbeRules.Plane(src, 0, 4, 2),
+            HwProbeRules.Plane(dst, 0, 4, 2),
+            2,
+            2,
+            2,
+        )
+        assertEquals(3, src.position())
+        assertEquals(5, src.limit())
+        assertEquals(0, dst.position())
+        assertEquals((0 until 8).map { it.toByte() }, dst.array().toList())
+    }
+
+    @Test
+    fun `a P010 stride is bytes unless it is too short to be`() {
+        assertEquals(7680, HwProbeRules.p010RowBytes(null, 3840))
+        assertEquals(7680, HwProbeRules.p010RowBytes(3840, 3840))
+        assertEquals(8192, HwProbeRules.p010RowBytes(4096, 3840))
+        assertEquals(7936, HwProbeRules.p010RowBytes(7936, 3840))
     }
 }

@@ -2,6 +2,7 @@ package com.zond.xtremio
 
 import android.media.MediaCodecInfo.CodecCapabilities
 import android.media.MediaCodecInfo.CodecProfileLevel
+import java.nio.ByteBuffer
 
 /**
  * The parts of the codec probe (HwProbe.kt) with no device in them, so a
@@ -233,6 +234,64 @@ object HwProbeRules {
             val k = keys.firstOrNull { it >= r }
             mapOf("requestedAt" to r, "keyAt" to k, "delta" to k?.let { it - r })
         }
+    }
+
+    // ------------------------------------------------------- plane copy
+
+    /**
+     * One plane of a picture in a buffer: the index of its first sample, the
+     * bytes from one row to the next, and the bytes from one sample to the
+     * next. An interleaved chroma plane is two of these, U and V, each with a
+     * pixel stride of twice the sample size.
+     */
+    class Plane(val buffer: ByteBuffer, val offset: Int, val rowStride: Int, val pixelStride: Int)
+
+    /**
+     * Copies [width] samples of [bytesPerSample] bytes on each of [height]
+     * rows from [src] to [dst]. Each side keeps its own strides. The bytes
+     * between samples on the destination side are left as they were, so U
+     * and V of an interleaved plane can be copied one after the other. The
+     * buffers' positions and limits are not touched.
+     */
+    fun copyPlane(src: Plane, dst: Plane, width: Int, height: Int, bytesPerSample: Int) {
+        if (width <= 0 || height <= 0) return
+        val srcSpan = (width - 1) * src.pixelStride + bytesPerSample
+        val dstSpan = (width - 1) * dst.pixelStride + bytesPerSample
+        val from = src.buffer.duplicate()
+        from.clear()
+        val to = dst.buffer.duplicate()
+        to.clear()
+        val packed = src.pixelStride == bytesPerSample && dst.pixelStride == bytesPerSample
+        val srcRow = ByteArray(srcSpan)
+        val dstRow = if (packed) srcRow else ByteArray(dstSpan)
+        for (y in 0 until height) {
+            from.position(src.offset + y * src.rowStride)
+            from.get(srcRow, 0, srcSpan)
+            val at = dst.offset + y * dst.rowStride
+            to.position(at)
+            if (!packed) {
+                to.get(dstRow, 0, dstSpan)
+                to.position(at)
+                for (x in 0 until width) {
+                    val s = x * src.pixelStride
+                    val d = x * dst.pixelStride
+                    for (b in 0 until bytesPerSample) dstRow[d + b] = srcRow[s + b]
+                }
+            }
+            to.put(dstRow, 0, dstSpan)
+        }
+    }
+
+    /**
+     * The bytes from one row of a P010 buffer to the next, from a format's
+     * `stride`. Codecs differ on whether that counts bytes or samples, so a
+     * stride shorter than two bytes a sample is taken as samples. No stride
+     * means rows packed tight.
+     */
+    fun p010RowBytes(stride: Int?, width: Int): Int = when {
+        stride == null || stride <= 0 -> width * 2
+        stride < width * 2 -> stride * 2
+        else -> stride
     }
 
     // ---------------------------------------------------------- numbers
