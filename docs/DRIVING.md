@@ -183,6 +183,8 @@ tool/hwprobe pull 4k-main10               # the run's mp4, when it asked for one
 `codecs` lists every codec whose types are video. For each it gives the
 profiles and levels by name, the sizes and frame rates it claims at 1080p
 and 2160p, the bitrate modes, the colour formats, and the features.
+An HEVC or H.264 encoder also gives the platform's answer on P010 input
+at Main10 or High10 (`supportsP010Main10at1080` and `...at2160`).
 
 `push` grants the debug app `READ_MEDIA_VIDEO` first, since the app opens
 the clip by its path. The clip goes to `/sdcard/Download/hwprobe/`.
@@ -206,16 +208,17 @@ A run's arguments (only `path` is required):
 |---|---|---|
 | `path` | | The clip: a file path or a `content://` URI. Its first video track is used. |
 | `label` | mode and file name | Names the report and the mp4. |
-| `mode` | `transcode` | `transcode`, `decodeOnly`, `perSlot` or `requestSync`. |
+| `mode` | `transcode` | `transcode`, `decodeOnly`, `perSlot`, `requestSync` or `transcodeP010`. |
 | `mime` | `video/hevc` | What to encode to: `video/hevc` or `video/avc`. |
 | `profile` | `auto` | `main`, `main10`, `main10hdr10`, `high` (H.264). `auto` picks Main10 for a 10-bit source. |
+| `perSlot` | false | `transcodeP010`: a fresh encoder at every slot, as in the `perSlot` mode. |
 | `bitrate` | 12000000 | Bits per second. |
 | `bitrateMode` | `cbr` | `cbr`, `vbr` or `cq`. |
 | `seconds` | 600 | Film time to make. The clip loops until then. |
 | `slotSeconds` | 10 | `perSlot`: the shortest slot. A slot starts at a source key frame. |
 | `requestSyncAt` | `[100, 400, 700]` | `requestSync`: the frames a key frame is asked for at. |
 | `repeat` | 1 | Runs of the whole plan. Two shows whether the bytes come out the same. |
-| `iFrameInterval` | 1, or 3600 for `perSlot` | Seconds between the encoder's own key frames. |
+| `iFrameInterval` | 1, or 3600 per slot | Seconds between the encoder's own key frames. |
 | `maxBframes` | 0 | B-frames the encoder may use. |
 | `wakeLock` | true | Holds the CPU awake for the run. |
 | `writeMp4` | false | Writes the first run's output to `Download/hwprobe/<label>.mp4`. |
@@ -233,6 +236,12 @@ The modes:
 - `requestSync` asks the encoder for a key frame at the given frames and
   reports how many frames later each one came. Give it a long
   `iFrameInterval`, or the encoder's own key frames answer first.
+- `transcodeP010` decodes to 10-bit P010 buffers and copies each picture
+  into the encoder's input buffers, at Main10 (High10 for H.264). It
+  shows whether an encoder whose surface gives 8-bit makes real 10-bit
+  from buffers. The report's `p010` part gives both sides' layouts and
+  the copy's time per frame. A decoder that will not put out 10-bit ends
+  the run with its colour format in the error.
 
 The probe needs Android 10 or later. Its channel is in every Android
 build, release too, but nothing in the app calls it.
