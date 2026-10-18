@@ -62,7 +62,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "0eef403194b2e
 # and Cargo will not pick two 1.x versions, so without that commit this
 # graph does not resolve at all; it used to be a vendored copy of the
 # crate wired in with `[patch]`.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "a98918c291aba93b0e11222a3a9a4762694af77b", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "66804d819c832a59ace83d141439c85b3d07033f", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
