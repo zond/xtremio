@@ -87,6 +87,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ServerConfig? dco_decode_opt_box_autoadd_server_config(dynamic raw);
 
   @protected
+  PictureSupport dco_decode_picture_support(dynamic raw);
+
+  @protected
   ServerConfig dco_decode_server_config(dynamic raw);
 
   @protected
@@ -165,6 +168,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ServerConfig? sse_decode_opt_box_autoadd_server_config(
     SseDeserializer deserializer,
   );
+
+  @protected
+  PictureSupport sse_decode_picture_support(SseDeserializer deserializer);
 
   @protected
   ServerConfig sse_decode_server_config(SseDeserializer deserializer);
@@ -268,6 +274,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_server_config(
     ServerConfig? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_picture_support(
+    PictureSupport self,
     SseSerializer serializer,
   );
 

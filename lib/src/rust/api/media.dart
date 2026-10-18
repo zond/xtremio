@@ -97,6 +97,13 @@ String? mediaCastNumbers({required String token}) =>
 bool mediaRenditionsAvailable() =>
     RustLib.instance.api.crateApiMediaMediaRenditionsAvailable();
 
+/// What this device can convert a picture with. Only hardware codecs
+/// count. Empty everywhere when it cannot convert at all: on a desktop, or
+/// a phone older than Android 8. The first call makes and deletes a few
+/// codecs, so it runs on a worker; later calls answer the kept result.
+Future<PictureSupport> mediaPictureSupport() =>
+    RustLib.instance.api.crateApiMediaMediaPictureSupport();
+
 /// Ends the publication `token`: nothing more is served under it, and a
 /// body in flight is cut. Whether it was published.
 Future<bool> mediaUnpublish({required String token}) =>
@@ -203,3 +210,35 @@ Future<bool> mpvStreamRegister({
   ctx: ctx,
   libmpvPath: libmpvPath,
 );
+
+/// What this device's hardware can convert a film's picture with, by the
+/// names the cast decision uses ("H.264", "HEVC", "AV1", "VP9").
+class PictureSupport {
+  /// The codecs a source's picture can be decoded from.
+  final List<String> decodes;
+
+  /// The codecs a converted picture can be made as: H.264 and HEVC at
+  /// most.
+  final List<String> encodes;
+
+  /// HEVC Main 10 can be made, with an HDR film's colours kept.
+  final bool tenBit;
+
+  const PictureSupport({
+    required this.decodes,
+    required this.encodes,
+    required this.tenBit,
+  });
+
+  @override
+  int get hashCode => decodes.hashCode ^ encodes.hashCode ^ tenBit.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PictureSupport &&
+          runtimeType == other.runtimeType &&
+          decodes == other.decodes &&
+          encodes == other.encodes &&
+          tenBit == other.tenBit;
+}
