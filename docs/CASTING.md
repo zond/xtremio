@@ -14,7 +14,9 @@ as the receiver reads it. Its sound is copied when it is AAC and
 ([Renditions](#renditions-the-picture-repackaged-the-sound-converted)).
 Or, when the receiver cannot show the film's picture at all, the phone
 **converts the picture** to HEVC or H.264 with its own hardware, where it
-can ([Converting the picture](#converting-the-picture)). While the
+can ([Converting the picture](#converting-the-picture)). That covers a
+file no receiver takes at all, such as an Xvid AVI, whose picture and
+sound are both converted. While the
 television plays, the player screen is a remote. A picture the phone cannot
 convert is still refused, with a sentence that says why. The button is
 never built on Android TV: a TV is a receiver, not a sender.
@@ -53,7 +55,13 @@ mpv is reading the bytes.
   handed over as `video/webm`, when it carries VP8 or VP9 with Opus, Vorbis
   or no sound. Otherwise it is a Matroska file, which a receiver does not
   take as it is. Any
-  other reader (AVI, a transport stream, Ogg, ...) is refused by name.
+  other reader (AVI, a transport stream, Ogg, ...) opens a file no receiver
+  takes. Played by id, such a film is converted where the phone can, its
+  picture and its sound alike
+  ([Converting the picture](#converting-the-picture)). Otherwise it is
+  refused by name: "A Chromecast plays MP4 and WebM files. This stream is an
+  AVI file, and xtremio can't convert this one for casting."
+  (`CastRefusal.container`).
 - **The codecs** are mpv's, for the same reason, and decide within a
   family: a receiver's video list, and the audio the container may carry.
 - **A picture no receiver decodes is refused up front**, for every
@@ -442,20 +450,33 @@ cannot show a film's picture as it is, and a copy into MP4 does not help.
 A phone with the right hardware then decodes the picture and encodes it
 again as HEVC or H.264, at the same size, for as long as the cast runs.
 
-**What is converted.** A film played by id, which would be refused for its
-picture, is converted when this phone's hardware decodes its codec:
+**What is converted.** A film played by id is converted when this phone
+decodes its codec, and it is one of these:
 
 - AV1 or VP9 that the receiver does not decode, or that a copy cannot carry;
 - 10-bit H.264, which no Chromecast decodes;
 - H.264 or HEVC at a size the receiver takes, but in a codec it does not;
 - a codec the receiver showed no picture for earlier in the session
-  ([A receiver that shows no picture](#a-receiver-that-shows-no-picture)).
+  ([A receiver that shows no picture](#a-receiver-that-shows-no-picture));
+- a film in a container other than MP4 or Matroska: an AVI, a transport
+  stream. Its picture is converted whatever it is, and its sound is made
+  stereo AAC whatever it is. An AVI carries no presentation times, so its
+  picture cannot be copied. A transport stream's H.264 could be, but the
+  rule does not tell containers apart, so it is converted too.
 
-Nothing is converted for a film a receiver takes as it is or as a copy.
+The phone decodes a codec in its hardware (H.264, HEVC, AV1, VP9 on zond's
+phone), or with the player's own FFmpeg where its hardware has no decoder.
+That is MPEG-4 Part 2 (Xvid, DivX 4 and later), DivX 3 and MPEG-2: the
+phone's own software MPEG-4 decoder takes the Simple profile alone, and
+Xvid is Advanced Simple. A picture decoded that way must be 8-bit and no
+bigger than 1920x1080, and it is made 8-bit.
+
+Nothing else is converted for a film a receiver takes as it is or as a copy.
 The decision is `choosePicture` (`lib/features/cast/picture_plan.dart`),
 asked by `CastCompatibility.of` with what the phone can do
-(`MediaIds.pictureSupport`, one answer per app run: the hardware codecs
-only, and whether its HEVC encoder makes 10-bit pictures). Its answer is a
+(`MediaIds.pictureSupport`, one answer per app run: the hardware codecs,
+whether its HEVC encoder makes 10-bit pictures, and what the player's
+FFmpeg decodes, `softwareDecodes`). Its answer is a
 `CastRendition` whose `picture` (a `PicturePlan`) goes into
 `RenditionSpec` as `"video": {"convert": {"target": "hevcMain", "bitrate":
 8000000}}`.
@@ -506,9 +527,16 @@ frames a second, never more than 24 Mbit/s (`pictureBitrate`):
   memory, which is too slow at that size (`main10Fits`): "This phone can't
   convert a 4K HDR picture for casting fast enough, and xtremio doesn't
   convert HDR to SDR." (`CastRefusal.hdrTooLarge`).
-- **A codec this phone's hardware does not decode**, a picture that is
-  4:2:2, 4:4:4 or 12-bit, a phone with no hardware encoder, or a film not
-  played by id. Those get the refusal a copy would get, unchanged.
+- **A picture the phone would decode in software, larger than 1920x1080.**
+  The player's FFmpeg decodes on one processor core, and the picture is
+  copied through memory twice on its way to the encoder: "This phone can't
+  convert this film's picture for casting fast enough."
+  (`CastRefusal.tooSlow`; the producer's `SOFTWARE_TOO_LARGE`).
+- **A codec this phone decodes neither way**, a picture that is 4:2:2,
+  4:4:4 or 12-bit (or 10-bit, decoded in software), a phone with no
+  hardware encoder, or a film not played by id. Those get the refusal a
+  copy would get, unchanged. In a container no receiver takes, that is the
+  container's.
 
 The producer on the Rust side refuses what the app cannot see: a film with
 stretched pixels, an HDR film handed a target that is not 10-bit HEVC,
@@ -534,7 +562,29 @@ holds nothing.
 newest run converts (`converting at 3.1x`)
 ([The stats panel while casting](#the-stats-panel-while-casting)).
 
-Readers other than the MP4 and Matroska families are still refused.
+**The software decoder** (`SoftDecoder` and `SoftCodecs` in
+`rust/src/picture.rs`, over `PictureDecoder` in `rust/src/libav.rs`) is
+libavcodec on the run's own thread, with no frame threads. Each picture
+leaves it in presentation order, libavcodec reordering B-frames itself,
+and libswscale turns it into NV12. The encoders then take byte buffers of
+NV12 (`color-format` 21) with the 8-bit profile, each picture copied into
+the encoder's own layout (`copy_nv12`), and a segment ends with an empty
+buffer marked as the end, as on the 10-bit path. The producer picks it
+when the phone's hardware has no decoder for the film's codec. The bench
+(`rust/examples/picture_bench.rs --libmpv <path>`) measures it; nothing has
+been measured on a phone yet.
+
+**An AVI's times are decode times.** Its packets say when each picture is
+decoded, at the stream's constant rate, and nothing says when it is shown.
+The producer reads the first video packet ahead, and a film whose first
+picture has no presentation time is timed again as its pictures leave the
+decoder (`PictureSource::decode_times`). The software decoder gives each
+picture the decode time of the packet that freed it (libavcodec's
+`best_effort_timestamp`), which is the same for a run from any key frame.
+A picture with no time takes the one before's plus a frame. A hardware
+decoder (H.264 in an AVI) hands each picture back with its own input
+time, so the converter gives each the earliest input time not yet given
+out. That holds while the decoder drops nothing.
 
 ## The URL and the address the receiver is given
 
@@ -762,8 +812,7 @@ What a cast still gets wrong, knowingly:
   cues gets an estimated layout, whose slots are labelled late and open
   with a `styp`. A seek back to a slot not read before walks forward a slot
   per request (7 to 17 in headless Chrome; the television may not recover).
-  A transport stream would be the same, but the app refuses one before a
-  rendition is considered.
+  A transport stream is the same, and its picture is converted.
 - **Dolby Vision profile 5 in an MP4 with AAC sound shows in the wrong
   colours.** It goes to the receiver as it is: mpv reports it as HEVC, the
   shipped libmpv has no property for the profile, and no producer reads
