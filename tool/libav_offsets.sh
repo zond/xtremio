@@ -37,6 +37,7 @@ cat > "$WORK/offsets.c" <<'EOF'
 #include "libavcodec/packet.h"
 #include "libavcodec/codec_par.h"
 #include "libavutil/frame.h"
+#include "libavutil/pixfmt.h"
 #define O(T, f) const unsigned long off_##T##__##f = offsetof(T, f);
 O(AVFormatContext, pb) O(AVFormatContext, nb_streams) O(AVFormatContext, streams)
 O(AVFormatContext, start_time) O(AVFormatContext, duration)
@@ -51,6 +52,8 @@ O(AVChannelLayout, nb_channels) O(AVChannelLayout, u) O(AVChannelLayout, opaque)
 O(AVCodecParameters, format) O(AVCodecParameters, bit_rate)
 O(AVFrame, extended_data) O(AVFrame, nb_samples) O(AVFrame, format) O(AVFrame, pts)
 O(AVFrame, sample_rate) O(AVFrame, ch_layout)
+O(AVFrame, data) O(AVFrame, linesize) O(AVFrame, width) O(AVFrame, height)
+O(AVFrame, best_effort_timestamp)
 O(AVPacket, pts) O(AVPacket, dts) O(AVPacket, data) O(AVPacket, size)
 O(AVPacket, stream_index) O(AVPacket, flags) O(AVPacket, duration)
 O(AVIOContext, buffer)
@@ -65,6 +68,7 @@ const unsigned long id_h264 = AV_CODEC_ID_H264, id_hevc = AV_CODEC_ID_HEVC,
     id_truehd = AV_CODEC_ID_TRUEHD, id_dts = AV_CODEC_ID_DTS,
     id_flac = AV_CODEC_ID_FLAC, id_opus = AV_CODEC_ID_OPUS, id_mp3 = AV_CODEC_ID_MP3,
     id_mp2 = AV_CODEC_ID_MP2, id_vorbis = AV_CODEC_ID_VORBIS,
+    id_msmpeg4v3 = AV_CODEC_ID_MSMPEG4V3, id_nv12 = AV_PIX_FMT_NV12,
     id_dovi_conf = AV_PKT_DATA_DOVI_CONF;
 EOF
 

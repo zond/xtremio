@@ -86,6 +86,12 @@ const AVMEDIA_TYPE_AUDIO: c_int = 1;
 /// `AV_CODEC_ID_H264`, `AV_CODEC_ID_HEVC`, `AV_CODEC_ID_VP9`,
 /// `AV_CODEC_ID_AV1`, `AV_CODEC_ID_AAC` (n6.0).
 pub const AV_CODEC_ID_H264: c_int = 27;
+/// `AV_CODEC_ID_MPEG2VIDEO`, `AV_CODEC_ID_MPEG4` (MPEG-4 Part 2: Xvid,
+/// DivX 4 and later) and `AV_CODEC_ID_MSMPEG4V3` (DivX 3), n6.0
+/// (`tool/libav_offsets.sh` prints them).
+pub const AV_CODEC_ID_MPEG2VIDEO: c_int = 2;
+pub const AV_CODEC_ID_MPEG4: c_int = 12;
+pub const AV_CODEC_ID_MSMPEG4V3: c_int = 16;
 pub const AV_CODEC_ID_HEVC: c_int = 173;
 pub const AV_CODEC_ID_VP9: c_int = 167;
 pub const AV_CODEC_ID_AV1: c_int = 226;
@@ -100,8 +106,9 @@ pub fn codec_name(id: c_int) -> Option<&'static str> {
         AV_CODEC_ID_AV1 => "AV1",
         AV_CODEC_ID_VP9 => "VP9",
         139 => "VP8",
-        12 => "MPEG-4 Part 2",
-        2 => "MPEG-2",
+        AV_CODEC_ID_MPEG4 => "MPEG-4 Part 2",
+        AV_CODEC_ID_MSMPEG4V3 => "DivX 3",
+        AV_CODEC_ID_MPEG2VIDEO => "MPEG-2",
         70 => "VC-1",
         AV_CODEC_ID_AAC => "AAC",
         86019 => "Dolby Digital (AC3)",
@@ -280,7 +287,7 @@ struct AVPacket {
 }
 
 /// `AVFrame`, n6.0, up to `ch_layout`: the sound the decoder hands out and
-/// the encoder takes. Every field through the deprecated ones 6.x keeps
+/// the encoder takes, and a decoded picture ([`PictureDecoder`]). Every field through the deprecated ones 6.x keeps
 /// (`coded_picture_number`, `reordered_opaque`, `channel_layout`,
 /// `pkt_duration`, `channels`), since they come before `ch_layout`.
 #[repr(C)]
@@ -402,6 +409,11 @@ mod layout {
     at!(AVChannelLayout.mask, 8, 8);
     at!(AVChannelLayout.opaque, 16, 16);
     const _: () = assert!(std::mem::size_of::<AVChannelLayout>() == 24);
+    at!(AVFrame.data, 0, 0);
+    at!(AVFrame.linesize, 64, 32);
+    at!(AVFrame.width, 104, 68);
+    at!(AVFrame.height, 108, 72);
+    at!(AVFrame.best_effort_timestamp, 344, 256);
     at!(AVFrame.extended_data, 96, 64);
     at!(AVFrame.nb_samples, 112, 76);
     at!(AVFrame.format, 116, 80);
@@ -467,7 +479,60 @@ pub struct Libav {
     /// What converting sound needs (libavcodec's codecs, libswresample),
     /// looked up apart: a libmpv without them still repackages.
     codecs: Result<Codecs, String>,
+    /// What turns a decoded picture into the encoder's layout
+    /// (libswscale), looked up apart for the same reason.
+    scaler: Result<Scaler, String>,
     _library: libloading::Library,
+}
+
+/// libswscale's functions, resolved from the same library as [`Libav`]'s.
+/// The Android libmpv exports them beside the rest of FFmpeg; a desktop's
+/// libmpv links the system's `libswscale`, where the lookup finds them.
+struct Scaler {
+    #[allow(clippy::type_complexity)]
+    sws_get_context: unsafe extern "C" fn(
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+        *const f64,
+    ) -> *mut c_void,
+    sws_scale: unsafe extern "C" fn(
+        *mut c_void,
+        *const *const u8,
+        *const c_int,
+        c_int,
+        c_int,
+        *const *mut u8,
+        *const c_int,
+    ) -> c_int,
+    sws_free_context: unsafe extern "C" fn(*mut c_void),
+}
+
+impl Scaler {
+    fn load(library: &libloading::Library) -> Result<Self, String> {
+        // SAFETY: each symbol is the libswscale function of that name, read
+        // as its 6.0 C signature (`libswscale/swscale.h`).
+        unsafe {
+            macro_rules! symbol {
+                ($name:literal) => {
+                    *library
+                        .get(concat!($name, "\0").as_bytes())
+                        .map_err(|error| format!("{}: {error}", $name))?
+                };
+            }
+            Ok(Self {
+                sws_get_context: symbol!("sws_getContext"),
+                sws_scale: symbol!("sws_scale"),
+                sws_free_context: symbol!("sws_freeContext"),
+            })
+        }
+    }
 }
 
 /// The functions that decode, resample and encode sound, resolved from the
@@ -568,6 +633,7 @@ impl Libav {
                 av_malloc: symbol!("av_malloc"),
                 av_free: symbol!("av_free"),
                 codecs: Codecs::load(&library),
+                scaler: Scaler::load(&library),
                 _library: library,
             })
         }
@@ -1558,6 +1624,286 @@ impl Drop for DecodeRun {
         // SAFETY: each pointer is null or this run's own, freed once.
         unsafe {
             (self.codecs.swr_free)(&mut self.swr);
+            if !self.frame.is_null() {
+                (self.codecs.av_frame_free)(&mut self.frame);
+            }
+            if !self.packet.is_null() {
+                (self.libav.av_packet_free)(&mut self.packet);
+            }
+            if !self.ctx.is_null() {
+                (self.codecs.avcodec_free_context)(&mut self.ctx);
+            }
+        }
+    }
+}
+
+// --- Pictures ---------------------------------------------------------------------
+
+/// `AV_PIX_FMT_NV12`: the luma plane, then one plane of interleaved U and V
+/// samples at half the height. What an encoder's byte buffers take in
+/// 8 bits (`COLOR_FormatYUV420SemiPlanar`).
+const AV_PIX_FMT_NV12: c_int = 23;
+/// `SWS_BILINEAR`. The picture keeps its size, so the filter only matters
+/// to a source whose chroma is not 4:2:0; 4:2:0 to NV12 is a copy.
+const SWS_BILINEAR: c_int = 2;
+
+/// Where an NV12 picture's samples are in a buffer: `stride` bytes from one
+/// row to the next, the luma rows from the start, the chroma rows from
+/// `stride * height`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Nv12Layout {
+    pub width: u32,
+    pub height: u32,
+    pub stride: usize,
+}
+
+impl Nv12Layout {
+    /// A `width`×`height` picture whose rows start every 64 bytes, which
+    /// libswscale writes fastest.
+    pub fn for_size(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            stride: (width as usize).next_multiple_of(64),
+        }
+    }
+
+    /// The bytes a whole picture takes, chroma included.
+    pub fn bytes(&self) -> usize {
+        self.stride * (self.height as usize + (self.height as usize).div_ceil(2))
+    }
+}
+
+/// One picture [`PictureDecoder::decode`] freed: libavcodec's best guess at
+/// when it is shown (`best_effort_timestamp`, in the units the packets'
+/// times were given in), `None` when it has none, and its samples in the
+/// decoder's [`Nv12Layout`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedPicture {
+    pub time: Option<i64>,
+    pub nv12: Vec<u8>,
+}
+
+/// Whether this library decodes pictures of codec `codec` (an n6.0
+/// `AVCodecID`) into what [`PictureDecoder`] hands out: it has the decoder
+/// and libswscale.
+pub fn decodes_picture(libav: &Libav, codec: c_int) -> bool {
+    let Ok(codecs) = libav.codecs() else {
+        return false;
+    };
+    // SAFETY: a lookup that allocates nothing.
+    libav.scaler.is_ok() && !unsafe { (codecs.avcodec_find_decoder)(codec) }.is_null()
+}
+
+/// **A software decoder of one stream's picture**: libavcodec over the
+/// stream's own codec parameters (the MPEG-4 Part 2 VOL header in the
+/// extradata, for instance), every picture converted to NV12 at
+/// [`Nv12Layout`] by libswscale. Pictures come out in presentation order:
+/// libavcodec reorders B-frames itself. It decodes on the calling thread
+/// alone (no frame threads), so a picture's best-effort time is the decode
+/// time of the packet that freed it when the packets carry only decode
+/// times, the same whichever run reads them.
+pub struct PictureDecoder {
+    libav: &'static Libav,
+    codecs: &'static Codecs,
+    scaler: &'static Scaler,
+    ctx: *mut c_void,
+    frame: *mut AVFrame,
+    packet: *mut AVPacket,
+    sws: *mut c_void,
+    /// What `sws` was made for: the source's width, height and format.
+    sws_for: Option<(c_int, c_int, c_int)>,
+    layout: Nv12Layout,
+}
+
+// SAFETY: every FFmpeg object here is this value's alone, made, used and
+// freed by whichever one thread holds it.
+unsafe impl Send for PictureDecoder {}
+
+impl PictureDecoder {
+    /// A started decoder for `par`'s codec, its pictures made `width` by
+    /// `height`, or `None` when this library has no such decoder.
+    pub fn open(par: &CodecParameters, width: u32, height: u32) -> Result<Option<Self>, String> {
+        let libav = par.libav;
+        let codecs = libav.codecs()?;
+        let scaler = libav.scaler.as_ref().map_err(Clone::clone)?;
+        // SAFETY: `par` is live; the lookup allocates nothing.
+        let decoder = unsafe { (codecs.avcodec_find_decoder)((*par.par).codec_id) };
+        if decoder.is_null() {
+            return Ok(None);
+        }
+        let mut made = Self {
+            libav,
+            codecs,
+            scaler,
+            ctx: std::ptr::null_mut(),
+            frame: std::ptr::null_mut(),
+            packet: std::ptr::null_mut(),
+            sws: std::ptr::null_mut(),
+            sws_for: None,
+            layout: Nv12Layout::for_size(width, height),
+        };
+        // SAFETY: FFmpeg's decoding sequence on objects `made` owns and
+        // frees in its `Drop`, whatever returns early.
+        unsafe {
+            made.ctx = (codecs.avcodec_alloc_context3)(decoder);
+            made.frame = (codecs.av_frame_alloc)();
+            made.packet = (libav.av_packet_alloc)();
+            if made.ctx.is_null() || made.frame.is_null() || made.packet.is_null() {
+                return Err("no memory for a picture decoder".to_owned());
+            }
+            if (codecs.avcodec_parameters_to_context)(made.ctx, par.par) < 0 {
+                return Err("the picture decoder could not be configured".to_owned());
+            }
+            let opened = (codecs.avcodec_open2)(made.ctx, decoder, std::ptr::null_mut());
+            if opened < 0 {
+                return Err(format!(
+                    "the picture decoder could not be opened ({opened})"
+                ));
+            }
+        }
+        Ok(Some(made))
+    }
+
+    /// Where each picture's samples are.
+    pub fn layout(&self) -> Nv12Layout {
+        self.layout
+    }
+
+    /// Sends one packet, its bytes with its presentation and decode times
+    /// ([`NOPTS`] for one it lacks), or the end (`None`), and answers every
+    /// picture that frees. A packet the decoder refuses (a damaged one)
+    /// frees nothing, and an empty one is not sent: it holds no picture,
+    /// and libavcodec would read it as the end.
+    pub fn decode(
+        &mut self,
+        packet: Option<(&[u8], i64, i64)>,
+    ) -> Result<Vec<DecodedPicture>, String> {
+        let mut out = Vec::new();
+        // SAFETY: the context is open and the frame and packet allocated
+        // (`open`); a packet's buffer holds `size` bytes once
+        // `av_new_packet` succeeds.
+        unsafe {
+            let sent = match packet {
+                Some(([], _, _)) => return Ok(out),
+                Some((data, pts, dts)) => {
+                    let size = c_int::try_from(data.len())
+                        .map_err(|_| "a picture too large to decode".to_owned())?;
+                    if (self.codecs.av_new_packet)(self.packet, size) < 0 {
+                        return Err("no memory for a packet".to_owned());
+                    }
+                    let p = &mut *self.packet;
+                    std::ptr::copy_nonoverlapping(data.as_ptr(), p.data, data.len());
+                    p.pts = pts;
+                    p.dts = dts;
+                    let mut sent = (self.codecs.avcodec_send_packet)(self.ctx, self.packet);
+                    if sent == AVERROR_EAGAIN {
+                        // Full: what it holds comes out first.
+                        self.receive(&mut out)?;
+                        sent = (self.codecs.avcodec_send_packet)(self.ctx, self.packet);
+                    }
+                    (self.libav.av_packet_unref)(self.packet);
+                    sent
+                }
+                None => (self.codecs.avcodec_send_packet)(self.ctx, std::ptr::null()),
+            };
+            if sent < 0 && sent != AVERROR_EOF {
+                tracing::debug!(code = sent, "the picture decoder refused a packet");
+            }
+            self.receive(&mut out)?;
+        }
+        Ok(out)
+    }
+
+    /// Every picture the decoder has ready, converted into `out`.
+    ///
+    /// # Safety
+    ///
+    /// The context is open, the frame allocated.
+    unsafe fn receive(&mut self, out: &mut Vec<DecodedPicture>) -> Result<(), String> {
+        loop {
+            // SAFETY: the caller's contract.
+            let received = unsafe { (self.codecs.avcodec_receive_frame)(self.ctx, self.frame) };
+            if received < 0 {
+                // EAGAIN (wants the next packet), the end, or an error in
+                // the packet: nothing more from it.
+                return Ok(());
+            }
+            // SAFETY: `frame` holds a decoded picture until unreferenced.
+            let converted = unsafe { self.convert() };
+            // SAFETY: as above.
+            unsafe { (self.codecs.av_frame_unref)(self.frame) };
+            out.push(converted?);
+        }
+    }
+
+    /// The decoded picture in `frame`, as NV12 in [`Self::layout`].
+    ///
+    /// # Safety
+    ///
+    /// `frame` holds a decoded picture.
+    unsafe fn convert(&mut self) -> Result<DecodedPicture, String> {
+        // SAFETY: the caller's contract. The scaler is made for this
+        // frame's size and format before it reads the frame's planes, and
+        // writes `layout.height` rows of `layout.stride` bytes into each of
+        // the two planes of a buffer of `layout.bytes()`.
+        unsafe {
+            let frame = &*self.frame;
+            let wanted = (frame.width, frame.height, frame.format);
+            if self.sws_for != Some(wanted) {
+                (self.scaler.sws_free_context)(self.sws);
+                self.sws = (self.scaler.sws_get_context)(
+                    frame.width,
+                    frame.height,
+                    frame.format,
+                    self.layout.width as c_int,
+                    self.layout.height as c_int,
+                    AV_PIX_FMT_NV12,
+                    SWS_BILINEAR,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                );
+                if self.sws.is_null() {
+                    self.sws_for = None;
+                    return Err(format!(
+                        "no converter from a {}x{} picture of format {}",
+                        frame.width, frame.height, frame.format
+                    ));
+                }
+                self.sws_for = Some(wanted);
+            }
+            let layout = self.layout;
+            let mut nv12 = vec![0u8; layout.bytes()];
+            let chroma = layout.stride * layout.height as usize;
+            let planes = [nv12.as_mut_ptr(), nv12.as_mut_ptr().add(chroma)];
+            let stride = c_int::try_from(layout.stride).map_err(|error| error.to_string())?;
+            let strides = [stride, stride];
+            let rows = (self.scaler.sws_scale)(
+                self.sws,
+                frame.data.as_ptr() as *const *const u8,
+                frame.linesize.as_ptr(),
+                0,
+                frame.height,
+                planes.as_ptr(),
+                strides.as_ptr(),
+            );
+            if rows <= 0 {
+                return Err(format!("the picture could not be converted ({rows})"));
+            }
+            Ok(DecodedPicture {
+                time: (frame.best_effort_timestamp != NOPTS).then_some(frame.best_effort_timestamp),
+                nv12,
+            })
+        }
+    }
+}
+
+impl Drop for PictureDecoder {
+    fn drop(&mut self) {
+        // SAFETY: each pointer is null or this decoder's own, freed once.
+        unsafe {
+            (self.scaler.sws_free_context)(self.sws);
             if !self.frame.is_null() {
                 (self.codecs.av_frame_free)(&mut self.frame);
             }
