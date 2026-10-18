@@ -83,9 +83,12 @@ const AV_DISPOSITION_ATTACHED_PIC: c_int = 0x0400;
 /// `AVMEDIA_TYPE_VIDEO`, `AVMEDIA_TYPE_AUDIO`.
 const AVMEDIA_TYPE_VIDEO: c_int = 0;
 const AVMEDIA_TYPE_AUDIO: c_int = 1;
-/// `AV_CODEC_ID_H264`, `AV_CODEC_ID_HEVC`, `AV_CODEC_ID_AAC` (n6.0).
+/// `AV_CODEC_ID_H264`, `AV_CODEC_ID_HEVC`, `AV_CODEC_ID_VP9`,
+/// `AV_CODEC_ID_AV1`, `AV_CODEC_ID_AAC` (n6.0).
 pub const AV_CODEC_ID_H264: c_int = 27;
 pub const AV_CODEC_ID_HEVC: c_int = 173;
+pub const AV_CODEC_ID_VP9: c_int = 167;
+pub const AV_CODEC_ID_AV1: c_int = 226;
 pub const AV_CODEC_ID_AAC: c_int = 0x15002;
 
 /// What a sentence calls the codec `id` (an n6.0 `AVCodecID`), for the
@@ -94,8 +97,8 @@ pub fn codec_name(id: c_int) -> Option<&'static str> {
     Some(match id {
         AV_CODEC_ID_H264 => "H.264",
         AV_CODEC_ID_HEVC => "HEVC",
-        226 => "AV1",
-        167 => "VP9",
+        AV_CODEC_ID_AV1 => "AV1",
+        AV_CODEC_ID_VP9 => "VP9",
         139 => "VP8",
         12 => "MPEG-4 Part 2",
         2 => "MPEG-2",
@@ -799,6 +802,37 @@ pub struct StreamInfo {
     /// The Dolby Vision configuration the container declares for this
     /// stream, if it declares one.
     pub dolby_vision: Option<DolbyVision>,
+    /// The picture's average frame rate (`AVStream.avg_frame_rate`), when
+    /// the container says.
+    pub frame_rate: Option<Rational>,
+    /// The picture's colour tags as the container has them.
+    pub colour: ColourTags,
+    /// The shape of the picture's pixels (`AVCodecParameters`); `0/1` when
+    /// the container does not say, which means square.
+    pub sample_aspect_ratio: Rational,
+}
+
+/// A picture's colour tags, as FFmpeg numbers them (`AVColorPrimaries`,
+/// `AVColorTransferCharacteristic`, `AVColorSpace`, `AVColorRange`). 0 is
+/// "reserved", and 2 "unspecified", for the first three; 0 is unspecified
+/// for the range.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ColourTags {
+    pub primaries: c_int,
+    pub transfer: c_int,
+    pub matrix: c_int,
+    pub range: c_int,
+}
+
+impl ColourTags {
+    /// `AVCOL_TRC_SMPTE2084` (PQ, HDR10) and `AVCOL_TRC_ARIB_STD_B67` (HLG).
+    pub const PQ: c_int = 16;
+    pub const HLG: c_int = 18;
+
+    /// Whether the transfer is an HDR one: PQ or HLG.
+    pub fn hdr(&self) -> bool {
+        matches!(self.transfer, Self::PQ | Self::HLG)
+    }
 }
 
 /// A Dolby Vision configuration record (`AVDOVIDecoderConfigurationRecord`,
@@ -1159,6 +1193,16 @@ impl<S: Source> Demuxer<S> {
                         channels: positive(par.ch_layout.nb_channels),
                         time_base: stream.time_base,
                         dolby_vision,
+                        frame_rate: (stream.avg_frame_rate.num > 0
+                            && stream.avg_frame_rate.den > 0)
+                            .then_some(stream.avg_frame_rate),
+                        colour: ColourTags {
+                            primaries: par.color_primaries,
+                            transfer: par.color_trc,
+                            matrix: par.color_space,
+                            range: par.color_range,
+                        },
+                        sample_aspect_ratio: par.sample_aspect_ratio,
                     })
                 })
                 .collect()

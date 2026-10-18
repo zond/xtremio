@@ -113,6 +113,34 @@ pub fn media_renditions_available() -> anyhow::Result<bool> {
     guarded_ok(crate::rendition::available)
 }
 
+/// What this device's hardware can convert a film's picture with, by the
+/// names the cast decision uses ("H.264", "HEVC", "AV1", "VP9").
+pub struct PictureSupport {
+    /// The codecs a source's picture can be decoded from.
+    pub decodes: Vec<String>,
+    /// The codecs a converted picture can be made as: H.264 and HEVC at
+    /// most.
+    pub encodes: Vec<String>,
+    /// HEVC Main 10 can be made, with an HDR film's colours kept.
+    pub ten_bit: bool,
+}
+
+/// What this device can convert a picture with. Only hardware codecs
+/// count. Empty everywhere when it cannot convert at all: on a desktop, or
+/// a phone older than Android 8. The first call makes and deletes a few
+/// codecs, so it runs on a worker; later calls answer the kept result.
+pub fn media_picture_support() -> anyhow::Result<PictureSupport> {
+    guarded_ok(|| {
+        let offered = crate::picture::support().offered();
+        let names = |codecs: &[&str]| codecs.iter().map(|name| (*name).to_owned()).collect();
+        PictureSupport {
+            decodes: names(&offered.decodes),
+            encodes: names(&offered.encodes),
+            ten_bit: offered.ten_bit,
+        }
+    })
+}
+
 /// Ends the publication `token`: nothing more is served under it, and a
 /// body in flight is cut. Whether it was published.
 pub fn media_unpublish(token: String) -> anyhow::Result<bool> {
@@ -255,4 +283,16 @@ pub fn mpv_stream_register(ctx: i64, libmpv_path: String) -> anyhow::Result<bool
         crate::mpv_stream::register(ctx, &libmpv_path)
             .map(|registered| registered == crate::mpv_stream::Registration::Registered)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A desktop is told it converts nothing.
+    #[test]
+    fn a_desktop_is_told_it_converts_nothing() {
+        let answer = media_picture_support().unwrap();
+        assert!(answer.decodes.is_empty() && answer.encodes.is_empty() && !answer.ten_bit);
+    }
 }

@@ -1,15 +1,18 @@
-//! **The rendition producer: the picture repackaged, the sound copied or
-//! converted** (stream-server `docs/design/renditions.md`, steps F2 and F3).
+//! **The rendition producer: the picture repackaged or converted, the sound
+//! copied or converted** (stream-server `docs/design/renditions.md`, steps
+//! F2 to F4).
 //!
 //! The server owns a rendition's route, its stream, cut rule, fMP4 muxer and
 //! ring. What it asks of the embedder is a [`Producer`]: given a reader over
 //! the media id, a plan and a time, hand encoded samples to a
-//! [`SampleSink`]. This is that producer for the plans with the picture
-//! copied. `Copy`/`Copy` is an H.264 or HEVC film with AAC sound in a
-//! container the receiver will not take, its samples moved into the server's
-//! fMP4 as they are. `Copy`/`AacStereo` is the same with the sound decoded,
-//! mixed down and encoded as stereo AAC ([`crate::sound`]), the same bytes
-//! whichever run makes them.
+//! [`SampleSink`]. This is that producer. `Copy`/`Copy` is an H.264 or HEVC
+//! film with AAC sound in a container the receiver will not take, its
+//! samples moved into the server's fMP4 as they are. `Copy`/`AacStereo` is
+//! the same with the sound decoded, mixed down and encoded as stereo AAC
+//! ([`crate::sound`]), the same bytes whichever run makes them.
+//! `Convert` decodes the picture (H.264, HEVC, AV1 or VP9) and encodes it
+//! again with Android's MediaCodec ([`crate::picture`]), one encoder per
+//! segment. The sound waits until the encoder has described the picture.
 //!
 //! # A run
 //!
@@ -99,11 +102,13 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use stream_server::{
-    AudioPlan, Job, Producer, ProducerRefusal, RenditionSpec, Sample, SampleSink, Stopped,
+    AudioPlan, Converted, ConvertedPicture, Job, PictureConverter, PictureTarget, Producer,
+    ProducerRefusal, RenditionSpec, Sample, SampleSink, SegmentPlan, SourcePicture, Stopped,
     TrackFormat, TrackKind, VideoPlan,
 };
 
 use crate::libav::{self, Demuxer, DolbyVision, Kind, Libav, Next, StreamInfo};
+use crate::picture::{self, Colour, DeviceSupport, EncoderConfig, PictureSource};
 use crate::sound::{self, AacEncoder, SoundConverter};
 use std::collections::{HashMap, VecDeque};
 use stream_server::IndexEntry;
@@ -112,10 +117,18 @@ use stream_server::IndexEntry;
 pub const UNAVAILABLE: &str =
     "This device cannot repackage films for the television: the player's FFmpeg is not one \
      this app can use.";
-/// What a viewer is told for a plan this producer does not build.
-pub const NOT_BUILT: &str =
-    "Converting this film's picture for the television is not built yet; only repackaging \
-     it and converting its sound are.";
+/// What a viewer is told when this device cannot convert the picture as
+/// the plan asks.
+pub const NO_PICTURE_CONVERTER: &str =
+    "This phone cannot convert this film's picture for the television.";
+/// The picture's conversion failed partway.
+pub const PICTURE_FAILED: &str = "Converting this film's picture for the television failed.";
+/// A picture whose pixels are not square, which a conversion would show
+/// squashed.
+pub const STRETCHED_PIXELS: &str =
+    "This film's picture has stretched pixels, which xtremio can't convert for casting yet.";
+/// An HDR picture asked to be converted to an 8-bit one.
+pub const HDR_TO_SDR: &str = "This film's picture is HDR, and xtremio doesn't convert HDR to SDR.";
 /// What a viewer is told when this device has nothing to encode AAC with.
 pub const NO_AAC_ENCODER: &str =
     "This device cannot convert the film's sound for the television: it has no AAC encoder \
@@ -202,9 +215,12 @@ pub fn available() -> bool {
 }
 
 /// **The producer the app installs** (`ServerHandle::install_producer`, at
-/// every server start): repackages `Copy`/`Copy`, refuses the rest.
+/// every server start): the picture copied or converted, the sound copied
+/// or converted.
 pub struct Repackager {
     libav: fn() -> Result<&'static Libav, String>,
+    /// What this device can convert a picture with.
+    support: fn() -> DeviceSupport,
 }
 
 impl Repackager {
@@ -212,21 +228,31 @@ impl Repackager {
     pub fn registered() -> Arc<Self> {
         Arc::new(Self {
             libav: Libav::registered,
+            support: picture::support,
         })
     }
 }
 
-/// Why `spec` is not one this producer makes, if it is not.
-fn refusal_for(spec: &RenditionSpec) -> Option<&'static str> {
-    match (&spec.video, &spec.audio) {
-        (VideoPlan::Copy, AudioPlan::Copy | AudioPlan::AacStereo { .. }) => None,
-        _ => Some(NOT_BUILT),
+/// Why `spec` is not one this producer makes on this device, if it is
+/// not. A converted picture needs the surface path and a hardware encoder
+/// for its codec, and Main 10 needs the buffer path too.
+fn refusal_for(spec: &RenditionSpec, support: fn() -> DeviceSupport) -> Option<&'static str> {
+    match &spec.video {
+        VideoPlan::Copy => None,
+        VideoPlan::Convert { target, .. } => {
+            let support = support();
+            let codec = if target.hevc() { "HEVC" } else { "H.264" };
+            let converts = support.surface
+                && support.encodes.contains(&codec)
+                && (!target.ten_bit() || support.ten_bit);
+            (!converts).then_some(NO_PICTURE_CONVERTER)
+        }
     }
 }
 
 impl Producer for Repackager {
     fn start(&self, job: Job) -> Result<(), ProducerRefusal> {
-        if let Some(sentence) = refusal_for(&job.spec) {
+        if let Some(sentence) = refusal_for(&job.spec, self.support) {
             return Err(ProducerRefusal(sentence.to_owned()));
         }
         let libav = (self.libav)().map_err(|error| {
@@ -255,6 +281,7 @@ fn run(libav: &'static Libav, job: Job) {
         spec,
         from,
         wants_index,
+        segments,
         sink,
     } = job;
     tracing::info!(from_ms = from.as_millis() as u64, "rendition run reading");
@@ -266,7 +293,7 @@ fn run(libav: &'static Libav, job: Job) {
             return;
         }
     };
-    repackage(&mut demuxer, &spec, from, wants_index, sink);
+    repackage(&mut demuxer, &spec, from, wants_index, &segments, sink);
 }
 
 // --- The run, over what it reads and where it writes -------------------------------
@@ -290,6 +317,13 @@ pub trait Packets {
         bitrate: u32,
         from_us: i64,
     ) -> Result<SoundConverter, String>;
+    /// What converts the picture `source` into what `config` says, or the
+    /// sentence for why this device cannot.
+    fn picture_converter(
+        &self,
+        source: PictureSource,
+        config: EncoderConfig,
+    ) -> Result<Box<dyn PictureConverter>, String>;
 }
 
 impl<S: libav::Source> Packets for Demuxer<S> {
@@ -362,6 +396,18 @@ impl<S: libav::Source> Packets for Demuxer<S> {
             self.start_us(),
             from_us,
         ))
+    }
+
+    fn picture_converter(
+        &self,
+        source: PictureSource,
+        config: EncoderConfig,
+    ) -> Result<Box<dyn PictureConverter>, String> {
+        let codecs = picture::NdkCodecs::new().map_err(|error| {
+            tracing::warn!(%error, "no MediaCodec to convert a rendition's picture with");
+            NO_PICTURE_CONVERTER.to_owned()
+        })?;
+        Ok(Box::new(picture::Converter::new(codecs, source, config)))
     }
 }
 
@@ -444,14 +490,25 @@ impl Sink for SampleSink {
 /// **A run**: formats, the seek, the source's index when `wants_index`,
 /// then every packet of the two chosen streams into `sink`, until the sink
 /// stops it, the film ends or the source fails.
+///
+/// A converted picture goes through a [`ConvertedPicture`] over the
+/// device's converter, on `segments`. Its format is the encoder's, known
+/// only once the first encoder has started. Until then the sound is held,
+/// since the server takes the formats as they stand at the first sample.
 pub fn repackage<P: Packets, K: Sink>(
     packets: &mut P,
     spec: &RenditionSpec,
     from: Duration,
     wants_index: bool,
+    segments: &SegmentPlan,
     sink: K,
 ) {
-    let mut chosen = match Chosen::of(packets.streams(), spec.audio_track, &spec.audio) {
+    let mut chosen = match Chosen::of(
+        packets.streams(),
+        spec.audio_track,
+        &spec.video,
+        &spec.audio,
+    ) {
         Ok(chosen) => chosen,
         Err(sentence) => {
             sink.fail(sentence);
@@ -501,12 +558,27 @@ pub fn repackage<P: Packets, K: Sink>(
             }
         }
     };
+    // The same for the picture.
+    let picture_converter = match &chosen.picture {
+        None => None,
+        Some(picture) => {
+            match packets.picture_converter(picture.source.clone(), picture.config.clone()) {
+                Ok(converter) => Some(converter),
+                Err(sentence) => {
+                    sink.fail(sentence);
+                    return;
+                }
+            }
+        }
+    };
+    if let Some(format) = &chosen.video_format {
+        if sink.format(TrackKind::Video, format.clone()).is_err() {
+            return;
+        }
+    }
     if sink
-        .format(TrackKind::Video, chosen.video_format.clone())
+        .format(TrackKind::Audio, chosen.audio_format.clone())
         .is_err()
-        || sink
-            .format(TrackKind::Audio, chosen.audio_format.clone())
-            .is_err()
     {
         return;
     }
@@ -526,9 +598,29 @@ pub fn repackage<P: Packets, K: Sink>(
         // not the run.
         tracing::warn!(%error, "a rendition's source could not be sought to its start");
     }
-    if wants_index && sink.index(packets.index(&chosen.video)).is_err() {
-        return;
-    }
+    let index = if wants_index {
+        let index = packets.index(&chosen.video);
+        if sink.index(index.clone()).is_err() {
+            return;
+        }
+        Some(index)
+    } else {
+        None
+    };
+    // The converted picture's segments: the frozen layout's, or cut from
+    // exactly the index just reported, as the layout is.
+    let mut picture = match (picture_converter, &chosen.picture) {
+        (Some(converter), Some(plan)) => Some(ConvertedPicture::new(
+            converter,
+            segments.segments(index.as_deref()),
+            plan.config.target,
+        )),
+        _ => None,
+    };
+    let mut outlet = Outlet {
+        held: picture.as_ref().map(|_| VecDeque::new()),
+        sink,
+    };
     let start = packets.start_us();
     let mut video_clock = Clock::default();
     let mut audio_clock = Clock::default();
@@ -537,28 +629,47 @@ pub fn repackage<P: Packets, K: Sink>(
         let packet = match next {
             Next::Packet(packet) => packet,
             Next::End => {
+                if let Some(picture) = &mut picture {
+                    match picture.finish() {
+                        Ok(converted) => {
+                            if outlet.converted(converted).is_err() {
+                                return;
+                            }
+                        }
+                        Err(detail) => {
+                            tracing::warn!(%detail, "a rendition's picture could not be converted");
+                            outlet.sink.fail(PICTURE_FAILED.to_owned());
+                            return;
+                        }
+                    }
+                }
                 if let Some(converter) = &mut converter {
                     match converter.finish() {
                         Ok(samples) => {
                             for sample in samples {
-                                if sink.sample(sample).is_err() {
+                                if outlet.sample(sample).is_err() {
                                     return;
                                 }
                             }
                         }
                         Err(error) => {
                             tracing::warn!(%error, "a rendition's sound could not be converted");
-                            sink.fail(SOUND_FAILED.to_owned());
+                            outlet.sink.fail(SOUND_FAILED.to_owned());
                             return;
                         }
                     }
                 }
-                sink.end();
+                if outlet.held.is_some() {
+                    tracing::warn!("a rendition's converted picture never described itself");
+                    outlet.sink.fail(PICTURE_FAILED.to_owned());
+                    return;
+                }
+                outlet.sink.end();
                 return;
             }
             Next::Failed(error) => {
                 tracing::warn!(%error, "a rendition's source stopped");
-                sink.fail(BROKEN.to_owned());
+                outlet.sink.fail(BROKEN.to_owned());
                 return;
             }
         };
@@ -576,14 +687,34 @@ pub fn repackage<P: Packets, K: Sink>(
             match converter.push(pts_us - start, packet) {
                 Ok(samples) => {
                     for sample in samples {
-                        if sink.sample(sample).is_err() {
+                        if outlet.sample(sample).is_err() {
                             return;
                         }
                     }
                 }
                 Err(error) => {
                     tracing::warn!(%error, "a rendition's sound could not be converted");
-                    sink.fail(SOUND_FAILED.to_owned());
+                    outlet.sink.fail(SOUND_FAILED.to_owned());
+                    return;
+                }
+            }
+            continue;
+        }
+        if let (TrackKind::Video, Some(picture)) = (track, &mut picture) {
+            let source = SourcePicture {
+                pts_us: pts_us - start,
+                key: packet.key,
+                data: chosen.config.sample(packet.data),
+            };
+            match picture.push(source) {
+                Ok(converted) => {
+                    if outlet.converted(converted).is_err() {
+                        return;
+                    }
+                }
+                Err(detail) => {
+                    tracing::warn!(%detail, "a rendition's picture could not be converted");
+                    outlet.sink.fail(PICTURE_FAILED.to_owned());
                     return;
                 }
             }
@@ -600,9 +731,47 @@ pub fn repackage<P: Packets, K: Sink>(
             key,
             data,
         };
-        if sink.sample(sample).is_err() {
+        if outlet.sample(sample).is_err() {
             return;
         }
+    }
+}
+
+/// Where a run's samples go: to the sink, or held while a converted
+/// picture has not described itself yet.
+struct Outlet<K: Sink> {
+    sink: K,
+    /// The samples waiting for the converted picture's format; `None` once
+    /// it has gone, or when the picture is copied.
+    held: Option<VecDeque<Sample>>,
+}
+
+impl<K: Sink> Outlet<K> {
+    fn sample(&mut self, sample: Sample) -> Result<(), Stopped> {
+        match &mut self.held {
+            Some(held) => {
+                held.push_back(sample);
+                Ok(())
+            }
+            None => self.sink.sample(sample),
+        }
+    }
+
+    /// What the converted picture made, in order. Its format goes to the
+    /// sink, and then whatever was held.
+    fn converted(&mut self, converted: Vec<Converted>) -> Result<(), Stopped> {
+        for item in converted {
+            match item {
+                Converted::Format(format) => {
+                    self.sink.format(TrackKind::Video, format)?;
+                    for sample in self.held.take().into_iter().flatten() {
+                        self.sink.sample(sample)?;
+                    }
+                }
+                Converted::Sample(sample) => self.sample(sample)?,
+            }
+        }
+        Ok(())
     }
 }
 
@@ -630,43 +799,81 @@ impl Clock {
     }
 }
 
-/// The two streams a run copies, with the formats the server is told.
+/// The two streams a run reads, with the formats the server is told.
 struct Chosen {
     video: StreamInfo,
     audio: StreamInfo,
     config: VideoConfig,
-    video_format: TrackFormat,
+    /// The copied picture's format. `None` when the picture is converted,
+    /// since the encoder decides that format.
+    video_format: Option<TrackFormat>,
+    /// The converted picture's decoder and encoders, when it is converted.
+    picture: Option<PicturePlan>,
     audio_format: TrackFormat,
     /// The audio comes in ADTS frames, and its configuration is the first
     /// frame's header ([`adts_config`]).
     adts: bool,
 }
 
+/// What a converted picture's decoder is told, and what its encoders are
+/// configured with.
+struct PicturePlan {
+    source: PictureSource,
+    config: EncoderConfig,
+}
+
 impl Chosen {
     /// The film's video (the first video stream that is not a cover picture)
     /// and the `audio_track`-th audio stream, or the sentence for why not.
-    /// The video must be a codec a copy can carry, and so must the audio
-    /// unless `audio` converts it.
+    /// The video must be a codec `video_plan` can carry: H.264 or HEVC for a
+    /// copy, AV1 and VP9 too for a conversion. The audio must be one a copy
+    /// carries unless `audio_plan` converts it.
     fn of(
         streams: &[StreamInfo],
         audio_track: u32,
+        video_plan: &VideoPlan,
         audio_plan: &AudioPlan,
     ) -> Result<Self, String> {
         let video = streams
             .iter()
             .find(|stream| stream.kind == Kind::Video && !stream.attached_picture)
             .ok_or("This film has no picture to send to the television.")?;
-        let config = match video.codec {
-            libav::AV_CODEC_ID_H264 => {
-                VideoConfig::H264(H264Config::of(&video.extradata).ok_or(UNREADABLE)?)
-            }
+        let convert = match video_plan {
+            VideoPlan::Copy => None,
+            VideoPlan::Convert { target, bitrate } => Some((*target, *bitrate)),
+        };
+        let (config, mime) = match video.codec {
+            libav::AV_CODEC_ID_H264 => (
+                VideoConfig::H264(H264Config::of(&video.extradata).ok_or(UNREADABLE)?),
+                "video/avc",
+            ),
             libav::AV_CODEC_ID_HEVC => {
                 if let Some(sentence) = dolby_vision_refusal(video.dolby_vision) {
                     return Err(sentence);
                 }
-                VideoConfig::Hevc(HevcConfig::of(&video.extradata).ok_or(UNREADABLE)?)
+                (
+                    VideoConfig::Hevc(HevcConfig::of(&video.extradata).ok_or(UNREADABLE)?),
+                    "video/hevc",
+                )
+            }
+            libav::AV_CODEC_ID_AV1 if convert.is_some() => (VideoConfig::Raw, "video/av01"),
+            libav::AV_CODEC_ID_VP9 if convert.is_some() => {
+                (VideoConfig::Raw, "video/x-vnd.on2.vp9")
             }
             other => return Err(video_refusal(other)),
+        };
+        let picture = match convert {
+            None => None,
+            Some((target, bitrate)) => {
+                let sar = video.sample_aspect_ratio;
+                if sar.num > 0 && sar.den > 0 && sar.num != sar.den {
+                    return Err(STRETCHED_PIXELS.to_owned());
+                }
+                if video.colour.hdr() && !target.ten_bit() {
+                    return Err(HDR_TO_SDR.to_owned());
+                }
+                Some(PicturePlan::of(video, &config, mime, target, bitrate))
+            }
         };
         let audio = streams
             .iter()
@@ -696,7 +903,11 @@ impl Chosen {
             ),
         };
         Ok(Self {
-            video_format: config.format(video.width, video.height),
+            video_format: match picture {
+                None => config.format(video.width, video.height),
+                Some(_) => None,
+            },
+            picture,
             audio_format,
             adts,
             video: video.clone(),
@@ -945,22 +1156,27 @@ fn hvcc_units(hvcc: &[u8]) -> Option<(Vec<&[u8]>, usize)> {
 enum VideoConfig {
     H264(H264Config),
     Hevc(HevcConfig),
+    /// AV1 or VP9, whose samples go to a decoder as the container has them.
+    Raw,
 }
 
 impl VideoConfig {
-    fn format(&self, width: u32, height: u32) -> TrackFormat {
+    /// The format a copy of the picture goes out with. `None` for a codec a
+    /// copy does not carry.
+    fn format(&self, width: u32, height: u32) -> Option<TrackFormat> {
         match self {
-            Self::H264(h264) => TrackFormat::H264 {
+            Self::H264(h264) => Some(TrackFormat::H264 {
                 width,
                 height,
                 csd0: h264.csd0.clone(),
                 csd1: h264.csd1.clone(),
-            },
-            Self::Hevc(hevc) => TrackFormat::Hevc {
+            }),
+            Self::Hevc(hevc) => Some(TrackFormat::Hevc {
                 width,
                 height,
                 csd0: hevc.csd0.clone(),
-            },
+            }),
+            Self::Raw => None,
         }
     }
 
@@ -968,6 +1184,54 @@ impl VideoConfig {
         match self {
             Self::H264(h264) => h264.sample(data),
             Self::Hevc(hevc) => hevc.sample(data),
+            Self::Raw => data,
+        }
+    }
+}
+
+impl PicturePlan {
+    /// The decoder's description of `video` (configured as `config`, of
+    /// MIME type `mime`), and the encoders' keys for `target` at `bitrate`.
+    /// The size is the container's, the frame rate its average (30 when it
+    /// has none), the colours its tags.
+    fn of(
+        video: &StreamInfo,
+        config: &VideoConfig,
+        mime: &'static str,
+        target: PictureTarget,
+        bitrate: u32,
+    ) -> Self {
+        let csd = match config {
+            VideoConfig::H264(h264) => vec![h264.csd0.clone(), h264.csd1.clone()],
+            VideoConfig::Hevc(hevc) => vec![hevc.csd0.clone()],
+            // AV1's `av1C`, as MediaCodec takes it in `csd-0`; VP9 has none.
+            VideoConfig::Raw if video.extradata.is_empty() => Vec::new(),
+            VideoConfig::Raw => vec![video.extradata.clone()],
+        };
+        let frame_rate = video
+            .frame_rate
+            .map(|rate| rate.num as f32 / rate.den as f32)
+            .filter(|rate| rate.is_finite() && *rate > 0.0)
+            .unwrap_or(30.0);
+        let colour = Colour::of_tags(video.colour);
+        Self {
+            source: PictureSource {
+                mime,
+                width: video.width,
+                height: video.height,
+                frame_rate,
+                csd,
+                colour,
+            },
+            config: EncoderConfig {
+                target,
+                width: video.width,
+                height: video.height,
+                bitrate,
+                frame_rate,
+                colour,
+                hdr_static_info: None,
+            },
         }
     }
 }
@@ -977,7 +1241,7 @@ fn starts_annex_b(data: &[u8]) -> bool {
 }
 
 /// The NAL units of an Annex-B buffer, start codes off.
-fn annex_b_units(data: &[u8]) -> Vec<&[u8]> {
+pub(crate) fn annex_b_units(data: &[u8]) -> Vec<&[u8]> {
     let mut starts = Vec::new();
     let mut at = 0;
     while at + 3 <= data.len() {
@@ -1123,6 +1387,9 @@ mod tests {
             channels: if kind == Kind::Audio { 2 } else { 0 },
             time_base: libav::Rational { num: 1, den: 1000 },
             dolby_vision: None,
+            frame_rate: None,
+            colour: libav::ColourTags::default(),
+            sample_aspect_ratio: libav::Rational { num: 0, den: 1 },
         }
     }
 
@@ -1152,6 +1419,10 @@ mod tests {
         /// What [`Packets::sound_converter`] makes, and what it was asked.
         sound: Option<fn() -> SoundConverter>,
         converted: RefCell<Vec<(usize, u32, i64)>>,
+        /// What [`Packets::picture_converter`] makes (none, as on a
+        /// desktop, when `None`), and what it was asked.
+        picture: Option<fn() -> Box<dyn PictureConverter>>,
+        pictures: RefCell<Vec<(PictureSource, EncoderConfig)>>,
     }
 
     impl Packets for FakePackets {
@@ -1194,6 +1465,22 @@ mod tests {
                 None => Err(audio_refusal(audio.codec)),
             }
         }
+        fn picture_converter(
+            &self,
+            source: PictureSource,
+            config: EncoderConfig,
+        ) -> Result<Box<dyn PictureConverter>, String> {
+            self.pictures.borrow_mut().push((source, config));
+            match &self.picture {
+                Some(make) => Ok(make()),
+                None => Err(NO_PICTURE_CONVERTER.to_owned()),
+            }
+        }
+    }
+
+    /// The segment plan a copy never reads.
+    fn plan() -> SegmentPlan {
+        SegmentPlan::for_film(1_000_000, 60_000, 6000)
     }
 
     #[derive(Debug, PartialEq)]
@@ -1291,6 +1578,8 @@ mod tests {
             rewinds_to: None,
             sound: None,
             converted: RefCell::default(),
+            picture: None,
+            pictures: RefCell::default(),
         }
     }
 
@@ -1314,7 +1603,14 @@ mod tests {
             packet(4, 0, true, b"aac1"),
         ]);
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(1), Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &spec(1),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         let config = H264Config::of(&avcc(4)).unwrap();
         let annex = annex_b(&[&[0x65, 0x88]]);
         assert_eq!(
@@ -1363,6 +1659,7 @@ mod tests {
             &spec(1),
             Duration::from_secs(6),
             false,
+            &plan(),
             sink.clone(),
         );
         assert_eq!(packets.seeks, vec![6_000_000]);
@@ -1397,7 +1694,14 @@ mod tests {
         ];
         packets.index = entries.clone();
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(1), Duration::ZERO, true, sink.clone());
+        repackage(
+            &mut packets,
+            &spec(1),
+            Duration::ZERO,
+            true,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(packets.seeks, vec![0]);
         assert_eq!(packets.indexed, vec![1], "the film's video stream");
         let wrote = sink.wrote.borrow();
@@ -1484,7 +1788,14 @@ mod tests {
         ts.streams[4].extradata = Bytes::new();
         ts.rewinds_to = Some(queue);
         let sink = FakeSink::new(None);
-        repackage(&mut ts, &spec(1), Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut ts,
+            &spec(1),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(ts.seeks, vec![0]);
         let wrote = sink.wrote.borrow();
         assert!(matches!(
@@ -1509,7 +1820,14 @@ mod tests {
         ts.streams[4].extradata = Bytes::new();
         ts.rewinds_to = Some(queue);
         let sink = FakeSink::new(None);
-        repackage(&mut ts, &spec(1), Duration::ZERO, true, sink.clone());
+        repackage(
+            &mut ts,
+            &spec(1),
+            Duration::ZERO,
+            true,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(ts.seeks, vec![0]);
         assert_eq!(sink.samples(), 2, "each packet once");
     }
@@ -1520,7 +1838,14 @@ mod tests {
     fn a_stopped_sink_ends_the_run_where_it_is() {
         let mut packets = film((0..10).map(|n| packet(1, n * 40, n == 0, SLICE)).collect());
         let sink = FakeSink::new(Some(3));
-        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(sink.samples(), 3);
         assert_eq!(
             packets.reads, 4,
@@ -1538,7 +1863,14 @@ mod tests {
             Next::Failed("the source failed".into()),
         ]);
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(
             sink.wrote.borrow().last(),
             Some(&Wrote::Fail(BROKEN.to_owned()))
@@ -1550,24 +1882,28 @@ mod tests {
     /// another plan, another codec, a track that is not there.
     #[test]
     fn what_is_not_a_copy_is_refused_with_a_sentence() {
-        assert_eq!(refusal_for(&spec(0)), None);
+        assert_eq!(refusal_for(&spec(0), picture::support), None);
         let mut convert = spec(0);
         convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
-        assert_eq!(refusal_for(&convert), None, "the sound converted");
-        let mut transcode = spec(0);
-        transcode.video = VideoPlan::H264 {
-            width: 1280,
-            height: 720,
-            bitrate: 4_000_000,
-        };
-        assert_eq!(refusal_for(&transcode), Some(NOT_BUILT));
+        assert_eq!(
+            refusal_for(&convert, picture::support),
+            None,
+            "the sound converted"
+        );
 
         // Each track it will not copy is named, in plain words.
         let refused = |change: &dyn Fn(&mut FakePackets)| -> Vec<Wrote> {
             let mut packets = film(Vec::new());
             change(&mut packets);
             let sink = FakeSink::new(None);
-            repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+            repackage(
+                &mut packets,
+                &spec(0),
+                Duration::ZERO,
+                false,
+                &plan(),
+                sink.clone(),
+            );
             sink.wrote.take()
         };
         assert_eq!(
@@ -1603,6 +1939,7 @@ mod tests {
             &spec(2),
             Duration::ZERO,
             false,
+            &plan(),
             sink.clone(),
         );
         assert_eq!(
@@ -1671,7 +2008,14 @@ mod tests {
         let mut convert = spec(1);
         convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &convert, Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &convert,
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(*packets.converted.borrow(), vec![(4, 192_000, 0)]);
         let wrote = sink.wrote.borrow();
         assert_eq!(
@@ -1715,7 +2059,14 @@ mod tests {
         let mut convert = spec(0);
         convert.audio = AudioPlan::AacStereo { bitrate: 192_000 };
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &convert, Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &convert,
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         assert_eq!(
             *sink.wrote.borrow(),
             vec![Wrote::Fail(
@@ -1729,6 +2080,7 @@ mod tests {
             &spec(0),
             Duration::ZERO,
             false,
+            &plan(),
             FakeSink::new(None),
         );
         assert!(copied.converted.borrow().is_empty());
@@ -1857,7 +2209,14 @@ mod tests {
         packets.streams[1].codec = libav::AV_CODEC_ID_HEVC;
         packets.streams[1].extradata = Bytes::from(hdr10_hvcc(4));
         let sink = FakeSink::new(None);
-        repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+        repackage(
+            &mut packets,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
         let wrote = sink.wrote.borrow();
         assert_eq!(
             wrote[0],
@@ -1905,7 +2264,14 @@ mod tests {
                 compatibility,
             });
             let sink = FakeSink::new(None);
-            repackage(&mut packets, &spec(0), Duration::ZERO, false, sink.clone());
+            repackage(
+                &mut packets,
+                &spec(0),
+                Duration::ZERO,
+                false,
+                &plan(),
+                sink.clone(),
+            );
             sink.wrote.take()
         };
         assert_eq!(
@@ -1943,5 +2309,390 @@ mod tests {
             })
         );
         assert_eq!(DolbyVision::of_record(&record[..7]), None);
+    }
+
+    // --- The picture converted ------------------------------------------------------
+
+    use stream_server::{PictureEvent, Route, Segments};
+
+    /// A converter with no delay: each picture comes straight back, the
+    /// first of each segment keyed, every encoder configured with the same
+    /// SPS and PPS. The push of the picture at `fail_at` fails.
+    #[derive(Default)]
+    struct EchoConverter {
+        open: Option<(u64, u32)>,
+        fail_at: Option<i64>,
+    }
+
+    impl PictureConverter for EchoConverter {
+        fn push(
+            &mut self,
+            picture: SourcePicture,
+            segments: &Segments,
+        ) -> Result<Vec<PictureEvent>, String> {
+            if self.fail_at == Some(picture.pts_us) {
+                return Err("the encoder failed".to_owned());
+            }
+            let mut events = Vec::new();
+            let Route::Encode { segment } = segments.route(picture.pts_us) else {
+                return Ok(events);
+            };
+            if self.open.map(|(open, _)| open) != Some(segment) {
+                events.extend(self.finish(segments)?);
+                events.push(PictureEvent::Config {
+                    segment,
+                    width: 320,
+                    height: 240,
+                    csd: Bytes::from(annex_b(&[SPS, PPS])),
+                });
+                self.open = Some((segment, 0));
+            }
+            let (_, count) = self.open.as_mut().unwrap();
+            events.push(PictureEvent::Picture {
+                segment,
+                pts_us: picture.pts_us,
+                key: *count == 0,
+                data: picture.data,
+            });
+            *count += 1;
+            Ok(events)
+        }
+
+        fn finish(&mut self, _: &Segments) -> Result<Vec<PictureEvent>, String> {
+            Ok(self
+                .open
+                .take()
+                .map(|(segment, count)| PictureEvent::SegmentDone {
+                    segment,
+                    pictures_in: count,
+                    pictures_out: count,
+                })
+                .into_iter()
+                .collect())
+        }
+    }
+
+    fn converting(target: PictureTarget) -> RenditionSpec {
+        let mut spec = spec(0);
+        spec.video = VideoPlan::Convert {
+            target,
+            bitrate: 8_000_000,
+        };
+        spec
+    }
+
+    /// **A converted run holds its sound until the picture is described**:
+    /// the sound's format goes first, the picture's when its first encoder
+    /// starts, then the sound that waited, in order, then everything as it
+    /// comes. The picture's format goes once, though every segment has an
+    /// encoder of its own. The converter is asked for the film's picture
+    /// as the container describes it.
+    #[test]
+    fn a_converted_run_holds_the_sound_until_the_picture_is_described() {
+        let mut packets = film(vec![
+            packet(3, -23, true, b"aac0"),
+            packet(3, 0, true, b"aac1"),
+            packet(1, 0, true, SLICE),
+            packet(3, 21, true, b"aac2"),
+            packet(1, 30_000, true, SLICE),
+        ]);
+        packets.picture = Some(|| Box::new(EchoConverter::default()));
+        packets.streams[1].frame_rate = Some(libav::Rational { num: 24, den: 1 });
+        let sink = FakeSink::new(None);
+        repackage(
+            &mut packets,
+            &converting(PictureTarget::H264High),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        let config = H264Config::of(&avcc(4)).unwrap();
+        let annex = annex_b(&[&[0x65, 0x88]]);
+        assert_eq!(
+            *sink.wrote.borrow(),
+            vec![
+                Wrote::Format(
+                    TrackKind::Audio,
+                    TrackFormat::Aac {
+                        sample_rate: 48_000,
+                        channels: 2,
+                        csd0: Bytes::from_static(&[0x11, 0x90]),
+                    }
+                ),
+                Wrote::Format(
+                    TrackKind::Video,
+                    TrackFormat::H264 {
+                        width: 320,
+                        height: 240,
+                        csd0: Bytes::from(annex_b(&[SPS])),
+                        csd1: Bytes::from(annex_b(&[PPS])),
+                    }
+                ),
+                Wrote::Sample(TrackKind::Audio, 0, true, b"aac0".to_vec()),
+                Wrote::Sample(TrackKind::Audio, 23_000, true, b"aac1".to_vec()),
+                Wrote::Sample(TrackKind::Video, 23_000, true, annex.clone()),
+                Wrote::Sample(TrackKind::Audio, 44_000, true, b"aac2".to_vec()),
+                Wrote::Sample(TrackKind::Video, 30_023_000, true, annex),
+                Wrote::End,
+            ]
+        );
+        let asked = packets.pictures.borrow();
+        let (source, encoders) = &asked[0];
+        assert_eq!(source.mime, "video/avc");
+        assert_eq!(source.csd, vec![config.csd0, config.csd1]);
+        assert_eq!(
+            (source.width, source.height, source.frame_rate),
+            (320, 240, 24.0)
+        );
+        assert_eq!(encoders.target, PictureTarget::H264High);
+        assert_eq!(encoders.bitrate, 8_000_000);
+        assert_eq!(encoders.frame_rate, 24.0);
+    }
+
+    /// **A conversion that fails ends the run with its sentence**, never
+    /// with an end. So does a film whose picture never came out.
+    #[test]
+    fn a_failed_conversion_fails_the_run() {
+        let mut packets = film(vec![
+            packet(1, 0, true, SLICE),
+            packet(3, 0, true, b"aac"),
+            packet(1, 40, false, SLICE),
+        ]);
+        packets.picture = Some(|| {
+            Box::new(EchoConverter {
+                fail_at: Some(63_000),
+                ..EchoConverter::default()
+            })
+        });
+        let sink = FakeSink::new(None);
+        let spec = converting(PictureTarget::HevcMain);
+        repackage(
+            &mut packets,
+            &spec,
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        assert_eq!(
+            sink.wrote.borrow().last(),
+            Some(&Wrote::Fail(
+                "Converting this film's picture for the television failed.".to_owned()
+            ))
+        );
+        assert!(!sink.wrote.borrow().contains(&Wrote::End));
+
+        let mut silent = film(vec![packet(3, 0, true, b"aac")]);
+        silent.picture = Some(|| Box::new(EchoConverter::default()));
+        let sink = FakeSink::new(None);
+        repackage(
+            &mut silent,
+            &spec,
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        assert_eq!(
+            sink.wrote.borrow().last(),
+            Some(&Wrote::Fail(PICTURE_FAILED.to_owned()))
+        );
+        assert_eq!(sink.samples(), 0, "the held sound never went");
+    }
+
+    /// **What a conversion reads**: AV1 and VP9 as well as H.264 and HEVC,
+    /// their samples as the container has them and AV1's `av1C` as the
+    /// decoder's configuration. Other codecs keep their sentence.
+    #[test]
+    fn a_conversion_reads_av1_and_vp9() {
+        let run = |codec: i32, extradata: &'static [u8]| -> (Vec<Wrote>, Vec<PictureSource>) {
+            let mut packets = film(vec![packet(1, 0, true, b"\x12\x00\x0a\x0b")]);
+            packets.streams[1].codec = codec;
+            packets.streams[1].extradata = Bytes::from_static(extradata);
+            packets.picture = Some(|| Box::new(EchoConverter::default()));
+            let sink = FakeSink::new(None);
+            let spec = converting(PictureTarget::HevcMain);
+            repackage(
+                &mut packets,
+                &spec,
+                Duration::ZERO,
+                false,
+                &plan(),
+                sink.clone(),
+            );
+            let sources = packets
+                .pictures
+                .borrow()
+                .iter()
+                .map(|(s, _)| s.clone())
+                .collect();
+            (sink.wrote.take(), sources)
+        };
+        let (wrote, sources) = run(libav::AV_CODEC_ID_AV1, b"\x81\x08\x0c\x00");
+        assert_eq!(sources[0].mime, "video/av01");
+        assert_eq!(
+            sources[0].csd,
+            vec![Bytes::from_static(b"\x81\x08\x0c\x00")]
+        );
+        assert!(wrote.contains(&Wrote::Sample(
+            TrackKind::Video,
+            23_000,
+            true,
+            b"\x12\x00\x0a\x0b".to_vec()
+        )));
+        assert_eq!(wrote.last(), Some(&Wrote::End));
+        let (wrote, sources) = run(libav::AV_CODEC_ID_VP9, b"");
+        assert_eq!(sources[0].mime, "video/x-vnd.on2.vp9");
+        assert!(sources[0].csd.is_empty());
+        assert_eq!(wrote.last(), Some(&Wrote::End));
+        let (wrote, sources) = run(2, b"");
+        assert!(sources.is_empty());
+        assert_eq!(
+            wrote,
+            vec![Wrote::Fail(
+                "This film's video is MPEG-2, which xtremio can't convert for casting yet."
+                    .to_owned()
+            )]
+        );
+        // A copy still takes neither.
+        let mut packets = film(Vec::new());
+        packets.streams[1].codec = libav::AV_CODEC_ID_VP9;
+        let sink = FakeSink::new(None);
+        repackage(
+            &mut packets,
+            &spec(0),
+            Duration::ZERO,
+            false,
+            &plan(),
+            sink.clone(),
+        );
+        assert_eq!(
+            sink.wrote.take(),
+            vec![Wrote::Fail(
+                "This film's video is VP9, which xtremio can't convert for casting yet.".to_owned()
+            )]
+        );
+    }
+
+    /// **What is refused before anything is read**: stretched pixels, an
+    /// HDR picture asked for 8 bits, and a device with no converter.
+    #[test]
+    fn a_conversion_is_refused_with_a_sentence() {
+        let refused = |change: &dyn Fn(&mut FakePackets), target: PictureTarget| -> Vec<Wrote> {
+            let mut packets = film(vec![packet(1, 0, true, SLICE)]);
+            packets.picture = Some(|| Box::new(EchoConverter::default()));
+            change(&mut packets);
+            let sink = FakeSink::new(None);
+            repackage(
+                &mut packets,
+                &converting(target),
+                Duration::ZERO,
+                false,
+                &plan(),
+                sink.clone(),
+            );
+            sink.wrote.take()
+        };
+        assert_eq!(
+            refused(
+                &|film| film.streams[1].sample_aspect_ratio = libav::Rational { num: 4, den: 3 },
+                PictureTarget::HevcMain
+            ),
+            vec![Wrote::Fail(
+                "This film's picture has stretched pixels, which xtremio can't convert for \
+                 casting yet."
+                    .to_owned()
+            )]
+        );
+        let pq = |film: &mut FakePackets| film.streams[1].colour.transfer = libav::ColourTags::PQ;
+        assert_eq!(
+            refused(&pq, PictureTarget::HevcMain),
+            vec![Wrote::Fail(
+                "This film's picture is HDR, and xtremio doesn't convert HDR to SDR.".to_owned()
+            )]
+        );
+        let hlg = |film: &mut FakePackets| film.streams[1].colour.transfer = libav::ColourTags::HLG;
+        assert_eq!(
+            refused(&hlg, PictureTarget::H264High),
+            vec![Wrote::Fail(HDR_TO_SDR.to_owned())]
+        );
+        let main10 = refused(&pq, PictureTarget::HevcMain10);
+        assert_eq!(main10.last(), Some(&Wrote::End), "Main 10 keeps it");
+        // Square pixels, said either way, are not stretched.
+        let square = |film: &mut FakePackets| {
+            film.streams[1].sample_aspect_ratio = libav::Rational { num: 1, den: 1 }
+        };
+        assert_eq!(
+            refused(&square, PictureTarget::HevcMain).last(),
+            Some(&Wrote::End)
+        );
+        assert_eq!(
+            refused(&|film| film.picture = None, PictureTarget::HevcMain),
+            vec![Wrote::Fail(
+                "This phone cannot convert this film's picture for the television.".to_owned()
+            )]
+        );
+    }
+
+    /// **Whether this device converts the plan's picture**: the surface
+    /// path and a hardware encoder for the target's codec, and for Main 10
+    /// the buffer path too. A desktop converts nothing.
+    #[test]
+    fn a_conversion_needs_the_devices_codecs() {
+        for target in [
+            PictureTarget::H264High,
+            PictureTarget::HevcMain,
+            PictureTarget::HevcMain10,
+        ] {
+            assert_eq!(
+                refusal_for(&converting(target), picture::support),
+                Some(NO_PICTURE_CONVERTER),
+                "{target:?} on a desktop"
+            );
+        }
+        fn hevc_only() -> DeviceSupport {
+            DeviceSupport {
+                surface: true,
+                ten_bit: false,
+                decodes: vec!["AV1"],
+                encodes: vec!["HEVC"],
+            }
+        }
+        fn everything() -> DeviceSupport {
+            DeviceSupport {
+                ten_bit: true,
+                encodes: vec!["H.264", "HEVC"],
+                ..hevc_only()
+            }
+        }
+        fn no_surface() -> DeviceSupport {
+            DeviceSupport {
+                surface: false,
+                ..everything()
+            }
+        }
+        let spec = converting;
+        assert_eq!(refusal_for(&spec(PictureTarget::HevcMain), hevc_only), None);
+        assert_eq!(
+            refusal_for(&spec(PictureTarget::HevcMain10), hevc_only),
+            Some(NO_PICTURE_CONVERTER)
+        );
+        assert_eq!(
+            refusal_for(&spec(PictureTarget::H264High), hevc_only),
+            Some(NO_PICTURE_CONVERTER)
+        );
+        assert_eq!(
+            refusal_for(&spec(PictureTarget::HevcMain10), everything),
+            None
+        );
+        assert_eq!(
+            refusal_for(&spec(PictureTarget::H264High), everything),
+            None
+        );
+        assert_eq!(
+            refusal_for(&spec(PictureTarget::HevcMain), no_surface),
+            Some(NO_PICTURE_CONVERTER)
+        );
     }
 }

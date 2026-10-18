@@ -1158,3 +1158,48 @@ fn serve_a_rendition_until_told_to_stop() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+/// **What a conversion reads off the container**: the picture's average
+/// frame rate, its colour tags and the shape of its pixels, as libavformat
+/// has them. The HDR10 film is BT.2020 with PQ at 25 pictures a second;
+/// stretched to 4:3 pixels here, which a conversion refuses.
+#[test]
+fn the_demuxer_reports_frame_rate_colour_and_pixel_shape() -> anyhow::Result<()> {
+    use xtremio_core::libav::{ColourTags, Demuxer, Kind, Libav, Rational};
+    let name = libmpv_name();
+    let libav = match Libav::load(&name) {
+        Ok(libav) => &*Box::leak(Box::new(libav)),
+        Err(error) => {
+            eprintln!("SKIPPED: no FFmpeg this build reads through {name}: {error}");
+            return Ok(());
+        }
+    };
+    let tmp = tempfile::tempdir()?;
+    let film = tmp.path().join("stretched.mkv");
+    let extra = ["-vf", "setsar=4/3"];
+    if make_with(&film, 2, Container::Matroska, Video::HevcHdr10, &extra).is_none() {
+        eprintln!("SKIPPED: no ffmpeg with libx265");
+        return Ok(());
+    }
+    let bytes = bytes::Bytes::from(std::fs::read(&film)?);
+    let demuxer = Demuxer::open(libav, std::io::Cursor::new(bytes)).expect("the header reads");
+    let video = demuxer
+        .streams()
+        .iter()
+        .find(|stream| stream.kind == Kind::Video)
+        .expect("a picture")
+        .clone();
+    assert_eq!(video.frame_rate, Some(Rational { num: 25, den: 1 }));
+    assert_eq!(
+        video.colour,
+        ColourTags {
+            primaries: 9,
+            transfer: ColourTags::PQ,
+            matrix: 9,
+            range: 1,
+        }
+    );
+    assert!(video.colour.hdr());
+    assert_eq!(video.sample_aspect_ratio, Rational { num: 4, den: 3 });
+    Ok(())
+}
