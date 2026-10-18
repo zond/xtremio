@@ -87,7 +87,7 @@ Future<void> main(List<String> argv) async {
     } else {
       stdout.write(human(message['cmd']! as String, answer));
     }
-    if (answer.containsKey('error')) exitCode = 1;
+    if (answer['error'] != null) exitCode = 1;
   } finally {
     await driver.close();
   }
