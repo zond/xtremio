@@ -197,8 +197,7 @@ and times the subtitles, and media_kit's `SubtitleView` draws their text
    It covers HDR10 and HLG only:
    HDR10's static metadata has to be set on the surface by hand, and
    neither HDR10+ nor Dolby Vision survives mpv's renderer. Nobody has
-   tried whether mpv 0.36's OpenGL ES path does this on Android. It may
-   also need a fork of media_kit's controller to hand mpv such a surface.
+   tried whether mpv 0.36's OpenGL ES path does this on Android.
 3. **A second player for HDR films** (Media3 ExoPlayer). This is the
    standard Android path. It does every variant, and audio passthrough too.
    But it is a whole second player beside mpv. It has no `xtremio://`
@@ -206,6 +205,72 @@ and times the subtitles, and media_kit's `SubtitleView` draws their text
    would have to reach Flutter's `SubtitleView` another way, and it reports
    its own stats. Everything the player screen asks
    of `PlaybackEngine` would be answered twice.
+
+**Only hybrid composition keeps the surface real.** Flutter shows an
+Android view in one of three ways
+([Flutter's platform views](https://docs.flutter.dev/platform-integration/android/platform-views)):
+
+- Hybrid composition (`PlatformViewsService.initExpensiveAndroidView`)
+  leaves the view in the real view hierarchy, with "SurfaceView support".
+  Android composites the `SurfaceView` itself, so HDR can reach the
+  display.
+- Texture layer hybrid composition and virtual display copy the view into
+  a texture. That loses HDR as any texture does. A `SurfaceView` in a
+  virtual display also renders too dark on some Samsung phones
+  ([flutter#141207](https://github.com/flutter/flutter/issues/141207)).
+- Hybrid Composition++ hands both to Android's compositor and avoids the
+  costs below. It is experimental and needs Android 14 and Impeller on
+  Vulkan, which most Google TV boxes do not have.
+
+Hybrid composition has a cost. Flutter merges its raster thread into the
+platform thread while such a view is up, which lowers the frame rate of
+the Flutter UI drawn over it. Before Android 10 it also copies every
+Flutter frame through main memory. On a weak box that cost lands on the
+player's controls. So the view should exist only while a film plays.
+A hybrid `SurfaceView` has also been drawn above the app bar inside a list
+([flutter#113601](https://github.com/flutter/flutter/issues/113601)). A
+full-screen player avoids that case, but the controls must be checked to
+stay on top.
+
+**media_kit has no platform-view mode.** Its Android controller always
+makes a texture surface and hands it to mpv (`wid`). Paths 1 and 2 need
+that surface to be a `SurfaceView`'s instead. That means our own platform
+view, as a fork of media_kit_video's Android controller or a small plugin
+of our own. The rest of media_kit stays: the player, the properties and
+`xtremio://`.
+
+**Flutter itself stays SDR, and that is fine.** Flutter has no HDR and no
+wide gamut on Android. Impeller's wide gamut exists only on iOS, and
+nobody is working on it for Vulkan
+([flutter#127852](https://github.com/flutter/flutter/issues/127852)). The
+controls and subtitles are SDR graphics over an HDR video layer, which is
+how Android expects it.
+
+**Others have done this.** The evidence that a hybrid `SurfaceView` under
+Flutter delivers HDR comes from apps, not from Flutter's own docs:
+
+- [m3u-tv](https://github.com/m3ue/m3u-tv/issues/221), a Flutter Android TV
+  app, moved full-screen playback from a Flutter texture to a Media3
+  `SurfaceView` in hybrid composition (October 2026). HDR output works
+  there, and it matches the frame rate as this app does.
+- [DreamPlayer](https://github.com/mangeshghodke/DreamPlayer), a Flutter
+  player for Android TV, does the same with Media3 for HDR10+ and Dolby
+  Vision. It also runs libmpv in its own `SurfaceView` through hybrid
+  composition, never a texture. That shows mpv renders into such a surface.
+  It does not show that mpv's own drawing gets HDR to the display.
+- [`video_player_hdr`](https://pub.dev/packages/video_player_hdr), a fork
+  of Flutter's `video_player`, offers a platform view instead of a texture
+  for HDR, and asks the display what it supports.
+- media_kit's own tracker agrees from the other side. A contributor wrote:
+  "Flutter textures don't have HDR capability on any platform"
+  ([media-kit#615](https://github.com/media-kit/media-kit/issues/615)).
+  One reporter with no HDR on an NVIDIA Shield switched to Media3 in a
+  platform view
+  ([media-kit#1243](https://github.com/media-kit/media-kit/issues/1243)).
+  Another saw HDR10 distorted with hardware decoding and fine without it
+  ([media-kit#1207](https://github.com/media-kit/media-kit/issues/1207)).
+  That one is worth checking here, since this app asks for
+  `mediacodec,mediacodec-copy`.
 
 Any of the three also needs these:
 
