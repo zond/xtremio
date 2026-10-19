@@ -144,6 +144,121 @@ available" rather than with a list of `.partNN.rar` files, and why the one
 that *did* list them was the one misbehaving. **Send one real stream list
 that names every volume and this becomes an afternoon.**
 
+## HDR on the device
+
+About playing on the Android TV box or a phone, not about casting. A cast
+already keeps HDR10 and HLG ([CASTING.md](CASTING.md#converting-the-picture)).
+The receiver decodes the film and switches the television itself.
+
+**Every HDR film is shown as SDR today.** media_kit's Android controller has
+mpv draw each frame with `vo=gpu` (OpenGL ES, `gpu-context=android`) into a
+Flutter texture. Flutter composites that texture as an 8-bit SDR image.
+Android never sees an HDR video layer, so the box never switches HDMI into
+HDR and the television shows no badge. mpv tone-maps PQ and HLG down to SDR
+first. xtremio sets no HDR property and never asks the display what it
+takes.
+
+| Variant | Today | What could support it |
+|---|---|---|
+| HDR10 | Tone-mapped to SDR | Any of the three paths below |
+| HLG | Tone-mapped to SDR | Any of the three paths below |
+| HDR10+ | Tone-mapped to SDR, its dynamic metadata ignored | Only a hardware decoder writing to the surface (paths 1 and 3) |
+| Dolby Vision 8 | Its base layer, tone-mapped | Dolby Vision on a box with a Dolby Vision decoder (paths 1 and 3). Otherwise its HDR10 or HLG base layer as HDR |
+| Dolby Vision 7 | Its HDR10 base layer, tone-mapped | The base layer as HDR10. The full enhancement layer is hard for any Android player |
+| Dolby Vision 5 | Wrong colours (green or purple) | Dolby Vision on a box with a decoder. Correct colours in SDR with libplacebo |
+| Dolby Vision IQ | Nothing | Nothing for the app to do. The television adapts a Dolby Vision signal to the room |
+
+No variant is allow-listed. Any app may play them through the platform's
+decoder. Dolby Vision needs a Dolby Vision decoder on the box
+(`video/dolby-vision`), which the manufacturer licenses. Many Google TV
+boxes have one.
+
+**The picture has to leave Flutter's texture.** Every variant needs this
+one change. Android switches the output to HDR only when its compositor gets
+a video layer marked as HDR. A texture drawn into Flutter's own frame can
+never be one. The video has to be its own `SurfaceView`, shown under
+Flutter's UI as a platform view. The controls and the subtitles are Flutter
+widgets already, so they are drawn over it as they are today. mpv decodes
+and times the subtitles, and media_kit's `SubtitleView` draws their text
+(`PlaybackEngine.buildVideo`). There are three ways to fill that surface:
+
+1. **mpv's `mediacodec_embed`.** It is compiled into the shipped libmpv.
+   MediaCodec decodes straight into the surface and carries HDR10's static
+   metadata, HDR10+'s dynamic metadata and Dolby Vision on a box that
+   decodes it. mpv then draws nothing, so its scaling and colour handling
+   are gone, and the box's hardware scaler does that work instead. The
+   subtitles are unaffected, since mpv still hands their text to Flutter.
+   A codec the box cannot decode in hardware has no picture on this path,
+   so such a film keeps today's path.
+2. **mpv's own drawing into an HDR surface.** Keep `vo=gpu`, hand it a
+   `SurfaceView` whose EGL surface is 10-bit BT.2020 PQ or HLG, and point
+   mpv at that target (`target-trc`, `target-prim`). It keeps mpv's
+   scaling and colour handling, and software-decoded films keep a picture.
+   It covers HDR10 and HLG only:
+   HDR10's static metadata has to be set on the surface by hand, and
+   neither HDR10+ nor Dolby Vision survives mpv's renderer. Nobody has
+   tried whether mpv 0.36's OpenGL ES path does this on Android. It may
+   also need a fork of media_kit's controller to hand mpv such a surface.
+3. **A second player for HDR films** (Media3 ExoPlayer). This is the
+   standard Android path. It does every variant, and audio passthrough too.
+   But it is a whole second player beside mpv. It has no `xtremio://`
+   protocol, so it would read the server's media route. Its subtitle cues
+   would have to reach Flutter's `SubtitleView` another way, and it reports
+   its own stats. Everything the player screen asks
+   of `PlaybackEngine` would be answered twice.
+
+Any of the three also needs these:
+
+- Ask the display what it takes (`Display.getHdrCapabilities()`, and per
+  mode from API 34). Send HDR only to a television that takes it, and
+  tone-map as today otherwise.
+- Make the frame-rate switch (`FrameRateMode`) follow onto the new surface.
+- Look at Flutter's controls over an HDR layer on a real panel. Android
+  dims graphics to SDR white there.
+
+**libplacebo (`vo=gpu-next`) is the other half, and gives no HDR by itself.**
+It is mpv's newer renderer. It would improve what is shown in SDR:
+
+- Tone mapping gets better curves and per-scene peak detection.
+- Dolby Vision's per-scene data (the RPU, which FFmpeg 6 exposes) is
+  applied. Profile 5 gets correct colours, and profiles 7 and 8 use their
+  scene data.
+- HDR10+'s dynamic metadata steers the tone mapping.
+
+It still draws into the same texture, so the television still does not
+switch. Its `--target-colorspace-hint` tells the window system that the
+output is HDR. That is implemented for Vulkan, D3D11, Wayland and macOS,
+and as far as is known not for Android's OpenGL. Together with path 2 it
+would be the best path that stays inside mpv.
+
+**libplacebo costs a libmpv build of our own.** The shipped libmpv is
+media_kit's libmpv-android-video-build (mpv 0.36, the `full` flavour
+vendored in `third_party/media_kit_libs_android_video`). It is configured
+with `-Dlibplacebo=disabled -Dvulkan=disabled`, so `vo=gpu-next` does not
+exist in it. Using it means building libmpv ourselves, with libplacebo, for
+four ABIs. It probably also means a newer mpv than the one media_kit was
+written against. That build would then have to be redone on every media_kit
+bump. Today a bump is checking four URLs and MD5 sums
+([ANDROID.md](ANDROID.md#the-libmpv-the-apk-carries)). After it, a bump is
+a build pipeline we own. The desktop libmpvs would want the same renderer,
+so the picture behaves the same everywhere.
+
+**libplacebo also costs GPU work.** Its renderer is heavier than `vo=gpu`,
+most of all with per-scene peak detection, which runs a compute pass on
+every frame. The boxes this app targets are where that bites. A Chromecast
+with Google TV has a low-end Mali GPU, and 4K60 with tone mapping may drop
+frames there. Measure on the weakest box before choosing it, with peak
+detection off as the fallback. Once the library has it, the switch itself
+is one line: `VideoControllerConfiguration.vo`, which media_kit defaults to
+`gpu`.
+
+**Not built because each path costs a part of the player that works
+today.** Path 1 costs mpv's own drawing of the picture, path 3 costs having
+one player, and libplacebo costs the prebuilt libmpv. Nobody has measured a box to choose
+between them. The first experiment is cheap: play an HDR10 film through
+`mediacodec_embed` on a `SurfaceView` and see whether the television
+switches.
+
 ## Audio a receiver cannot have
 
 About playing on the device into an AV receiver (an amplifier), not about
