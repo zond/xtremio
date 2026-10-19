@@ -227,30 +227,48 @@ It is mpv's newer renderer. It would improve what is shown in SDR:
 
 It still draws into the same texture, so the television still does not
 switch. Its `--target-colorspace-hint` tells the window system that the
-output is HDR. That is implemented for Vulkan, D3D11, Wayland and macOS,
-and as far as is known not for Android's OpenGL. Together with path 2 it
-would be the best path that stays inside mpv.
+output is HDR, and mpv 0.41 turns it on by default. The release notes name
+HDR output on DRM, Wayland and macOS, never on Android. Together with path 2
+it would be the best path that stays inside mpv.
 
-**libplacebo costs a libmpv build of our own.** The shipped libmpv is
-media_kit's libmpv-android-video-build (mpv 0.36, the `full` flavour
-vendored in `third_party/media_kit_libs_android_video`). It is configured
-with `-Dlibplacebo=disabled -Dvulkan=disabled`, so `vo=gpu-next` does not
-exist in it. Using it means building libmpv ourselves, with libplacebo, for
-four ABIs. It probably also means a newer mpv than the one media_kit was
-written against. That build would then have to be redone on every media_kit
-bump. Today a bump is checking four URLs and MD5 sums
-([ANDROID.md](ANDROID.md#the-libmpv-the-apk-carries)). After it, a bump is
-a build pipeline we own. The desktop libmpvs would want the same renderer,
-so the picture behaves the same everywhere.
+**libplacebo comes with any newer mpv, so it costs a libmpv build of our
+own.** Every libmpv media_kit ships is mpv 0.36 with libplacebo off
+(`-Dlibplacebo=disabled`). That holds for Android's
+libmpv-android-video-build (the `full` flavour vendored in
+`third_party/media_kit_libs_android_video`) and for macOS's
+libmpv-darwin-build, whose newest release (September 2026) still locks
+0.36.0. Windows's libmpv-win32-video-build has been archived since 2024.
+So `vo=gpu-next` exists in none of them.
+
+mpv itself has moved on: 0.41.0 came out in December 2025, and `gpu-next`
+is its default renderer. Since 0.37, mpv does not build without
+libplacebo, and since 0.39 it needs FFmpeg 6.1. The bundled builds have
+6.0. So libplacebo is not a separate choice for HDR. It is the price of any
+newer mpv, including what a newer mpv would bring besides HDR: the
+`dolby-vision-profile` track property (0.39), `ao_audiotrack`'s passthrough
+fixes (0.38) and AAudio output on Android (0.41).
+
+A media_kit bump will not bring that mpv, because media_kit's builds are
+not moving. The cost is owning a libmpv build for each platform for as long
+as the app exists: mpv, libplacebo and FFmpeg 6.1 or newer, for four
+Android ABIs and the desktops. Today an update is checking four URLs and
+MD5 sums ([ANDROID.md](ANDROID.md#the-libmpv-the-apk-carries)). After it,
+it is a build pipeline we own. media_kit's Dart side stays written against
+mpv 0.36, so every mpv upgrade also means checking mpv's client API changes
+(`DOCS/client-api-changes.rst`) against media_kit and the patch in
+`third_party/media_kit`.
 
 **libplacebo also costs GPU work.** Its renderer is heavier than `vo=gpu`,
 most of all with per-scene peak detection, which runs a compute pass on
 every frame. The boxes this app targets are where that bites. A Chromecast
 with Google TV has a low-end Mali GPU, and 4K60 with tone mapping may drop
 frames there. Measure on the weakest box before choosing it, with peak
-detection off as the fallback. Once the library has it, the switch itself
-is one line: `VideoControllerConfiguration.vo`, which media_kit defaults to
-`gpu`.
+detection off as the fallback. Once the library has it, the switch on
+Android is one line: `VideoControllerConfiguration.vo`, which media_kit
+defaults to `gpu` there. The desktops are not that simple. media_kit draws
+there through mpv's render API (`vo=libmpv`), where the renderer is not a
+`vo` setting. Nobody has checked whether that API can use libplacebo, so the
+same picture on every platform may not be reachable through media_kit.
 
 **Not built because each path costs a part of the player that works
 today.** Path 1 costs mpv's own drawing of the picture, path 3 costs having
