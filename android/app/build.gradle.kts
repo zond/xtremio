@@ -186,6 +186,18 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
+
+    // The side-by-side app above also looks different: a dark red launcher
+    // icon ground and a TV banner that reads "debug" under the wordmark. On a
+    // television the home screen shows an app by its banner, and the name
+    // often only when the tile is focused, so two identical banners are easy
+    // to mix up. A build type's resources replace main's of the same name, so
+    // the release build keeps main's untouched. tool/generate_branding.sh
+    // writes src/dev/res; both build types read it, as they share the suffix.
+    sourceSets {
+        getByName("debug").res.srcDir("src/dev/res")
+        getByName("profile").res.srcDir("src/dev/res")
+    }
 }
 
 kotlin {
