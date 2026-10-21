@@ -2364,6 +2364,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       // screen, and a direction key there seeks instead of walking the panel's
       // row.
       _timingFocus.requestFocus();
+    } else if (_isTv &&
+        _upNextSecondsLeft != null &&
+        _focusStop(_playNextFocus)) {
+      // The episode ended under the sheet. The card is the question on
+      // screen now, and the remote goes to it as it would have ([_focusUpNext]).
     } else {
       _focusNode.requestFocus();
     }

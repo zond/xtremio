@@ -16,6 +16,25 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     final millis = _settings.nextVideoNotificationDuration;
     setState(() => _upNextSecondsLeft = (millis / 1000).ceil());
     _resumeUpNext();
+    _focusUpNext();
+  }
+
+  /// On a television, puts the remote on "Play now" once the card is drawn.
+  ///
+  /// The card is the question on screen, so the centre key answers it: it
+  /// plays the next episode, and Left then centre calls it off. Left on the
+  /// video, the remote showed no ring anywhere, and the centre key there
+  /// dismissed the card ([_onVideoTap]'s rule), so the obvious press threw
+  /// the next episode away. The timing panel keeps the remote it has. A sheet
+  /// over the player hands the remote to the card as it closes
+  /// ([_showSheet]).
+  void _focusUpNext() {
+    if (!_isTv) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _upNextSecondsLeft == null || _timingShown) return;
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      _focusStop(_playNextFocus);
+    });
   }
 
   /// Ticks the countdown once a second while the card shows and no sheet

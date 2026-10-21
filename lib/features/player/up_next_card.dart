@@ -5,8 +5,9 @@ import '../../shell/device_profile.dart';
 /// Offered when an episode ends and the engine knows the next one: counts
 /// down to playing it, with a way out.
 ///
-/// Both buttons are focusable, so a remote can take the hand-off early or call
-/// it off once the player has moved focus onto the card. They wear the theme
+/// Both buttons are focusable. On a television the player puts the remote on
+/// "Play now" as the card appears, so the centre key takes the hand-off early
+/// and Left then centre calls it off. They wear the theme
 /// floor's stroke and nothing more. The card is an opaque surface of the app's
 /// own drawn over the video, so a light stroke has a known background under it.
 /// And two buttons side by side in a card that is itself a hand-over prompt are
@@ -29,8 +30,8 @@ class UpNextCard extends StatelessWidget {
   final VoidCallback onPlay;
   final VoidCallback onDismiss;
 
-  /// Attached to "Play now": where the remote lands when it reaches the
-  /// card, with Cancel a left press away.
+  /// Attached to "Play now": where the remote lands when the card appears,
+  /// with Cancel a left press away.
   final FocusNode? playFocusNode;
 
   /// How wide the card is allowed to get, on a phone or a desktop and on

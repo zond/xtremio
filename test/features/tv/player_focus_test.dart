@@ -328,18 +328,49 @@ void main() {
       expect(focusIn<PlayerBottomBar>(), isTrue);
     });
 
-    testWidgets('the centre key on the video dismisses the countdown', (
+    testWidgets('the card takes the remote, and the centre key plays on', (
       tester,
     ) async {
       final harness = await pumpCountdown(tester);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      // On the video the remote would show no ring, and the centre key there
+      // calls the hand-off off: the obvious press would lose the episode.
+      expect(focusedLabel(tester), 'Play now');
 
-      // A tap on the video dismisses it; the remote's centre key is that
-      // tap, not a play/pause toggle.
       await press(tester, LogicalKeyboardKey.select);
-      expect(find.byType(UpNextCard), findsNothing);
       expect(harness.engine.playOrPauseCalls, 0);
-      expect(harness.playerActions(), isNot(contains('NextVideo')));
+      expect(harness.playerActions(), contains('NextVideo'));
+    });
+
+    testWidgets('an episode that ends under a sheet hands the card the remote '
+        'as the sheet closes', (tester) async {
+      final harness = await pumpOnTv(tester, withNext: true);
+      harness.engine.emitTracks(
+        const PlaybackTracks(
+          audio: [
+            TrackInfo(id: '1', title: 'English'),
+            TrackInfo(id: '2', title: 'German'),
+          ],
+        ),
+      );
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      await press(tester, LogicalKeyboardKey.keyA);
+      expect(find.byType(AudioMenu), findsOneWidget);
+
+      harness.engine.emitEnd();
+      await pumpEvents(tester);
+      expect(find.byType(UpNextCard), findsOneWidget);
+      expect(
+        focusedLabel(tester),
+        isNot('Play now'),
+        reason: 'the sheet has it',
+      );
+
+      await tester.tap(find.text('German'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AudioMenu), findsNothing);
+      expect(focusedLabel(tester), 'Play now');
     });
 
     testWidgets('the D-pad stays on the card once it is there', (tester) async {
@@ -1166,9 +1197,11 @@ void main() {
       harness.engine.emitEnd();
       await pumpEvents(tester);
       expect(find.byType(UpNextCard), findsOneWidget);
+      expect(focusedLabel(tester), 'Play now');
 
       // The most transient thing on screen goes first, and the hand-off it
-      // was counting down to does not happen.
+      // was counting down to does not happen. The remote being on the card
+      // changes nothing about that.
       await systemBack(tester);
       expect(find.byType(UpNextCard), findsNothing);
       expect(find.byType(PlayerScreen), findsOneWidget);
