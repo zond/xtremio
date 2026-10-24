@@ -32,12 +32,14 @@ import 'features/local/local_media.dart';
 import 'widgets/focusable_tile.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
-/// `hardwareDecoding` and this device's "Verbose diagnostics"
-/// ([AppPrefs.verboseDiagnostics], read as the player opens).
+/// `hardwareDecoding` and this device's "Verbose diagnostics" and "Direct
+/// video" ([AppPrefs.verboseDiagnostics], [AppPrefs.directVideo], read as the
+/// player opens).
 /// [MediaKitEngine.new] fits.
 typedef PlaybackEngineBuilder = PlaybackEngine Function({
   required bool hardwareDecoding,
   required bool verboseLog,
+  required bool directVideo,
 });
 
 /// Root of the Xtremio application.
@@ -762,6 +764,7 @@ class _XtremioAppState extends State<XtremioApp> {
       (widget.engineBuilder ?? MediaKitEngine.new)(
         hardwareDecoding: _settings.hardwareDecoding,
         verboseLog: _prefs.verboseDiagnostics,
+        directVideo: _prefs.directVideo,
       );
 
   Future<bool> _isLoggedIn() async {

@@ -327,6 +327,41 @@ engine on first GET). The player opens that in media_kit/libmpv and reports
 interface over media_kit. Widget tests swap in `FakePlaybackEngine` through
 `PlaybackScope`.
 
+### Where the picture goes
+
+**A film is drawn one of two ways** (`VideoOutput`,
+`lib/features/player/video_output.dart`).
+
+- **The texture**, media_kit's way and the only one off Android. mpv draws
+  each frame with OpenGL into a texture, and Flutter draws that texture into
+  the app's picture. It shows every codec, at the cost of two GPU passes over
+  every pixel of every frame, and HDR is converted to SDR.
+- **The surface**, Android only, behind Settings → Player → "Direct video"
+  (`AppPrefs.directVideo`, off by default). MediaCodec decodes straight into a
+  `SurfaceView` of its own (`VideoSurface.kt`, `video_surface.dart`, mpv's
+  `vo=mediacodec_embed`), shown through hybrid composition. The display
+  hardware shows the film at the panel's resolution, the GPU does nothing per
+  frame, and an HDR10 or HLG film reaches the display as HDR. On a Galaxy Tab
+  S9 FE with a 4K HDR10 film the GPU went from 59-62% busy to 0%, and the
+  layer was `BT2020_ITU_PQ` with its HDR metadata.
+
+**The surface shows only what MediaCodec decodes**, so a film is placed on it
+by rules, all in `video_output.dart` and pinned by `video_output_test.dart`.
+A player on the surface starts with no video output and no video decoding
+(`surfaceStartOverrides`). Started with nowhere to draw, MediaCodec fails at
+init and the player reads that as a failed open. Once mpv's track list names
+the codec, a codec mpv sends to MediaCodec (`surfaceCodecs`, the same list as
+`hwdec-codecs`) goes to the surface, and anything else to the texture. If the
+decoder still ends up in software (`hwdec-current` says `no`), the film moves
+to the texture. Neither fallback has been seen on a device yet.
+
+**The surface is attached in media_kit's own order** (`surfaceAttach`: `vo`
+off, size, `wid`, `vo` on, `vid` again, then a seek to where it was) and
+taken off whenever it goes away (`surfaceDetach`), the app going to the
+background included. Subtitle text on the surface is drawn by `SubtitleLines`,
+which matches media_kit's own subtitle view. Picture subtitles are not drawn
+on either output.
+
 ### Streams, the proxy and the cache
 
 **Every stream reaches mpv as a media id, `xtremio://<id>`.** The player

@@ -388,6 +388,32 @@ void main() {
     });
   });
 
+  group('direct video', () {
+    test('is off until something is loaded, and stays off with nothing '
+        'stored', () async {
+      final prefs = AppPrefs(client: FakePrefsClient());
+      expect(prefs.directVideo, isFalse);
+      await prefs.load();
+      expect(prefs.directVideo, isFalse);
+    });
+
+    test(
+      'load reads a stored choice, and a change is written through',
+      () async {
+        final client = FakePrefsClient({AppPrefs.directVideoKey: true});
+        final prefs = AppPrefs(client: client);
+        await prefs.load();
+        expect(prefs.directVideo, isTrue);
+
+        await prefs.setDirectVideo(false);
+        expect(client.stored[AppPrefs.directVideoKey], isFalse);
+        final fresh = AppPrefs(client: client);
+        await fresh.load();
+        expect(fresh.directVideo, isFalse);
+      },
+    );
+  });
+
   group('verbose diagnostics', () {
     // Off until chosen, read back from storage, written through once.
     test(

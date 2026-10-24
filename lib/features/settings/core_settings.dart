@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
@@ -208,6 +209,47 @@ class BufferAheadSection extends StatelessWidget {
         options: BufferAhead.values,
         label: (choice) => choice.label,
         onPicked: prefs.setBufferAhead,
+      ),
+    );
+  }
+}
+
+/// Settings → Player → "Direct video": whether a film on Android may go
+/// straight to the display ([AppPrefs.directVideoKey], `VideoOutput.surface`).
+///
+/// The app's own preference, for the same reason as "Buffer ahead": whether a
+/// device's decoder copes is a fact about the device. Offered on Android only,
+/// the one platform with the surface. Off by default while the surface is new.
+class DirectVideoSection extends StatelessWidget {
+  const DirectVideoSection({super.key, required this.prefs, this.platform});
+
+  final AppPrefs prefs;
+
+  /// The platform to offer it on; the one running when null. For tests.
+  final TargetPlatform? platform;
+
+  static const String title = 'Direct video';
+  static const String explanation =
+      'Sends the picture straight to the screen. It is lighter on the device, '
+      'and HDR films show in HDR. Turn it off if a video plays without a '
+      'picture. A change applies to the next video you open.';
+
+  @override
+  Widget build(BuildContext context) {
+    if ((platform ?? defaultTargetPlatform) != TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+    return Explained(
+      title: title,
+      explanation: explanation,
+      child: SwitchListTile(
+        // The same key shape a `profile.settings` control gets, so a test
+        // finds this one the same way.
+        key: settingKey(AppPrefs.directVideoKey),
+        secondary: const ExplainIcon(Icon(Icons.hd_outlined)),
+        title: const Text(title),
+        value: prefs.directVideo,
+        onChanged: prefs.setDirectVideo,
       ),
     );
   }

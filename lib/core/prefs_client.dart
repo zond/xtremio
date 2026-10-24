@@ -162,6 +162,15 @@ class AppPrefs extends ChangeNotifier {
   /// device's log holds.
   static const String verboseDiagnosticsKey = 'verboseDiagnostics';
 
+  /// The `directVideo` key: whether a film on Android is decoded straight into
+  /// its own surface on the display (`VideoOutput.surface`), rather than drawn
+  /// into the app's picture by mpv (`VideoOutput.texture`). Off by default
+  /// while the surface is new: the films the surface cannot show are handed to
+  /// the texture by rules no device has exercised yet. Whether a device's
+  /// decoder copes is a fact about the device, so it belongs to this device
+  /// rather than to the account.
+  static const String directVideoKey = 'directVideo';
+
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
   /// made that is still remembered (see [SubtitleSyncMemory]), most
   /// recent first.
@@ -334,6 +343,10 @@ class AppPrefs extends ChangeNotifier {
   /// Whether the log is verbose -- see [verboseDiagnosticsKey].
   bool get verboseDiagnostics => _verboseDiagnostics;
   bool _verboseDiagnostics = false;
+
+  /// Whether a film may go straight to the display -- see [directVideoKey].
+  bool get directVideo => _directVideo;
+  bool _directVideo = false;
 
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 
@@ -547,6 +560,11 @@ class AppPrefs extends ChangeNotifier {
       _verboseDiagnostics = verbose;
       changed = true;
     }
+    final directVideo = stored[directVideoKey];
+    if (directVideo is bool && directVideo != _directVideo) {
+      _directVideo = directVideo;
+      changed = true;
+    }
     // Rows this build cannot read are dropped rather than failing the
     // load; an adjustment forgotten is the failure this whole store is
     // built to accept.
@@ -734,6 +752,13 @@ class AppPrefs extends ChangeNotifier {
     _verboseDiagnostics = value;
     notifyListeners();
     await _write(verboseDiagnosticsKey, value);
+  }
+
+  Future<void> setDirectVideo(bool value) async {
+    if (_directVideo == value) return;
+    _directVideo = value;
+    notifyListeners();
+    await _write(directVideoKey, value);
   }
 
   /// Stores [value], or removes the key entirely once nothing is

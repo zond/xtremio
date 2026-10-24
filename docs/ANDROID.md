@@ -394,8 +394,10 @@ and this is the only way mpv learns the rate at all. It is:
 The stats OSD draws `display 23.976 Hz` between the drop counts and
 `hwdec`. The fixed state is `hwdec mediacodec` with a `vo` count that has
 stopped climbing. Rendering into a real `Surface` rather than a Flutter
-texture, as the libVLC and Media3 players of the official app do, is not in
-scope unless the drops return.
+texture, as libVLC and Kodi do, is "Direct video"
+([ARCHITECTURE.md](ARCHITECTURE.md#where-the-picture-goes)): the
+`xtremio/video_surface` platform view (`VideoSurface.kt`), registered in
+`MainActivity`.
 
 ## Where torrent data goes
 

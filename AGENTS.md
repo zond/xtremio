@@ -316,6 +316,29 @@ and `rust/tests/subtitle_threshold.rs`.
   preselected, Off is a value, and a synthesized preference is never
   dispatched as `SubtitlePreferenceChanged`.
 
+## The surface shows only what MediaCodec decodes
+
+On Android with "Direct video" on, a film can go to its own `SurfaceView`
+instead of media_kit's texture (`VideoOutput`,
+`lib/features/player/video_output.dart`; see
+[Where the picture goes](docs/ARCHITECTURE.md#where-the-picture-goes)). Tests:
+`test/features/player/video_output_test.dart`,
+`test/features/player/subtitle_lines_test.dart`.
+
+- **Decide before decoding.** A player that may use the surface starts with
+  `vo=null` and `vid=no`, and attaches nothing until mpv's track list names the
+  codec. MediaCodec started with nowhere to draw fails, and the player reads
+  that as a failed open.
+- **A codec mpv decodes in software goes to the texture.** `surfaceCodecs` is
+  `hwdec-codecs`, and a test holds them equal. Change one only with the other.
+- **Attach in media_kit's order, detach whenever the surface goes**
+  (`surfaceAttach`, `surfaceDetach`). Nothing may draw into a destroyed
+  surface.
+- **Hybrid composition only** (`initExpensiveAndroidView`). The other platform
+  view modes copy the surface into a texture and lose what it is for.
+- **Anything drawn over the film is Flutter's**, subtitles included
+  (`SubtitleLines`). Nothing is drawn by mpv on the surface.
+
 ## The stats panel draws a reading or nothing at all
 
 A number that does not exist takes its row (or its half of one) away,

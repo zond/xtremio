@@ -21,8 +21,11 @@ import '../../src/rust/api/media.dart' as rust_media;
 import '../../shell/display_frame_rate.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
+import 'subtitle_lines.dart';
 import 'subtitle_match.dart';
 import 'torrent_stats.dart';
+import 'video_output.dart';
+import 'video_surface.dart';
 
 export 'playback_stats.dart';
 export 'playback_tracks.dart';
@@ -387,28 +390,36 @@ class MediaKitEngine implements PlaybackEngine {
   MediaKitEngine({
     bool hardwareDecoding = true,
     bool verboseLog = false,
+    bool directVideo = false,
     MediaIdProtocolRegistrar? registerMediaIdProtocol,
   }) : _verboseLog = verboseLog,
+       _hardwareDecoding = hardwareDecoding,
+       _surfaceAllowed = surfaceAllowed(
+         hardwareDecoding: hardwareDecoding,
+         directVideo: directVideo,
+       ),
        _player = Player(
          configuration: playerConfigurationFor(verboseLog: verboseLog),
        ) {
     final platform = _player.platform;
-    _overrides = _applyOverrides(platform, overridesFor(verboseLog: verboseLog))
-        .then(
+    _overrides =
+        _applyOverrides(platform, {
+          ...overridesFor(verboseLog: verboseLog),
+          if (_surfaceAllowed) ...surfaceStartOverrides,
+        }).then(
           (_) => registerMediaIdProtocolOn(
             platform,
             registerMediaIdProtocol ?? rust_media.mpvStreamRegister,
           ),
         );
-    _controller = VideoController(
-      _player,
-      configuration: configurationFor(hardwareDecoding: hardwareDecoding),
-    );
+    if (!_surfaceAllowed) _useTexture();
     _trackSubscriptions = [
       _player.stream.tracks.listen((tracks) {
         _lastTracks = tracks;
         _emitTracks();
+        _decideOutput(tracks);
       }),
+      _player.stream.videoParams.listen(_onVideoParams),
       _player.stream.track.listen((track) {
         _lastTrack = track;
         _emitTracks();
@@ -418,6 +429,7 @@ class MediaKitEngine implements PlaybackEngine {
     if (native is NativePlayer) {
       _observeSelection(native).ignore();
       _observeFrameRate(native).ignore();
+      if (_surfaceAllowed) _observeHwdec(native).ignore();
     }
   }
 
@@ -431,7 +443,39 @@ class MediaKitEngine implements PlaybackEngine {
   /// configuration, and a player cannot be reconfigured.
   final bool _verboseLog;
 
-  late final VideoController _controller;
+  /// `profile.settings.hardwareDecoding` as it stood when this player
+  /// opened; the texture's controller is configured from it
+  /// ([configurationFor]).
+  final bool _hardwareDecoding;
+
+  /// Whether this player may put the film on its own surface
+  /// ([surfaceAllowed]: Android, hardware decoding, "Direct video").
+  final bool _surfaceAllowed;
+
+  /// media_kit's controller for the texture, made when the film goes to the
+  /// texture ([_useTexture]): at construction where the surface is not
+  /// allowed, and on the surface's player only for a film it cannot show.
+  VideoController? _controller;
+
+  /// Where the film is drawn; null until it is decided ([VideoOutput]).
+  final ValueNotifier<VideoOutput?> _output = ValueNotifier(null);
+
+  /// The film's shape for the surface's box, from mpv's video parameters, or
+  /// the track's size until those arrive.
+  final ValueNotifier<double?> _aspect = ValueNotifier(null);
+
+  /// The surface mpv is drawing into, while there is one.
+  VideoSurfaceInfo? _surface;
+
+  /// The property writes to the surface, one after another. A surface that
+  /// changes size while the last write is still going waits for it.
+  Future<void> _surfaceWrites = Future.value();
+
+  late final VideoSurfaceEvents _surfaceEvents = VideoSurfaceEvents(
+    onSurface: _onSurface,
+    onGone: _onSurfaceGone,
+  );
+
   bool _disposed = false;
 
   /// The mpv properties in [mpvOverrides], on their way to the backend.
@@ -722,6 +766,38 @@ class MediaKitEngine implements PlaybackEngine {
         ? 'videotoolbox'
         : 'mediacodec,mediacodec-copy',
   );
+
+  /// What a player that may use the surface starts with
+  /// ([VideoOutput.surface]): no video output and no video decoding until the
+  /// output is decided, and MediaCodec decoding straight into the surface
+  /// (`mediacodec`, never the copying `mediacodec-copy`) once it is. Started
+  /// with nowhere to draw, MediaCodec fails at init ("Both surface and
+  /// native_window are NULL") and the player reads that as a failed open.
+  static const Map<String, String> surfaceStartOverrides = {
+    'vo': 'null',
+    'vid': 'no',
+    'hwdec': 'mediacodec',
+  };
+
+  /// The writes that put the film on [surface], in media_kit's own order
+  /// (`android_video_controller/real.dart`): `vo` off first, then the size and
+  /// the window, then `vo` on, then `vid` again so the decoder starts over with
+  /// the new output.
+  static List<(String, String)> surfaceAttach(VideoSurfaceInfo surface) => [
+    ('vo', 'null'),
+    ('android-surface-size', '${surface.width}x${surface.height}'),
+    ('wid', '${surface.wid}'),
+    ('vo', 'mediacodec_embed'),
+    ('vid', 'auto'),
+  ];
+
+  /// The writes that take the film off a surface that is going away: nothing
+  /// may draw into it after it is gone.
+  static const List<(String, String)> surfaceDetach = [
+    ('vo', 'null'),
+    ('vid', 'no'),
+    ('wid', '0'),
+  ];
 
   /// Which codecs may go to the hardware decoder.
   ///
@@ -1263,35 +1339,170 @@ class MediaKitEngine implements PlaybackEngine {
   /// one shows nothing until this moves to libass.
   @override
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24}) {
-    final style = _subtitleStyle;
     final padding = EdgeInsets.fromLTRB(16, 0, 16, subtitleBottomPadding);
+    return ValueListenableBuilder<VideoOutput?>(
+      valueListenable: _output,
+      builder: (context, output, _) => switch (output) {
+        VideoOutput.texture => _textureVideo(padding),
+        VideoOutput.surface => _surfaceVideo(padding),
+        null => const ColoredBox(color: Color(0xFF000000)),
+      },
+    );
+  }
+
+  /// media_kit's [Video] over the texture, with its own subtitle view.
+  Widget _textureVideo(EdgeInsets padding) {
     if (_lift.changedTo(padding)) _pushSubtitlePadding(padding);
     return Video(
       key: _videoKey,
-      controller: _controller,
+      controller: _controller!,
       controls: NoVideoControls,
       fill: const Color(0xFF000000),
       subtitleViewConfiguration: SubtitleViewConfiguration(
-        style: TextStyle(
-          fontSize: style.fontSize,
-          color: style.color,
-          height: 1.4,
-          fontWeight: FontWeight.w500,
-          backgroundColor: style.backgroundColor,
-          shadows: style.hasBackground
-              ? null
-              : const [
-                  Shadow(color: Color(0xFF000000), blurRadius: 4),
-                  Shadow(
-                    color: Color(0xFF000000),
-                    offset: Offset(1, 1),
-                    blurRadius: 2,
-                  ),
-                ],
-        ),
+        style: _subtitleTextStyle(),
         padding: padding,
       ),
     );
+  }
+
+  /// The film's own surface, kept to its shape, with the subtitles drawn over
+  /// it by [SubtitleLines] ([VideoOutput.surface]).
+  Widget _surfaceVideo(EdgeInsets padding) => Stack(
+    fit: StackFit.expand,
+    children: [
+      const ColoredBox(color: Color(0xFF000000)),
+      Center(
+        child: ValueListenableBuilder<double?>(
+          valueListenable: _aspect,
+          builder: (context, aspect, child) =>
+              AspectRatio(aspectRatio: aspect ?? 16 / 9, child: child),
+          child: VideoSurface(events: _surfaceEvents),
+        ),
+      ),
+      SubtitleLines(
+        lines: _player.stream.subtitle,
+        initial: _player.state.subtitle,
+        style: _subtitleTextStyle(),
+        padding: padding,
+      ),
+    ],
+  );
+
+  /// The subtitle text's style from [_subtitleStyle]: the same on either
+  /// output.
+  TextStyle _subtitleTextStyle() {
+    final style = _subtitleStyle;
+    return TextStyle(
+      fontSize: style.fontSize,
+      color: style.color,
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+      backgroundColor: style.backgroundColor,
+      shadows: style.hasBackground
+          ? null
+          : const [
+              Shadow(color: Color(0xFF000000), blurRadius: 4),
+              Shadow(
+                color: Color(0xFF000000),
+                offset: Offset(1, 1),
+                blurRadius: 2,
+              ),
+            ],
+    );
+  }
+
+  // --- Video output ----------------------------------------------------------
+
+  /// Puts the film on the texture: media_kit's controller, made once. It sets
+  /// its own `vo`, `hwdec` and `vid` and waits for its texture.
+  void _useTexture() {
+    _controller ??= VideoController(
+      _player,
+      configuration: configurationFor(hardwareDecoding: _hardwareDecoding),
+    );
+    _output.value = VideoOutput.texture;
+  }
+
+  /// Decides the output from the first video track's codec, once
+  /// ([videoOutputForCodec]). A film with no video track decides nothing.
+  void _decideOutput(Tracks tracks) {
+    if (!_surfaceAllowed || _output.value != null || _disposed) return;
+    final video = [
+      for (final track in tracks.video)
+        if (track.id != 'auto' && track.id != 'no') track,
+    ];
+    if (video.isEmpty) return;
+    final first = video.first;
+    final w = first.w;
+    final h = first.h;
+    if (_aspect.value == null && w != null && h != null && w > 0 && h > 0) {
+      _aspect.value = w / h;
+    }
+    final output = videoOutputForCodec(allowed: true, codec: first.codec);
+    if (output == null) return;
+    DiagnosticsLog.info(
+      'player',
+      'video output: ${output.name} for ${first.codec}',
+    );
+    if (output == VideoOutput.texture) {
+      _useTexture();
+    } else {
+      _output.value = VideoOutput.surface;
+    }
+  }
+
+  void _onVideoParams(VideoParams params) {
+    final w = params.dw;
+    final h = params.dh;
+    if (w == null || h == null || w <= 0 || h <= 0) return;
+    final rotated = params.rotate == 90 || params.rotate == 270;
+    _aspect.value = rotated ? h / w : w / h;
+  }
+
+  /// Watches which decoder took the film on the surface, and moves the film
+  /// to the texture when it is software after all
+  /// ([surfaceDecodingFellBack]).
+  Future<void> _observeHwdec(NativePlayer native) async {
+    try {
+      await native.observeProperty('hwdec-current', (value) async {
+        if (_output.value != VideoOutput.surface || _surface == null) return;
+        if (!surfaceDecodingFellBack(value)) return;
+        DiagnosticsLog.warn(
+          'player',
+          'video output: the surface got a software decoder; to the texture',
+        );
+        await _writeSurface(surfaceDetach);
+        _surface = null;
+        _useTexture();
+      });
+    } catch (_) {
+      // Torn down before the player initialised: nothing left to watch.
+    }
+  }
+
+  void _onSurface(VideoSurfaceInfo surface) {
+    if (_output.value != VideoOutput.surface || _disposed) return;
+    _surface = surface;
+    _surfaceWrites = _surfaceWrites.then((_) async {
+      await _writeSurface(surfaceAttach(surface));
+      if (_disposed) return;
+      // mpv starts the video over from the new output; the position is
+      // where it was, as media_kit does after its own `vid` re-init.
+      await _player.seek(_player.state.position);
+    });
+  }
+
+  void _onSurfaceGone() {
+    if (_surface == null) return;
+    _surface = null;
+    _surfaceWrites = _surfaceWrites.then((_) => _writeSurface(surfaceDetach));
+  }
+
+  Future<void> _writeSurface(List<(String, String)> writes) async {
+    for (final (key, value) in writes) {
+      if (_disposed) return;
+      await _setProperty(key, value);
+    }
   }
 
   /// Tells the live subtitle view about a padding the configuration cannot

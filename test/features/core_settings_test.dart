@@ -603,6 +603,72 @@ void main() {
     }, variant: TargetPlatformVariant.mobile());
   });
 
+  group('direct video', () {
+    Finder theSwitch() => find.byKey(settingKey(AppPrefs.directVideoKey));
+
+    testWidgets('starts off, under Player, and says what it does', (
+      tester,
+    ) async {
+      await pumpSettings(tester, prefs: AppPrefs.inMemory());
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+      await openExplanation(tester, DirectVideoSection.title);
+      expect(
+        inExplanation(
+          'Sends the picture straight to the screen. It is lighter on the '
+          'device, and HDR films show in HDR. Turn it off if a video plays '
+          'without a picture. A change applies to the next video you open.',
+        ),
+        findsOneWidget,
+      );
+      await closeExplanation(tester);
+      final player = tester.getTopLeft(find.text('Player'));
+      final subtitles = tester.getTopLeft(find.text('Subtitles'));
+      final tile = tester.getTopLeft(theSwitch());
+      expect(tile.dy, greaterThan(player.dy));
+      expect(tile.dy, lessThan(subtitles.dy));
+    });
+
+    testWidgets('writes the choice to the preferences, not the core', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      final core = await pumpSettings(tester, prefs: prefs);
+      await tester.ensureVisible(theSwitch());
+      await tester.tap(theSwitch());
+      await tester.pump();
+
+      expect(prefs.directVideo, isTrue);
+      expect(stored.stored[AppPrefs.directVideoKey], isTrue);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
+      expect(core.dispatched, isEmpty);
+    });
+
+    testWidgets('is offered on Android only', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: Column(
+              children: [
+                for (final platform in [
+                  TargetPlatform.iOS,
+                  TargetPlatform.macOS,
+                  TargetPlatform.linux,
+                  TargetPlatform.windows,
+                ])
+                  DirectVideoSection(
+                    prefs: AppPrefs.inMemory(),
+                    platform: platform,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(theSwitch(), findsNothing);
+    });
+  });
+
   group('verbose diagnostics', () {
     Finder theSwitch() =>
         find.byKey(settingKey(AppPrefs.verboseDiagnosticsKey));
@@ -651,10 +717,11 @@ void main() {
     final core = await pumpSettings(tester, ctx: {});
     expect(find.text('Loading settings…'), findsWidgets);
     // Every switch over a `profile.settings` key is behind that pending
-    // tile. The two that are drawn are the app's own preferences, which do
+    // tile. The three that are drawn are the app's own preferences, which do
     // not come out of `ctx` and must not wait for it.
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.byType(SwitchListTile), findsNWidgets(3));
     expect(find.byKey(settingKey(AppPrefs.shareWhileIdleKey)), findsOneWidget);
+    expect(find.byKey(settingKey(AppPrefs.directVideoKey)), findsOneWidget);
     expect(
       find.byKey(settingKey(AppPrefs.verboseDiagnosticsKey)),
       findsOneWidget,
