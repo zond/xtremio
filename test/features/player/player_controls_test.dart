@@ -146,6 +146,29 @@ void main() {
     expect(find.byTooltip('Play (Space)'), findsOneWidget);
   });
 
+  testWidgets('hidden controls hold their time, and show the new one when '
+      'they come back', (tester) async {
+    // The faded bar is still mounted. A clock and a seek bar that followed
+    // the film would rebuild with every position update, 24 a second, and
+    // each rebuild between two of the film's frames is a frame of its own
+    // that draws the whole picture again.
+    final harness = await pumpPlaying(tester);
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+    await pumpWatching(tester, harness, PlayerScreen.controlsTimeout);
+    await tester.pumpAndSettle();
+    expect(controlsOpacity(tester), 0);
+
+    harness.engine.emitPosition(const Duration(minutes: 30));
+    harness.engine.emitBuffer(const Duration(minutes: 31));
+    await pumpEvents(tester);
+    expect(find.textContaining('30:00'), findsNothing);
+
+    await tapVideo(tester);
+    expect(controlsOpacity(tester), 1);
+    expect(find.textContaining('30:00'), findsOneWidget);
+  });
+
   testWidgets('a focused control does not hold the controls open off a TV', (
     tester,
   ) async {

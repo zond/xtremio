@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2736,8 +2737,17 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                                     wide: wide,
                                     playing: _playing,
                                     seekStep: seekStep,
-                                    position: _position,
-                                    buffered: _buffer,
+                                    // Hidden, the bar holds what it last
+                                    // showed. It stays mounted under the
+                                    // fade, and a bar that followed the film
+                                    // would ask for frames between the
+                                    // film's own ([_HeldValue]).
+                                    position: shown
+                                        ? _position
+                                        : _HeldValue(_position.value),
+                                    buffered: shown
+                                        ? _buffer
+                                        : _HeldValue(_buffer.value),
                                     duration: _duration,
                                     showRemaining: _showRemaining,
                                     volume: _volume,
@@ -2941,4 +2951,26 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
     return null;
   }
+}
+
+/// A value that never changes, for the controls while they are hidden.
+///
+/// The faded bar stays mounted, so its clock and seek bar would rebuild with
+/// every position update, 24 a second. A rebuild between two of the film's
+/// frames is a frame of its own, and each frame draws the whole picture
+/// again. Measured on a Galaxy Tab S9 FE with a 4K film: Flutter drew 26 to
+/// 29 frames a second for a 23.976 fps film, and 24 once the hidden bar held
+/// its values. Shown again, the bar gets the live values and the current
+/// time at once.
+class _HeldValue<T> implements ValueListenable<T> {
+  const _HeldValue(this.value);
+
+  @override
+  final T value;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
