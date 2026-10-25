@@ -44,6 +44,7 @@ dependencies:
   # in a living room rather than in this suite.
   qr_flutter: ^4.1.0
   file_selector: ^1.1.0
+  wakelock_plus: ^1.8.2
 
 dev_dependencies:
   flutter_test:

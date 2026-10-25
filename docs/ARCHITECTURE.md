@@ -363,6 +363,11 @@ background included. Subtitle text on the surface is drawn by `SubtitleLines`,
 which matches media_kit's own subtitle view. Picture subtitles are not drawn
 on either output.
 
+**The screen stays on while a film plays, on either output.**
+`ScreenAwakeWhilePlaying` (`screen_awake.dart`) wraps both outputs and follows
+mpv's play and pause. The surface builds no media_kit `Video`, and the
+texture's `Video` is built with its own hold off, so the flag has one owner.
+
 ### Streams, the proxy and the cache
 
 **Every stream reaches mpv as a media id, `xtremio://<id>`.** The player

@@ -21,6 +21,7 @@ import '../../src/rust/api/media.dart' as rust_media;
 import '../../shell/display_frame_rate.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
+import 'screen_awake.dart';
 import 'subtitle_lines.dart';
 import 'subtitle_match.dart';
 import 'torrent_stats.dart';
@@ -1336,23 +1337,30 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24}) {
     final padding = EdgeInsets.fromLTRB(16, 0, 16, subtitleBottomPadding);
-    return ValueListenableBuilder<VideoOutput?>(
-      valueListenable: _output,
-      builder: (context, output, _) => switch (output) {
-        VideoOutput.texture => _textureVideo(padding),
-        VideoOutput.surface => _surfaceVideo(padding),
-        null => const ColoredBox(color: Color(0xFF000000)),
-      },
+    return ScreenAwakeWhilePlaying(
+      playing: _player.stream.playing,
+      initial: _player.state.playing,
+      child: ValueListenableBuilder<VideoOutput?>(
+        valueListenable: _output,
+        builder: (context, output, _) => switch (output) {
+          VideoOutput.texture => _textureVideo(padding),
+          VideoOutput.surface => _surfaceVideo(padding),
+          null => const ColoredBox(color: Color(0xFF000000)),
+        },
+      ),
     );
   }
 
-  /// media_kit's [Video] over the texture, with its own subtitle view.
+  /// media_kit's [Video] over the texture, with its own subtitle view. Its
+  /// hold on the screen is off, since [ScreenAwakeWhilePlaying] in
+  /// [buildVideo] keeps the screen on for either output.
   Widget _textureVideo(EdgeInsets padding) {
     if (_lift.changedTo(padding)) _pushSubtitlePadding(padding);
     return Video(
       key: _videoKey,
       controller: _controller!,
       controls: NoVideoControls,
+      wakelock: false,
       fill: const Color(0xFF000000),
       subtitleViewConfiguration: SubtitleViewConfiguration(
         style: _subtitleTextStyle(),

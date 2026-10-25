@@ -323,7 +323,8 @@ instead of media_kit's texture (`VideoOutput`,
 `lib/features/player/video_output.dart`; see
 [Where the picture goes](docs/ARCHITECTURE.md#where-the-picture-goes)). Tests:
 `test/features/player/video_output_test.dart`,
-`test/features/player/subtitle_lines_test.dart`.
+`test/features/player/subtitle_lines_test.dart`,
+`test/features/player/screen_awake_test.dart`.
 
 - **Decide before decoding.** A player that may use the surface starts with
   `vo=null` and `vid=no`, and attaches nothing until mpv's track list names the
@@ -338,6 +339,12 @@ instead of media_kit's texture (`VideoOutput`,
   view modes copy the surface into a texture and lose what it is for.
 - **Anything drawn over the film is Flutter's**, subtitles included
   (`SubtitleLines`). Nothing is drawn by mpv on the surface.
+- **The screen stays on while a film plays, on either output.**
+  `ScreenAwakeWhilePlaying` (`lib/features/player/screen_awake.dart`) wraps
+  both outputs and is the one owner of that flag. The surface builds no
+  media_kit `Video`, and the texture's `Video` is built with
+  `wakelock: false`. `Video` does more than draw, so anything the surface
+  needs from it is done by the player for both outputs.
 
 ## The stats panel draws a reading or nothing at all
 
