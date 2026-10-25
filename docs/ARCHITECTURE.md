@@ -336,14 +336,15 @@ interface over media_kit. Widget tests swap in `FakePlaybackEngine` through
   each frame with OpenGL into a texture, and Flutter draws that texture into
   the app's picture. It shows every codec, at the cost of two GPU passes over
   every pixel of every frame, and HDR is converted to SDR.
-- **The surface**, Android only, behind Settings → Player → "Direct video"
-  (`AppPrefs.directVideo`, off by default). MediaCodec decodes straight into a
+- **The surface**, what Android uses whenever hardware decoding is on
+  (`surfaceAllowed`). MediaCodec decodes straight into a
   `SurfaceView` of its own (`VideoSurface.kt`, `video_surface.dart`, mpv's
   `vo=mediacodec_embed`), shown through hybrid composition. The display
   hardware shows the film at the panel's resolution, the GPU does nothing per
   frame, and an HDR10 or HLG film reaches the display as HDR. On a Galaxy Tab
   S9 FE with a 4K HDR10 film the GPU went from 59-62% busy to 0%, and the
-  layer was `BT2020_ITU_PQ` with its HDR metadata.
+  layer was `BT2020_ITU_PQ` with its HDR metadata. It has played 4K films on
+  a phone and on a television, from a torrent and from Real-Debrid.
 
 **The surface shows only what MediaCodec decodes**, so a film is placed on it
 by rules, all in `video_output.dart` and pinned by `video_output_test.dart`.
@@ -353,7 +354,7 @@ init and the player reads that as a failed open. Once mpv's track list names
 the codec, a codec mpv sends to MediaCodec (`surfaceCodecs`, the same list as
 `hwdec-codecs`) goes to the surface, and anything else to the texture. If the
 decoder still ends up in software (`hwdec-current` says `no`), the film moves
-to the texture. Neither fallback has been seen on a device yet.
+to the texture. With hardware decoding off, every film goes to the texture.
 
 **The surface is attached in media_kit's own order** (`surfaceAttach`: `vo`
 off, size, `wid`, `vo` on, `vid` again, then a seek to where it was) and

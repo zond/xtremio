@@ -280,8 +280,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Not a `profile.settings` field, so it is outside `_withSettings`
           // and shows whether or not the `ctx` field has arrived.
           BufferAheadSection(prefs: _prefs),
-          // The app's own preference too, and Android's only.
-          DirectVideoSection(prefs: _prefs),
           _withSettings(
             (settings, write) =>
                 PlayerSettingsSection(settings: settings, onSetting: write),

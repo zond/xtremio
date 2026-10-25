@@ -318,7 +318,7 @@ and `rust/tests/subtitle_threshold.rs`.
 
 ## The surface shows only what MediaCodec decodes
 
-On Android with "Direct video" on, a film can go to its own `SurfaceView`
+On Android with hardware decoding on, a film can go to its own `SurfaceView`
 instead of media_kit's texture (`VideoOutput`,
 `lib/features/player/video_output.dart`; see
 [Where the picture goes](docs/ARCHITECTURE.md#where-the-picture-goes)). Tests:

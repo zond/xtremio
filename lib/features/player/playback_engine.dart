@@ -390,14 +390,10 @@ class MediaKitEngine implements PlaybackEngine {
   MediaKitEngine({
     bool hardwareDecoding = true,
     bool verboseLog = false,
-    bool directVideo = false,
     MediaIdProtocolRegistrar? registerMediaIdProtocol,
   }) : _verboseLog = verboseLog,
        _hardwareDecoding = hardwareDecoding,
-       _surfaceAllowed = surfaceAllowed(
-         hardwareDecoding: hardwareDecoding,
-         directVideo: directVideo,
-       ),
+       _surfaceAllowed = surfaceAllowed(hardwareDecoding: hardwareDecoding),
        _player = Player(
          configuration: playerConfigurationFor(verboseLog: verboseLog),
        ) {
@@ -449,7 +445,7 @@ class MediaKitEngine implements PlaybackEngine {
   final bool _hardwareDecoding;
 
   /// Whether this player may put the film on its own surface
-  /// ([surfaceAllowed]: Android, hardware decoding, "Direct video").
+  /// ([surfaceAllowed]: Android, with hardware decoding on).
   final bool _surfaceAllowed;
 
   /// media_kit's controller for the texture, made when the film goes to the

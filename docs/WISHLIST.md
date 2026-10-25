@@ -150,7 +150,12 @@ About playing on the Android TV box or a phone, not about casting. A cast
 already keeps HDR10 and HLG ([CASTING.md](CASTING.md#converting-the-picture)).
 The receiver decodes the film and switches the television itself.
 
-**Every HDR film is shown as SDR today.** media_kit's Android controller has
+**Path 1 below is built.** Android shows a film on its own `SurfaceView`
+whenever hardware decoding is on, and an HDR10 film reaches the display as
+HDR ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-picture-goes)). The rest of
+this entry describes the texture, which shows HDR as SDR.
+
+**Every HDR film on the texture is shown as SDR.** media_kit's Android controller has
 mpv draw each frame with `vo=gpu` (OpenGL ES, `gpu-context=android`) into a
 Flutter texture. Flutter composites that texture as an 8-bit SDR image.
 Android never sees an HDR video layer, so the box never switches HDMI into
@@ -160,8 +165,8 @@ takes.
 
 | Variant | Today | What could support it |
 |---|---|---|
-| HDR10 | Tone-mapped to SDR | Any of the three paths below |
-| HLG | Tone-mapped to SDR | Any of the three paths below |
+| HDR10 | HDR on the surface, tone-mapped to SDR on the texture | Path 1, built |
+| HLG | HDR on the surface, tone-mapped to SDR on the texture | Path 1, built |
 | HDR10+ | Tone-mapped to SDR, its dynamic metadata ignored | Only a hardware decoder writing to the surface (paths 1 and 3) |
 | Dolby Vision 8 | Its base layer, tone-mapped | Dolby Vision on a box with a Dolby Vision decoder (paths 1 and 3). Otherwise its HDR10 or HLG base layer as HDR |
 | Dolby Vision 7 | Its HDR10 base layer, tone-mapped | The base layer as HDR10. The full enhancement layer is hard for any Android player |

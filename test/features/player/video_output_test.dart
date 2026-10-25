@@ -8,11 +8,10 @@ import 'package:xtremio/features/player/video_surface.dart';
 /// mpv to put it on the surface and take it off.
 void main() {
   group('the surface is allowed', () {
-    test('on Android with hardware decoding and "Direct video" on', () {
+    test('on Android with hardware decoding on', () {
       expect(
         surfaceAllowed(
           hardwareDecoding: true,
-          directVideo: true,
           platform: TargetPlatform.android,
         ),
         isTrue,
@@ -22,21 +21,14 @@ void main() {
     test('and nowhere else', () {
       for (final platform in TargetPlatform.values) {
         for (final hardwareDecoding in [false, true]) {
-          for (final directVideo in [false, true]) {
-            final expected =
-                platform == TargetPlatform.android &&
-                hardwareDecoding &&
-                directVideo;
-            expect(
-              surfaceAllowed(
-                hardwareDecoding: hardwareDecoding,
-                directVideo: directVideo,
-                platform: platform,
-              ),
-              expected,
-              reason: '$platform hw=$hardwareDecoding direct=$directVideo',
-            );
-          }
+          expect(
+            surfaceAllowed(
+              hardwareDecoding: hardwareDecoding,
+              platform: platform,
+            ),
+            platform == TargetPlatform.android && hardwareDecoding,
+            reason: '$platform hw=$hardwareDecoding',
+          );
         }
       }
     });

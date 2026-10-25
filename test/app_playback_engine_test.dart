@@ -31,26 +31,19 @@ void main() {
 
   /// And every `verboseLog`, in the same order.
   late List<bool> verbose;
-  late List<bool> direct;
 
   setUp(() {
     built = [];
     verbose = [];
-    direct = [];
   });
 
   Widget app(FakeCoreClient core, {AppPrefs? prefs}) => XtremioApp(
     core: core,
     prefs: prefs,
     engineBuilder:
-        ({
-          required bool hardwareDecoding,
-          required bool verboseLog,
-          required bool directVideo,
-        }) {
+        ({required bool hardwareDecoding, required bool verboseLog}) {
           built.add(hardwareDecoding);
           verbose.add(verboseLog);
-          direct.add(directVideo);
           return FakePlaybackEngine();
         },
     sharingActivity: FakeSharingActivity(),
@@ -104,18 +97,5 @@ void main() {
     await tester.pumpAndSettle();
     openPlayer(tester);
     expect(verbose, [false, true]);
-  });
-
-  testWidgets('a player follows "Direct video" as it stands when it opens, '
-      'and it is off until it is turned on', (tester) async {
-    final prefs = AppPrefs.inMemory();
-    await tester.pumpWidget(app(coreWith(const {}), prefs: prefs));
-    await tester.pumpAndSettle();
-    openPlayer(tester);
-
-    await prefs.setDirectVideo(true);
-    await tester.pumpAndSettle();
-    openPlayer(tester);
-    expect(direct, [false, true]);
   });
 }

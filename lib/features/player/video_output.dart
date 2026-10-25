@@ -29,17 +29,14 @@ enum VideoOutput { texture, surface }
 const Set<String> surfaceCodecs = {'h264', 'hevc', 'vp8', 'vp9', 'av1'};
 
 /// Whether a player may use [VideoOutput.surface] at all: on Android, with
-/// hardware decoding on, and with the viewer's "Direct video" on
-/// (`AppPrefs.directVideo`). Anything else is [VideoOutput.texture] for the
+/// hardware decoding on. Anything else is [VideoOutput.texture] for the
 /// player's whole life.
 bool surfaceAllowed({
   required bool hardwareDecoding,
-  required bool directVideo,
   TargetPlatform? platform,
 }) =>
     (platform ?? defaultTargetPlatform) == TargetPlatform.android &&
-    hardwareDecoding &&
-    directVideo;
+    hardwareDecoding;
 
 /// The output for a film whose video codec mpv names [codec] (its
 /// `current-tracks/video/codec`), in a player where the surface is

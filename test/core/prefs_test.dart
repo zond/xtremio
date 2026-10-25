@@ -388,30 +388,16 @@ void main() {
     });
   });
 
-  group('direct video', () {
-    test('is off until something is loaded, and stays off with nothing '
-        'stored', () async {
-      final prefs = AppPrefs(client: FakePrefsClient());
-      expect(prefs.directVideo, isFalse);
-      await prefs.load();
-      expect(prefs.directVideo, isFalse);
+  group('retired keys', () {
+    test('a stored `directVideo` is removed on load, once', () async {
+      final client = FakePrefsClient({'directVideo': false});
+      await AppPrefs(client: client).load();
+      expect(client.stored.containsKey('directVideo'), isFalse);
+
+      client.writes.clear();
+      await AppPrefs(client: client).load();
+      expect(client.writes, isEmpty);
     });
-
-    test(
-      'load reads a stored choice, and a change is written through',
-      () async {
-        final client = FakePrefsClient({AppPrefs.directVideoKey: true});
-        final prefs = AppPrefs(client: client);
-        await prefs.load();
-        expect(prefs.directVideo, isTrue);
-
-        await prefs.setDirectVideo(false);
-        expect(client.stored[AppPrefs.directVideoKey], isFalse);
-        final fresh = AppPrefs(client: client);
-        await fresh.load();
-        expect(fresh.directVideo, isFalse);
-      },
-    );
   });
 
   group('verbose diagnostics', () {

@@ -169,8 +169,7 @@ class MainActivity : FlutterActivity() {
         localMedia = LocalMediaChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         appUpdate = AppUpdateChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         power = PowerChannel(this, flutterEngine.dartExecutor.binaryMessenger)
-        // The film's own surface, for "Direct video"
-        // (lib/features/player/video_surface.dart).
+        // The film's own surface (lib/features/player/video_surface.dart).
         flutterEngine.platformViewsController.registry.registerViewFactory(
             VideoSurfaceFactory.VIEW_TYPE,
             VideoSurfaceFactory(flutterEngine.dartExecutor.binaryMessenger),

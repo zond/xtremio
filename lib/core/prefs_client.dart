@@ -162,15 +162,6 @@ class AppPrefs extends ChangeNotifier {
   /// device's log holds.
   static const String verboseDiagnosticsKey = 'verboseDiagnostics';
 
-  /// The `directVideo` key: whether a film on Android is decoded straight into
-  /// its own surface on the display (`VideoOutput.surface`), rather than drawn
-  /// into the app's picture by mpv (`VideoOutput.texture`). Off by default
-  /// while the surface is new: the films the surface cannot show are handed to
-  /// the texture by rules no device has exercised yet. Whether a device's
-  /// decoder copes is a fact about the device, so it belongs to this device
-  /// rather than to the account.
-  static const String directVideoKey = 'directVideo';
-
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
   /// made that is still remembered (see [SubtitleSyncMemory]), most
   /// recent first.
@@ -213,14 +204,20 @@ class AppPrefs extends ChangeNotifier {
 
   /// Keys an older build wrote and this one removes on [load]:
   /// `similarApiKey`, the Gemini key a viewer once pasted so the app could
-  /// ask a model itself, and `similarModel`, which model it asked.
+  /// ask a model itself, `similarModel`, which model it asked, and
+  /// `directVideo`, a choice of where a film on Android was drawn.
   ///
   /// This build asks the xtremio-xervice server for "More like this", and the
-  /// server holds the only key there is, so neither means anything here. They
-  /// are not merely ignored. The first is a credential, and a credential
-  /// nothing reads should not be lying in a file on the device. So a load that
-  /// finds either removes it, once, and every later load finds nothing.
-  static const List<String> retiredKeys = ['similarApiKey', 'similarModel'];
+  /// server holds the only key there is, so the first two mean nothing here.
+  /// Nothing reads the third. They are not merely ignored. The first is a
+  /// credential, and a credential nothing reads should not be lying in a file
+  /// on the device. So a load that finds any of them removes it, once, and
+  /// every later load finds nothing.
+  static const List<String> retiredKeys = [
+    'similarApiKey',
+    'similarModel',
+    'directVideo',
+  ];
 
   /// The `similarSuggestions` key: what the server has already answered
   /// about each title (see [SimilarMemory]).
@@ -343,10 +340,6 @@ class AppPrefs extends ChangeNotifier {
   /// Whether the log is verbose -- see [verboseDiagnosticsKey].
   bool get verboseDiagnostics => _verboseDiagnostics;
   bool _verboseDiagnostics = false;
-
-  /// Whether a film may go straight to the display -- see [directVideoKey].
-  bool get directVideo => _directVideo;
-  bool _directVideo = false;
 
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 
@@ -560,11 +553,6 @@ class AppPrefs extends ChangeNotifier {
       _verboseDiagnostics = verbose;
       changed = true;
     }
-    final directVideo = stored[directVideoKey];
-    if (directVideo is bool && directVideo != _directVideo) {
-      _directVideo = directVideo;
-      changed = true;
-    }
     // Rows this build cannot read are dropped rather than failing the
     // load; an adjustment forgotten is the failure this whole store is
     // built to accept.
@@ -752,13 +740,6 @@ class AppPrefs extends ChangeNotifier {
     _verboseDiagnostics = value;
     notifyListeners();
     await _write(verboseDiagnosticsKey, value);
-  }
-
-  Future<void> setDirectVideo(bool value) async {
-    if (_directVideo == value) return;
-    _directVideo = value;
-    notifyListeners();
-    await _write(directVideoKey, value);
   }
 
   /// Stores [value], or removes the key entirely once nothing is
