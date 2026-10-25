@@ -195,6 +195,19 @@ class MainActivity : FlutterActivity() {
         if (opensDownloads(intent)) downloads?.openRequested()
     }
 
+    // A window shown again after being stopped (minimised, behind another
+    // app) can come back with no view inside it focused. Keys go to the
+    // focused view, so with none, Space only takes the window out of touch
+    // mode and a media key falls through to the last app registered for
+    // media buttons. This hands focus back to Flutter, and only when nothing
+    // has it, so a native view that has focus keeps it.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && currentFocus == null) {
+            findViewById<View>(FLUTTER_VIEW_ID)?.requestFocus()
+        }
+    }
+
     /**
      * Asks the display to present [fps] frames a second, so that a 23.976
      * fps film is not laid out on a 59.94 Hz output's 3:2 cadence: some

@@ -435,6 +435,14 @@ judges (`AddonHealth.verdict`, a pure function). See
 Each is easy to write again, and each has a test in `test/features/tv/`
 unless it says otherwise.
 
+- **A window shown again gives Flutter its focus back.** Android can show a
+  stopped window again with no view inside it focused, and then no key
+  reaches Flutter: Space is spent leaving touch mode, and a media key goes
+  to whichever app last registered for media buttons.
+  `MainActivity.onWindowFocusChanged` focuses the FlutterView when nothing
+  has focus. No test: only a device shows it (minimise the window, restore
+  it, press Space).
+
 - **Nothing vetoes the OSD's fade on a focus.** `PlayerScreen._canAutoHide`
   does not list "a control has focus". `_hideControls` hides the bar and
   hands the remote back to the video as one act.
