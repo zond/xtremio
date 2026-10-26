@@ -148,65 +148,6 @@ extension _PlayerServerPolls on _PlayerScreenState {
     }());
   }
 
-  /// One ask of the read-wait readout ([_readStalled]), for the torrent
-  /// the engine reads by media id.
-  ///
-  /// The card goes up when a read has waited [PlayerScreen.readWaitShown] while
-  /// the picture stood still since the last ask. It comes down at the first ask
-  /// that finds reads flowing, whatever the read is: the file's head, its
-  /// index, the resume point. No give-up: a read that waits for ever keeps the
-  /// card up for ever, and the viewer decides.
-  Future<void> _pollReadWait() async {
-    final id = _playingMediaId;
-    final reader = _streamNumbersReader;
-    if (!mounted ||
-        id == null ||
-        reader == null ||
-        _torrentStatsRequest == null ||
-        _casting ||
-        _handedOver ||
-        _appHidden ||
-        _readWaitFetching) {
-      return;
-    }
-    final position = _position.value;
-    _readWaitFetching = true;
-    ReadWait wait;
-    try {
-      wait = await reader.mediaReadWait(id);
-    } on Object {
-      wait = ReadWait.none;
-    } finally {
-      _readWaitFetching = false;
-    }
-    if (!mounted || _playingMediaId != id) return;
-    final from = _readWaitFrom;
-    _readWaitFrom = position;
-    final still =
-        from != null && (position - from).abs() < PlayerScreen.stuckTwitch;
-    final stalled =
-        _mediaLoaded &&
-        _playing &&
-        still &&
-        wait.waitedAtLeast(PlayerScreen.readWaitShown);
-    if (stalled == _readStalled) return;
-    if (stalled) {
-      DiagnosticsLog.warn(
-        'player',
-        'a read has waited ${wait.waiting?.inMilliseconds}ms at byte '
-            '${wait.offset} with the picture still at '
-            '${position.inSeconds}s; buffering from the torrent',
-      );
-    } else {
-      DiagnosticsLog.info(
-        'player',
-        'reads are flowing again at ${position.inSeconds}s',
-      );
-    }
-    setState(() => _readStalled = stalled);
-    _syncStatsPolls();
-  }
-
   // --- Torrent start-up ----------------------------------------------------
 
   /// Begins polling the server's stats for the torrent [state] plays (see

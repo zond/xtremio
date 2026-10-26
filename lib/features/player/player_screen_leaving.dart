@@ -46,8 +46,6 @@ extension _PlayerLeaving on _PlayerScreenState {
     _subscriptions.clear();
     unawaited(_castStatsSubscription?.cancel());
     _castStatsSubscription = null;
-    unawaited(_stuckSample?.cancel());
-    _stuckSample = null;
     _cancelCastFetch();
     _cancelOpenRetry();
     _stopTorrentStats();
@@ -61,10 +59,7 @@ extension _PlayerLeaving on _PlayerScreenState {
     _controls.stop();
     _clickTimer?.cancel();
     _clickTimer = null;
-    _stuckTimer?.cancel();
-    _stuckTimer = null;
-    _readWaitTimer?.cancel();
-    _readWaitTimer = null;
+    _watchdog.stop();
     _subtitleFailureTimer?.cancel();
     _subtitleFailureTimer = null;
   }

@@ -23,6 +23,7 @@ import 'cast_stats_overlay.dart';
 import 'controls_visibility.dart';
 import 'core_time_reporter.dart';
 import 'playback_stats_overlay.dart';
+import 'playback_watchdog.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
 import 'subtitle_calibration.dart';
@@ -328,8 +329,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     'bufferMs': _buffer.value.inMilliseconds,
     'playing': _playing,
     'buffering': _buffering,
-    'positionStuck': _positionStuck,
-    'readStalled': _readStalled,
+    'positionStuck': _watchdog.positionStuck,
+    'readStalled': _watchdog.readStalled,
     'casting': _casting,
     'leaving': _leaving,
     'engineError': _engineError == null
@@ -548,48 +549,41 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// screen then neither unloads the core's player nor reacts to its state.
   bool get _handedOver => _phase == _ScreenPhase.handedOver;
 
-  /// **Whether the viewer is waiting**, which is not the same question as
-  /// whether mpv says it is buffering.
-  ///
-  /// mpv's flag means its demuxer cache ran dry during playback; it does not
-  /// cover a read blocked in the server while mpv seeks (one such session
-  /// played nothing for three and a half minutes with no stall reported). A
-  /// position that stands still while the player says it is playing cannot
-  /// be fooled, so the overlay adds it, counted in ticks of
-  /// [PlayerScreen.stuckInterval].
-  Timer? _stuckTimer;
-  int _stillTicks = 0;
+  /// The waits mpv does not report: a position standing still, and a read
+  /// the server says is parked. See [PlaybackWatchdog].
+  late final PlaybackWatchdog _watchdog = PlaybackWatchdog(
+    stuckInterval: PlayerScreen.stuckInterval,
+    stuckAfter: PlayerScreen.stuckAfter,
+    stuckTwitch: PlayerScreen.stuckTwitch,
+    readWaitInterval: PlayerScreen.readWaitInterval,
+    readWaitShown: PlayerScreen.readWaitShown,
+    position: () => _position.value,
+    shouldMove: () =>
+        mounted && _playing && !_buffering && !_casting && !_handedOver,
+    playingLoaded: () => _mediaLoaded && _playing,
+    readWaitId: () {
+      final id = _playingMediaId;
+      final askable =
+          mounted &&
+          _streamNumbersReader != null &&
+          _torrentStatsRequest != null &&
+          !_casting &&
+          !_handedOver &&
+          !_appHidden;
+      return askable ? id : null;
+    },
+    playingId: () => _playingMediaId,
+    askReadWait: (id) => _streamNumbersReader!.mediaReadWait(id),
+    stats: () => _engine?.stats,
+  )..addListener(_onWatchdog);
 
-  /// The position the standing-still is measured from: the last one far
-  /// enough from the one before it to be film playing
-  /// ([PlayerScreen.stuckTwitch]).
-  Duration _stillFrom = Duration.zero;
-  bool _positionStuck = false;
-
-  /// **Whether the viewer is waiting on a read the server knows is parked**:
-  /// mpv's reader of the playing media id has been blocked for
-  /// [PlayerScreen.readWaitShown] and the picture has not moved since the last
-  /// ask. This is the truth that [_positionStuck] guessed at. mpv blocked in a
-  /// read (at the start, in the index, at the resume point) reports no stall
-  /// and no cache to wait for. Asked every [PlayerScreen.readWaitInterval]
-  /// ([_pollReadWait]).
-  bool _readStalled = false;
-  Timer? _readWaitTimer;
-  bool _readWaitFetching = false;
-
-  /// The position at the last read-wait ask, which the next one compares
-  /// against: a read can wait while mpv plays out its own buffer, and
-  /// that is no wait of the viewer's.
-  Duration? _readWaitFrom;
-
-  /// Whether the player has reported a position at all yet.
-  ///
-  /// A position cannot have *stopped* moving before it has moved. Until the
-  /// first report there is nothing to compare against, and a player that is
-  /// still opening is not one that is stuck. This also keeps a backend that
-  /// reports no positions at all, which is every fake, from looking stuck
-  /// forever.
-  bool _positionSeen = false;
+  void _onWatchdog() {
+    if (!mounted) return;
+    setState(() {});
+    // The stats poll picks its interval only when asked to, as
+    // [_onBuffering] asks: a wait beginning or ending changes it.
+    _syncStatsPolls();
+  }
 
   /// Where the server is told how long the film is, which is what its
   /// retention sizes a stream's lookahead from. Not where it is told where
@@ -969,10 +963,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// another stream, since it describes the file mpv was reading then.
   PlaybackStats? _lastStats;
   StreamSubscription<PlaybackStats>? _castStatsSubscription;
-
-  /// The sample asked for while the position stands still; see
-  /// [_logWhatMpvIsDoing]. Held only until it answers.
-  StreamSubscription<PlaybackStats>? _stuckSample;
 
   /// The receiver has reported the media finished and the core has been
   /// told. A receiver keeps saying so; the core hears it once.
@@ -1424,7 +1414,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _mediaIn = true;
     }
     if (_takeHeldSeek(position)) return;
-    _positionSeen = true;
+    _watchdog.sawPosition();
     if (position != _position.value) {
       final advanced = position - _position.value;
       if (advanced > Duration.zero && advanced < _playbackTick) {
@@ -1441,37 +1431,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         _playingNormally = false;
         _playedSinceSeek = Duration.zero;
       }
-      // Far enough to be film, not a frame or two behind a picture that
-      // is standing still ([PlayerScreen.stuckTwitch]).
-      if ((position - _stillFrom).abs() >= PlayerScreen.stuckTwitch) {
-        _stillTicks = 0;
-        _stillFrom = position;
-        // Film is moving, so the viewer is not waiting on whatever read the
-        // server says is waiting ([_readStalled]). The next ask measures again
-        // from here.
-        if (_readStalled) {
-          DiagnosticsLog.info(
-            'player',
-            'playing again at ${position.inSeconds}s, after a read waited',
-          );
-          _readWaitFrom = position;
-          setState(() => _readStalled = false);
-          _syncStatsPolls();
-        }
-        if (_positionStuck) {
-          DiagnosticsLog.info(
-            'player',
-            'playing again at ${position.inSeconds}s, after the position '
-                'stood still with mpv reporting no stall',
-          );
-          setState(() => _positionStuck = false);
-          _stuckSample?.cancel();
-          _stuckSample = null;
-          // Otherwise the card going leaves the stall cadence behind: the stats
-          // poll picks its interval only when asked to, as [_onBuffering] asks.
-          _syncStatsPolls();
-        }
-      }
+      _watchdog.positionMoved(position);
     }
     _reportedPosition = position;
     _position.value = position;
@@ -1513,94 +1473,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       // the polling back, at once if the media arrived already stalled.
       _pauseTorrentStats();
     });
-    _startStuckWatch();
+    _watchdog.start();
     _syncStatsPolls();
     _maybeAutoPickSubtitles();
-  }
-
-  /// Watches for a position that has stopped moving while the player says
-  /// it is playing ([_positionStuck]), and asks the server whether a read
-  /// is what it is waiting on ([_readStalled]).
-  void _startStuckWatch() {
-    _readWaitTimer?.cancel();
-    _readWaitFrom = null;
-    _readWaitTimer = Timer.periodic(
-      PlayerScreen.readWaitInterval,
-      (_) => _pollReadWait(),
-    );
-    _stuckTimer?.cancel();
-    _stillTicks = 0;
-    _stillFrom = Duration.zero;
-    _positionSeen = false;
-    _stuckTimer = Timer.periodic(
-      PlayerScreen.stuckInterval,
-      (_) => _checkStuck(),
-    );
-  }
-
-  void _checkStuck() {
-    // Paused is not waiting, mpv's own flag is already drawn, and while a
-    // receiver has the stream the local position is not the viewer's.
-    if (!mounted ||
-        !_playing ||
-        !_positionSeen ||
-        _buffering ||
-        _casting ||
-        _handedOver) {
-      _stillTicks = 0;
-      _stillFrom = _position.value;
-      return;
-    }
-    if (_positionStuck) return;
-    _stillTicks++;
-    final still = PlayerScreen.stuckInterval * _stillTicks;
-    if (still < PlayerScreen.stuckAfter) return;
-    DiagnosticsLog.warn(
-      'player',
-      'the position has not moved for '
-          '${still.inSeconds}s at '
-          '${_position.value.inSeconds}s, and mpv reports no stall',
-    );
-    setState(() => _positionStuck = true);
-    _syncStatsPolls();
-    _logWhatMpvIsDoing();
-  }
-
-  /// Logs what mpv is doing with the film, once, when the position has
-  /// stood still: a frozen picture is either a decoder that cannot keep up
-  /// or a read that never arrived, and one [PlaybackStats] sample (decoder,
-  /// codec and size, dropped frames, demuxer cache) tells them apart.
-  ///
-  /// Silent on a player that will not answer: a diagnostic must not hold up
-  /// anything.
-  void _logWhatMpvIsDoing() {
-    final engine = _engine;
-    if (engine == null) return;
-    _stuckSample?.cancel();
-    _stuckSample = engine.stats.listen(_logStats);
-  }
-
-  /// The one sample [_logWhatMpvIsDoing] asked for, written down and the
-  /// asking ended: the panel's cadence is not something a log line needs.
-  void _logStats(PlaybackStats stats) {
-    _stuckSample?.cancel();
-    _stuckSample = null;
-    if (!mounted || !_positionStuck) return;
-    String? size() => stats.width == null || stats.height == null
-        ? null
-        : '${stats.width}x${stats.height}';
-    DiagnosticsLog.info(
-      'player',
-      'what mpv is doing with it: '
-          'hwdec=${stats.hwdec ?? '?'} '
-          'video=${stats.videoCodec ?? '?'} ${size() ?? '?'} '
-          'audio=${stats.audioCodec ?? '?'} '
-          'fps=${stats.outputFps ?? '?'}/${stats.containerFps ?? '?'} '
-          'dropped=${stats.droppedFrames ?? '?'}'
-          '/${stats.decoderDroppedFrames ?? '?'} '
-          'cache=${stats.cacheDuration?.inMilliseconds ?? '?'}ms '
-          'paused_for_cache=${stats.pausedForCache ?? '?'}',
-    );
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1617,7 +1492,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// not the end of playback: a dead subtitle link, a damaged frame, a read
   /// that was retried. A playback that has really stopped says so on its own
   /// terms: an early end of file ([_onFalseEnd]) or a position that stands
-  /// still ([_checkStuck]).
+  /// still ([PlaybackWatchdog]).
   void _onEngineError(String error) {
     final subtitle = externalSubtitleFailure(error);
     if (subtitle != null) {
@@ -1637,12 +1512,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool get _startupOverlayShown =>
       _torrentStatsRequest != null && !_mediaLoaded;
 
-  /// Every way of waiting: mpv's own stall, a read the server says is parked
-  /// ([_readStalled]), and a position standing still ([_positionStuck]). The
-  /// last is a guess the readout replaced, used only where the server cannot be
-  /// asked: a stream with no media id.
+  /// Every way of waiting: mpv's own stall, a read the server says is parked,
+  /// and a position standing still ([_watchdog]). The last is a guess the
+  /// readout replaced, used only where the server cannot be asked: a stream
+  /// with no media id.
   bool get _waiting =>
-      _buffering || _readStalled || (_positionStuck && !_readWaitAsked);
+      _buffering ||
+      _watchdog.readStalled ||
+      (_watchdog.positionStuck && !_readWaitAsked);
 
   /// Whether the read-wait readout speaks for this playback: a media id
   /// the server reads, and a server to ask.
@@ -2355,6 +2232,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _detach();
     _controls.dispose();
     _upNext.dispose();
+    _watchdog.dispose();
     // Discovery belongs to the process, not this screen, and a hand-over's
     // successor has started it again by now. `pushReplacement` builds the new
     // player before this one goes, so a stop from here would end the search the
