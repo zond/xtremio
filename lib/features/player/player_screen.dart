@@ -19,6 +19,7 @@ import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
+import 'cast_session.dart';
 import 'cast_stats_overlay.dart';
 import 'controls_visibility.dart';
 import 'core_time_reporter.dart';
@@ -880,9 +881,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// Casting: the sender, the LAN media listener a cast URL is served from,
   /// the receivers found so far and the one that has the stream.
   ///
-  /// [_castingTo] non-null is the whole of "this screen is a remote now":
+  /// [_castSession] non-null is the whole of "this screen is a remote now":
   /// local playback is paused, the engine's own reports are ignored, and
-  /// what is drawn and what reaches the core both come from [_castStatus].
+  /// what is drawn and what reaches the core both come from its status.
   CastClient? _cast;
   LanMediaControl? _lanMedia;
 
@@ -895,8 +896,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   );
 
   List<CastDevice> get _castDevices => _castDeviceList.value;
-  CastDevice? _castingTo;
-  CastStatus _castStatus = const CastStatus(state: CastPlayerState.idle);
+
+  /// The cast on a receiver, from the hand-over until it ends; null while
+  /// the film plays here. See [CastSession].
+  CastSession? _castSession;
 
   /// Whether this screen turned the LAN media listener on, and so owes it
   /// an off. A stream the receiver fetches straight from its own host needs
@@ -933,42 +936,12 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Timer? _castPrepareTimer;
   Completer<void>? _castPrepareWake;
 
-  /// What the remote says under the title while the receiver has reached
-  /// this device and been sent nothing yet ([_castFetchCheck]); null
-  /// otherwise. A note and not an ending: a stream that is not here yet is
-  /// waited for, never given up on.
-  String? _castNote;
-
   /// The last sample mpv gave for the open media, taken while the cast
   /// sheet is up: all the compatibility check believes about what the file
   /// is (its reader and its codecs). Dropped when the screen moves on to
   /// another stream, since it describes the file mpv was reading then.
   PlaybackStats? _lastStats;
   StreamSubscription<PlaybackStats>? _castStatsSubscription;
-
-  /// The receiver has reported the media finished and the core has been
-  /// told. A receiver keeps saying so; the core hears it once.
-  bool _castEnded = false;
-
-  /// Where the receiver was told to start, and whether it has yet reported a
-  /// position of its own. The Cast SDK reports status and position on two
-  /// streams. The client folds them together with the last position it saw,
-  /// which before the receiver's first tick is a zero it never reported. Taken
-  /// at its word, that zero reaches the core as `TimeChanged{0}` and is where
-  /// local playback resumes if the session ends. So until the first tick the
-  /// handed-over position stands in ([_trustedCastStatus]).
-  Duration _castHandedAt = Duration.zero;
-  bool _castReported = false;
-
-  /// The picture the receiver was handed, for the check that it shows one
-  /// ([_PlayerCasting._watchCastPicture]): its codec as judged (null for
-  /// sound alone, which has none to show, and once the check has acted),
-  /// how it was sent, whether the receiver has reported a picture since,
-  /// and where it was when it first said it was playing.
-  String? _castVideo;
-  String _castSent = 'the film as it is';
-  bool _castPictureSeen = false;
-  Duration? _castPlayingFrom;
 
   /// What the cast panel is told about the cast on the receiver
   /// ([CastStatsOverlay]): what was known at the hand-over, how often the
@@ -979,26 +952,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   CastBuffering _castBuffering = const CastBuffering();
   DateTime? _castBeganAt;
 
-  bool get _casting => _castingTo != null;
-
-  /// **The receiver fetches the stream from its source itself**
-  /// ([directCastUrl]): it was handed the link, not a token on the LAN
-  /// listener. Nothing is served from this device for it -- no listener,
-  /// no publication, no fetch watchdog -- and the remote says so.
-  bool _castDirect = false;
-
-  /// What a direct cast falls back on if the receiver refuses the link
-  /// before it has played any of it ([_PlayerCasting._fallBackFromDirect]):
-  /// the session it was handed in, to be handed again through the LAN
-  /// listener. Null once the receiver has played (a later error is the
-  /// film's, not the link's), after the fallback, and for a relayed cast.
-  ({
-    CastDevice device,
-    CastDevice receiver,
-    Uri local,
-    CastCompatibility compatibility,
-  })?
-  _castDirectRetry;
+  bool get _casting => _castSession != null;
 
   /// The stream ([_opened]) a receiver refused to fetch from its source. It is
   /// relayed from then on, to that receiver and any other, since all of them
@@ -1803,7 +1757,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   void _togglePlay() {
     if (_casting) {
       final cast = _cast;
-      (_castStatus.state.isPlaying ? cast?.pause() : cast?.play())?.ignore();
+      final playing = _castSession!.status.state.isPlaying;
+      (playing ? cast?.pause() : cast?.play())?.ignore();
     } else {
       _engine?.playOrPause();
     }
@@ -1853,7 +1808,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (_casting) {
       // The receiver will report the new position itself; showing it at
       // once keeps the bar from snapping back while the round trip runs.
-      setState(() => _castStatus = _castStatus.at(clamped));
+      final session = _castSession!;
+      setState(() => session.status = session.status.at(clamped));
       _cast?.seek(clamped).ignore();
     } else {
       // Relative, from where playback actually is, so a run of presses under
@@ -2595,12 +2551,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// stack: the remote takes the height it needs, and the panel the rest,
   /// below the top bar, scrolling when its rows do not fit.
   Widget _castingView(PlayerState? state) {
+    final session = _castSession!;
     final remote = CastRemotePanel(
-      deviceName: _castingTo!.name,
+      deviceName: session.device.name,
       title: state?.title ?? '',
-      status: _castStatus,
-      note: _castNote,
-      direct: _castDirect,
+      status: session.status,
+      note: session.note,
+      direct: session.direct,
       onPlayPause: _togglePlay,
       onSeek: _seekTo,
       onStop: () => unawaited(_stopCast()),
@@ -2624,7 +2581,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                   // two of them is no reading.
                   key: ValueKey(('cast stats', token)),
                   facts: facts,
-                  status: _castStatus,
+                  status: session.status,
                   buffering: _castBuffering,
                   now: widget.now,
                   numbers: token == null || ids == null

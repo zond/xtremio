@@ -399,7 +399,7 @@ void main() {
         // The step after the session and the URL: local playback stops
         // before the receiver starts. mpv answers a `pause` when its
         // command queue gets to it, and what came back then handed the
-        // receiver the film -- and, worse, wrote `_castingTo` from inside
+        // receiver the film -- and, worse, wrote the cast session from inside
         // a `setState`, which takes the video out of the tree for the
         // rest of the teardown wait and leaves nothing draining the sinks
         // mpv is still being stopped through.

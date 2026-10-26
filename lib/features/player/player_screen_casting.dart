@@ -55,7 +55,7 @@ extension _PlayerCasting on _PlayerScreenState {
   /// same answer.
   void _onCastSession(CastDevice? device) {
     if (!mounted || !_casting || _castStarts > 0) return;
-    if (device != null && device == _castingTo) return;
+    if (device != null && device == _castSession?.device) return;
     unawaited(_stopCast(disconnect: false));
   }
 
@@ -66,22 +66,23 @@ extension _PlayerCasting on _PlayerScreenState {
   /// notice which device the pixels were on.
   void _onCastStatus(CastStatus reported) {
     if (!mounted) return;
-    final status = _casting ? _trustedCastStatus(reported) : reported;
+    final session = _castSession;
+    // A status with no cast of ours is nobody's to show.
+    if (session == null) return;
+    final status = session.trusted(reported);
     setState(() {
-      _castStatus = status;
-      if (_casting) {
-        _castBuffering = _castBuffering.note(status.state, widget.now());
-      }
+      session.status = status;
+      _castBuffering = _castBuffering.note(status.state, widget.now());
     });
-    if (!_casting || _opened == null) return;
+    if (_opened == null) return;
     // A direct cast is on trial until the receiver plays: a refusal before
     // then is the link's (bound to this device's address, expired, a 403),
     // and the cast is relayed instead. After it, an error is the film's,
     // and handled as any cast's.
-    if (_castDirectRetry != null) {
+    if (session.directRetry != null) {
       if (status.state == CastPlayerState.playing ||
           status.state == CastPlayerState.paused) {
-        _castDirectRetry = null;
+        session.directRetry = null;
       } else if (status.failed) {
         unawaited(
           _fallBackFromDirect('the receiver reported an error')
@@ -113,8 +114,8 @@ extension _PlayerCasting on _PlayerScreenState {
     // whatever `bingeWatching` says. The countdown assumes someone at this
     // screen who can press Cancel, and a television that plays on into the
     // next episodes by itself is what to avoid.
-    if (status.ended && !_castEnded) {
-      _castEnded = true;
+    if (status.ended && !session.ended) {
+      session.ended = true;
       _client?.dispatch(CoreActions.playerEnded());
     }
   }
@@ -129,23 +130,24 @@ extension _PlayerCasting on _PlayerScreenState {
   /// and the receiver is not sent that video again this session. Not for
   /// sound alone, nor on a platform that reports no picture at all.
   void _watchCastPicture(CastStatus status) {
-    final video = _castVideo;
-    final device = _castingTo;
+    final session = _castSession;
+    final video = session?.video;
     final cast = _cast;
-    if (video == null || device == null || cast == null) return;
+    if (session == null || video == null || cast == null) return;
+    final device = session.device;
     if (!cast.reportsPicture) return;
     final picture = status.picture;
     if (picture != null) {
-      if (!_castPictureSeen) {
-        _castPictureSeen = true;
+      if (!session.pictureSeen) {
+        session.pictureSeen = true;
         DiagnosticsLog.info('player', 'the receiver shows a $picture picture');
       }
       return;
     }
-    if (_castPictureSeen || status.state != CastPlayerState.playing) return;
-    final from = _castPlayingFrom ??= status.position;
+    if (session.pictureSeen || status.state != CastPlayerState.playing) return;
+    final from = session.playingFrom ??= status.position;
     if (status.position - from < PlayerScreen.castNoPictureAfter) return;
-    _castVideo = null;
+    session.video = null;
     unawaited(_endCastWithNoPicture(cast, device, video));
   }
 
@@ -164,7 +166,7 @@ extension _PlayerCasting on _PlayerScreenState {
       'the receiver played the sound and reported no picture for '
           '$video$size; the film is back here',
     );
-    final sent = _castSent;
+    final sent = _castSession?.sent ?? 'the film as it is';
     await _stopCast();
     await _explainCast(
       '${device.name} played the sound but showed no picture. It cannot '
@@ -172,20 +174,6 @@ extension _PlayerCasting on _PlayerScreenState {
       'is playing here again.',
       title: 'No picture on ${device.name}',
     );
-  }
-
-  /// [reported] as it is to be believed: a zero the receiver has not actually
-  /// reported is replaced by the position it was handed (see [_castHandedAt]).
-  /// The first position that is not zero is the receiver's own tick. From then
-  /// on every report is its own, including a later zero, which is then a
-  /// receiver really at the start.
-  CastStatus _trustedCastStatus(CastStatus reported) {
-    if (_castReported) return reported;
-    if (reported.position != Duration.zero) {
-      _castReported = true;
-      return reported;
-    }
-    return reported.at(_castHandedAt);
   }
 
   /// The receivers, and Stop when one of them has the stream.
@@ -211,7 +199,7 @@ extension _PlayerCasting on _PlayerScreenState {
         valueListenable: _castDeviceList,
         builder: (context, devices, _) => CastDeviceSheet(
           devices: devices,
-          connected: _castingTo,
+          connected: _castSession?.device,
           onSelect: (device) {
             Navigator.of(context).pop();
             unawaited(_startCast(device));
@@ -551,39 +539,35 @@ extension _PlayerCasting on _PlayerScreenState {
         sourceChannels: mpv?.audioChannels,
         reportsPicture: cast.reportsPicture,
       );
-      _castingTo = device;
-      _castNote = null;
-      _castEnded = false;
-      _castHandedAt = position;
-      _castReported = false;
-      _castVideo = switch (compatibility) {
-        CastReady(:final video) || CastRendition(:final video) => video,
-        _ => null,
-      };
-      _castSent = switch (compatibility) {
-        CastRendition(picture: _?, convertsSound: true) =>
-          'the film with its picture and sound converted',
-        CastRendition(picture: _?) => 'the film with its picture converted',
-        CastRendition(convertsSound: true) =>
-          'the film repackaged, its sound converted',
-        CastRendition() => 'the film repackaged',
-        _ => 'the film as it is',
-      };
-      _castPictureSeen = false;
-      _castPlayingFrom = null;
-      _castDirect = direct != null;
-      _castDirectRetry = direct == null
-          ? null
-          : (
-              device: device,
-              receiver: receiver,
-              local: local,
-              compatibility: compatibility,
-            );
-      _castStatus = CastStatus(
-        state: CastPlayerState.buffering,
-        position: position,
-        duration: _duration > Duration.zero ? _duration : null,
+      _castSession = CastSession(
+        device: device,
+        status: CastStatus(
+          state: CastPlayerState.buffering,
+          position: position,
+          duration: _duration > Duration.zero ? _duration : null,
+        ),
+        handedAt: position,
+        video: switch (compatibility) {
+          CastReady(:final video) || CastRendition(:final video) => video,
+          _ => null,
+        },
+        sent: switch (compatibility) {
+          CastRendition(picture: _?, convertsSound: true) =>
+            'the film with its picture and sound converted',
+          CastRendition(picture: _?) => 'the film with its picture converted',
+          CastRendition(convertsSound: true) =>
+            'the film repackaged, its sound converted',
+          CastRendition() => 'the film repackaged',
+          _ => 'the film as it is',
+        },
+        directRetry: direct == null
+            ? null
+            : (
+                device: device,
+                receiver: receiver,
+                local: local,
+                compatibility: compatibility,
+              ),
       );
     });
     // What we handed the receiver, and which address it was picked for. Not the
@@ -628,7 +612,7 @@ extension _PlayerCasting on _PlayerScreenState {
         await _teardownCast();
         return null;
       }
-      if (_castDirectRetry != null) {
+      if (_castSession?.directRetry != null) {
         return _fallBackFromDirect('the platform refused the load');
       }
       await _stopCast();
@@ -672,10 +656,11 @@ extension _PlayerCasting on _PlayerScreenState {
   /// Not a timer: a receiver that is slow to start a link is waited for,
   /// as any cast is. Only its refusal hands the stream back.
   Future<String?> _fallBackFromDirect(String why) async {
-    final retry = _castDirectRetry;
+    final session = _castSession;
+    final retry = session?.directRetry;
     final cast = _cast;
-    if (retry == null || cast == null) return null;
-    _castDirectRetry = null;
+    if (session == null || retry == null || cast == null) return null;
+    session.directRetry = null;
     _castDirectRefused = _opened;
     DiagnosticsLog.warn(
       'player',
@@ -692,7 +677,7 @@ extension _PlayerCasting on _PlayerScreenState {
       _state,
       retry.compatibility,
       abandoned,
-      start: _castHandedAt,
+      start: session.handedAt,
     );
   }
 
@@ -801,7 +786,7 @@ extension _PlayerCasting on _PlayerScreenState {
   ///   the reason said.
   /// - **It reached this device and has been sent nothing yet** -- requests,
   ///   no body. A refusal (which the server logged), or a stream whose
-  ///   bytes are not here yet. Said on the remote ([_castNote]), and asked
+  ///   bytes are not here yet. Said on the remote ([CastSession.note]), and asked
   ///   again after as long: **never an ending.** A stream that is slow to
   ///   come is waited for; the viewer is the one who gives up.
   /// - **A body began.** The network and the server did their part, and
@@ -812,7 +797,7 @@ extension _PlayerCasting on _PlayerScreenState {
     if (!mounted || !_casting) return;
     final requests = _lanMedia?.lanMediaRequestsServed ?? 0;
     if (requests == 0) {
-      final device = _castingTo;
+      final device = _castSession?.device;
       DiagnosticsLog.warn(
         'player',
         'receiver asked the LAN listener for nothing; ending the session',
@@ -832,18 +817,19 @@ extension _PlayerCasting on _PlayerScreenState {
         'receiver asked the LAN listener for $requests request(s) and was '
             'sent $bodies bod${bodies == 1 ? 'y' : 'ies'}',
       );
-      if (_castNote != null) setState(() => _castNote = null);
+      if (_castSession?.note != null) setState(() => _castSession?.note = null);
       return;
     }
-    if (_castNote == null) {
+    final session = _castSession;
+    if (session != null && session.note == null) {
       DiagnosticsLog.warn(
         'player',
         'receiver asked the LAN listener for $requests request(s) and has '
             'been sent nothing yet',
       );
       setState(
-        () => _castNote =
-            '${_castingTo?.name ?? 'The receiver'} has reached this device '
+        () => session.note =
+            '${session.device.name} has reached this device '
             'and has not been sent any of the film yet.',
       );
     }
@@ -993,9 +979,8 @@ extension _PlayerCasting on _PlayerScreenState {
     _logCastEnd();
     _castStops++;
     _cancelCastFetch();
-    final position = _castStatus.position;
-    _castingTo = null;
-    _castNote = null;
+    final position = _castSession!.status.position;
+    _castSession = null;
     if (mounted) setState(() {});
     if (disconnect) await _cast?.disconnect();
     await _endLanMedia();
@@ -1033,7 +1018,7 @@ extension _PlayerCasting on _PlayerScreenState {
   /// must not outlive a session.
   Future<void> _teardownCast() async {
     _logCastEnd();
-    _castingTo = null;
+    _castSession = null;
     await _cast?.disconnect();
     await _endLanMedia();
   }
@@ -1066,7 +1051,7 @@ extension _PlayerCasting on _PlayerScreenState {
               '${buffering.count == 1 ? 'time' : 'times'}, '
               '${PlaybackStatsOverlay.formatAge(buffering.totalAt(now))} in all';
     final served = numbers == null
-        ? (_castDirect
+        ? ((_castSession?.direct ?? false)
               ? 'it read the stream from its source'
               : 'no numbers from this device')
         : '${numbers.delivery.requests} '
