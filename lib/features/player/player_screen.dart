@@ -1948,6 +1948,26 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _restartControlsTimer();
   }
 
+  /// Whether [_canAutoHide] held at the last build ([_armFadeWhenAllowed]).
+  bool _couldAutoHide = false;
+
+  /// Arms the fade the moment the controls may fade again.
+  ///
+  /// Whatever held them up (a menu, a wait, a scrub, the up-next card) can
+  /// go in many ways, and each one is a rebuild. So the change is read here,
+  /// once, rather than at each of them: a bar that was brought up while one
+  /// of them held it fades [PlayerScreen.controlsTimeout] after the last one
+  /// goes, with no key and no Back.
+  void _armFadeWhenAllowed() {
+    final can = _canAutoHide;
+    final became = can && !_couldAutoHide;
+    _couldAutoHide = can;
+    if (!became) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _restartControlsTimer();
+    });
+  }
+
   void _restartControlsTimer() {
     _controlsTimer?.cancel();
     _controlsTimer = null;
@@ -2529,6 +2549,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
+    _armFadeWhenAllowed();
     // Never poppable by the framework, so that every way out of the player runs
     // the teardown before the screen goes. Back and Escape both arrive here
     // rather than taking the route out from under a player that is still
