@@ -406,11 +406,16 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// back to it unwatched, and a screen can go through both.
   Future<void>? _teardown;
 
+  /// Where this screen is in its life; see [_ScreenPhase]. One value rather
+  /// than a flag a phase, so a screen cannot be both on its way out and
+  /// handed over.
+  _ScreenPhase _phase = _ScreenPhase.playing;
+
   /// Whether the player is on its way out: the teardown has begun and the
   /// screen stays only so mpv has something to hand its last frames to. The
   /// controls come down at the same moment ([build]): media_kit throws on a
   /// player that has been released.
-  bool _leaving = false;
+  bool get _leaving => _phase == _ScreenPhase.leaving;
 
   /// Whether this screen is still the one that should act on the player:
   /// built, and not on its way out. **Every continuation in this class asks
@@ -540,9 +545,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool _fullscreenOn = false;
   bool _showRemaining = false;
 
-  /// Set once the next episode's screen has been pushed in our place: this
+  /// Whether the next episode's screen has been pushed in our place: this
   /// screen then neither unloads the core's player nor reacts to its state.
-  bool _handedOver = false;
+  bool get _handedOver => _phase == _ScreenPhase.handedOver;
 
   /// **Whether the viewer is waiting**, which is not the same question as
   /// whether mpv says it is buffering.
@@ -654,13 +659,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   final ValueNotifier<BufferAheadStatus> _bufferStatus = ValueNotifier(
     const BufferAheadStatus(BufferAhead.normal),
   );
-
-  /// Set once moving on to the next episode has begun. Looking the episode up
-  /// on the disk stands between the decision and the hand-over, and nothing on
-  /// screen stops answering meanwhile. Without this, a second Next (or the
-  /// countdown running out under one) would advance the core's player twice and
-  /// replace this route twice over.
-  bool _advancing = false;
 
   /// Whether the auto-pick is settled for this media, once per `open`: what is
   /// on screen is the best it can be, or every subtitle addon has answered and
@@ -2970,6 +2968,29 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
     return null;
   }
+}
+
+/// Where a player screen is in its life. It only ever moves down this list,
+/// and [advancing] may be skipped.
+enum _ScreenPhase {
+  /// Playing, or ready to: the screen acts on the player and the core.
+  playing,
+
+  /// Moving on to the next episode has begun. Looking the episode up on the
+  /// disk stands between the decision and the hand-over, and nothing on
+  /// screen stops answering meanwhile. A second Next (or the countdown
+  /// running out under one) must not advance the core's player twice and
+  /// replace this route twice over.
+  advancing,
+
+  /// The next episode's screen has been pushed in this one's place. This
+  /// screen neither unloads the core's player nor reacts to its state, and
+  /// it never leaves: the route it would pop is its successor's.
+  handedOver,
+
+  /// The viewer left, or there was no stream to hand over to. The teardown
+  /// has begun.
+  leaving,
 }
 
 /// A value that never changes, for the controls while they are hidden.

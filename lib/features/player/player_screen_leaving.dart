@@ -88,8 +88,10 @@ extension _PlayerLeaving on _PlayerScreenState {
   /// depend on it. A player that will not stop finishes, or does not, in the
   /// background, and the teardown logs which.
   Future<void> _leave([PlayerScreenResult? result]) async {
-    if (_leaving) return;
-    setState(() => _leaving = true);
+    // A screen handed over has nothing to leave: the route on top is its
+    // successor's, and that one leaves for itself.
+    if (_leaving || _handedOver) return;
+    setState(() => _phase = _ScreenPhase.leaving);
     // Reports are a second apart, and this keeps the viewer's last second from
     // being lost to the throttle. The stop that follows reports nothing
     // ([_detach]).

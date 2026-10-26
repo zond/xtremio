@@ -80,17 +80,17 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   /// to it (as good, and needing nothing opened), its linked Drive file, or the
   /// stream the engine found (same addon, same binge group). The engine cannot
   /// find the Drive file itself: a Drive play's request names a service that
-  /// answers no addon query ([driveStreamRequest]). [_advancing] holds a second
-  /// press while the registry answers.
+  /// answers no addon query ([driveStreamRequest]). [_ScreenPhase.advancing]
+  /// holds a second press while the registry answers.
   void _playNext() {
     final state = _state;
     final next = state?.nextVideo;
     // Nothing to move on to (the next episode has gone from the state):
     // the countdown must not keep ticking.
     _dismissUpNext();
-    if (state == null || next == null || _handedOver || _advancing) return;
-    if (_leaving) return;
-    _advancing = true;
+    if (state == null || next == null) return;
+    if (_phase != _ScreenPhase.playing) return;
+    _phase = _ScreenPhase.advancing;
     _client?.dispatch(CoreActions.playerNextVideo());
     final navigator = Navigator.of(context);
     // Whatever sits over this screen (a sheet) goes first, so that the
@@ -213,7 +213,7 @@ extension _PlayerNextEpisode on _PlayerScreenState {
       unawaited(_leave(PlayerScreenResult(selectVideoId: next.id)));
       return;
     }
-    _handedOver = true;
+    _phase = _ScreenPhase.handedOver;
     DiagnosticsLog.info('player', 'handing over to the next episode');
     // Before the push, not in [dispose]. `pushReplacement` keeps this screen
     // alive until the transition finishes, and the new player can read its
