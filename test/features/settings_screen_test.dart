@@ -6,6 +6,7 @@ import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/local/desktop_local_media_source.dart';
+import 'package:xtremio/features/local/folder_access.dart';
 import 'package:xtremio/features/local/local_folders_section.dart';
 import 'package:xtremio/features/local/local_media.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
@@ -504,7 +505,15 @@ void main() {
     }
 
     testWidgets('a desktop chooses its folders here', (tester) async {
-      await mount(tester, (prefs) => DesktopLocalMediaSource(prefs: prefs));
+      // Not the host's folder access. On a Mac that is the bookmark channel,
+      // which no test registers, so the pick throws before it is stored.
+      await mount(
+        tester,
+        (prefs) => DesktopLocalMediaSource(
+          prefs: prefs,
+          folderAccess: const NoFolderAccess(),
+        ),
+      );
       expect(find.text('Local'), findsOneWidget);
       await tester.ensureVisible(find.text(LocalFoldersSection.addLabel));
       await tester.pumpAndSettle();
