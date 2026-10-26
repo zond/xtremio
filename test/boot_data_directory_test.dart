@@ -99,7 +99,11 @@ void migration() {
   late Directory external;
 
   setUp(() async {
-    tmp = await Directory.systemTemp.createTemp('xtremio-root');
+    // Resolved, since the system's temp directory may itself sit behind a
+    // symlink (`/tmp` and `/var` are links into `/private` on macOS). The
+    // only symlink these tests mean is the Android one made below.
+    final made = await Directory.systemTemp.createTemp('xtremio-root');
+    tmp = Directory(await made.resolveSymbolicLinks());
     internal = await Directory('${tmp.path}/data/data/com.zond.xtremio/cache')
         .create(recursive: true);
     await Link('${tmp.path}/data/user/0')
