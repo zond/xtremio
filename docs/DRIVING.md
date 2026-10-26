@@ -9,7 +9,7 @@ and installing in general.
 ## The second app
 
 Debug and profile builds are a separate package, `com.zond.xtremio.debug`,
-labelled "Xtremio debug" (`android/app/build.gradle.kts`). They install
+labelled "xtremio debug" (`android/app/build.gradle.kts`). They install
 beside the release app and never over it. A debug-signed build cannot
 update the release install anyway, and the only other way onto the device
 would be to uninstall the release app and lose its login, settings and

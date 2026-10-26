@@ -52,7 +52,7 @@ make apk-debug FLAGS="--target-platform android-arm64,android-x64" # phone/64-bi
 ```
 
 Debug and profile builds are the package `com.zond.xtremio.debug`
-("Xtremio debug"), installed beside a release build rather than over it
+("xtremio debug"), installed beside a release build rather than over it
 ([DRIVING.md](DRIVING.md#the-second-app)). Debug builds always add x86_64
 for the emulator, since cargokit mirrors Flutter here. The vendored copy is
 patched to stop also adding android-x86, which Flutter 3.47 cannot package.

@@ -145,7 +145,7 @@ android {
 
     buildTypes {
         // Debug and profile builds are a second app beside the release one:
-        // `com.zond.xtremio.debug`, labelled "Xtremio debug". A build signed
+        // `com.zond.xtremio.debug`, labelled "xtremio debug". A build signed
         // with the debug key cannot update the release install (Android
         // refuses the certificate), so without the suffix the only way to put
         // one on a phone is to uninstall the release app and lose its login,
@@ -169,11 +169,11 @@ android {
         // this block runs, so it does not inherit these and is set here too.
         getByName("debug") {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "Xtremio debug"
+            manifestPlaceholders["appLabel"] = "xtremio debug"
         }
         maybeCreate("profile").apply {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "Xtremio debug"
+            manifestPlaceholders["appLabel"] = "xtremio debug"
         }
         release {
             // The release key when this machine has it, the debug key
