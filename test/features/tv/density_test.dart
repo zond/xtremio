@@ -6,7 +6,7 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/catalog_rows.dart';
-import 'package:xtremio/features/player/player_controls.dart';
+import 'package:xtremio/features/player/seek_bar.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
@@ -248,10 +248,17 @@ void main() {
 
       // The seek bar and the transport row are what a remote is aimed at,
       // so they stay inside the band; the video is not cropped to fit it.
-      expect(
-        tester.getRect(find.byType(PlayerBottomBar)).bottom,
-        lessThanOrEqualTo(tvSize.height * 0.95),
-      );
+      // The bar's own gradient runs on to the edge
+      // (`player_bars_edge_test.dart`), so it is these that are measured.
+      for (final control in [
+        find.byType(SeekBar),
+        find.byTooltip('Pause (Space)'),
+      ]) {
+        expect(
+          tester.getRect(control).bottom,
+          lessThanOrEqualTo(tvSize.height * 0.95),
+        );
+      }
       expect(tester.getRect(find.byType(Scaffold)), Offset.zero & tvSize);
     });
   });

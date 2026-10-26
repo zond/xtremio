@@ -31,9 +31,11 @@ const _whiteOnVideo = ButtonStyle(
 /// Every button on the bar is an [IconButton] and takes the theme floor's
 /// stroke and fill (`FocusTheme`) rather than a ring of its own. That is why
 /// the white is given as a style rather than as [IconButton.color] (see
-/// `_whiteOnVideo`). The bar is drawn on its own gradient, black at the panel's
-/// edge where the buttons are, so a light stroke has something to contrast
-/// with. And a button in a row of eight, a few pixels apart, is the last thing
+/// `_whiteOnVideo`). The bar is drawn on its own gradient, black at the edge
+/// of the screen and clear towards the picture, so a light stroke has
+/// something to contrast with. The gradient runs out to the edge and the
+/// buttons stay inside the safe area (a television's overscan band, a
+/// phone's notch), as on [PlayerBottomBar]. And a button in a row of eight, a few pixels apart, is the last thing
 /// that should grow when the remote reaches it.
 ///
 /// Every button here is focusable, so a remote reaches the menus once the
@@ -106,77 +108,82 @@ class PlayerTopBar extends StatelessWidget {
           colors: [_gradientBlack, Color(0x00000000)],
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 8, 16),
-        child: Row(
-          children: [
-            IconButton(
-              // A [BackButton] in all but name; that one takes no focus
-              // node, and the remote has to be able to land on this one.
-              key: const ValueKey('back'),
-              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-              style: _whiteOnVideo,
-              focusNode: firstFocusNode,
-              onPressed: onBack,
-              icon: const BackButtonIcon(),
-            ),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.titleMedium?.copyWith(color: Colors.white),
-              ),
-            ),
-            if (onCast != null)
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 8, 16),
+          child: Row(
+            children: [
               IconButton(
-                key: const ValueKey('cast'),
-                tooltip: castOn ? 'Casting' : 'Cast to a device',
+                // A [BackButton] in all but name; that one takes no focus
+                // node, and the remote has to be able to land on this one.
+                key: const ValueKey('back'),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 style: _whiteOnVideo,
-                isSelected: castOn,
-                onPressed: onCast,
-                icon: Icon(castOn ? Icons.cast_connected : Icons.cast),
+                focusNode: firstFocusNode,
+                onPressed: onBack,
+                icon: const BackButtonIcon(),
               ),
-            if (onNext != null)
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.titleMedium?.copyWith(color: Colors.white),
+                ),
+              ),
+              if (onCast != null)
+                IconButton(
+                  key: const ValueKey('cast'),
+                  tooltip: castOn ? 'Casting' : 'Cast to a device',
+                  style: _whiteOnVideo,
+                  isSelected: castOn,
+                  onPressed: onCast,
+                  icon: Icon(castOn ? Icons.cast_connected : Icons.cast),
+                ),
+              if (onNext != null)
+                IconButton(
+                  key: const ValueKey('next'),
+                  tooltip: 'Next episode (N)',
+                  style: _whiteOnVideo,
+                  onPressed: onNext,
+                  icon: const Icon(Icons.skip_next),
+                ),
+              if (onSubtitles != null)
+                IconButton(
+                  key: const ValueKey('subtitles'),
+                  tooltip: 'Subtitles (S)',
+                  style: _whiteOnVideo,
+                  onPressed: onSubtitles,
+                  icon: Icon(
+                    subtitlesOn ? Icons.subtitles : Icons.subtitles_off,
+                  ),
+                ),
+              if (onAudio != null)
+                IconButton(
+                  key: const ValueKey('audio'),
+                  tooltip: 'Audio track (A)',
+                  style: _whiteOnVideo,
+                  onPressed: onAudio,
+                  icon: const Icon(Icons.audiotrack),
+                ),
               IconButton(
-                key: const ValueKey('next'),
-                tooltip: 'Next episode (N)',
+                key: const ValueKey('stats'),
+                tooltip: 'Playback stats (Shift+I)',
                 style: _whiteOnVideo,
-                onPressed: onNext,
-                icon: const Icon(Icons.skip_next),
+                isSelected: statsOn,
+                onPressed: onStats,
+                icon: const Icon(Icons.query_stats),
               ),
-            if (onSubtitles != null)
               IconButton(
-                key: const ValueKey('subtitles'),
-                tooltip: 'Subtitles (S)',
+                key: const ValueKey('settings'),
+                tooltip: 'Playback settings',
                 style: _whiteOnVideo,
-                onPressed: onSubtitles,
-                icon: Icon(subtitlesOn ? Icons.subtitles : Icons.subtitles_off),
+                onPressed: onSettings,
+                icon: const Icon(Icons.settings),
               ),
-            if (onAudio != null)
-              IconButton(
-                key: const ValueKey('audio'),
-                tooltip: 'Audio track (A)',
-                style: _whiteOnVideo,
-                onPressed: onAudio,
-                icon: const Icon(Icons.audiotrack),
-              ),
-            IconButton(
-              key: const ValueKey('stats'),
-              tooltip: 'Playback stats (Shift+I)',
-              style: _whiteOnVideo,
-              isSelected: statsOn,
-              onPressed: onStats,
-              icon: const Icon(Icons.query_stats),
-            ),
-            IconButton(
-              key: const ValueKey('settings'),
-              tooltip: 'Playback settings',
-              style: _whiteOnVideo,
-              onPressed: onSettings,
-              icon: const Icon(Icons.settings),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -362,83 +369,86 @@ class PlayerBottomBar extends StatelessWidget {
           colors: [_gradientBlack, Color(0x00000000)],
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 16, 12, 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            seekBar,
-            Row(
-              children: [
-                if (wide) ...[
-                  IconButton(
-                    tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
-                    style: _whiteOnVideo,
-                    focusNode: playPauseFocusNode,
-                    iconSize: 32,
-                    onPressed: onPlayPause,
-                    icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                  ),
-                  IconButton(
-                    tooltip: 'Back ${seekLabel(seekStep)} (←)',
-                    style: _whiteOnVideo,
-                    onPressed: onSeekBack,
-                    icon: Icon(seekBackIcon(seekStep)),
-                  ),
-                  IconButton(
-                    tooltip: 'Forward ${seekLabel(seekStep)} (→)',
-                    style: _whiteOnVideo,
-                    onPressed: onSeekForward,
-                    icon: Icon(seekForwardIcon(seekStep)),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                time,
-                const Spacer(),
-                if (wide) ...[
-                  IconButton(
-                    tooltip: volume == 0 ? 'Unmute (M)' : 'Mute (M)',
-                    style: _whiteOnVideo,
-                    onPressed: onMute,
-                    icon: Icon(
-                      volume == 0
-                          ? Icons.volume_off
-                          : volume < 50
-                          ? Icons.volume_down
-                          : Icons.volume_up,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              seekBar,
+              Row(
+                children: [
+                  if (wide) ...[
+                    IconButton(
+                      tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
+                      style: _whiteOnVideo,
+                      focusNode: playPauseFocusNode,
+                      iconSize: 32,
+                      onPressed: onPlayPause,
+                      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
                     ),
-                  ),
-                  // Only where something can drag it: a [Slider] takes
-                  // every arrow key for itself, so a remote that landed on
-                  // it could never leave again, and the set has its own
-                  // volume keys anyway. Mute stays, as a key does that.
+                    IconButton(
+                      tooltip: 'Back ${seekLabel(seekStep)} (←)',
+                      style: _whiteOnVideo,
+                      onPressed: onSeekBack,
+                      icon: Icon(seekBackIcon(seekStep)),
+                    ),
+                    IconButton(
+                      tooltip: 'Forward ${seekLabel(seekStep)} (→)',
+                      style: _whiteOnVideo,
+                      onPressed: onSeekForward,
+                      icon: Icon(seekForwardIcon(seekStep)),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  time,
+                  const Spacer(),
+                  if (wide) ...[
+                    IconButton(
+                      tooltip: volume == 0 ? 'Unmute (M)' : 'Mute (M)',
+                      style: _whiteOnVideo,
+                      onPressed: onMute,
+                      icon: Icon(
+                        volume == 0
+                            ? Icons.volume_off
+                            : volume < 50
+                            ? Icons.volume_down
+                            : Icons.volume_up,
+                      ),
+                    ),
+                    // Only where something can drag it: a [Slider] takes
+                    // every arrow key for itself, so a remote that landed on
+                    // it could never leave again, and the set has its own
+                    // volume keys anyway. Mute stays, as a key does that.
+                    if (!isTv)
+                      SizedBox(
+                        width: 120,
+                        child: Slider(
+                          value: volume.clamp(0, 100),
+                          max: 100,
+                          onChanged: onVolume,
+                        ),
+                      ),
+                  ],
+                  // A television is fullscreen the whole time it is up, so
+                  // the button is not built at all rather than built and
+                  // thrown away on every tick of the position.
                   if (!isTv)
-                    SizedBox(
-                      width: 120,
-                      child: Slider(
-                        value: volume.clamp(0, 100),
-                        max: 100,
-                        onChanged: onVolume,
+                    IconButton(
+                      tooltip: fullscreen
+                          ? 'Exit fullscreen (F)'
+                          : 'Fullscreen (F)',
+                      style: _whiteOnVideo,
+                      onPressed: onFullscreen,
+                      icon: Icon(
+                        fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
                       ),
                     ),
                 ],
-                // A television is fullscreen the whole time it is up, so
-                // the button is not built at all rather than built and
-                // thrown away on every tick of the position.
-                if (!isTv)
-                  IconButton(
-                    tooltip: fullscreen
-                        ? 'Exit fullscreen (F)'
-                        : 'Fullscreen (F)',
-                    style: _whiteOnVideo,
-                    onPressed: onFullscreen,
-                    icon: Icon(
-                      fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                    ),
-                  ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

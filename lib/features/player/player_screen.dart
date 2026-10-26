@@ -2708,95 +2708,93 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                       // that shows none.
                       child: ExcludeSemantics(
                         excluding: !shown,
-                        child: SafeArea(
-                          child: _controlsFocus(
-                            Column(
-                              children: [
-                                PlayerTopBar(
-                                  title: state?.title ?? '',
-                                  onBack: _leavePlayer,
-                                  subtitlesOn:
-                                      _tracks.value.activeSubtitleId != null,
-                                  onSubtitles: _openSubtitleMenu,
-                                  onAudio: _tracks.value.audio.length > 1
-                                      ? _openAudioMenu
-                                      : null,
-                                  statsOn: _statsPinned ?? false,
-                                  onStats: _toggleStatsPinned,
-                                  onSettings: _openSettings,
-                                  onNext: nextVideo == null || casting
-                                      ? null
-                                      : _playNext,
-                                  onCast: _castAvailable
-                                      ? _openCastSheet
-                                      : null,
-                                  castOn: casting,
-                                  firstFocusNode: _topBarFocus,
-                                ),
-                                Expanded(
-                                  child:
-                                      !wide &&
-                                          hasVideo &&
-                                          status == null &&
-                                          !startup
-                                      ? Center(
-                                          child: PlayerCenterControls(
-                                            playing: _playing,
-                                            seekStep: seekStep,
-                                            onPlayPause: _togglePlay,
-                                            onSeekBack: () =>
-                                                _seekBy(-seekStep),
-                                            onSeekForward: () =>
-                                                _seekBy(seekStep),
-                                          ),
-                                        )
-                                      : const SizedBox.expand(),
-                                ),
-                                if (hasVideo)
-                                  PlayerBottomBar(
-                                    key: _bottomBarKey,
-                                    wide: wide,
-                                    playing: _playing,
-                                    seekStep: seekStep,
-                                    // Hidden, the bar holds what it last
-                                    // showed. It stays mounted under the
-                                    // fade, and a bar that followed the film
-                                    // would ask for frames between the
-                                    // film's own ([_HeldValue]).
-                                    position: shown
-                                        ? _position
-                                        : _HeldValue(_position.value),
-                                    buffered: shown
-                                        ? _buffer
-                                        : _HeldValue(_buffer.value),
-                                    duration: _duration,
-                                    showRemaining: _showRemaining,
-                                    volume: _volume,
-                                    fullscreen: _fullscreenOn,
-                                    onPlayPause: _togglePlay,
-                                    onSeekBack: () => _seekBy(-seekStep),
-                                    onSeekForward: () => _seekBy(seekStep),
-                                    onSeek: _seekTo,
-                                    onStep: _seekBy,
-                                    onScrubStart: () {
-                                      _scrubbing = true;
-                                      _controlsTimer?.cancel();
-                                    },
-                                    onScrubEnd: () {
-                                      _scrubbing = false;
-                                      _restartControlsTimer();
-                                    },
-                                    onToggleTimeDisplay: () => setState(
-                                      () => _showRemaining = !_showRemaining,
-                                    ),
-                                    onVolume: _setVolume,
-                                    onMute: _toggleMute,
-                                    onFullscreen: _toggleFullscreen,
-                                    playPauseFocusNode: _playPauseFocus,
-                                    seekBarFocusNode: _seekBarFocus,
+                        // No SafeArea here: each bar keeps its buttons
+                        // inside the safe area itself, and draws its gradient
+                        // out to the edge of the screen.
+                        child: _controlsFocus(
+                          Column(
+                            children: [
+                              PlayerTopBar(
+                                title: state?.title ?? '',
+                                onBack: _leavePlayer,
+                                subtitlesOn:
+                                    _tracks.value.activeSubtitleId != null,
+                                onSubtitles: _openSubtitleMenu,
+                                onAudio: _tracks.value.audio.length > 1
+                                    ? _openAudioMenu
+                                    : null,
+                                statsOn: _statsPinned ?? false,
+                                onStats: _toggleStatsPinned,
+                                onSettings: _openSettings,
+                                onNext: nextVideo == null || casting
+                                    ? null
+                                    : _playNext,
+                                onCast: _castAvailable ? _openCastSheet : null,
+                                castOn: casting,
+                                firstFocusNode: _topBarFocus,
+                              ),
+                              Expanded(
+                                child:
+                                    !wide &&
+                                        hasVideo &&
+                                        status == null &&
+                                        !startup
+                                    ? Center(
+                                        child: PlayerCenterControls(
+                                          playing: _playing,
+                                          seekStep: seekStep,
+                                          onPlayPause: _togglePlay,
+                                          onSeekBack: () => _seekBy(-seekStep),
+                                          onSeekForward: () =>
+                                              _seekBy(seekStep),
+                                        ),
+                                      )
+                                    : const SizedBox.expand(),
+                              ),
+                              if (hasVideo)
+                                PlayerBottomBar(
+                                  key: _bottomBarKey,
+                                  wide: wide,
+                                  playing: _playing,
+                                  seekStep: seekStep,
+                                  // Hidden, the bar holds what it last
+                                  // showed. It stays mounted under the
+                                  // fade, and a bar that followed the film
+                                  // would ask for frames between the
+                                  // film's own ([_HeldValue]).
+                                  position: shown
+                                      ? _position
+                                      : _HeldValue(_position.value),
+                                  buffered: shown
+                                      ? _buffer
+                                      : _HeldValue(_buffer.value),
+                                  duration: _duration,
+                                  showRemaining: _showRemaining,
+                                  volume: _volume,
+                                  fullscreen: _fullscreenOn,
+                                  onPlayPause: _togglePlay,
+                                  onSeekBack: () => _seekBy(-seekStep),
+                                  onSeekForward: () => _seekBy(seekStep),
+                                  onSeek: _seekTo,
+                                  onStep: _seekBy,
+                                  onScrubStart: () {
+                                    _scrubbing = true;
+                                    _controlsTimer?.cancel();
+                                  },
+                                  onScrubEnd: () {
+                                    _scrubbing = false;
+                                    _restartControlsTimer();
+                                  },
+                                  onToggleTimeDisplay: () => setState(
+                                    () => _showRemaining = !_showRemaining,
                                   ),
-                              ],
-                            ),
+                                  onVolume: _setVolume,
+                                  onMute: _toggleMute,
+                                  onFullscreen: _toggleFullscreen,
+                                  playPauseFocusNode: _playPauseFocus,
+                                  seekBarFocusNode: _seekBarFocus,
+                                ),
+                            ],
                           ),
                         ),
                       ),
