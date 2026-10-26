@@ -293,7 +293,10 @@ fn wait_for(key: &str, what: &str, done: impl Fn(&serde_json::Value) -> bool) ->
 #[test]
 fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
-    let storage = tmp.path().join("core");
+    // Resolved, because the server reports the paths it resolved: on macOS
+    // the temp dir is under /tmp, a link to /private/tmp.
+    let root = tmp.path().canonicalize()?;
+    let storage = root.join("core");
     xtremio_core::env::set_storage_dir(&storage)?;
     let registry_file = storage.join("downloads.json");
 
@@ -301,13 +304,13 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     // the folder librqbit manages: one download is instantly complete, the
     // other can never finish (nobody is seeding), which is exactly the pair
     // the registry has to tell apart.
-    let content = tmp.path().join("Test Show");
+    let content = root.join("Test Show");
     std::fs::create_dir_all(&content)?;
     write_payload(&content.join("have.bin"), HAVE_LEN);
     write_payload(&content.join("missing.bin"), MISSING_LEN);
     let (torrent, info_hash, files) = real_torrent(&content);
 
-    let cache_root = tmp.path().join("cache").join("server");
+    let cache_root = root.join("cache").join("server");
     // What the backend *calls* each file. A name, not a file: nothing is
     // ever written there, and the entry carries it so a listing can show
     // one. The bytes are the pieces placed above.
@@ -315,7 +318,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let have_pieces = piece_range(&files, "have.bin");
 
     let base_url = url::Url::parse(&server_start(ServerConfig {
-        config_dir: tmp.path().join("server").display().to_string(),
+        config_dir: root.join("server").display().to_string(),
         cache_dir: cache_root.display().to_string(),
     })?)?;
     // After the server is up, not before: a start-up sweep deletes the
@@ -936,7 +939,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     core_init(CoreConfig {
         storage_dir: storage.display().to_string(),
         server: Some(ServerConfig {
-            config_dir: tmp.path().join("server").display().to_string(),
+            config_dir: root.join("server").display().to_string(),
             cache_dir: cache_root.display().to_string(),
         }),
     })?;
@@ -1085,7 +1088,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         settings["cacheRoot"],
         "a root the server refused changed nothing"
     );
-    let elsewhere = tmp.path().join("elsewhere");
+    let elsewhere = root.join("elsewhere");
     let patched = json(&server_update_settings(
         serde_json::json!({ "cacheRoot": elsewhere.display().to_string() }).to_string(),
     )?);

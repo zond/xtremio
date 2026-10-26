@@ -127,11 +127,14 @@ fn endless_origin(
 #[tokio::test]
 async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
+    // Resolved, because the server reports the paths it resolved: on macOS
+    // the temp dir is under /tmp, a link to /private/tmp.
+    let root = tmp.path().canonicalize()?;
     assert_eq!(server_base_url()?, None, "nothing running before start");
 
     // Start on an ephemeral port: URL is well-formed and the server answers.
     let url = tokio::task::spawn_blocking({
-        let cfg = config(tmp.path());
+        let cfg = config(&root);
         move || server_start(cfg)
     })
     .await??;
@@ -140,11 +143,8 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert_eq!(parsed.host_str(), Some("127.0.0.1"));
     assert!(parsed.port().is_some_and(|port| port != 0));
     assert_eq!(server_base_url()?.as_deref(), Some(url.as_str()));
-    assert!(tmp.path().join("server").is_dir(), "config dir created");
-    assert!(
-        tmp.path().join("cache/server").is_dir(),
-        "cache dir created"
-    );
+    assert!(root.join("server").is_dir(), "config dir created");
+    assert!(root.join("cache/server").is_dir(), "cache dir created");
 
     // Answering, and refusing a control request that carries no token.
     assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
@@ -249,13 +249,13 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // is on. The occupancy is the server's own count, the same figure the
     // usage call answers, and not a walk of the root: a file under it that
     // no owner holds is in a walk and in neither count.
-    let stray = tmp.path().join("cache/server/stray/film.mkv");
+    let stray = root.join("cache/server/stray/film.mkv");
     std::fs::create_dir_all(stray.parent().expect("a parent"))?;
     std::fs::write(&stray, vec![1u8; 1 << 20])?;
     let report = json(&tokio::task::spawn_blocking(server_storage_report).await??);
     assert_eq!(
         report["cacheDir"],
-        tmp.path().join("cache/server").display().to_string(),
+        root.join("cache/server").display().to_string(),
         "{report}"
     );
     let counted = json(&tokio::task::spawn_blocking(server_cache_usage).await??);
@@ -416,7 +416,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
 
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({
-        let cfg = config(tmp.path());
+        let cfg = config(&root);
         move || server_start(cfg)
     })
     .await??;
@@ -458,7 +458,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // Stop when not running is a no-op, and a restart works.
     tokio::task::spawn_blocking(server_stop).await??;
     let restarted = tokio::task::spawn_blocking({
-        let cfg = config(tmp.path());
+        let cfg = config(&root);
         move || server_start(cfg)
     })
     .await??;
