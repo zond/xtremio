@@ -2188,14 +2188,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // overlay about local playback is about a player that is paused.
     final startup = _startupOverlayShown && !casting && !leaving;
     final status = startup || casting || leaving ? null : _status(state);
-    final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controls.shown && !leaving;
     final nextVideo = state?.nextVideo;
     final upNext = leaving ? null : _upNext.secondsLeft;
     final hasVideo = engine != null && _opened != null && !casting;
-    final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
     _controls.rebuilt();
@@ -2233,46 +2230,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // A mouse is a click ([_onVideoClick]) and everything
-                  // else a tap ([_onVideoTap]); the two never see the same
-                  // pointer.
-                  Listener(
-                    onPointerDown: (event) => _clickDownAt =
-                        event.kind == PointerDeviceKind.mouse &&
-                            event.buttons == kPrimaryMouseButton
-                        ? event.localPosition
-                        : null,
-                    onPointerUp: (event) {
-                      final down = _clickDownAt;
-                      _clickDownAt = null;
-                      if (down == null ||
-                          (event.localPosition - down).distance > kTouchSlop) {
-                        return;
-                      }
-                      _onVideoClick(event.localPosition);
-                    },
-                    onPointerCancel: (_) => _clickDownAt = null,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      supportedDevices: const {
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.stylus,
-                        PointerDeviceKind.invertedStylus,
-                        PointerDeviceKind.unknown,
-                      },
-                      onTap: _onVideoTap,
-                      onDoubleTapDown: (details) =>
-                          _onVideoDoubleTap(details, width),
-                      onDoubleTap: () {},
-                      child: hasVideo
-                          ? engine.buildVideo(
-                              context,
-                              subtitleBottomPadding: _subtitleBottomPadding(
-                                controlsShown: shown,
-                              ),
-                            )
-                          : const SizedBox.expand(),
-                    ),
+                  _videoLayer(
+                    engine: hasVideo ? engine : null,
+                    width: width,
+                    shown: shown,
                   ),
                   // Above the tap-to-show-controls surface rather than inside
                   // it: its buttons are the only thing on screen while a
@@ -2280,254 +2241,30 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                   // arena against the video's double-tap-to-seek first.
                   if (casting) SafeArea(child: _castingView(state)),
                   if (_castPreparation case final preparing? when !casting)
-                    SafeArea(
-                      child: CastPreparingPanel(
-                        deviceName: preparing.device.name,
-                        phase: CastPreparingPanel.phaseLine(preparing.phase),
-                        speed: switch (_torrentStats?.downloadSpeed) {
-                          final speed? when speed > 0 =>
-                            TorrentProgressCard.formatSpeed(speed),
-                          _ => null,
-                        },
-                        onCancel: _cancelCastPrepare,
-                      ),
-                    ),
-                  if (hasVideo && _statsVisible)
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 12, top: 64),
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: PlaybackStatsOverlay(
-                            stats: engine.stats,
-                            source: _opened,
-                            read: _engineUrl,
-                            isTorrent: _torrentStatsRequest != null,
-                            torrent: _torrentStats,
-                            dht: _dhtStatus,
-                            held: _numbersPoll.numbers,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (startup)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: TorrentStartupOverlay(
-                          stats: _torrentStats,
-                          hasTrackers:
-                              _torrentStatsRequest?.trackers.isNotEmpty ?? true,
-                          dht: _dhtStatus,
-                        ),
-                      ),
-                    ),
-                  if (status != null)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: stall
-                            ? TorrentStallOverlay(stats: _torrentStats)
-                            : Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (status.failed)
-                                    const Icon(Icons.error_outline, size: 48)
-                                  else
-                                    const CircularProgressIndicator(),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    status.text,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  AnimatedOpacity(
-                    opacity: shown ? 1 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: IgnorePointer(
-                      ignoring: !shown,
-                      // Hidden is hidden to a screen reader too, from the
-                      // moment the bar starts to fade: an opacity takes
-                      // its subtree out of the semantics tree only once it
-                      // has reached zero, and until then the seek bar
-                      // would still be offered as a slider over a screen
-                      // that shows none.
-                      child: ExcludeSemantics(
-                        excluding: !shown,
-                        // No SafeArea here: each bar keeps its buttons
-                        // inside the safe area itself, and draws its gradient
-                        // out to the edge of the screen.
-                        child: _controlsFocus(
-                          Column(
-                            children: [
-                              PlayerTopBar(
-                                title: state?.title ?? '',
-                                onBack: _leavePlayer,
-                                subtitlesOn:
-                                    _tracks.value.activeSubtitleId != null,
-                                onSubtitles: _openSubtitleMenu,
-                                onAudio: _tracks.value.audio.length > 1
-                                    ? _openAudioMenu
-                                    : null,
-                                statsOn: _statsPinned ?? false,
-                                onStats: _toggleStatsPinned,
-                                onSettings: _openSettings,
-                                onNext: nextVideo == null || casting
-                                    ? null
-                                    : _playNext,
-                                onCast: _castAvailable ? _openCastSheet : null,
-                                castOn: casting,
-                                firstFocusNode: _topBarFocus,
-                              ),
-                              Expanded(
-                                child:
-                                    !wide &&
-                                        hasVideo &&
-                                        status == null &&
-                                        !startup
-                                    ? Center(
-                                        child: PlayerCenterControls(
-                                          playing: _playing,
-                                          seekStep: seekStep,
-                                          onPlayPause: _togglePlay,
-                                          onSeekBack: () => _seekBy(-seekStep),
-                                          onSeekForward: () =>
-                                              _seekBy(seekStep),
-                                        ),
-                                      )
-                                    : const SizedBox.expand(),
-                              ),
-                              if (hasVideo)
-                                PlayerBottomBar(
-                                  key: _bottomBarKey,
-                                  wide: wide,
-                                  playing: _playing,
-                                  seekStep: seekStep,
-                                  // Hidden, the bar holds what it last
-                                  // showed. It stays mounted under the
-                                  // fade, and a bar that followed the film
-                                  // would ask for frames between the
-                                  // film's own ([_HeldValue]).
-                                  position: shown
-                                      ? _position
-                                      : _HeldValue(_position.value),
-                                  buffered: shown
-                                      ? _buffer
-                                      : _HeldValue(_buffer.value),
-                                  duration: _duration,
-                                  showRemaining: _showRemaining,
-                                  volume: _volume,
-                                  fullscreen: _fullscreenOn,
-                                  onPlayPause: _togglePlay,
-                                  onSeekBack: () => _seekBy(-seekStep),
-                                  onSeekForward: () => _seekBy(seekStep),
-                                  onSeek: _seekTo,
-                                  onStep: _seekBy,
-                                  onScrubStart: () {
-                                    _scrubbing = true;
-                                    _controls.pause();
-                                  },
-                                  onScrubEnd: () {
-                                    _scrubbing = false;
-                                    _controls.restart();
-                                  },
-                                  onToggleTimeDisplay: () => setState(
-                                    () => _showRemaining = !_showRemaining,
-                                  ),
-                                  onVolume: _setVolume,
-                                  onMute: _toggleMute,
-                                  onFullscreen: _toggleFullscreen,
-                                  playPauseFocusNode: _playPauseFocus,
-                                  seekBarFocusNode: _seekBarFocus,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                    SafeArea(child: _castPreparingLayer(preparing)),
+                  if (hasVideo && _statsVisible) _statsLayer(engine),
+                  if (startup) _startupLayer(),
+                  if (status != null) _statusLayer(status, state),
+                  _controlsLayer(
+                    state: state,
+                    shown: shown,
+                    wide: width >= PlayerScreen.wideBreakpoint,
+                    hasVideo: hasVideo,
+                    centreControls: status == null && !startup,
                   ),
                   // Outside the OSD's fade: it says why the
                   // subtitle the viewer is looking for is not there, and
                   // the bar is not what they are looking at.
                   if (_subtitleFailure case final failure?)
-                    SafeArea(
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 64),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              child: Text(
-                                failure,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    _subtitleFailureLayer(failure),
                   // Outside the bar's [AnimatedOpacity] on purpose: this
                   // is the layer that must still be there when the OSD has
                   // faded, which is the whole of what it is for. Top right,
                   // opposite the stats panel and clear of the subtitles it
                   // is being used to judge.
-                  if (_timingShown)
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 12, top: 64),
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: FocusScope(
-                            node: _timingScope,
-                            child: SubtitleTimingOverlay(
-                              timing: _timing,
-                              firstFocusNode: _timingFocus,
-                              // Null with nothing else on offer, which is
-                              // what leaves the whole option undrawn.
-                              onMatch: _hasOtherSubtitleFile(state)
-                                  ? () => unawaited(_openSubtitleMatch())
-                                  : null,
-                              matching: _matchingSubtitle,
-                              matchNote: _subtitleMatchNote,
-                              onMark: () => unawaited(_markSubtitleTiming()),
-                              markNote: _markNote,
-                              onShift: (step) =>
-                                  _adjustTiming(_timing.shiftedBy(step)),
-                              onReset: _undoSubtitleTiming,
-                              onClose: _hideSubtitleTiming,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  if (_timingShown) _timingLayer(state),
                   if (upNext != null && upNext > 0 && nextVideo != null)
-                    Positioned(
-                      right: 16,
-                      bottom: hasVideo ? 112 : 16,
-                      child: SafeArea(
-                        child: _upNextFocus(
-                          UpNextCard(
-                            label: nextVideo.seasonEpisodeLabel,
-                            title: nextVideo.title,
-                            secondsLeft: upNext,
-                            onPlay: _playNext,
-                            onDismiss: _upNext.dismiss,
-                            playFocusNode: _playNextFocus,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _upNextLayer(nextVideo, upNext, hasVideo: hasVideo),
                 ],
               ),
             ),
@@ -2536,6 +2273,291 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       ),
     );
   }
+
+  /// The video, under everything, and what a press on it means. [engine] is
+  /// null while there is no video here to draw.
+  Widget _videoLayer({
+    required PlaybackEngine? engine,
+    required double width,
+    required bool shown,
+  }) {
+    // A mouse is a click ([_onVideoClick]) and everything else a tap
+    // ([_onVideoTap]); the two never see the same pointer.
+    return Listener(
+      onPointerDown: (event) => _clickDownAt =
+          event.kind == PointerDeviceKind.mouse &&
+              event.buttons == kPrimaryMouseButton
+          ? event.localPosition
+          : null,
+      onPointerUp: (event) {
+        final down = _clickDownAt;
+        _clickDownAt = null;
+        if (down == null ||
+            (event.localPosition - down).distance > kTouchSlop) {
+          return;
+        }
+        _onVideoClick(event.localPosition);
+      },
+      onPointerCancel: (_) => _clickDownAt = null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        supportedDevices: const {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.invertedStylus,
+          PointerDeviceKind.unknown,
+        },
+        onTap: _onVideoTap,
+        onDoubleTapDown: (details) => _onVideoDoubleTap(details, width),
+        onDoubleTap: () {},
+        child: engine != null
+            ? engine.buildVideo(
+                context,
+                subtitleBottomPadding: _subtitleBottomPadding(
+                  controlsShown: shown,
+                ),
+              )
+            : const SizedBox.expand(),
+      ),
+    );
+  }
+
+  /// The panel a rendition is prepared under, before the receiver has it.
+  Widget _castPreparingLayer(CastPreparation preparing) => CastPreparingPanel(
+    deviceName: preparing.device.name,
+    phase: CastPreparingPanel.phaseLine(preparing.phase),
+    speed: switch (_torrentStats?.downloadSpeed) {
+      final speed? when speed > 0 => TorrentProgressCard.formatSpeed(speed),
+      _ => null,
+    },
+    onCancel: _cancelCastPrepare,
+  );
+
+  /// The stats panel over local playback, top left.
+  Widget _statsLayer(PlaybackEngine engine) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.only(left: 12, top: 64),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: PlaybackStatsOverlay(
+          stats: engine.stats,
+          source: _opened,
+          read: _engineUrl,
+          isTorrent: _torrentStatsRequest != null,
+          torrent: _torrentStats,
+          dht: _dhtStatus,
+          held: _numbersPoll.numbers,
+        ),
+      ),
+    ),
+  );
+
+  /// A torrent starting up, in the middle of the screen.
+  Widget _startupLayer() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: TorrentStartupOverlay(
+        stats: _torrentStats,
+        hasTrackers: _torrentStatsRequest?.trackers.isNotEmpty ?? true,
+        dht: _dhtStatus,
+      ),
+    ),
+  );
+
+  /// What the middle of the screen says: the stall card for a torrent the
+  /// server can be asked about, else a spinner or an error icon over the
+  /// status's sentence.
+  Widget _statusLayer(PlayerStatus status, PlayerState? state) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: _stallOverlayShown(state)
+          ? TorrentStallOverlay(stats: _torrentStats)
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (status.failed)
+                  const Icon(Icons.error_outline, size: 48)
+                else
+                  const CircularProgressIndicator(),
+                const SizedBox(height: 12),
+                Text(status.text, textAlign: TextAlign.center),
+              ],
+            ),
+    ),
+  );
+
+  /// The OSD: the top bar, the narrow layout's centre controls and the
+  /// bottom bar, faded out together. [centreControls] is false while the
+  /// middle of the screen says something else.
+  Widget _controlsLayer({
+    required PlayerState? state,
+    required bool shown,
+    required bool wide,
+    required bool hasVideo,
+    required bool centreControls,
+  }) {
+    final nextVideo = state?.nextVideo;
+    final seekStep = _seekStep;
+    return AnimatedOpacity(
+      opacity: shown ? 1 : 0,
+      duration: const Duration(milliseconds: 200),
+      child: IgnorePointer(
+        ignoring: !shown,
+        // Hidden is hidden to a screen reader too, from the moment the bar
+        // starts to fade: an opacity takes its subtree out of the semantics
+        // tree only once it has reached zero, and until then the seek bar
+        // would still be offered as a slider over a screen that shows none.
+        child: ExcludeSemantics(
+          excluding: !shown,
+          // No SafeArea here: each bar keeps its buttons inside the safe area
+          // itself, and draws its gradient out to the edge of the screen.
+          child: _controlsFocus(
+            Column(
+              children: [
+                PlayerTopBar(
+                  title: state?.title ?? '',
+                  onBack: _leavePlayer,
+                  subtitlesOn: _tracks.value.activeSubtitleId != null,
+                  onSubtitles: _openSubtitleMenu,
+                  onAudio: _tracks.value.audio.length > 1
+                      ? _openAudioMenu
+                      : null,
+                  statsOn: _statsPinned ?? false,
+                  onStats: _toggleStatsPinned,
+                  onSettings: _openSettings,
+                  onNext: nextVideo == null || _casting ? null : _playNext,
+                  onCast: _castAvailable ? _openCastSheet : null,
+                  castOn: _casting,
+                  firstFocusNode: _topBarFocus,
+                ),
+                Expanded(
+                  child: !wide && hasVideo && centreControls
+                      ? Center(
+                          child: PlayerCenterControls(
+                            playing: _playing,
+                            seekStep: seekStep,
+                            onPlayPause: _togglePlay,
+                            onSeekBack: () => _seekBy(-seekStep),
+                            onSeekForward: () => _seekBy(seekStep),
+                          ),
+                        )
+                      : const SizedBox.expand(),
+                ),
+                if (hasVideo)
+                  PlayerBottomBar(
+                    key: _bottomBarKey,
+                    wide: wide,
+                    playing: _playing,
+                    seekStep: seekStep,
+                    // Hidden, the bar holds what it last showed. It stays
+                    // mounted under the fade, and a bar that followed the
+                    // film would ask for frames between the film's own
+                    // ([_HeldValue]).
+                    position: shown ? _position : _HeldValue(_position.value),
+                    buffered: shown ? _buffer : _HeldValue(_buffer.value),
+                    duration: _duration,
+                    showRemaining: _showRemaining,
+                    volume: _volume,
+                    fullscreen: _fullscreenOn,
+                    onPlayPause: _togglePlay,
+                    onSeekBack: () => _seekBy(-seekStep),
+                    onSeekForward: () => _seekBy(seekStep),
+                    onSeek: _seekTo,
+                    onStep: _seekBy,
+                    onScrubStart: () {
+                      _scrubbing = true;
+                      _controls.pause();
+                    },
+                    onScrubEnd: () {
+                      _scrubbing = false;
+                      _controls.restart();
+                    },
+                    onToggleTimeDisplay: () =>
+                        setState(() => _showRemaining = !_showRemaining),
+                    onVolume: _setVolume,
+                    onMute: _toggleMute,
+                    onFullscreen: _toggleFullscreen,
+                    playPauseFocusNode: _playPauseFocus,
+                    seekBarFocusNode: _seekBarFocus,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Why the subtitle the viewer picked is not on screen, top centre.
+  Widget _subtitleFailureLayer(String failure) => SafeArea(
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 64),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(failure, style: const TextStyle(color: Colors.white)),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// The "Adjust timing" panel, top right, in its own focus scope.
+  Widget _timingLayer(PlayerState? state) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.only(right: 12, top: 64),
+      child: Align(
+        alignment: Alignment.topRight,
+        child: FocusScope(
+          node: _timingScope,
+          child: SubtitleTimingOverlay(
+            timing: _timing,
+            firstFocusNode: _timingFocus,
+            // Null with nothing else on offer, which is what leaves the whole
+            // option undrawn.
+            onMatch: _hasOtherSubtitleFile(state)
+                ? () => unawaited(_openSubtitleMatch())
+                : null,
+            matching: _matchingSubtitle,
+            matchNote: _subtitleMatchNote,
+            onMark: () => unawaited(_markSubtitleTiming()),
+            markNote: _markNote,
+            onShift: (step) => _adjustTiming(_timing.shiftedBy(step)),
+            onReset: _undoSubtitleTiming,
+            onClose: _hideSubtitleTiming,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// The up-next card, bottom right, above the bottom bar when there is one.
+  Widget _upNextLayer(
+    VideoInfo nextVideo,
+    int secondsLeft, {
+    required bool hasVideo,
+  }) => Positioned(
+    right: 16,
+    bottom: hasVideo ? 112 : 16,
+    child: SafeArea(
+      child: _upNextFocus(
+        UpNextCard(
+          label: nextVideo.seasonEpisodeLabel,
+          title: nextVideo.title,
+          secondsLeft: secondsLeft,
+          onPlay: _playNext,
+          onDismiss: _upNext.dismiss,
+          playFocusNode: _playNextFocus,
+        ),
+      ),
+    ),
+  );
 
   /// The remote a receiver's film is driven from, and the cast panel above
   /// it while the stats are on ([_statsVisible], the same button and
