@@ -77,8 +77,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
       // What went back on screen is what the failed upgrade replaced, so a
       // candidate now has to beat that file's rank. The pick is open again,
       // past the dead file.
-      _autoPickRank = pick.rankBefore;
-      _autoPickedSubtitles = false;
+      _autoPick.refused(pick.rankBefore);
       _maybeAutoPickSubtitles();
     }
   }
@@ -306,7 +305,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// A press on the timing panel; the panel is rebuilt from [_timing], so it
   /// draws what mpv is really playing.
   ///
-  /// It ends the auto-pick ([_subtitlesChosenByHand]): a viewer judging the
+  /// It ends the auto-pick ([SubtitleAutoPick.byHand]): a viewer judging the
   /// subtitle in front of them has answered what the auto-pick guesses at.
   /// And it is the only path that remembers anything: every other change to
   /// the timing is the machine putting a file back ([_resetSubtitleTiming]),
@@ -314,7 +313,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// here.
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
-    _subtitlesChosenByHand = true;
+    _autoPick.chooseByHand();
     setState(() => _timing = timing);
     _applySubtitleTiming();
     _rememberTiming();
@@ -477,7 +476,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   }
 
   void _selectEmbeddedSubtitle(TrackInfo track) {
-    _subtitlesChosenByHand = true;
+    _autoPick.chooseByHand();
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
     _resetSubtitleTiming();
     _engine?.setSubtitleTrack(track.id);
@@ -498,7 +497,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   }
 
   void _selectExternalSubtitle(SubtitleInfo subtitle) {
-    _subtitlesChosenByHand = true;
+    _autoPick.chooseByHand();
     _subtitlePick = (
       url: subtitle.url.toString(),
       before: _tracks.value,
@@ -530,7 +529,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   }
 
   void _disableSubtitles() {
-    _subtitlesChosenByHand = true;
+    _autoPick.chooseByHand();
     _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
     _resetSubtitleTiming();
     _engine?.disableSubtitles();
@@ -612,9 +611,9 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// replaces the one on screen** ([_subtitleRank]). The best there is goes up
   /// at once, so nothing waits on the slowest addon, and the file this show was
   /// watched with takes over the moment it arrives. It settles
-  /// ([_autoPickedSubtitles]) once what is on screen cannot be beaten, or every
+  /// ([SubtitleAutoPick.settle]) once what is on screen cannot be beaten, or every
   /// addon has answered and nothing better came. A pick by hand ends it at once
-  /// ([_subtitlesChosenByHand]).
+  /// ([SubtitleAutoPick.byHand]).
   ///
   /// With no session preference, what this show was last watched with stands in
   /// ([_wanted]). That is every fresh start, since the core clears the
@@ -626,12 +625,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// means "the viewer said so, this session", and a remembered guess in it
   /// would be indistinguishable from a judgement.
   void _maybeAutoPickSubtitles() {
-    if (_autoPickedSubtitles ||
-        _autoPickingSubtitles ||
-        _subtitlesChosenByHand ||
-        !_mediaLoaded ||
-        _opened == null ||
-        _handedOver) {
+    if (!_autoPick.mayPick || !_mediaLoaded || _opened == null || _handedOver) {
       return;
     }
     final state = _state;
@@ -695,7 +689,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
           ? 0
           : _subtitleRank(preference, external: false, exact: true);
       final best = externalRank > embeddedRank ? externalRank : embeddedRank;
-      final standing = _autoPickRank;
+      final standing = _autoPick.rank;
       // Strictly better only. A file as good as the one on screen would flash
       // the words for nothing. And this is asked again after each pick the
       // engine takes, so an equal rank replacing itself would do so for ever.
@@ -704,9 +698,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
       if (best == 0 || (standing != null && best <= standing)) {
         // Nothing better than what is on screen. Once every addon has
         // answered, nothing better is coming either.
-        if (standing != null && _allSubtitleAddonsIn(state)) {
-          _autoPickedSubtitles = true;
-        }
+        if (_allSubtitleAddonsIn(state)) _autoPick.settle();
         return;
       }
       rank = best;
@@ -739,15 +731,16 @@ extension _PlayerSubtitles on _PlayerScreenState {
     // call, and by then the viewer may have chosen a file of their own.
     final applying = _tracks.value.activeSubtitleId;
     final settles = rank >= _topSubtitleRank || _allSubtitleAddonsIn(state);
-    _autoPickingSubtitles = true;
+    // The pick this began with: an answer after a new stream opened is
+    // about the media before it.
+    final autoPick = _autoPick..applying();
     var accepted = false;
     applied
         .then(
           (_) {
             if (_opened != url) return;
             accepted = true;
-            _autoPickRank = rank;
-            if (settles) _autoPickedSubtitles = true;
+            autoPick.accepted(rank, settles: settles);
           },
           onError: (Object _) {
             // Rejected: show what is really selected and try again on the next
@@ -763,7 +756,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
           },
         )
         .whenComplete(() {
-          _autoPickingSubtitles = false;
+          autoPick.answered();
           // An addon that answered while this was in flight found the pick busy
           // and was not looked at, so look now. Only after a pick the engine
           // took: asking again straight after a refusal would make the same

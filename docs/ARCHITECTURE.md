@@ -706,7 +706,7 @@ the file going on screen, or untouched. Both values are re-applied after a re-op
 the addon file first (a re-open is a fresh `loadfile`, and nothing
 `sub-add` put in survives one). A pick from the menu or a press on the panel
 stops the session preference's auto-pick for that media
-(`_subtitlesChosenByHand`).
+(`SubtitleAutoPick.byHand`).
 
 ### Matching against another subtitle
 

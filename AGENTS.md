@@ -295,7 +295,7 @@ and `rust/tests/subtitle_threshold.rs`.
 - **A re-open restores the addon file before the timing**
   (`_restoreExternalSubtitle` then `_applySubtitleTiming`).
 - **A pick or a press by hand stops the auto-pick** for that media
-  (`_subtitlesChosenByHand`). A late auto-pick revert undoes only its own
+  (`SubtitleAutoPick.byHand`). A late auto-pick revert undoes only its own
   id and moves `_timing` inside a `setState`.
 - **The panel is not the OSD.** It is drawn outside the fade, has its own
   focus scope and Back rung, and scrolls in whatever height it gets.

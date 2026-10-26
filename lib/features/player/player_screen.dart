@@ -28,6 +28,7 @@ import 'player_controls.dart';
 import 'seek_hold.dart';
 import 'stall_account.dart';
 import 'stream_numbers_poll.dart';
+import 'subtitle_auto_pick.dart';
 import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
@@ -658,28 +659,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     const BufferAheadStatus(BufferAhead.normal),
   );
 
-  /// Whether the auto-pick is settled for this media, once per `open`: what is
-  /// on screen is the best it can be, or every subtitle addon has answered and
-  /// nothing better came. Until then each answer that lands asks again, and a
-  /// better file replaces the one on screen. The second flag says whether an
-  /// attempt is in flight.
-  bool _autoPickedSubtitles = false;
-  bool _autoPickingSubtitles = false;
-
-  /// How good the subtitle the auto-pick put on screen is, as
-  /// `_subtitleRank` scores it; null while it has put nothing there. A
-  /// candidate has to beat this to replace it.
-  int? _autoPickRank;
-
-  /// Whether the viewer has said what they want of the subtitles for this
-  /// media -- picked a file, an embedded track or none, or moved the timing
-  /// by hand -- which leaves the auto-pick nothing to guess at.
-  ///
-  /// [_autoPickedSubtitles] records only that the engine *accepted* a pick,
-  /// so an engine that keeps refusing one would leave the auto-pick retrying
-  /// on every state and tracks event, replacing the timing and the selection
-  /// under a viewer who has just adjusted them.
-  bool _subtitlesChosenByHand = false;
+  /// Where the subtitle auto-pick stands for this media; see
+  /// [SubtitleAutoPick]. Replaced when a new stream opens.
+  SubtitleAutoPick _autoPick = SubtitleAutoPick();
 
   /// The addon files mpv has said it could not load for this media
   /// ([externalSubtitleFailure]), by URL. The auto-pick passes over them:
@@ -690,7 +672,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// What the last addon file put on screen replaced, for as long as it might
   /// yet turn out not to load: its URL, the tracks as they were, the file whose
   /// timing was in force, whether the auto-pick made the choice (and so should
-  /// make another), and how good what it replaced was ([_autoPickRank], put
+  /// make another), and how good what it replaced was ([SubtitleAutoPick.rank], put
   /// back with it). `sub-add` does not answer a failure (see
   /// [externalSubtitleFailure]). The error that says so arrives on its own, and
   /// this is what it is undone from.
@@ -1357,9 +1339,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // this one. Until mpv reports again a cast is a "not yet".
     _lastStats = null;
     unawaited(_unpublishCast());
-    _autoPickedSubtitles = false;
-    _autoPickRank = null;
-    _subtitlesChosenByHand = false;
+    _autoPick = SubtitleAutoPick();
     _mediaLoaded = false;
     // A different video. The adjustment the last subtitle was played with says
     // nothing about it, and neither does the rate the last container declared.
