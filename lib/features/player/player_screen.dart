@@ -35,6 +35,7 @@ import 'track_menus.dart';
 import '../local/local_media.dart';
 import '../local/local_playback.dart';
 import 'up_next_card.dart';
+import 'up_next_countdown.dart';
 
 part 'player_screen_open.dart';
 part 'player_screen_polls.dart';
@@ -1084,8 +1085,16 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool _barMeasureScheduled = false;
 
   /// Seconds left on the up-next card; null while it is not showing.
-  int? _upNextSecondsLeft;
-  Timer? _upNextTimer;
+  /// The up-next card's countdown; see [UpNextCountdown]. A sheet over the
+  /// player holds it ([_showSheet]).
+  late final UpNextCountdown _upNext = UpNextCountdown(
+    onDue: () => _playNext(),
+    mayTick: () => !_menuOpen,
+  )..addListener(_onUpNext);
+
+  void _onUpNext() {
+    if (mounted) setState(() {});
+  }
 
   /// Stats OSD visibility. Hover shows it until the pointer rests for
   /// [PlayerScreen.statsHoverTimeout]; Shift+I pins it on or off, after
@@ -1369,7 +1378,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // for.
     _containerFrameRate = null;
     _resetSubtitleTiming();
-    _dismissUpNext();
+    _upNext.dismiss();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
         ? Duration(milliseconds: progress.timeOffset)
@@ -1949,13 +1958,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       !_menuOpen &&
       !_scrubbing &&
       _opened != null &&
-      _upNextSecondsLeft == null &&
+      _upNext.secondsLeft == null &&
       !_startupOverlayShown &&
       _statusText(_state) == null;
 
   void _onVideoTap() {
-    if (_upNextSecondsLeft != null) {
-      _dismissUpNext();
+    if (_upNext.secondsLeft != null) {
+      _upNext.dismiss();
       return;
     }
     if (_controls.shown) {
@@ -1988,8 +1997,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _clickAt = at;
       _clickTimer = Timer(kDoubleTapTimeout, () => _clickAt = null);
     }
-    if (_upNextSecondsLeft != null) {
-      _dismissUpNext();
+    if (_upNext.secondsLeft != null) {
+      _upNext.dismiss();
       return;
     }
     _togglePlay();
@@ -2143,7 +2152,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // window. The core only moves time forward on TimeChanged, and relies on
     // Seek and TimeChanged agreeing.
     _lastReported = null;
-    _dismissUpNext();
+    _upNext.dismiss();
     _controls.show();
   }
 
@@ -2317,7 +2326,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// not this one. It resumes when the sheet closes.
   Future<void> _showSheet(WidgetBuilder builder) async {
     _controls.pause();
-    _pauseUpNext();
+    _upNext.pause();
     // On a television the remote opened this from a button on the bar:
     // remember which, so closing the sheet puts it back there and the
     // neighbouring menu stays one press away.
@@ -2348,7 +2357,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       // row.
       _timingFocus.requestFocus();
     } else if (_isTv &&
-        _upNextSecondsLeft != null &&
+        _upNext.secondsLeft != null &&
         _focusStop(_playNextFocus)) {
       // The episode ended under the sheet. The card is the question on
       // screen now, and the remote goes to it as it would have ([_focusUpNext]).
@@ -2356,7 +2365,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _focusNode.requestFocus();
     }
     _controls.show();
-    _resumeUpNext();
+    _upNext.resume();
   }
 
   Future<void> _openAudioMenu() => _showSheet(
@@ -2430,6 +2439,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // route dismantled from above).
     _detach();
     _controls.dispose();
+    _upNext.dispose();
     // Discovery belongs to the process, not this screen, and a hand-over's
     // successor has started it again by now. `pushReplacement` builds the new
     // player before this one goes, so a stop from here would end the search the
@@ -2507,7 +2517,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controls.shown && !leaving;
     final nextVideo = state?.nextVideo;
-    final upNext = leaving ? null : _upNextSecondsLeft;
+    final upNext = leaving ? null : _upNext.secondsLeft;
     final hasVideo = engine != null && _opened != null && !casting;
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
@@ -2836,7 +2846,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                             title: nextVideo.title,
                             secondsLeft: upNext,
                             onPlay: _playNext,
-                            onDismiss: _dismissUpNext,
+                            onDismiss: _upNext.dismiss,
                             playFocusNode: _playNextFocus,
                           ),
                         ),

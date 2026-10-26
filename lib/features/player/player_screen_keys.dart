@@ -70,7 +70,7 @@ extension _PlayerKeys on _PlayerScreenState {
   /// stream resolves) leaves a focused control where it is and sends the
   /// remote from the video to the top bar, which is always built.
   void _focusDown() {
-    final stop = _upNextSecondsLeft != null
+    final stop = _upNext.secondsLeft != null
         ? _playNextFocus
         : _seekBarFocus.hasFocus
         ? _playPauseFocus
@@ -104,7 +104,7 @@ extension _PlayerKeys on _PlayerScreenState {
   bool get _backDismisses =>
       _timingShown ||
       (_isTv &&
-          (_upNextSecondsLeft != null || (_controls.visible && _canAutoHide)));
+          (_upNext.secondsLeft != null || (_controls.visible && _canAutoHide)));
 
   /// One rung down the ladder [_backDismisses] describes, most transient
   /// first. Only called while there is a rung to take: the last one is
@@ -116,8 +116,8 @@ extension _PlayerKeys on _PlayerScreenState {
       _hideSubtitleTiming();
       return;
     }
-    if (_upNextSecondsLeft != null) {
-      _dismissUpNext();
+    if (_upNext.secondsLeft != null) {
+      _upNext.dismiss();
       return;
     }
     _controls.hide();
@@ -224,11 +224,11 @@ extension _PlayerKeys on _PlayerScreenState {
           // pause, the ordinary [PlayerScreen.controlsTimeout] runs.
           _togglePlay();
           _focusPlayPause();
-        } else if (_upNextSecondsLeft != null) {
+        } else if (_upNext.secondsLeft != null) {
           // On the video the centre key is the tap that [_onVideoTap]
           // handles, so with the countdown up it calls the hand-off off
           // instead of toggling playback.
-          _dismissUpNext();
+          _upNext.dismiss();
         } else {
           _togglePlay();
         }

@@ -13,9 +13,9 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   /// [_showSheet]). A duration of 0 ("disabled") shows no card: the next
   /// episode plays as soon as this one ends.
   void _startUpNext() {
-    final millis = _settings.nextVideoNotificationDuration;
-    setState(() => _upNextSecondsLeft = (millis / 1000).ceil());
-    _resumeUpNext();
+    _upNext.start(
+      Duration(milliseconds: _settings.nextVideoNotificationDuration),
+    );
     _focusUpNext();
   }
 
@@ -31,44 +31,10 @@ extension _PlayerNextEpisode on _PlayerScreenState {
   void _focusUpNext() {
     if (!_isTv) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _upNextSecondsLeft == null || _timingShown) return;
+      if (!mounted || _upNext.secondsLeft == null || _timingShown) return;
       if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
       _focusStop(_playNextFocus);
     });
-  }
-
-  /// Ticks the countdown once a second while the card shows and no sheet
-  /// is open; at zero the next episode plays.
-  void _resumeUpNext() {
-    _pauseUpNext();
-    final left = _upNextSecondsLeft;
-    if (left == null || _menuOpen) return;
-    if (left <= 0) {
-      _playNext();
-      return;
-    }
-    _upNextTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final left = _upNextSecondsLeft;
-      if (!mounted || left == null) return;
-      if (left <= 1) {
-        _playNext();
-      } else {
-        setState(() => _upNextSecondsLeft = left - 1);
-      }
-    });
-  }
-
-  /// Stops the ticking but keeps the card and the seconds left on it.
-  void _pauseUpNext() {
-    _upNextTimer?.cancel();
-    _upNextTimer = null;
-  }
-
-  void _dismissUpNext() {
-    _pauseUpNext();
-    if (_upNextSecondsLeft != null && mounted) {
-      setState(() => _upNextSecondsLeft = null);
-    }
   }
 
   /// Moves on to the next episode: the engine advances the library item,
@@ -87,7 +53,7 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     final next = state?.nextVideo;
     // Nothing to move on to (the next episode has gone from the state):
     // the countdown must not keep ticking.
-    _dismissUpNext();
+    _upNext.dismiss();
     if (state == null || next == null) return;
     if (_phase != _ScreenPhase.playing) return;
     _phase = _ScreenPhase.advancing;

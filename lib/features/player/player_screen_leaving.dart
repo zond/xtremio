@@ -57,7 +57,7 @@ extension _PlayerLeaving on _PlayerScreenState {
     _seekCheck?.cancel();
     _seekCheck = null;
     _letHeldSeekGo();
-    _pauseUpNext();
+    _upNext.pause();
     _controls.stop();
     _clickTimer?.cancel();
     _clickTimer = null;
