@@ -621,9 +621,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// the core replaced.
   int _openAttempt = 0;
 
-  /// The media id a player was last reported opened on
-  /// ([_reportMediaOpened]): once per id, after its first resolve, since
-  /// before that the server does not know which torrent the id is.
+  /// What a player was last reported opened on: a media id
+  /// ([_reportMediaOpened]), or the hash of a torrent played by its route
+  /// ([_reportPlayerOpened]). Once each, after the first resolve, since
+  /// before that the server does not know which torrent an id is, and a
+  /// retry is not a new player.
   String? _mediaOpenedReported;
 
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the

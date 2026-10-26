@@ -55,7 +55,13 @@ extension _PlayerOpen on _PlayerScreenState {
           final opening = engine.open(media, start: start);
           // After the open is on its way, as a torrent read by URL reports
           // it after its stream request ([_startTorrentStats]).
-          if (mediaIdOf(media) case final id?) _reportMediaOpened(id);
+          // Opened by what the engine plays: a media id when it has one, and
+          // otherwise a torrent's hash, played by its route.
+          if (mediaIdOf(media) case final id?) {
+            _reportMediaOpened(id);
+          } else if (_torrentStatsRequest case final request?) {
+            _reportPlayerOpened(request.infoHash);
+          }
           return opening.then((_) {
             if (state != null) _reportVideoParams(state, url);
             // A re-open is a fresh `loadfile`, and a correction the viewer made

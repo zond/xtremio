@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 
 import '../../support/player_harness.dart';
@@ -187,5 +188,37 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.hints.mediaStalls, ['m1']);
+  });
+
+  testWidgets('a torrent the server plays only by its route reports by hash', (
+    tester,
+  ) async {
+    // Registered, but refused an id at the resolve: the engine is handed the
+    // route itself, so there is no media id to report by. The server is told
+    // about the torrent by its hash instead, the open included, or the
+    // stalls it hears are counted against no open.
+    final harness = bunny();
+    harness.mediaIds.refusal = const MediaRefusal(
+      'notYet',
+      'not served by id yet',
+    );
+    await harness.pump(tester);
+    expect(harness.engine.opened.single.$1.scheme, 'http');
+
+    expect(harness.hints.opened, [infoHash]);
+    expect(harness.hints.mediaOpened, isEmpty);
+
+    // The resume point, then three seconds of film from it.
+    harness.engine.emitDuration(const Duration(minutes: 20));
+    harness.engine.emitPosition(const Duration(seconds: 897));
+    harness.engine.emitPosition(const Duration(seconds: 898));
+    harness.engine.emitPosition(const Duration(seconds: 899));
+    harness.engine.emitPosition(const Duration(seconds: 900));
+    await pumpEvents(tester);
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(harness.hints.files, hasLength(1), reason: 'the length, by hash');
+    expect(harness.hints.stalls, [infoHash]);
+    expect(harness.hints.mediaStalls, isEmpty);
   });
 }

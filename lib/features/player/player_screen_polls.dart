@@ -94,10 +94,12 @@ extension _PlayerServerPolls on _PlayerScreenState {
   }
 
   /// Tells the server a player opened on the torrent, so the stalls it goes
-  /// on to report are counted for this video; see [_reportStall]. Only for
-  /// a torrent not played by id; one that is reports by id
-  /// ([_reportMediaOpened]).
+  /// on to report are counted for this video; see [_reportStall]. Once per
+  /// torrent, and only for one the engine plays by its route; one played by
+  /// id reports by id ([_reportMediaOpened]).
   Future<void> _reportPlayerOpened(String infoHash) async {
+    if (_mediaOpenedReported == infoHash) return;
+    _mediaOpenedReported = infoHash;
     try {
       await _playbackHints?.notePlayerOpened(infoHash: infoHash);
     } catch (_) {
@@ -168,10 +170,6 @@ extension _PlayerServerPolls on _PlayerScreenState {
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
-    // A torrent registered as a media id ([_register], which ran first)
-    // is reported opened by id once the engine has it; only one played by
-    // its URL is reported by its hash.
-    if (_mediaIdSource != _opened) _reportPlayerOpened(request.infoHash);
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
     _startStartupPolling();
