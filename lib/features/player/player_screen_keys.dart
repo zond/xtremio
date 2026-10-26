@@ -253,61 +253,45 @@ extension _PlayerKeys on _PlayerScreenState {
       return KeyEventResult.handled;
     }
 
-    // Shift+I toggles the stats OSD, as in mpv; only the initial press.
-    if (key == LogicalKeyboardKey.keyI) {
-      if (!shift) return KeyEventResult.ignored;
-      if (event is KeyDownEvent &&
-          (ModalRoute.of(context)?.isCurrent ?? true)) {
-        _toggleStatsPinned();
-      }
+    final shortcut = PlayerShortcut.of(key, shift: shift);
+    if (shortcut == null) return KeyEventResult.ignored;
+    if (!shortcut.repeats && event is! KeyDownEvent) {
       return KeyEventResult.handled;
     }
-    if (shift &&
-        (key == LogicalKeyboardKey.arrowLeft ||
-            key == LogicalKeyboardKey.arrowRight)) {
-      // The short step stays an exact seek: at three seconds by default it
-      // is shorter than many releases' keyframe interval, so a scan would
-      // answer it with a jump of ten.
-      _seekTo(
-        _position.value +
-            (key == LogicalKeyboardKey.arrowLeft
-                ? -_shortSeekStep
-                : _shortSeekStep),
-      );
-      return KeyEventResult.handled;
-    }
-    switch (key) {
-      case LogicalKeyboardKey.space:
-      case LogicalKeyboardKey.keyK:
-      case LogicalKeyboardKey.mediaPlayPause:
-        if (event is KeyDownEvent) _togglePlay();
-      case LogicalKeyboardKey.mediaPlay:
-        if (event is KeyDownEvent) _play();
-      case LogicalKeyboardKey.mediaPause:
-        if (event is KeyDownEvent) _pause();
-      case LogicalKeyboardKey.mediaStop:
+    switch (shortcut) {
+      case PlayerShortcut.togglePlay:
+        _togglePlay();
+      case PlayerShortcut.play:
+        _play();
+      case PlayerShortcut.pause:
+        _pause();
+      case PlayerShortcut.stop:
         // Stop ends the session: leave the player (unloading pauses and reports
-        // the position). Unlike Back it has no ladder to come down first, since
-        // there is nothing transient about a stop.
-        if (event is KeyDownEvent) _leavePlayer();
-      case LogicalKeyboardKey.arrowLeft:
-      case LogicalKeyboardKey.keyJ:
-      case LogicalKeyboardKey.mediaRewind:
+        // the position).
+        _leavePlayer();
+      case PlayerShortcut.seekBack:
         _seekBy(-_seekHold.stepFor(event, _seekStep));
-      case LogicalKeyboardKey.arrowRight:
-      case LogicalKeyboardKey.keyL:
-      case LogicalKeyboardKey.mediaFastForward:
+      case PlayerShortcut.seekForward:
         _seekBy(_seekHold.stepFor(event, _seekStep));
-      case LogicalKeyboardKey.arrowUp:
+      case PlayerShortcut.shortSeekBack || PlayerShortcut.shortSeekForward:
+        // The short step stays an exact seek: at three seconds by default it
+        // is shorter than many releases' keyframe interval, so a scan would
+        // answer it with a jump of ten.
+        _seekTo(
+          _position.value +
+              (shortcut == PlayerShortcut.shortSeekBack
+                  ? -_shortSeekStep
+                  : _shortSeekStep),
+        );
+      case PlayerShortcut.volumeUp:
         _setVolume(_volume + 5);
-      case LogicalKeyboardKey.arrowDown:
+      case PlayerShortcut.volumeDown:
         _setVolume(_volume - 5);
-      case LogicalKeyboardKey.keyM:
-        if (event is KeyDownEvent) _toggleMute();
-      case LogicalKeyboardKey.keyF:
-        if (event is KeyDownEvent) _toggleFullscreen();
-      case LogicalKeyboardKey.escape:
-        if (event is! KeyDownEvent) break;
+      case PlayerShortcut.mute:
+        _toggleMute();
+      case PlayerShortcut.fullscreen:
+        _toggleFullscreen();
+      case PlayerShortcut.escape:
         // `escExitFullscreen` only decides whether Esc leaves fullscreen
         // first; otherwise it leaves the player, as in stremio-web.
         if (!_isTv && _fullscreenOn && _settings.escExitFullscreen) {
@@ -315,32 +299,20 @@ extension _PlayerKeys on _PlayerScreenState {
         } else {
           Navigator.of(context).maybePop();
         }
-      case LogicalKeyboardKey.keyS:
-        // S is the list of subtitles; Shift+S is what to do about the
-        // one that is playing.
-        if (event is! KeyDownEvent) break;
-        if (shift) {
-          _toggleSubtitleTiming();
-        } else {
-          _openSubtitleMenu();
-        }
-      case LogicalKeyboardKey.keyA:
-        if (event is KeyDownEvent && _tracks.value.audio.length > 1) {
-          _openAudioMenu();
-        }
-      case LogicalKeyboardKey.keyN:
-      case LogicalKeyboardKey.mediaTrackNext:
+      case PlayerShortcut.subtitles:
+        _openSubtitleMenu();
+      case PlayerShortcut.subtitleTiming:
+        _toggleSubtitleTiming();
+      case PlayerShortcut.audio:
+        if (_tracks.value.audio.length > 1) _openAudioMenu();
+      case PlayerShortcut.next:
         // Not while casting, like the top bar's Next: moving on would
         // start the next episode here while the receiver plays this one.
-        if (event is KeyDownEvent && _state?.nextVideo != null && !_casting) {
-          _playNext();
-        }
-      case LogicalKeyboardKey.mediaTrackPrevious:
-        // There is no previous episode in the player's state; the remote's
-        // previous-track key starts this one over, as music players do.
-        if (event is KeyDownEvent) _seekTo(Duration.zero);
-      default:
-        return KeyEventResult.ignored;
+        if (_state?.nextVideo != null && !_casting) _playNext();
+      case PlayerShortcut.restart:
+        _seekTo(Duration.zero);
+      case PlayerShortcut.stats:
+        if (ModalRoute.of(context)?.isCurrent ?? true) _toggleStatsPinned();
     }
     return KeyEventResult.handled;
   }

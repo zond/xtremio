@@ -27,6 +27,7 @@ import 'core_time_reporter.dart';
 import 'playback_stats_overlay.dart';
 import 'playback_watchdog.dart';
 import 'player_controls.dart';
+import 'player_shortcut.dart';
 import 'player_status.dart';
 import 'seek_hold.dart';
 import 'stall_account.dart';
