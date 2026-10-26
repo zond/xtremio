@@ -296,9 +296,8 @@ extension _PlayerOpen on _PlayerScreenState {
     _openRetries = 0;
     _openError = null;
     // The window that follows is filling, which is not the stall the
-    // server is told about; see [_playingNormally].
-    _playingNormally = false;
-    _playedSinceSeek = Duration.zero;
+    // server is told about.
+    _stallAccount.seeked();
     // A re-open is a new attempt, so the last failure is not what is happening
     // any more. Left, it would sit as "Playback failed" over a stream that
     // plays, block the display's rate ([_askDisplayFrameRate]) and hold the

@@ -109,11 +109,11 @@ extension _PlayerServerPolls on _PlayerScreenState {
   /// normally, which has it split one more piece ahead of the reader for the
   /// rest of this video. Not the wait after an open or a seek: that is a window
   /// filling, which the server sizes from the film's rate on its own
-  /// ([_playingNormally]). Only for a torrent this server is streaming, since
+  /// ([StallAccount.counts]). Only for a torrent this server is streaming, since
   /// the count is that engine's.
   Future<void> _reportStall() async {
     final request = _torrentStatsRequest;
-    if (request == null || !_playingNormally) return;
+    if (request == null || !_stallAccount.counts) return;
     final id = _playingMediaId;
     try {
       if (id != null) {

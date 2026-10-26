@@ -26,6 +26,7 @@ import 'playback_stats_overlay.dart';
 import 'playback_watchdog.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
+import 'stall_account.dart';
 import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
@@ -848,45 +849,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Duration _openStart = Duration.zero;
   int _openRetries = 0;
 
-  /// When the current `open` was issued, how many times playback has run
-  /// out of data since, and when the stall on now began -- the report's
-  /// side of a playback that keeps stopping. See [_logStall].
-  DateTime? _openedAt;
-  int _stalls = 0;
-  DateTime? _stallStart;
-
-  /// Whether the film has actually been playing since the current `open` or
-  /// the last seek, so a buffering popup from here on is a stall the server
-  /// is told about ([_reportStall]) and not the window filling after a load
-  /// or a seek, which the server sizes for itself.
-  ///
-  /// **A tick of playback in total, not one advancing report**: a scrub back
-  /// decodes a few frames between rewinds, and if those re-armed this, each
-  /// next rewind would be reported as a stall. [_playedSinceSeek] sums the
-  /// forward steps, and a seek resets it.
-  bool _playingNormally = false;
-
-  /// Forward playback since the current `open` or the last seek, summed
-  /// from the position reports; see [_playingNormally].
-  Duration _playedSinceSeek = Duration.zero;
-
-  /// How much film has to have played since the last seek before a
-  /// buffering popup is a stall the server is told about. Two seconds: long
-  /// enough that the few frames between two rewinds of a scrub back cannot
-  /// reach it, short enough that a viewer who is genuinely watching has
-  /// passed it before anything could stall. See [_playingNormally].
-  static const Duration _playedBeforeAStallCounts = Duration(seconds: 2);
-
-  /// The most a position can move between two reports and still be
-  /// playback rather than a seek or a load; see [_playingNormally].
-  static const Duration _playbackTick = Duration(seconds: 2);
+  /// Whether a stall now is one the server is told about, and the report's
+  /// log of them; see [StallAccount].
+  final StallAccount _stallAccount = StallAccount();
 
   /// How many times the engine has reported an end of file that was not
   /// one for the media on screen. See [_onFalseEnd].
   int _falseEnds = 0;
 
-  /// How many stalls are written out one by one before only every tenth is.
-  static const int _stallsLogged = 10;
   Timer? _openRetryTimer;
   String? _openError;
 
@@ -1378,11 +1348,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _openStart = start;
     _openRetries = 0;
     _openError = null;
-    _stalls = 0;
-    _playingNormally = false;
-    _playedSinceSeek = Duration.zero;
+    _stallAccount.opened();
     _falseEnds = 0;
-    _openedAt = DateTime.now();
     _open(
       url,
       reason: 'initial (${state.selectedStream?.kind.name ?? 'stream'})',
@@ -1416,21 +1383,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (_takeHeldSeek(position)) return;
     _watchdog.sawPosition();
     if (position != _position.value) {
-      final advanced = position - _position.value;
-      if (advanced > Duration.zero && advanced < _playbackTick) {
-        // Summed, not taken one report at a time: see [_playingNormally].
-        _playedSinceSeek += advanced;
-        if (_playedSinceSeek >= _playedBeforeAStallCounts) {
-          _playingNormally = true;
-        }
-      } else {
-        // **A seek this player never made.** The remote's rewind and
-        // fast-forward keys reach mpv directly, so `_seekTo` does not run. A
-        // position that moves backwards, or forwards by more than a tick, is
-        // a seek whoever asked for it, and what follows is a window filling.
-        _playingNormally = false;
-        _playedSinceSeek = Duration.zero;
-      }
+      _stallAccount.moved(position - _position.value);
       _watchdog.positionMoved(position);
     }
     _reportedPosition = position;
@@ -1461,11 +1414,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   void _onMediaLoaded() {
     if (_mediaLoaded || _opened == null || _handedOver) return;
     _cancelOpenRetry();
-    final openedAt = _openedAt;
+    final since = _stallAccount.sinceOpened;
     DiagnosticsLog.info(
       'player',
-      'media loaded'
-          '${openedAt == null ? '' : ' after ${DateTime.now().difference(openedAt).inMilliseconds}ms'}',
+      'media loaded${since == null ? '' : ' after ${since.inMilliseconds}ms'}',
     );
     setState(() {
       _mediaLoaded = true;
@@ -1556,42 +1508,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   }
 
   void _onBuffering(bool buffering) {
-    _logStall(buffering);
+    _stallAccount.buffering(buffering, at: _position.value);
     if (buffering) _reportStall();
     setState(() => _buffering = buffering);
     _syncStatsPolls();
     _controls.restart();
-  }
-
-  /// Puts a stall and its end in the report -- the shape of a playback that
-  /// keeps stopping, which is invisible in the Rust half of the log.
-  ///
-  /// Bounded rather than complete: a playback that stalls every few seconds
-  /// for an hour would otherwise be the only thing left in a 400-line ring.
-  /// The first [_stallsLogged] of them are written one by one, and after
-  /// that every tenth, so the pattern still shows and the rest of the
-  /// session survives.
-  void _logStall(bool buffering) {
-    if (buffering) {
-      _stalls++;
-      _stallStart = DateTime.now();
-      if (_stalls <= _stallsLogged || _stalls % 10 == 0) {
-        DiagnosticsLog.warn(
-          'player',
-          'stalled at ${_position.value.inSeconds}s (stall $_stalls)',
-        );
-      }
-      return;
-    }
-    final started = _stallStart;
-    _stallStart = null;
-    if (started == null) return;
-    if (_stalls <= _stallsLogged || _stalls % 10 == 0) {
-      DiagnosticsLog.info(
-        'player',
-        'playing again after ${DateTime.now().difference(started).inMilliseconds}ms',
-      );
-    }
   }
 
   void _onCompleted(bool completed) {
@@ -1915,10 +1836,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         ? upper
         : target;
     _position.value = clamped;
-    // The buffering that follows is the new window filling, not a stall;
-    // see [_playingNormally].
-    _playingNormally = false;
-    _playedSinceSeek = Duration.zero;
+    // The buffering that follows is the new window filling, not a stall.
+    _stallAccount.seeked();
     if (_casting) {
       // The receiver will report the new position itself; showing it at
       // once keeps the bar from snapping back while the round trip runs.

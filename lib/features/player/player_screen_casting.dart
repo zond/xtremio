@@ -1004,8 +1004,7 @@ extension _PlayerCasting on _PlayerScreenState {
     // released must not be asked to do.
     if (!_stillOurs) return;
     _position.value = position;
-    _playingNormally = false;
-    _playedSinceSeek = Duration.zero;
+    _stallAccount.seeked();
     // Through the hold: a cast started before the local file was in hands
     // the film back to an engine that will drop a plain seek.
     _seekEngineTo(position);
