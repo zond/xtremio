@@ -66,8 +66,8 @@ void main() {
     // it pushes `position: Duration.zero` and then `duration:
     // Duration.zero` down the same streams the screen has been listening
     // to all session. The zero position arrives while the duration is
-    // still the film's, which is exactly the shape `_reportTime` forwards
-    // -- so the last thing the core heard about a film the viewer left at
+    // still the film's, which is exactly the shape
+    // `CoreTimeReporter.time` forwards -- so the last thing the core heard about a film the viewer left at
     // 37 minutes was that they were at the start of it, and
     // continue-watching offered it back from the beginning.
     //

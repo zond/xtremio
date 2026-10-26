@@ -21,6 +21,7 @@ import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
 import 'cast_stats_overlay.dart';
 import 'controls_visibility.dart';
+import 'core_time_reporter.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
@@ -526,18 +527,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   final ValueNotifier<PlaybackTracks> _tracks = ValueNotifier(
     const PlaybackTracks(),
   );
-  Duration? _lastReported;
 
-  /// The time the core holds as this playback's offset, which is where
-  /// continue-watching resumes: the library's own at the open, then the
-  /// last `Seek` or `TimeChanged` this screen sent. The core moves it back
-  /// only for a `Seek` ([_reportTime]). Null with no stream.
-  Duration? _coreTime;
-
-  /// This stream has been reported to the core at least once ([_reportTime],
-  /// [_flushTime]). False from each open until the first report.
-  bool _reportedToCore = false;
-  bool? _lastPlaying;
+  /// What the core is told about this playback's time; see
+  /// [CoreTimeReporter].
+  late final CoreTimeReporter _core = CoreTimeReporter(
+    dispatch: (action) => _client?.dispatch(action),
+    device: Platform.operatingSystem,
+    interval: PlayerScreen.timeReportInterval,
+  );
   bool _playing = false;
   bool _buffering = false;
   String? _engineError;
@@ -1385,8 +1382,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
         : Duration.zero;
     _position.value = start;
     _reportedPosition = null;
-    _coreTime = Duration(milliseconds: progress?.timeOffset ?? 0);
-    _reportedToCore = false;
+    _core.newStream(Duration(milliseconds: progress?.timeOffset ?? 0));
     _cancelOpenRetry();
     _openState = state;
     _openStart = start;
@@ -1419,8 +1415,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (!mounted) return;
     setState(_publishBuffer);
   }
-
-  String get _device => Platform.operatingSystem;
 
   void _onPosition(Duration position) {
     if (_handedOver || _casting) return;
@@ -1481,64 +1475,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     }
     _reportedPosition = position;
     _position.value = position;
-    _reportTime(position);
-  }
-
-  /// Tells the core where playback has got to, no more often than
-  /// [PlayerScreen.timeReportInterval]. Shared by the local engine and the
-  /// receiver, so continue-watching is kept the same way either way.
-  ///
-  /// **A position behind the one the core holds is said as a `Seek`.**
-  /// stremio-core takes a `TimeChanged` only when it is later than the offset
-  /// it has (`models/player.rs`: a seek back is the app's to say). Some seeks
-  /// back reach it only as positions: one made before the duration was known,
-  /// which no `Seek` can carry, or the remote's rewind key, which reaches mpv
-  /// without [_seekTo]. Those left continue-watching on the old timeline.
-  void _reportTime(Duration position) {
-    if (_opened == null || _duration == Duration.zero) return;
-    final last = _lastReported;
-    if (last != null &&
-        (position - last).abs() < PlayerScreen.timeReportInterval) {
-      return;
-    }
-    _lastReported = position;
-    final core = _coreTime;
-    _coreTime = position;
-    _reportedToCore = true;
-    _client?.dispatch(
-      core != null && position < core
-          ? CoreActions.playerSeek(
-              time: position.inMilliseconds,
-              duration: _duration.inMilliseconds,
-              device: _device,
-            )
-          : CoreActions.playerTimeChanged(
-              time: position.inMilliseconds,
-              duration: _duration.inMilliseconds,
-              device: _device,
-            ),
-    );
-  }
-
-  /// Tells the core the position now, throttle or not: the last report
-  /// before the screen lets go ([_leave]).
-  ///
-  /// **A video left before it started is reported too, at its start.** Until
-  /// mpv knows the length nothing is reported ([_reportTime]), and the core
-  /// moves its library item to another episode only on a report. Without
-  /// this, a next episode left while its first bytes downloaded kept
-  /// continue-watching on the episode before it. A length of zero is the
-  /// core's "not known": it updates neither the length nor the watched mark.
-  void _flushTime() {
-    _lastReported = null;
-    if (_opened != null && !_reportedToCore && _duration == Duration.zero) {
-      _reportedToCore = true;
-      _client?.dispatch(
-        CoreActions.playerTimeChanged(time: 0, duration: 0, device: _device),
-      );
-      return;
-    }
-    _reportTime(_position.value);
+    _core.time(position, _duration);
   }
 
   void _onDuration(Duration duration) {
@@ -1738,15 +1675,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       setState(() => _playing = playing);
       _controls.show();
     }
-    _reportPlaying(playing);
-  }
-
-  /// Tells the core whether playback is running, once per change. Shared by
-  /// the local engine and the receiver, which are never both playing.
-  void _reportPlaying(bool playing) {
-    if (_opened == null || playing == _lastPlaying) return;
-    _lastPlaying = playing;
-    _client?.dispatch(CoreActions.playerPausedChanged(!playing));
+    _core.playing(playing);
   }
 
   void _onBuffering(bool buffering) {
@@ -2137,21 +2066,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       }
       _watchSeek(from: from, to: clamped);
     }
-    if (_opened != null && _duration > Duration.zero) {
-      _coreTime = clamped;
-      _reportedToCore = true;
-      _client?.dispatch(
-        CoreActions.playerSeek(
-          time: clamped.inMilliseconds,
-          duration: _duration.inMilliseconds,
-          device: _device,
-        ),
-      );
-    }
-    // The next TimeChanged must go through even if it is within the throttle
-    // window. The core only moves time forward on TimeChanged, and relies on
-    // Seek and TimeChanged agreeing.
-    _lastReported = null;
+    _core.seek(clamped, _duration);
     _upNext.dismiss();
     _controls.show();
   }

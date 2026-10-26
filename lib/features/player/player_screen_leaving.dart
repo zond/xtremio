@@ -94,7 +94,7 @@ extension _PlayerLeaving on _PlayerScreenState {
     // Reports are a second apart, and this keeps the viewer's last second from
     // being lost to the throttle. The stop that follows reports nothing
     // ([_detach]).
-    _flushTime();
+    _core.flush(_position.value, _duration);
     // And to the server, which remembers where its reader was with it.
     _reportLeavingPosition();
     // Nothing may act on the player from here on, and this is the line that

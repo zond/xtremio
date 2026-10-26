@@ -105,8 +105,8 @@ extension _PlayerCasting on _PlayerScreenState {
       unawaited(_reportDuration(duration));
     }
     _position.value = status.position;
-    _reportTime(status.position);
-    _reportPlaying(status.state.isPlaying);
+    _core.time(status.position, _duration);
+    _core.playing(status.state.isPlaying);
     // A receiver keeps repeating "idle, finished"; the core hears it once.
     //
     // Casts do not binge, by decision: no up-next card and no hand-over,
