@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -163,10 +165,15 @@ void main() {
           'args': {'paused': true},
         },
         // The end of the media is a position at the end of it, which the
-        // core hears about before the `Ended` that follows from it.
+        // core hears about before the `Ended` that follows from it. The
+        // device is the OS the player runs on, so this host's.
         {
           'action': 'TimeChanged',
-          'args': {'time': 5760000, 'duration': 5760000, 'device': 'linux'},
+          'args': {
+            'time': 5760000,
+            'duration': 5760000,
+            'device': Platform.operatingSystem,
+          },
         },
         {'action': 'Ended'},
       ]);
