@@ -430,6 +430,31 @@ computes" pin the two together, so change one only with the other. Rust counts, 
 judges (`AddonHealth.verdict`, a pure function). See
 [docs/ADDONS.md](docs/ADDONS.md).
 
+## The player keeps its state in named objects
+
+`PlayerScreen` (`lib/features/player/player_screen.dart`) is one `State`,
+split into `part` files by concern. Each piece of its state that has rules
+of its own lives in a class of its own, with a test of its own under
+`test/features/player/` named after it. A new rule goes into that class
+and its test, not into a new field on the screen.
+
+- Where the screen is in its life: `_ScreenPhase`. It only moves forward.
+- The controls' fade: `ControlsVisibility`. The up-next countdown:
+  `UpNextCountdown`.
+- What the core is told about time: `CoreTimeReporter`. The waits mpv does
+  not report: `PlaybackWatchdog`. A playback's stalls: `StallAccount`.
+- The server polls: `TorrentStatsPoll` and `StreamNumbersPoll`
+  (`server_polls_test.dart`).
+- Subtitles: `SubtitleAutoPick` and `SubtitleTiming`.
+- A cast: `CastPreparation` while a rendition is prepared, then
+  `CastSession` from the hand-over to the end. The screen holds each only
+  while it lasts, so nothing in it outlives its cast.
+- What the middle of the screen says: `PlayerStatus`. The keyboard
+  shortcuts: `PlayerShortcut`.
+
+The part files are extensions, so they call the State's `_update`, never
+`setState`. None of them switches an analyzer check off.
+
 ## Rules a real device taught us
 
 Each is easy to write again, and each has a test in `test/features/tv/`
@@ -444,8 +469,8 @@ unless it says otherwise.
   it, press Space).
 
 - **Nothing vetoes the OSD's fade on a focus.** `PlayerScreen._canAutoHide`
-  does not list "a control has focus". `_hideControls` hides the bar and
-  hands the remote back to the video as one act.
+  does not list "a control has focus". `ControlsVisibility.hide` hides the
+  bar, and its `onHidden` hands the remote back to the video, as one act.
 - **A direction key never leaves a layer**, and Back comes down a ladder,
   most transient first. A rung exists only while it visibly does something,
   and asks what is on screen, never a field. An on-screen back arrow is not
