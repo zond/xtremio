@@ -19,6 +19,7 @@ import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
+import 'cast_preparation.dart';
 import 'cast_session.dart';
 import 'cast_stats_overlay.dart';
 import 'controls_visibility.dart';
@@ -919,22 +920,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// a URL into this device for as long as it is published.
   String? _castToken;
 
-  /// **A rendition being made ready before the receiver is told to load
-  /// it** ([_PlayerCasting._prepareRendition]): the receiver it is for and
-  /// the server's phase, while it is; null otherwise. Local playback goes
-  /// on meanwhile, and the card over it has a Cancel.
-  CastDevice? _castPreparingFor;
+  /// A rendition being made ready before the receiver is told to load it;
+  /// null otherwise. See [CastPreparation].
+  CastPreparation? _castPreparation;
 
   /// The start the rendition on the receiver was published and prepared
   /// for: what the receiver is told to start at.
   Duration? _castRenditionStart;
-  String _castPreparingPhase = 'index';
-
-  /// The wait between two readiness asks, and the completer that ends it
-  /// early: Cancel, Stop and leaving the screen wake the loop rather than
-  /// leave it parked on a timer.
-  Timer? _castPrepareTimer;
-  Completer<void>? _castPrepareWake;
 
   /// The last sample mpv gave for the open media, taken while the cast
   /// sheet is up: all the compatibility check believes about what the file
@@ -2285,13 +2277,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                   // receiver has the stream, and they must not have to win an
                   // arena against the video's double-tap-to-seek first.
                   if (casting) SafeArea(child: _castingView(state)),
-                  if (_castPreparingFor case final device? when !casting)
+                  if (_castPreparation case final preparing? when !casting)
                     SafeArea(
                       child: CastPreparingPanel(
-                        deviceName: device.name,
-                        phase: CastPreparingPanel.phaseLine(
-                          _castPreparingPhase,
-                        ),
+                        deviceName: preparing.device.name,
+                        phase: CastPreparingPanel.phaseLine(preparing.phase),
                         speed: switch (_torrentStats?.downloadSpeed) {
                           final speed? when speed > 0 =>
                             TorrentProgressCard.formatSpeed(speed),

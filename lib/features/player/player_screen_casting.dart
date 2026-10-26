@@ -708,10 +708,8 @@ extension _PlayerCasting on _PlayerScreenState {
     final ids = _mediaIds;
     final token = _castToken;
     if (ids == null || token == null) return null;
-    setState(() {
-      _castPreparingFor = device;
-      _castPreparingPhase = 'index';
-    });
+    final preparation = CastPreparation(device);
+    setState(() => _castPreparation = preparation);
     try {
       await ids.prepareRendition(token);
       while (!abandoned()) {
@@ -719,35 +717,27 @@ extension _PlayerCasting on _PlayerScreenState {
         if (abandoned()) return null;
         if (readiness.phase == 'ready') return null;
         if (!readiness.preparing) return readiness;
-        if (readiness.phase != _castPreparingPhase && mounted) {
-          setState(() => _castPreparingPhase = readiness.phase);
+        if (readiness.phase != preparation.phase && mounted) {
+          setState(() => preparation.phase = readiness.phase);
         }
-        final wake = Completer<void>();
-        _castPrepareWake = wake;
-        _castPrepareTimer = Timer(PlayerScreen.castPreparePoll, () {
-          if (!wake.isCompleted) wake.complete();
-        });
-        await wake.future;
+        await preparation.wait(PlayerScreen.castPreparePoll);
       }
       return null;
     } finally {
-      _castPrepareTimer?.cancel();
-      _castPrepareTimer = null;
-      _castPrepareWake = null;
-      if (mounted) setState(() => _castPreparingFor = null);
+      preparation.end();
+      // Only its own: a preparation for another receiver may have begun.
+      if (identical(_castPreparation, preparation)) {
+        if (mounted) {
+          setState(() => _castPreparation = null);
+        } else {
+          _castPreparation = null;
+        }
+      }
     }
   }
 
-  /// Ends a preparation's wait now: Cancel, Stop, leaving the screen.
-  void _wakeCastPrepare() {
-    _castPrepareTimer?.cancel();
-    _castPrepareTimer = null;
-    final wake = _castPrepareWake;
-    if (wake != null && !wake.isCompleted) wake.complete();
-  }
+  void _wakeCastPrepare() => _castPreparation?.wake();
 
-  /// The card's Cancel: the rendition is unpublished, the session ended,
-  /// and the film never left this screen.
   void _cancelCastPrepare() {
     _castStops++;
     _wakeCastPrepare();
