@@ -34,7 +34,7 @@ import '../../support/player_harness.dart';
 /// answer.
 ///
 /// The three awaits not listed here are listed for the next reader
-/// instead. `_pollTorrentStats` is deliberately absent: its continuation
+/// instead. `TorrentStatsPoll.poll` is deliberately absent: its continuation
 /// reaches none of the four -- a poll that lands late only rebuilds a
 /// screen that is drawing the picture anyway. `_leave`'s own
 /// `_endPlayback` is the teardown, which is the one thing that *is*

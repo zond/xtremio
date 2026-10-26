@@ -27,6 +27,7 @@ import 'playback_watchdog.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
 import 'stall_account.dart';
+import 'stream_numbers_poll.dart';
 import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
@@ -34,6 +35,7 @@ import 'subtitle_timing.dart';
 import 'torrent_progress_card.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
+import 'torrent_stats_poll.dart';
 import 'track_menus.dart';
 import '../local/local_media.dart';
 import '../local/local_playback.dart';
@@ -783,7 +785,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// what [_controls] says (see [_showSubtitleTiming]).
   bool _timingShown = false;
 
-  /// The torrent overlays: while [_torrentStatsTimer] runs the server's
+  /// The torrent overlays: while [_torrentPoll] runs the server's
   /// stats are polled and the latest answer shown ([_torrentStats], null
   /// until the server answers for this torrent).
   ///
@@ -793,18 +795,29 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// stall ([PlayerScreen.torrentStallStatsInterval]) or the stats OSD
   /// ([PlayerScreen.torrentStatsOverlayInterval]). [_syncTorrentStats] owns the
   /// cadence. An engine error and dispose end both. When the server has no
-  /// answer for the stream's file, a poll asks for the torrent-level
-  /// [_torrentStatsFallback].
+  /// answer for the stream's file, a poll asks for the torrent-level stats
+  /// ([TorrentStatsPoll]).
   ///
   /// Null means: not a torrent, or no embedded server. Read it as "there is
   /// a torrent here we can ask our own server about".
   TorrentStatsClient? _torrentStatsClient;
-  TorrentStatsRequest? _torrentStatsRequest;
-  TorrentStatsRequest? _torrentStatsFallback;
-  Timer? _torrentStatsTimer;
-  Duration? _torrentStatsCadence;
-  bool _torrentStatsFetching = false;
-  TorrentStats? _torrentStats;
+
+  /// The poll of the server's stats for the torrent playing; see
+  /// [TorrentStatsPoll]. When it runs is [_syncTorrentStats]'s to say.
+  late final TorrentStatsPoll _torrentPoll = TorrentStatsPoll(
+    client: () => _torrentStatsClient,
+    startupCadence: PlayerScreen.torrentStatsInterval,
+  )..addListener(_onTorrentPoll);
+
+  void _onTorrentPoll() {
+    if (mounted) setState(() {});
+  }
+
+  /// The torrent asked about, or null for a stream that is not one.
+  TorrentStatsRequest? get _torrentStatsRequest => _torrentPoll.request;
+
+  /// The last stats worth showing.
+  TorrentStats? get _torrentStats => _torrentPoll.stats;
 
   /// The name of the file the server says it opened for this torrent
   /// ([TorrentStats.streamName]), kept from the last answer that carried
@@ -817,20 +830,35 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// when it would state the past as the present, but which file this is
   /// does not go stale, and the polling stops entirely once playback is
   /// under way. It is cleared only with the torrent itself.
-  String? _serverFilename;
+  String? get _serverFilename => _torrentPoll.serverFilename;
 
   /// What the stats panel's cache and sharing rows read: what the server
   /// holds of the stream on screen, asked with [_heldStreamUrl].
   ///
   /// Polled only while the panel is up and the app is in front, at
   /// [PlayerScreen.streamNumbersInterval], proxied streams included.
-  /// **[_streamNumbers] is a reading and nothing else**: set only from an
+  /// **Its numbers are a reading and nothing else**: set only from an
   /// answer about the URL open now, and dropped the moment nothing polls
   /// it, so the past is never shown as the present.
   StreamNumbersReader? _streamNumbersReader;
-  Timer? _streamNumbersTimer;
-  bool _streamNumbersFetching = false;
-  StreamNumbers? _streamNumbers;
+
+  /// The panel's poll of what the server holds of the stream on screen; see
+  /// [StreamNumbersPoll]. When it runs is [_syncStreamNumbers]'s to say.
+  late final StreamNumbersPoll _numbersPoll = StreamNumbersPoll(
+    reader: () => _streamNumbersReader,
+    interval: PlayerScreen.streamNumbersInterval,
+    // The media id the engine reads, or else [_heldStreamUrl]. [_opened],
+    // not the URL, says which video an answer is about.
+    target: () => (
+      id: _serverBase == null ? null : (_registeredMediaId ?? _playingMediaId),
+      url: _heldStreamUrl,
+      stream: _opened,
+    ),
+  )..addListener(_onNumbersPoll);
+
+  void _onNumbersPoll() {
+    if (mounted) setState(() {});
+  }
 
   /// What reads [_dhtStatus] (absent the FFI one). Cheap and synchronous,
   /// so unlike the stats client above this is called directly rather than
@@ -1278,7 +1306,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (_settings.pauseOnMinimize && _playing && !_handedOver) {
       _engine?.pause();
     }
-    if (!_mediaLoaded) _pauseTorrentStats();
+    if (!_mediaLoaded) _torrentPoll.pause();
     _syncStatsPolls();
   }
 
@@ -1294,7 +1322,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // A torrent still starting up: the card is back on screen, so its
     // polling comes back with it. `_syncTorrentStats` leaves this alone
     // until the media has loaded, and takes over from it then.
-    if (!_mediaLoaded && _torrentStatsRequest != null) _startStartupPolling();
+    if (!_mediaLoaded && _torrentStatsRequest != null) {
+      _torrentPoll.runStartup();
+    }
     _syncStatsPolls();
   }
 
@@ -1425,7 +1455,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _mediaLoaded = true;
       // The start-up cadence is over. The torrent is not: a stall brings
       // the polling back, at once if the media arrived already stalled.
-      _pauseTorrentStats();
+      _torrentPoll.pause();
     });
     _watchdog.start();
     _syncStatsPolls();
@@ -2154,6 +2184,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _controls.dispose();
     _upNext.dispose();
     _watchdog.dispose();
+    _torrentPoll.dispose();
+    _numbersPoll.dispose();
     // Discovery belongs to the process, not this screen, and a hand-over's
     // successor has started it again by now. `pushReplacement` builds the new
     // player before this one goes, so a stop from here would end the search the
@@ -2345,7 +2377,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                             isTorrent: _torrentStatsRequest != null,
                             torrent: _torrentStats,
                             dht: _dhtStatus,
-                            held: _streamNumbers,
+                            held: _numbersPoll.numbers,
                           ),
                         ),
                       ),
