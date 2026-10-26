@@ -27,6 +27,7 @@ import 'core_time_reporter.dart';
 import 'playback_stats_overlay.dart';
 import 'playback_watchdog.dart';
 import 'player_controls.dart';
+import 'player_status.dart';
 import 'seek_hold.dart';
 import 'stall_account.dart';
 import 'stream_numbers_poll.dart';
@@ -1645,7 +1646,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _opened != null &&
       _upNext.secondsLeft == null &&
       !_startupOverlayShown &&
-      _statusText(_state) == null;
+      _status(_state) == null;
 
   void _onVideoTap() {
     if (_upNext.secondsLeft != null) {
@@ -2185,7 +2186,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // buffering here and no torrent is starting up for this screen: every
     // overlay about local playback is about a player that is paused.
     final startup = _startupOverlayShown && !casting && !leaving;
-    final status = startup || casting || leaving ? null : _statusText(state);
+    final status = startup || casting || leaving ? null : _status(state);
     final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
@@ -2329,13 +2330,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                             : Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (_engineError == null &&
-                                      state?.unplayableReason == null)
-                                    const CircularProgressIndicator()
+                                  if (status.failed)
+                                    const Icon(Icons.error_outline, size: 48)
                                   else
-                                    const Icon(Icons.error_outline, size: 48),
+                                    const CircularProgressIndicator(),
                                   const SizedBox(height: 12),
-                                  Text(status, textAlign: TextAlign.center),
+                                  Text(
+                                    status.text,
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ],
                               ),
                       ),
@@ -2601,21 +2604,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Widget _upNextFocus(Widget card) =>
       _isTv ? FocusScope(node: _upNextScope, child: card) : card;
 
-  String? _statusText(PlayerState? state) {
-    if (_engineError != null) return 'Playback failed: $_engineError';
-    if (state == null || !state.isLoaded) return 'Loading…';
-    final unplayable = state.unplayableReason;
-    if (unplayable != null) return unplayable;
-    if (_opened == null) return 'Opening the stream…';
-    if (_waiting) {
-      // For a torrent this is what the stall card says with nothing from
-      // the server yet, and the whole of what a stall says without one.
-      return state.selectedStream?.kind == StreamKind.torrent
-          ? TorrentStallOverlay.waiting
-          : 'Buffering…';
-    }
-    return null;
-  }
+  PlayerStatus? _status(PlayerState? state) => PlayerStatus.of(
+    engineError: _engineError,
+    loaded: state != null && state.isLoaded,
+    unplayable: state?.unplayableReason,
+    opened: _opened != null,
+    waiting: _waiting,
+    torrent: state?.selectedStream?.kind == StreamKind.torrent,
+  );
 }
 
 /// Where a player screen is in its life. It only ever moves down this list,
