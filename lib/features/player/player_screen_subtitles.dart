@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// What the auto-pick is looking for, from whichever of the two answers
 /// there is: the engine's session preference, or what this show was last
 /// watched with (`SubtitlePickMemory`).
@@ -91,15 +87,15 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// taken off.
   void _undoSubtitlePick(PlaybackTracks before, SubtitleInfo? beforeSubtitle) {
     _tracks.value = before;
-    setState(() => _resetSubtitleTiming(beforeSubtitle));
+    _update(() => _resetSubtitleTiming(beforeSubtitle));
   }
 
   void _showSubtitleFailure(String message) {
     _subtitleFailureTimer?.cancel();
-    setState(() => _subtitleFailure = message);
+    _update(() => _subtitleFailure = message);
     _subtitleFailureTimer = Timer(PlayerScreen.subtitleFailureShown, () {
       _subtitleFailureTimer = null;
-      if (mounted) setState(() => _subtitleFailure = null);
+      if (mounted) _update(() => _subtitleFailure = null);
     });
   }
 
@@ -314,7 +310,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
     _autoPick.chooseByHand();
-    setState(() => _timing = timing);
+    _update(() => _timing = timing);
     _applySubtitleTiming();
     _rememberTiming();
   }
@@ -327,7 +323,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// like any press, so untouched is *forgotten* rather than stored as zero.
   void _undoSubtitleTiming() {
     _calibration = SubtitleCalibration.none;
-    setState(() => _markNote = null);
+    _update(() => _markNote = null);
     _adjustTiming(const SubtitleTiming());
   }
 
@@ -356,7 +352,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
       // Between two lines, or subtitles off: there is nothing on screen
       // the viewer can have been pointing at, and a mark invented from
       // the position would say the file is already right.
-      setState(() => _markNote = subtitleNoCueNote);
+      _update(() => _markNote = subtitleNoCueNote);
       return;
     }
     // What mpv is drawing that cue at, which is what `_timing` is: it is
@@ -371,7 +367,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
       inForce: inForce,
     );
     _calibration = result.calibration;
-    setState(() => _markNote = result.outcome.note);
+    _update(() => _markNote = result.outcome.note);
     // Through the ordinary press path, because that is what it is: the
     // viewer judged the picture in front of them, so the answer is
     // theirs to keep and is remembered under the same keys as a shift.
@@ -434,7 +430,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   ) async {
     final client = _subtitleMatchClient;
     if (client == null || _matchingSubtitle) return;
-    setState(() {
+    _update(() {
       _matchingSubtitle = true;
       _subtitleMatchNote = null;
     });
@@ -458,10 +454,10 @@ extension _PlayerSubtitles on _PlayerScreenState {
     // would ruin the one that replaced it, and its score would be a claim about
     // a file nobody measured.
     if (_externalSubtitle?.url != playing.url) {
-      setState(() => _matchingSubtitle = false);
+      _update(() => _matchingSubtitle = false);
       return;
     }
-    setState(() {
+    _update(() {
       _matchingSubtitle = false;
       _subtitleMatchNote = note;
     });
@@ -805,7 +801,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// long as it holds focus, the rule [_controls] keeps for the bar.
   void _showSubtitleTiming() {
     if (_timingShown) return;
-    setState(() => _timingShown = true);
+    _update(() => _timingShown = true);
     // After the frame that builds it: there is no node to focus until
     // the panel is in the tree.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -822,7 +818,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
     if (!_timingShown) return;
     _flushRememberedTiming();
     final focused = _timingScope.hasFocus;
-    setState(() => _timingShown = false);
+    _update(() => _timingShown = false);
     if (focused) _focusNode.requestFocus();
   }
 

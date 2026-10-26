@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// Leaving the player: detaching, the teardown, and ending the proxied
 /// streams.
 extension _PlayerLeaving on _PlayerScreenState {
@@ -85,7 +81,7 @@ extension _PlayerLeaving on _PlayerScreenState {
     // A screen handed over has nothing to leave: the route on top is its
     // successor's, and that one leaves for itself.
     if (_leaving || _handedOver) return;
-    setState(() => _phase = _ScreenPhase.leaving);
+    _update(() => _phase = _ScreenPhase.leaving);
     // Reports are a second apart, and this keeps the viewer's last second from
     // being lost to the throttle. The stop that follows reports nothing
     // ([_detach]).

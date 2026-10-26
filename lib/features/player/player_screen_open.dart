@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// Opening the stream: what the engine is handed (a media id, as a rule),
 /// the read-ahead, re-opens, and retrying a slow torrent's start.
 extension _PlayerOpen on _PlayerScreenState {
@@ -281,7 +277,7 @@ extension _PlayerOpen on _PlayerScreenState {
   void _setBufferAhead(BufferAhead choice) {
     if (choice == _bufferAhead) return;
     final previousWire = _bufferAhead.wire;
-    setState(() {
+    _update(() {
       _bufferOverride = choice;
       _bufferNote = choice.storesTheFile
           ? 'Keeping this file on the device. It will appear in Downloads.'
@@ -309,7 +305,7 @@ extension _PlayerOpen on _PlayerScreenState {
     // plays, block the display's rate ([_askDisplayFrameRate]) and hold the
     // stats panel's request away.
     final failed = _engineError != null;
-    if (failed) setState(() => _engineError = null);
+    if (failed) _update(() => _engineError = null);
     _open(url, reason: reason);
     if (failed) _restoreTorrentStats();
   }
@@ -330,7 +326,7 @@ extension _PlayerOpen on _PlayerScreenState {
       return;
     }
     final videoId = state.selectedVideoId ?? meta.id;
-    setState(() {
+    _update(() {
       _keeping = true;
       _publishBuffer();
     });
@@ -356,7 +352,7 @@ extension _PlayerOpen on _PlayerScreenState {
     // The registry took a round trip to answer and a refusal re-opens the
     // stream ([_failBuffer]), so this is a way back onto the engine.
     if (!_stillOurs) return;
-    setState(() {
+    _update(() {
       _keeping = false;
       _publishBuffer();
     });
@@ -369,7 +365,7 @@ extension _PlayerOpen on _PlayerScreenState {
       _failBuffer(downloadFailureMessage(failure));
       return;
     }
-    setState(() {
+    _update(() {
       _bufferNote =
           'Keeping this file on the device. It is in Downloads, where it '
           'can be deleted.';
@@ -383,7 +379,7 @@ extension _PlayerOpen on _PlayerScreenState {
   void _failBuffer(String reason) {
     if (!_stillOurs) return;
     final previousWire = _bufferAhead.wire;
-    setState(() {
+    _update(() {
       _bufferOverride = BufferAhead.maximum;
       _keeping = false;
       _bufferNote = '$reason Buffering as far ahead as possible instead.';
@@ -441,7 +437,7 @@ extension _PlayerOpen on _PlayerScreenState {
     // film's rate until the viewer pressed Back. That is the juddering system
     // UI this feature exists to avoid.
     _releaseDisplayFrameRate();
-    setState(() {
+    _update(() {
       _engineError = error;
       _stopTorrentStats();
     });

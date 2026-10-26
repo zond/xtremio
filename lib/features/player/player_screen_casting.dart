@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// Casting: the receiver sheet, handing the stream to a receiver, and
 /// bringing it back.
 extension _PlayerCasting on _PlayerScreenState {
@@ -39,7 +35,7 @@ extension _PlayerCasting on _PlayerScreenState {
 
   void _onCastDevices(List<CastDevice> devices) {
     if (!mounted) return;
-    setState(() => _castDeviceList.value = devices);
+    _update(() => _castDeviceList.value = devices);
   }
 
   /// The session as the sender sees it. A null while this screen thinks it
@@ -70,7 +66,7 @@ extension _PlayerCasting on _PlayerScreenState {
     // A status with no cast of ours is nobody's to show.
     if (session == null) return;
     final status = session.trusted(reported);
-    setState(() {
+    _update(() {
       session.status = status;
       _castBuffering = _castBuffering.note(status.state, widget.now());
     });
@@ -508,7 +504,7 @@ extension _PlayerCasting on _PlayerScreenState {
       return null;
     }
     final mpv = _lastStats;
-    setState(() {
+    _update(() {
       // A cast handed again through this device after the receiver refused
       // its source is the same cast, and keeps its clock and its count.
       if (_castBeganAt == null) {
@@ -709,7 +705,7 @@ extension _PlayerCasting on _PlayerScreenState {
     final token = _castToken;
     if (ids == null || token == null) return null;
     final preparation = CastPreparation(device);
-    setState(() => _castPreparation = preparation);
+    _update(() => _castPreparation = preparation);
     try {
       await ids.prepareRendition(token);
       while (!abandoned()) {
@@ -718,7 +714,7 @@ extension _PlayerCasting on _PlayerScreenState {
         if (readiness.phase == 'ready') return null;
         if (!readiness.preparing) return readiness;
         if (readiness.phase != preparation.phase && mounted) {
-          setState(() => preparation.phase = readiness.phase);
+          _update(() => preparation.phase = readiness.phase);
         }
         await preparation.wait(PlayerScreen.castPreparePoll);
       }
@@ -728,7 +724,7 @@ extension _PlayerCasting on _PlayerScreenState {
       // Only its own: a preparation for another receiver may have begun.
       if (identical(_castPreparation, preparation)) {
         if (mounted) {
-          setState(() => _castPreparation = null);
+          _update(() => _castPreparation = null);
         } else {
           _castPreparation = null;
         }
@@ -807,7 +803,7 @@ extension _PlayerCasting on _PlayerScreenState {
         'receiver asked the LAN listener for $requests request(s) and was '
             'sent $bodies bod${bodies == 1 ? 'y' : 'ies'}',
       );
-      if (_castSession?.note != null) setState(() => _castSession?.note = null);
+      if (_castSession?.note != null) _update(() => _castSession?.note = null);
       return;
     }
     final session = _castSession;
@@ -817,7 +813,7 @@ extension _PlayerCasting on _PlayerScreenState {
         'receiver asked the LAN listener for $requests request(s) and has '
             'been sent nothing yet',
       );
-      setState(
+      _update(
         () => session.note =
             '${session.device.name} has reached this device '
             'and has not been sent any of the film yet.',
@@ -971,7 +967,7 @@ extension _PlayerCasting on _PlayerScreenState {
     _cancelCastFetch();
     final position = _castSession!.status.position;
     _castSession = null;
-    if (mounted) setState(() {});
+    if (mounted) _update(() {});
     if (disconnect) await _cast?.disconnect();
     await _endLanMedia();
     // Ending the session is a round trip, and what follows it puts the film

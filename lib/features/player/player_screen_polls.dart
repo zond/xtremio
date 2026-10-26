@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// What the player asks of this device's server while it plays: the
 /// torrent's stats, what the server holds of the stream, and the hints it
 /// is told.

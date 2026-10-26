@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// The remote and the keyboard: focus stops, the Back ladder, key presses,
 /// and pointer hover.
 extension _PlayerKeys on _PlayerScreenState {
@@ -328,11 +324,11 @@ extension _PlayerKeys on _PlayerScreenState {
     _statsHoverTimer?.cancel();
     _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
       if (!mounted || !_statsHover) return;
-      setState(() => _statsHover = false);
+      _update(() => _statsHover = false);
       _syncStatsPolls();
     });
     if (!_statsHover) {
-      setState(() => _statsHover = true);
+      _update(() => _statsHover = true);
       _syncStatsPolls();
     }
   }
@@ -341,7 +337,7 @@ extension _PlayerKeys on _PlayerScreenState {
     _statsHoverTimer?.cancel();
     _statsHoverTimer = null;
     if (!_statsHover) return;
-    setState(() => _statsHover = false);
+    _update(() => _statsHover = false);
     _syncStatsPolls();
   }
 }

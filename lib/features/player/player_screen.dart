@@ -2105,6 +2105,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   // --- Lifecycle -----------------------------------------------------------
 
+  /// [setState], for the State's methods in the part files. They are
+  /// extensions, and an extension is not a subclass, so the analyzer would
+  /// flag a `setState` written there.
+  void _update(VoidCallback fn) => setState(fn);
+
   @override
   void dispose() {
     // Ordinarily a no-op: [_leave] detaches at the press. This covers a

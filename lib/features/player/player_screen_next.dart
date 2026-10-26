@@ -1,9 +1,5 @@
 part of 'player_screen.dart';
 
-// These are the State's own methods, split out by concern; an extension
-// is not a subclass, so the analyzer flags their `setState` calls.
-// ignore_for_file: invalid_use_of_protected_member
-
 /// The up-next card, and handing over to the next episode.
 extension _PlayerNextEpisode on _PlayerScreenState {
   // --- Next episode --------------------------------------------------------
