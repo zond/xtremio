@@ -1,0 +1,88 @@
+#!/usr/bin/env -S python3 -I
+"""Compares two `flutter test --coverage` reports over one part of the tree.
+
+    tool/coverage-compare <before.info> <after.info> [--under <prefix>]
+
+Both are lcov files (coverage/lcov.info). <prefix> is a path from the
+repository root, `lib/features/player/` by default. Every file under it in
+either report gets one line: its covered and total lines before and after.
+Then a TOTAL line, and PASS or FAIL.
+
+It fails, with exit code 1, when more lines under <prefix> are uncovered
+after than before. The count is summed over the prefix rather than per
+file, so code moved from one file to another under it is no change. For
+every file with uncovered lines after, it prints their numbers, which is
+where to look when it fails.
+"""
+
+import sys
+
+
+def read(path):
+    """{file: (covered line numbers, uncovered line numbers)} of an lcov file."""
+    files = {}
+    current = None
+    with open(path) as lcov:
+        for raw in lcov:
+            line = raw.strip()
+            if line.startswith("SF:"):
+                name = line[3:]
+                # Absolute in the report: keep the part from the root down.
+                at = name.find("/lib/")
+                current = name[at + 1 :] if at >= 0 else name
+                files[current] = (set(), set())
+            elif line.startswith("DA:") and current is not None:
+                number, hits = line[3:].split(",")[:2]
+                covered, uncovered = files[current]
+                (covered if int(hits) > 0 else uncovered).add(int(number))
+            elif line == "end_of_record":
+                current = None
+    return files
+
+
+def main(argv):
+    args = argv[1:]
+    prefix = "lib/features/player/"
+    if "--under" in args:
+        at = args.index("--under")
+        prefix = args[at + 1]
+        del args[at : at + 2]
+    if len(args) != 2:
+        print(__doc__.strip(), file=sys.stderr)
+        return 64
+    before, after = (read(path) for path in args)
+    names = sorted(
+        name for name in set(before) | set(after) if name.startswith(prefix)
+    )
+    totals = {"before": [0, 0], "after": [0, 0]}
+    for name in names:
+        cells = []
+        for label, report in (("before", before), ("after", after)):
+            if name in report:
+                covered, uncovered = report[name]
+                total = len(covered) + len(uncovered)
+                totals[label][0] += len(covered)
+                totals[label][1] += total
+                cells.append(f"{len(covered):5}/{total:<5}")
+            else:
+                cells.append(f"{'-':>11}")
+        print(f"{cells[0]}  ->  {cells[1]}  {name}")
+    missed = {label: total - covered for label, (covered, total) in totals.items()}
+    print(
+        f"TOTAL uncovered under {prefix}: "
+        f"{missed['before']} of {totals['before'][1]} before, "
+        f"{missed['after']} of {totals['after'][1]} after"
+    )
+    for name in names:
+        if name in after and after[name][1]:
+            lines = ",".join(str(n) for n in sorted(after[name][1]))
+            print(f"  uncovered after: {name}: {lines}")
+    if missed["after"] > missed["before"]:
+        print(f"FAIL: {missed['after'] - missed['before']} more uncovered lines")
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
