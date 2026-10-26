@@ -104,7 +104,7 @@ extension _PlayerKeys on _PlayerScreenState {
   bool get _backDismisses =>
       _timingShown ||
       (_isTv &&
-          (_upNextSecondsLeft != null || (_controlsVisible && _canAutoHide)));
+          (_upNextSecondsLeft != null || (_controls.visible && _canAutoHide)));
 
   /// One rung down the ladder [_backDismisses] describes, most transient
   /// first. Only called while there is a rung to take: the last one is
@@ -120,7 +120,7 @@ extension _PlayerKeys on _PlayerScreenState {
       _dismissUpNext();
       return;
     }
-    _hideControls();
+    _controls.hide();
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -133,7 +133,7 @@ extension _PlayerKeys on _PlayerScreenState {
     if (_leaving) return KeyEventResult.handled;
     // Back belongs to the route, not to this handler. Android delivers it as a
     // key first and pops only if nothing took it, and [PopScope] is what
-    // answers. This sits above `_showControls` below, because the OSD flashing
+    // answers. This sits above `_controls.show` below, because the OSD flashing
     // up on the way out of the player would be the opposite of what the press
     // asked for.
     if (event.logicalKey == LogicalKeyboardKey.goBack) {
@@ -181,11 +181,11 @@ extension _PlayerKeys on _PlayerScreenState {
     }
 
     // Which of the player's two modes this press is in, read before
-    // [_showControls]: a press means what it meant when the viewer made it.
+    // [ControlsVisibility.show]: a press means what it meant when the viewer made it.
     // A press landing as the bar fades gets either answer, and both are
     // fine.
-    final shownBefore = _controlsShown;
-    _showControls();
+    final shownBefore = _controls.shown;
+    _controls.show();
 
     // A control on the bar has the remote: select presses it and left/right
     // walk the bar (the seek bar seeks), both handled below us. The seek bar
@@ -352,7 +352,7 @@ extension _PlayerKeys on _PlayerScreenState {
     // above the `IgnorePointer`), and it is aimed at nothing, like a key press
     // ([_onKeyEvent]). The timer below would also outlive [_detach].
     if (_leaving) return;
-    _showControls();
+    _controls.show();
     _statsHoverTimer?.cancel();
     _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
       if (!mounted || !_statsHover) return;

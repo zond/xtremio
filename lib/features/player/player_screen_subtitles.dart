@@ -809,7 +809,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// Not part of the OSD: the bar fades on its timer while this stays, because
   /// adjusting means pressing and then watching the picture. It is drawn
   /// outside the fade and is not on [_canAutoHide]'s list. It is visible for as
-  /// long as it holds focus, the rule [_hideControls] keeps for the bar.
+  /// long as it holds focus, the rule [_controls] keeps for the bar.
   void _showSubtitleTiming() {
     if (_timingShown) return;
     setState(() => _timingShown = true);

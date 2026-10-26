@@ -20,6 +20,7 @@ import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
 import 'cast_stats_overlay.dart';
+import 'controls_visibility.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'seek_hold.dart';
@@ -784,7 +785,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   String? _subtitleMatchNote;
 
   /// Whether the timing panel is up. Not part of the OSD, so it is not
-  /// what [_controlsVisible] says (see [_showSubtitleTiming]).
+  /// what [_controls] says (see [_showSubtitleTiming]).
   bool _timingShown = false;
 
   /// The torrent overlays: while [_torrentStatsTimer] runs the server's
@@ -1043,8 +1044,18 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// under way learns that the viewer pressed Stop during it.
   int _castStops = 0;
 
-  bool _controlsVisible = true;
-  Timer? _controlsTimer;
+  /// Whether the controls are up, and their fade; see [ControlsVisibility].
+  /// What may hold them up is [_canAutoHide], asked rather than told. Putting
+  /// them away hands the remote back to the video in the same breath: a
+  /// focus ring that fades out with the bar is focus the viewer can no longer
+  /// see, and the next press would act on a control that is not on screen.
+  late final ControlsVisibility _controls = ControlsVisibility(
+    timeout: PlayerScreen.controlsTimeout,
+    canFade: () => _canAutoHide,
+    onHidden: () {
+      if (_controlFocused) _focusNode.requestFocus();
+    },
+  )..addListener(_onControlsVisibility);
 
   /// Runs for one double-click interval after a mouse click on the video,
   /// so the next click inside it is the double-click ([_onVideoClick]).
@@ -1135,12 +1146,17 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _upNextScope.addListener(_onControlsFocusChange);
   }
 
-  /// A control took or lost focus: the controls may not fade while one has
-  /// it, and they must start fading again once it is gone.
+  /// A control took or lost focus. Focus holds nothing up (see
+  /// [_canAutoHide]), so the fade only starts over: the remote moving is the
+  /// viewer using the controls.
   void _onControlsFocusChange() {
     if (!mounted) return;
     setState(() {});
-    _restartControlsTimer();
+    _controls.restart();
+  }
+
+  void _onControlsVisibility() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -1383,7 +1399,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _startTorrentStats(state);
     _startStreamNumbers();
     setState(() => _engineError = null);
-    _restartControlsTimer();
+    _controls.restart();
   }
 
   /// The default changed in Settings while this player is up. It does not
@@ -1711,7 +1727,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (playing && !_frameRateAsked) _askDisplayFrameRate();
     if (_playing != playing) {
       setState(() => _playing = playing);
-      _showControls();
+      _controls.show();
     }
     _reportPlaying(playing);
   }
@@ -1729,7 +1745,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (buffering) _reportStall();
     setState(() => _buffering = buffering);
     _syncStatsPolls();
-    _restartControlsTimer();
+    _controls.restart();
   }
 
   /// Puts a stall and its end in the report -- the shape of a playback that
@@ -1781,7 +1797,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _releaseDisplayFrameRate();
     // `bingeWatching` off: the episode just ends; the Next button remains.
     if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
-    _showControls();
+    _controls.show();
   }
 
   /// Whether a `completed` from the engine is the film ending.
@@ -1825,7 +1841,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     );
     setState(() => _buffering = true);
     _syncStatsPolls();
-    _showControls();
+    _controls.show();
     _cancelOpenRetry();
     if (wait == Duration.zero) {
       _reopenAt(position, reason: 'false-end $ends');
@@ -1926,8 +1942,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   ///
   /// A control holding focus is deliberately not on this list: on a
   /// television the remote always has focus somewhere on the bar, so such a
-  /// veto would keep the OSD up for good. [_hideControls] takes the remote
-  /// back to the video as it hides the bar instead.
+  /// veto would keep the OSD up for good. Putting the bar away takes the remote
+  /// back to the video instead ([_controls]).
   bool get _canAutoHide =>
       _playing &&
       !_menuOpen &&
@@ -1937,67 +1953,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       !_startupOverlayShown &&
       _statusText(_state) == null;
 
-  bool get _controlsShown => _controlsVisible || !_canAutoHide;
-
-  void _showControls() {
-    if (!_controlsVisible && mounted) {
-      setState(() => _controlsVisible = true);
-    }
-    _restartControlsTimer();
-  }
-
-  /// Whether [_canAutoHide] held at the last build ([_armFadeWhenAllowed]).
-  bool _couldAutoHide = false;
-
-  /// Arms the fade the moment the controls may fade again.
-  ///
-  /// Whatever held them up (a menu, a wait, a scrub, the up-next card) can
-  /// go in many ways, and each one is a rebuild. So the change is read here,
-  /// once, rather than at each of them: a bar that was brought up while one
-  /// of them held it fades [PlayerScreen.controlsTimeout] after the last one
-  /// goes, with no key and no Back.
-  void _armFadeWhenAllowed() {
-    final can = _canAutoHide;
-    final became = can && !_couldAutoHide;
-    _couldAutoHide = can;
-    if (!became) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _restartControlsTimer();
-    });
-  }
-
-  void _restartControlsTimer() {
-    _controlsTimer?.cancel();
-    _controlsTimer = null;
-    // Nothing to fade once the player is stopping ([build]), and a timer
-    // armed after [_detach] would outlive the screen.
-    if (_leaving || !_canAutoHide || !_controlsVisible) return;
-    _controlsTimer = Timer(PlayerScreen.controlsTimeout, _hideControls);
-  }
-
-  /// Puts the controls away, and on a television hands the remote back to
-  /// the video in the same breath.
-  ///
-  /// The two go together on purpose: a focus ring that fades out with the
-  /// bar is focus the viewer can no longer see, and the next press would
-  /// act on a control that is not on screen.
-  void _hideControls() {
-    _controlsTimer?.cancel();
-    _controlsTimer = null;
-    if (!mounted || !_canAutoHide || !_controlsVisible) return;
-    setState(() => _controlsVisible = false);
-    if (_controlFocused) _focusNode.requestFocus();
-  }
-
   void _onVideoTap() {
     if (_upNextSecondsLeft != null) {
       _dismissUpNext();
       return;
     }
-    if (_controlsShown) {
-      _hideControls();
+    if (_controls.shown) {
+      _controls.hide();
     } else {
-      _showControls();
+      _controls.show();
     }
   }
 
@@ -2095,7 +2059,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     } else {
       _engine?.playOrPause();
     }
-    _showControls();
+    _controls.show();
   }
 
   /// The transport keys that name what they want, rather than toggling:
@@ -2107,7 +2071,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     } else {
       _engine?.play();
     }
-    _showControls();
+    _controls.show();
   }
 
   void _pause() {
@@ -2116,7 +2080,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     } else {
       _engine?.pause();
     }
-    _showControls();
+    _controls.show();
   }
 
   /// Puts the playback at [target] and tells everything that watches where
@@ -2180,7 +2144,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // Seek and TimeChanged agreeing.
     _lastReported = null;
     _dismissUpNext();
-    _showControls();
+    _controls.show();
   }
 
   /// Whether a seek made now may be dropped by the engine: the file the
@@ -2301,7 +2265,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     if (clamped > 0) _volumeBeforeMute = null;
     setState(() => _volume = clamped);
     _engine?.setVolume(clamped);
-    _showControls();
+    _controls.show();
   }
 
   void _toggleMute() {
@@ -2323,13 +2287,13 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // Nothing to toggle on a television: it is fullscreen the whole time
     // the player is up, and F/the centre key only wake the controls.
     if (_isTv) {
-      _showControls();
+      _controls.show();
       return;
     }
     final on = !_fullscreenOn;
     setState(() => _fullscreenOn = on);
     (on ? _fullscreen?.enter() : _fullscreen?.exit())?.ignore();
-    _showControls();
+    _controls.show();
   }
 
   void _toggleStatsPinned() {
@@ -2352,7 +2316,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// while one is open, because the hand-off would replace the sheet's route,
   /// not this one. It resumes when the sheet closes.
   Future<void> _showSheet(WidgetBuilder builder) async {
-    _controlsTimer?.cancel();
+    _controls.pause();
     _pauseUpNext();
     // On a television the remote opened this from a button on the bar:
     // remember which, so closing the sheet puts it back there and the
@@ -2391,7 +2355,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     } else {
       _focusNode.requestFocus();
     }
-    _showControls();
+    _controls.show();
     _resumeUpNext();
   }
 
@@ -2465,6 +2429,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // screen that went without a leave (a hand-over's `pushReplacement`, a
     // route dismantled from above).
     _detach();
+    _controls.dispose();
     // Discovery belongs to the process, not this screen, and a hand-over's
     // successor has started it again by now. `pushReplacement` builds the new
     // player before this one goes, so a stop from here would end the search the
@@ -2540,14 +2505,14 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
-    final shown = _controlsShown && !leaving;
+    final shown = _controls.shown && !leaving;
     final nextVideo = state?.nextVideo;
     final upNext = leaving ? null : _upNextSecondsLeft;
     final hasVideo = engine != null && _opened != null && !casting;
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
-    _armFadeWhenAllowed();
+    _controls.rebuilt();
     // Never poppable by the framework, so that every way out of the player runs
     // the teardown before the screen goes. Back and Escape both arrive here
     // rather than taking the route out from under a player that is still
@@ -2777,11 +2742,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                                   onStep: _seekBy,
                                   onScrubStart: () {
                                     _scrubbing = true;
-                                    _controlsTimer?.cancel();
+                                    _controls.pause();
                                   },
                                   onScrubEnd: () {
                                     _scrubbing = false;
-                                    _restartControlsTimer();
+                                    _controls.restart();
                                   },
                                   onToggleTimeDisplay: () => setState(
                                     () => _showRemaining = !_showRemaining,
