@@ -66,7 +66,11 @@ final class MetaDetailsState {
 
   /// The stream (and the addon group it was found in) this title was last
   /// played with, when one of the loaded groups still offers it or a
-  /// binge-group sibling; null otherwise.
+  /// binge-group sibling. Otherwise it is the stream this device last played
+  /// the selected video with (`rememberedStream`, `XtremioModel::
+  /// remembered_stream`), once the addon that gave it has failed or answered
+  /// without it. Its group is then that addon's request with only this
+  /// stream in it, so a play credits the addon. Null when there is neither.
   final (StreamGroup, StreamInfo)? lastUsedStream;
 
   /// The title's library item: from the library bucket when it is or was
@@ -99,9 +103,9 @@ final class MetaDetailsState {
         for (final group in (json['streams'] as List<dynamic>? ?? const []))
           StreamGroup.fromJson(group as Map<String, dynamic>),
       ],
-      lastUsedStream: _lastUsedStream(
-        json['lastUsedStream'] as Map<String, dynamic>?,
-      ),
+      lastUsedStream:
+          _lastUsedStream(json['lastUsedStream'] as Map<String, dynamic>?) ??
+          _lastUsedStream(json['rememberedStream'] as Map<String, dynamic>?),
       libraryItem: switch (json['libraryItem']) {
         final Map<String, dynamic> item => LibraryItemView(item),
         _ => null,
@@ -114,6 +118,8 @@ final class MetaDetailsState {
 
   /// `lastUsedStream` is `ResourceLoadable<Option<Stream>>`: the request is
   /// the stream addon's when a stream matched, the meta request otherwise.
+  /// `rememberedStream` has the same shape, always with the stream addon's
+  /// request.
   static (StreamGroup, StreamInfo)? _lastUsedStream(
     Map<String, dynamic>? json,
   ) {

@@ -313,6 +313,57 @@ void main() {
       );
     });
 
+    testWidgets('offers the stream last played here when its addon fails, '
+        'and plays it as that addon\'s', (tester) async {
+      useWideViewport(tester);
+      const torrentio = 'https://torrentio.example/manifest.json';
+      final stream = {
+        'infoHash': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        'fileIdx': 0,
+        'name': 'Torrentio\n1080p',
+      };
+      final failed = failedGroup(torrentio);
+      Map<String, dynamic> fixture({required bool remembered}) =>
+          loadMetaDetailsFixture()
+            ..['streams'] = [
+              failed,
+              emptyGroup('https://watchhub.example/manifest.json'),
+            ]
+            ..['lastUsedStream'] = {
+              'request': failed['request'],
+              'content': failed['content'],
+            }
+            ..['rememberedStream'] = remembered
+                ? {
+                    'request': failed['request'],
+                    'content': {'type': 'Ready', 'content': stream},
+                  }
+                : null;
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: fixture(remembered: false),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+      expect(find.text('Continue with last stream'), findsNothing);
+      expect(find.text('No streams for this title'), findsOneWidget);
+
+      core.setState(CoreField.metaDetails, fixture(remembered: true));
+      await tester.pumpAndSettle();
+      expect(find.text('No streams for this title'), findsNothing);
+      await tester.tap(find.text('Continue with last stream'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      final args = loadArgs(
+        core.dispatched.firstWhere((a) => a.field == CoreField.player),
+      );
+      expect(args['stream']['infoHash'], stream['infoHash']);
+      expect(args['streamRequest']['base'], torrentio);
+    });
+
     testWidgets('a phone opens at the top of the page, whatever arrives '
         'after it', (tester) async {
       // A television opened scrolled down to the first source. A phone

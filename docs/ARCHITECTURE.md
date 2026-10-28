@@ -80,7 +80,9 @@ the model behind Discover's rows (`CatalogsWithExtra`), of one type or all.
   (`LibraryWithFilters<NotRemovedFilter>`).
 - `XtremioModel::snapshot` adds a sibling key where the raw model lacks
   what the UI needs, rather than reshaping the field: `meta_details` gains
-  `watchedVideoIds`, `board`/`search` gain `catalogLabels` (catalog and
+  `watchedVideoIds` and `rememberedStream` (see
+  [The last stream, when its addon fails](#the-last-stream-when-its-addon-fails)),
+  `board`/`search` gain `catalogLabels` (catalog and
   addon names resolved from the profile's manifests, aligned with
   `catalogs`).
 - `board` and `search` are the one reshape. They are `GridCatalogs`, which
@@ -870,8 +872,7 @@ persisted last stream. stremio-core resolves it against the addon's answers
 by source (a `Url` never matches a `Torrent`) and then by binge group, which
 is why `offlineStream` keeps `behaviorHints.bingeGroup`. When the addon sets
 none, "Continue with last stream" disappears after an offline play until
-the title is played from an addon again. The next play then starts with no
-remembered subtitle or audio track.
+the title is played from an addon again.
 
 **What a download is doing** comes from one `DownloadDetailPoller`
 (`lib/features/downloads/download_detail.dart`), built in `XtremioApp` and
@@ -1147,6 +1148,26 @@ primary action. `profile.addonsLocked` disables every mutation behind a
 banner. [docs/ADDONS.md](ADDONS.md) covers how each addon has been
 answering and the verdict drawn from it.
 [docs/DEEP_LINKS.md](DEEP_LINKS.md) covers installing from a web page.
+
+### The last stream, when its addon fails
+
+stremio-core remembers the stream each video was last played with, on this
+device only (`ctx.streams`, never synced). It offers it again only through
+the current answer of the addon that gave it (`last_used_stream_update`).
+So a rate-limited Torrentio hid a torrent that needs nothing from it to
+play. `XtremioModel::remembered_stream` fills that gap. When the engine's
+`lastUsedStream` is an error or `Ready(None)`, and this exact video has a
+record, `meta_details` carries the record's stream as `rememberedStream`.
+It has the shape of `lastUsedStream` and the request of the addon that gave
+the stream. `MetaDetailsState.lastUsedStream` falls back to it, so
+"Continue with last stream" shows and the empty notice does not. A play
+credits the original addon, which keeps the record and the binge match
+pointing at it. Only the exact video is answered for: the next episode's
+file is something only the addon knows. Subtitles are unaffected, since
+their memories key on the stream's own name and the show, never on the
+addon that answered. Tests: `meta_details_remembers_the_stream_the_addon_cannot_offer`
+in `rust/src/model.rs`, and "offers the stream last played here" in
+`test/features/meta_details_screen_test.dart`.
 
 ## Recommendations
 

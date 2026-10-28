@@ -24,15 +24,15 @@ use stremio_core::models::player::Player;
 use stremio_core::models::streaming_server::StreamingServer;
 use stremio_core::runtime::msg::{Internal, Msg};
 use stremio_core::runtime::{Effects, UpdateWithCtx};
-use stremio_core::types::addon::Descriptor;
+use stremio_core::types::addon::{Descriptor, ResourceRequest};
 use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::{LibraryBucket, LibraryItem};
 use stremio_core::types::notifications::NotificationsBucket;
 use stremio_core::types::profile::Profile;
-use stremio_core::types::resource::{MetaItemPreview, PosterShape};
+use stremio_core::types::resource::{MetaItemPreview, PosterShape, Stream};
 use stremio_core::types::search_history::SearchHistoryBucket;
 use stremio_core::types::server_urls::ServerUrlsBucket;
-use stremio_core::types::streams::StreamsBucket;
+use stremio_core::types::streams::{StreamsBucket, StreamsItemKey};
 use stremio_core::Model;
 use url::Url;
 
@@ -408,13 +408,46 @@ impl XtremioModel {
         serde_json::to_string(&MetaDetailsJson {
             meta_details: &self.meta_details,
             watched_video_ids,
+            remembered_stream: self.remembered_stream(),
+        })
+    }
+
+    /// The stream this device last played the selected video with, when the
+    /// engine's `lastUsedStream` cannot offer it: the addon that gave it
+    /// failed, or answered without it. Shaped like `lastUsedStream`, with the
+    /// request that addon was asked, so a play credits the addon and not this
+    /// device.
+    ///
+    /// stremio-core shows a remembered stream only through its addon's
+    /// current answer (`last_used_stream_update`). An addon that is down or
+    /// rate-limited hides a stream that needs nothing from it to play: a
+    /// torrent is its hash and file. Only the exact video is answered for. The
+    /// next episode's file is something only the addon knows.
+    ///
+    /// None while the addon is still being asked, and whenever the engine
+    /// found the stream or a binge-group sibling itself.
+    fn remembered_stream(&self) -> Option<ResourceLoadable<Option<Stream>>> {
+        let selected = self.meta_details.selected.as_ref()?;
+        let stream_path = selected.stream_path.as_ref()?;
+        match self.meta_details.last_used_stream.as_ref()?.content {
+            Some(Loadable::Err(_)) | Some(Loadable::Ready(None)) => {}
+            _ => return None,
+        }
+        let item = self.ctx.streams.items.get(&StreamsItemKey {
+            meta_id: selected.meta_path.id.clone(),
+            video_id: stream_path.id.clone(),
+        })?;
+        Some(ResourceLoadable {
+            request: ResourceRequest::new(item.stream_transport_url.clone(), stream_path.clone()),
+            content: Some(Loadable::Ready(Some(item.stream.clone()))),
         })
     }
 }
 
 /// What [`XtremioModel::meta_details_json`] writes: the model's own fields
 /// with `watchedVideoIds` beside them, present only when the engine has a
-/// watched bitfield to answer from.
+/// watched bitfield to answer from, and `rememberedStream`
+/// ([`XtremioModel::remembered_stream`]), present only when there is one.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MetaDetailsJson<'a> {
@@ -422,6 +455,8 @@ struct MetaDetailsJson<'a> {
     meta_details: &'a MetaDetails,
     #[serde(skip_serializing_if = "Option::is_none")]
     watched_video_ids: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remembered_stream: Option<ResourceLoadable<Option<Stream>>>,
 }
 
 /// Parses a `snake_case` field name (`"board"`, `"meta_details"`, ...).
@@ -545,6 +580,97 @@ mod tests {
         assert_eq!(state["watchedVideoIds"], serde_json::json!([ids[1]]));
         assert_eq!(state["metaItems"][0]["content"]["type"], "Ready");
         assert!(state.get("watched").is_none(), "{state}");
+    }
+
+    /// `rememberedStream` is the stream this device last played the episode
+    /// with, under the request of the addon that gave it. It is there only
+    /// when the engine's own `lastUsedStream` could not offer it, and only for
+    /// the exact episode.
+    #[test]
+    fn meta_details_remembers_the_stream_the_addon_cannot_offer() {
+        use stremio_core::models::meta_details::Selected as MetaSelected;
+        use stremio_core::runtime::EnvError;
+        use stremio_core::types::streams::StreamsItem;
+
+        let torrentio = Url::parse("https://torrentio.example/manifest.json").unwrap();
+        let cinemeta = Url::parse("https://v3-cinemeta.strem.io/manifest.json").unwrap();
+        let episode = ResourcePath::without_extra("stream", "series", "tt0903747:2:5");
+        let stream: Stream = serde_json::from_value(serde_json::json!({
+            "infoHash": "0123456789abcdef0123456789abcdef01234567",
+            "fileIdx": 4,
+            "name": "Torrentio\n1080p",
+            "behaviorHints": { "bingeGroup": "torrentio|1080p" },
+        }))
+        .unwrap();
+        let record = |video_id: &str| StreamsItem {
+            stream: stream.clone(),
+            r#type: "series".to_owned(),
+            meta_id: "tt0903747".to_owned(),
+            video_id: video_id.to_owned(),
+            meta_transport_url: cinemeta.clone(),
+            stream_transport_url: torrentio.clone(),
+            state: None,
+            mtime: chrono::Utc::now(),
+        };
+        let with = |video_id: &str, last_used: Option<Loadable<Option<Stream>, ResourceError>>| {
+            let mut model = default_model();
+            model.ctx.streams.items.insert(
+                StreamsItemKey {
+                    meta_id: "tt0903747".to_owned(),
+                    video_id: video_id.to_owned(),
+                },
+                record(video_id),
+            );
+            model.meta_details.selected = Some(MetaSelected {
+                meta_path: ResourcePath::without_extra("meta", "series", "tt0903747"),
+                stream_path: Some(episode.clone()),
+                guess_stream: false,
+            });
+            model.meta_details.last_used_stream = Some(ResourceLoadable {
+                request: ResourceRequest::new(torrentio.clone(), episode.clone()),
+                content: last_used,
+            });
+            let json: serde_json::Value =
+                serde_json::from_str(&model.meta_details_json().expect("serializes"))
+                    .expect("JSON");
+            json
+        };
+        let failed = || {
+            Some(Loadable::Err(ResourceError::Env(EnvError::Fetch(
+                "HTTP 429".to_owned(),
+            ))))
+        };
+
+        let state = with("tt0903747:2:5", failed());
+        let remembered = &state["rememberedStream"];
+        assert_eq!(remembered["request"]["base"], torrentio.as_str());
+        assert_eq!(remembered["request"]["path"]["id"], "tt0903747:2:5");
+        assert_eq!(remembered["content"]["type"], "Ready");
+        assert_eq!(remembered["content"]["content"]["fileIdx"], 4);
+        assert_eq!(state["lastUsedStream"]["content"]["type"], "Err");
+
+        let without = with("tt0903747:2:5", Some(Loadable::Ready(None)));
+        assert_eq!(
+            without["rememberedStream"]["content"]["content"]["fileIdx"],
+            4
+        );
+
+        for (why, state) in [
+            (
+                "the addon is still asked",
+                with("tt0903747:2:5", Some(Loadable::Loading)),
+            ),
+            (
+                "the engine found it",
+                with("tt0903747:2:5", Some(Loadable::Ready(Some(stream.clone())))),
+            ),
+            (
+                "only the episode before was played",
+                with("tt0903747:2:4", failed()),
+            ),
+        ] {
+            assert!(state.get("rememberedStream").is_none(), "{why}: {state}");
+        }
     }
 
     /// The items of every `Ready` page of the recorded board fixture: what
