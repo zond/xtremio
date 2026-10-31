@@ -55,13 +55,15 @@ class PortForwardingStatus {
   /// the mapping. Null once the failure clears.
   final String? error;
 
-  /// The state in words a viewer reads. Settings, the player's stats panel and
-  /// the Diagnostics report all show this, so the wording lives only here.
+  /// The state in words a viewer reads. Settings shows this as it is; the
+  /// player's stats panel and the Diagnostics report show [detail], which
+  /// adds the error's own text. The wording lives only here.
   ///
   /// A held mapping wins over everything else. An error is the router's
-  /// refusal when a router answered, and a failed search when none did. A
-  /// router that answered with neither a hold nor an error has not said yes
-  /// yet.
+  /// refusal when a router answered, and a failed search when none did; the
+  /// error's text stays out of this line, because it is the server's and
+  /// names protocols and addresses a Settings row should not. A router that
+  /// answered with neither a hold nor an error has not said yes yet.
   String get line {
     if (!enabled) return 'Off';
     if (held) {
@@ -70,17 +72,23 @@ class PortForwardingStatus {
         if (port != null) 'port $port',
       ].join(', ');
     }
-    final error = this.error;
     if (error != null) {
       return gateway == null
-          ? 'Could not look for your router: $error'
-          : 'Your router refused: $error';
+          ? 'Could not look for your router'
+          : 'Your router refused';
     }
     if (!searched) return 'Asking your router…';
     if (gateway == null) {
       return 'No router answered, so only connections this device starts';
     }
     return 'Waiting for $gateway to open a port…';
+  }
+
+  /// [line] with the error's own text after it, for the stats panel and the
+  /// Diagnostics report, where whoever reads it came for the detail.
+  String get detail {
+    final error = this.error;
+    return error == null || held ? line : '$line: $error';
   }
 
   @override

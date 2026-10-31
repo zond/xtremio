@@ -130,8 +130,41 @@ void main() {
           held: false,
           error: 'conflict in mapping entry',
         ).line,
-        'Your router refused: conflict in mapping entry',
+        'Your router refused',
       );
+    });
+
+    test('keeps the error\'s own text for the detail, never the line', () {
+      const refused = PortForwardingStatus(
+        enabled: true,
+        searched: true,
+        gateway: 'FRITZ!Box 7590',
+        held: false,
+        error: 'conflict in mapping entry',
+      );
+      expect(refused.detail, 'Your router refused: conflict in mapping entry');
+      const failed = PortForwardingStatus(
+        enabled: true,
+        searched: true,
+        held: false,
+        error: 'failed to send SSDP search request: no route to host',
+      );
+      expect(failed.line, 'Could not look for your router');
+      expect(
+        failed.detail,
+        'Could not look for your router: failed to send SSDP search request: '
+        'no route to host',
+      );
+      // Held says nothing of an earlier error, in either form.
+      const held = PortForwardingStatus(
+        enabled: true,
+        searched: true,
+        gateway: 'FRITZ!Box 7590',
+        port: 45810,
+        held: true,
+        error: 'stale',
+      );
+      expect(held.detail, held.line);
     });
 
     test('is a failed search when an error stands and no router answered', () {
@@ -142,7 +175,7 @@ void main() {
           held: false,
           error: 'no route to host',
         ).line,
-        'Could not look for your router: no route to host',
+        'Could not look for your router',
       );
     });
 

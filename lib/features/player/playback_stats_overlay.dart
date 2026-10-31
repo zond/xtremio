@@ -374,11 +374,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
   static String describeDht(DhtStatus dht) =>
       'dht      ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}';
 
-  /// The `router` row: [PortForwardingStatus.line], the same words Settings
-  /// shows. A wide row, because a router's name and its refusal are as long
-  /// as whoever wrote them.
+  /// The `router` row: [PortForwardingStatus.detail], Settings' words with
+  /// the error's text after them. A wide row, because a router's name and
+  /// its refusal are as long as whoever wrote them.
   static String describeRouter(PortForwardingStatus router) =>
-      'router   ${router.line}';
+      'router   ${router.detail}';
 
   /// The phase, with the percentage of whatever it is measuring when the
   /// server measures one.
