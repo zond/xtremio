@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../src/rust/api/diagnostics.dart' as rust;
 import 'server_client.dart';
 import 'state/dht_status.dart';
+import 'state/port_forwarding_status.dart';
 import 'state/server_storage.dart';
 
 export '../src/rust/api/diagnostics.dart' show DiagnosticsSnapshot;
@@ -38,6 +39,11 @@ abstract interface class DiagnosticsClient {
   /// `DhtStatus(enabled: false, ...)`. Cheap and synchronous. This screen reads
   /// it once on open and on an explicit refresh, never on a timer.
   DhtStatus dhtStatus();
+
+  /// Whether people outside the local network can connect in through the
+  /// router (`ServerHandle::port_forwarding_status`). Never throws, and read
+  /// alongside [dhtStatus]: once on open and on an explicit refresh.
+  PortForwardingStatus portForwardingStatus();
 }
 
 /// [DiagnosticsClient] over FFI, `dart:io` and the `xtremio/device`
@@ -69,6 +75,9 @@ class RustDiagnosticsClient implements DiagnosticsClient {
 
   @override
   DhtStatus dhtStatus() => server.dhtStatus;
+
+  @override
+  PortForwardingStatus portForwardingStatus() => server.portForwardingStatus;
 
   /// The platform's answer, or what `dart:io` says when there is nobody to
   /// ask.

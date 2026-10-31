@@ -454,6 +454,33 @@ pub fn server_dht_status() -> anyhow::Result<String> {
     guarded_ok(|| serde_json::to_string(&crate::server::dht_status()).unwrap_or_default())
 }
 
+/// Whether peers outside the local network can connect in through the
+/// router, as JSON (`PortForwardingStatus`: `enabled`, `searched`,
+/// `gateway`, `port`, `held`, `error`). This is
+/// `ServerHandle::port_forwarding_status`, which has no HTTP route, because
+/// the app is the only thing that asks.
+///
+/// This is information, not a failure. The server asks the router over
+/// UPnP to forward its incoming torrent port. A torrent downloads without
+/// it, from the peers this device dials, only fewer people can share with
+/// it. `searched` with no `gateway` is no router to ask (a cellular
+/// network, or UPnP turned off), which is not an error either. `error` is
+/// a failed search, or else the router refusing the mapping. `enabled:
+/// false` answers the same whether the server is not running or its
+/// listener is loopback only, and this call never errors on its account.
+///
+/// Cheap (one read of the forwarder's latest state) and synchronous, so it
+/// is safe to call from the UI thread. Still, nothing should poll it on a
+/// timer of its own. Read it on screen-open, or piggyback it on a poll that
+/// is already running for another reason (the player's stats panel), the
+/// way [`server_dht_status`] is read.
+#[frb(sync)]
+pub fn server_port_forwarding_status() -> anyhow::Result<String> {
+    guarded_ok(|| {
+        serde_json::to_string(&crate::server::port_forwarding_status()).unwrap_or_default()
+    })
+}
+
 /// Ends every proxied stream carrying `token` and answers how many streams
 /// that was. `token` is the name the app minted for the player being torn
 /// down and put in the `/proxy` URL that player fetches.

@@ -9,9 +9,10 @@ use std::sync::{Arc, Mutex};
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
     server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
-    server_clear_cache, server_close_proxy_streams, server_dht_status, server_set_background,
-    server_set_idle_sharing_held, server_settings, server_stop, server_storage_report,
-    server_torrent_stats, server_update_settings, ServerConfig,
+    server_clear_cache, server_close_proxy_streams, server_dht_status,
+    server_port_forwarding_status, server_set_background, server_set_idle_sharing_held,
+    server_settings, server_stop, server_storage_report, server_torrent_stats,
+    server_update_settings, ServerConfig,
 };
 
 /// The embedded server, started the way the app starts it but **joining no
@@ -295,6 +296,19 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert!(dht["nodesV6"].is_u64(), "{dht}");
     assert!(dht["everBootstrapped"].is_boolean(), "{dht}");
 
+    // Whether peers can connect in through the router
+    // (`ServerHandle::port_forwarding_status`, no route): as cheap and as
+    // synchronous. This server started offline, so its torrent listener is
+    // loopback only. It asks no router of the test machine's network and
+    // says off, with every field present.
+    let forwarding = json(&server_port_forwarding_status()?);
+    assert_eq!(forwarding["enabled"], false, "{forwarding}");
+    assert!(forwarding["searched"].is_boolean(), "{forwarding}");
+    assert!(forwarding["held"].is_boolean(), "{forwarding}");
+    for field in ["gateway", "port", "error"] {
+        assert!(forwarding.get(field).is_some(), "{forwarding}");
+    }
+
     // Cleaning runs the eviction pass in place, with no restart, so the
     // server answers throughout and at the same URL afterwards.
     let cleaned = json(&tokio::task::spawn_blocking(server_clean_cache_now).await??);
@@ -451,6 +465,11 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     let dht = json(&server_dht_status()?);
     assert_eq!(dht["enabled"], false, "{dht}");
     assert_eq!(dht["everBootstrapped"], false, "{dht}");
+    // Nor is there a router to ask on its behalf, and that answers the
+    // same as a loopback listener: off, nothing held.
+    let forwarding = json(&server_port_forwarding_status()?);
+    assert_eq!(forwarding["enabled"], false, "{forwarding}");
+    assert_eq!(forwarding["held"], false, "{forwarding}");
     // Nothing to make lean, and that is an answer, not an error.
     assert!(!server_set_background(true)?);
     assert_eq!(xtremio_core::server::is_background(), None);

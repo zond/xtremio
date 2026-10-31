@@ -306,7 +306,7 @@ Each installed addon carries a verdict on how it has been answering
 Every row shows its title. What the row means opens from its icon (the
 tooltip says "What is this?"), or from a held OK on a television. A row
 whose second line is state keeps it: the account, the server's status,
-peer discovery, the internet readout, the core schema version, the
+peer discovery, incoming connections, the internet readout, the core schema version, the
 installed version, the local folders' scan and a paused Share while idle.
 
 - **Account**: sign in, create an account, sync, log out; signed in,
@@ -329,7 +329,10 @@ installed version, the local folders' scan and a paused Share while idle.
   lives, what it costs, "Clean cache now" and "Clear the cache"), **Clear
   the cache** (after a confirmation, stops what is streaming and deletes
   everything cached that a kept download does not hold, and says what it
-  freed and how many torrents it stopped) and peer discovery (DHT) health.
+  freed and how many torrents it stopped), peer discovery (DHT) health and
+  **Incoming connections**. That row sits beside peer discovery and says
+  whether other people can connect to this device. The app asks the router
+  to open a port for that on every device, and downloads work either way.
 - **Core**: the stremio-core storage schema version.
 - **About**: **Check for updates**, and open source licences, including
   unrar-rs's. The app also looks for updates once a day by itself. An

@@ -5,6 +5,7 @@ import '../src/rust/api/server.dart' as rust;
 import 'diagnostics_log.dart';
 import 'state/background_traffic.dart';
 import 'state/dht_status.dart';
+import 'state/port_forwarding_status.dart';
 import 'state/server_storage.dart';
 import 'state/read_wait.dart';
 import 'state/stream_numbers.dart';
@@ -395,6 +396,19 @@ class ServerClient
   /// poll that is already running.
   DhtStatus get dhtStatus =>
       DhtStatus.fromJson(_object(rust.serverDhtStatus()));
+
+  /// Whether people outside the local network can connect to this device
+  /// through the router (`ServerHandle::port_forwarding_status`): whether the
+  /// server asks a router at all, which one answered, the port and whether
+  /// the router holds it now. Never throws. A server that is not running
+  /// answers the same as one that asks no router,
+  /// `PortForwardingStatus(enabled: false, ...)`.
+  ///
+  /// Cheap and synchronous, like [dhtStatus], and read the same way: on
+  /// screen-open or alongside a poll that is already running, never on a
+  /// timer of its own.
+  PortForwardingStatus get portForwardingStatus =>
+      PortForwardingStatus.fromJson(_object(rust.serverPortForwardingStatus()));
 
   /// Whether the server is moving bytes over this device's connection while
   /// nothing is playing, in each direction

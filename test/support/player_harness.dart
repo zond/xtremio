@@ -48,10 +48,12 @@ class PlayerHarness {
     this.now,
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
+    PortForwardingStatus? portForwardingStatus,
     bool embeddedServer = true,
   }) : serverBaseUrl =
            serverBaseUrl ?? (embeddedServer ? recordedServerBaseUrl : null),
        dhtStatus = dhtStatus ?? _dhtDisabled,
+       portForwardingStatus = portForwardingStatus ?? _forwardingOff,
        fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -82,6 +84,19 @@ class PlayerHarness {
   /// How many times the screen has asked for [dhtStatus] -- a test's proof
   /// that nothing polls it on a timer of its own.
   int dhtStatusReads = 0;
+
+  /// What [PlaybackScope.portForwardingStatusOf] answers -- off (no `router`
+  /// row) unless a test asks for a specific state.
+  final PortForwardingStatus portForwardingStatus;
+
+  /// How many times the screen has asked for [portForwardingStatus].
+  int portForwardingStatusReads = 0;
+
+  static const PortForwardingStatus _forwardingOff = PortForwardingStatus(
+    enabled: false,
+    searched: false,
+    held: false,
+  );
 
   static const DhtStatus _dhtDisabled = DhtStatus(
     enabled: false,
@@ -222,6 +237,10 @@ class PlayerHarness {
         dhtStatus: () {
           dhtStatusReads++;
           return dhtStatus;
+        },
+        portForwardingStatus: () {
+          portForwardingStatusReads++;
+          return portForwardingStatus;
         },
         proxyStreams: proxyStreams,
         streamNumbers: streamNumbers,

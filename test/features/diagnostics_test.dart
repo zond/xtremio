@@ -644,6 +644,63 @@ void main() {
       expect(text, isNot(contains('dht:')));
     });
 
+    group('the incoming connections line', () {
+      DiagnosticsSnapshot snapshot() =>
+          const DiagnosticsSnapshot(coreVersion: '0.1.0', logLines: []);
+
+      String report(PortForwardingStatus? forwarding) => formatDiagnostics(
+        snapshot: snapshot(),
+        platform: 'android',
+        osVersion: 'Android 14',
+        at: DateTime.utc(2026),
+        forwarding: forwarding,
+      );
+
+      test('says the state whenever the server asks a router', () {
+        expect(
+          report(
+            const PortForwardingStatus(
+              enabled: true,
+              searched: true,
+              gateway: 'FRITZ!Box 7590',
+              port: 45810,
+              held: true,
+            ),
+          ),
+          contains(
+            'incoming connections: Open through FRITZ!Box 7590, port 45810',
+          ),
+        );
+        expect(
+          report(
+            const PortForwardingStatus(
+              enabled: true,
+              searched: true,
+              held: false,
+            ),
+          ),
+          contains(
+            'incoming connections: No router answered, so only connections '
+            'this device starts',
+          ),
+        );
+      });
+
+      test('says nothing when off or unread', () {
+        expect(
+          report(
+            const PortForwardingStatus(
+              enabled: false,
+              searched: false,
+              held: false,
+            ),
+          ),
+          isNot(contains('incoming connections:')),
+        );
+        expect(report(null), isNot(contains('incoming connections:')));
+      });
+    });
+
     group('the DHT line', () {
       DiagnosticsSnapshot snapshot() =>
           const DiagnosticsSnapshot(coreVersion: '0.1.0', logLines: []);
@@ -995,6 +1052,41 @@ void main() {
         expect(copied.single, isNot(contains('dht:')));
       },
     );
+
+    testWidgets('copies the state of the router, read when the screen opens', (
+      tester,
+    ) async {
+      final client = FakeDiagnosticsClient(
+        forwarding: const PortForwardingStatus(
+          enabled: true,
+          searched: true,
+          gateway: 'FRITZ!Box 7590',
+          port: 45810,
+          held: false,
+          error: 'conflict in mapping entry',
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DiagnosticsScreen(
+            client: client,
+            now: () => DateTime.utc(2026, 9, 3),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final copied = interceptClipboard(tester);
+      await tester.tap(find.text('Copy diagnostics'));
+      await tester.pumpAndSettle();
+      expect(
+        copied.single,
+        contains(
+          'incoming connections: Your router refused: conflict in mapping '
+          'entry',
+        ),
+      );
+    });
 
     testWidgets('reports the image cache as it stands at each read', (
       tester,

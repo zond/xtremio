@@ -226,7 +226,8 @@ lines the Rust core kept in memory: its own and the embedded server's, which
 share one subscriber (`rust/src/logging.rs`). A header above them names the
 build, the cache against its limit, the free space where the server writes,
 the device (on Android the release, API level and model), the embedded
-server and the pinned `stream-server` and `stremio-core` revisions. The
+server, an `incoming connections:` line saying whether peers can connect in
+through the router, and the pinned `stream-server` and `stremio-core` revisions. The
 screen copies it all to the clipboard. It ships in release builds on purpose:
 it is the only way to get a log off a phone without ADB. Over ADB, every
 line the app keeps also goes to logcat under the tag `xtremio`
@@ -352,9 +353,11 @@ last said about everyone (`137 seeds / 402 peers · 4 min ago`, or `not
 reported`); the phase while not ready; the piece length (nothing is readable
 until a whole piece is verified); an `inflight` row for the piece the reader
 is on (`inflight #137 · 6.3 of 16.0 MiB · unverified`); the server's
-reason when it stopped; and a `dht` row only while the DHT has found no
-node. They are polled every five seconds while the panel is up and the app
-in front (`PlayerScreen.torrentStatsOverlayInterval`). During a stall they
+reason when it stopped; a `dht` row only while the DHT has found no
+node; and a `router` row whenever the server asks the router to let peers in
+(`Open through <router>, port <n>`, or why not). The `dht` and `router` rows
+are read once, when the torrent's polling starts. The rest are polled
+every five seconds while the panel is up and the app in front (`PlayerScreen.torrentStatsOverlayInterval`). During a stall they
 are polled every two seconds, panel or not, because the stall card reads
 them too.
 

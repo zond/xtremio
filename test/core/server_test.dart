@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/server_client.dart';
+import 'package:xtremio/core/state/port_forwarding_status.dart';
 import 'package:xtremio/core/state/stream_numbers.dart';
 
 import '../support/rust_lib.dart';
@@ -100,6 +101,11 @@ void main() {
       // it never saw -- where the truth is that it has not looked.
       expect(await server.streamNumbers(url.resolve('$_infoHash/0')), isNull);
 
+      // ... whether peers can connect in: this server joins the swarm, so its
+      // torrent listener is on the network and it asks a router. Whether one
+      // answers depends on the machine, so only that it asks is asserted.
+      expect(server.portForwardingStatus.enabled, isTrue);
+
       // ... and the full clear: nothing streams here, so it stops nothing,
       // and the server answers at the same URL afterwards.
       final cleared = await server.clearCache();
@@ -109,6 +115,15 @@ void main() {
 
       await stopServerForTests();
       expect(serverBaseUrlForTests(), isNull);
+      // No server is no router to ask, and that is an answer, not a throw.
+      expect(
+        server.portForwardingStatus,
+        const PortForwardingStatus(
+          enabled: false,
+          searched: false,
+          held: false,
+        ),
+      );
       await expectLater(server.clearCache(), throwsA(anything));
       await expectLater(server.settings(), throwsA(anything));
       await expectLater(

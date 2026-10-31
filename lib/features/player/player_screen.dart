@@ -857,6 +857,15 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// explanation does not need to track a bootstrap that happens later.
   DhtStatus? _dhtStatus;
 
+  /// What reads [_portForwardingStatus] (absent the FFI one), the same way
+  /// [_dhtStatusProvider] reads the DHT's.
+  PortForwardingStatus Function()? _portForwardingStatusProvider;
+
+  /// Whether people can connect in through the router, read beside
+  /// [_dhtStatus] when this torrent's polling started and never on a timer of
+  /// its own. It is the stats panel's `router` row.
+  PortForwardingStatus? _portForwardingStatus;
+
   /// The open being retried: the state and start position [_opened] was
   /// opened with, how many retries it has had, the timer waiting to make
   /// the next one, and the failure that would be shown if there were no
@@ -1126,6 +1135,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _keepAwake = PlaybackScope.keepAwakeOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
+    _portForwardingStatusProvider = PlaybackScope.portForwardingStatusOf(
+      context,
+    );
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
     // A television has no window to be one part of. The video fills the screen
     // from the moment the player opens, with the system bars out of the way,
@@ -2351,6 +2363,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
           isTorrent: _torrentStatsRequest != null,
           torrent: _torrentStats,
           dht: _dhtStatus,
+          router: _portForwardingStatus,
           held: _numbersPoll.numbers,
         ),
       ),

@@ -23,6 +23,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     this.isTorrent = false,
     this.torrent,
     this.dht,
+    this.router,
     this.held,
   });
 
@@ -55,6 +56,13 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// [DhtStatus.unavailable]. A bootstrapped or disabled DHT is not news, and
   /// this panel is not where it would be worth a row anyway.
   final DhtStatus? dht;
+
+  /// Whether people can connect in through the router, read beside [dht]; null
+  /// when it was not asked or could not be read. Shown as the `router` row
+  /// whenever the server asks a router at all ([PortForwardingStatus.enabled]),
+  /// since whether this device can be reached is part of how a swarm treats
+  /// it, held or not.
+  final PortForwardingStatus? router;
 
   /// What the embedded server holds of this stream right now, or null when
   /// it holds nothing of it (an addon's direct link, a debrid URL, a file
@@ -145,6 +153,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
               _wideRow(error, style, maxLines: 2),
             if (dht?.unavailable ?? false)
               Text(describeDht(dht!), style: style),
+            if (router case final router? when router.enabled)
+              _wideRow(describeRouter(router), style, maxLines: 1),
           ],
           if (source != null) _wideRow('stream   $source', style, maxLines: 1),
           if (read != null && read != source)
@@ -363,6 +373,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// Information, never phrased as a problem: trackers keep working regardless.
   static String describeDht(DhtStatus dht) =>
       'dht      ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}';
+
+  /// The `router` row: [PortForwardingStatus.line], the same words Settings
+  /// shows. A wide row, because a router's name and its refusal are as long
+  /// as whoever wrote them.
+  static String describeRouter(PortForwardingStatus router) =>
+      'router   ${router.line}';
 
   /// The phase, with the percentage of whatever it is measuring when the
   /// server measures one.

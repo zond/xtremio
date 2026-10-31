@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/playback_stats_overlay.dart';
@@ -101,6 +102,45 @@ void main() {
     final whileShown = stats.requests.length;
     await tester.pump(PlayerScreen.torrentStatsOverlayInterval * 3);
     expect(stats.requests, hasLength(whileShown));
+  });
+
+  testWidgets(
+    'the router row is read with the DHT, once, when polling starts',
+    (tester) async {
+      final harness = PlayerHarness(
+        portForwardingStatus: const PortForwardingStatus(
+          enabled: true,
+          searched: true,
+          gateway: 'FRITZ!Box 7590',
+          port: 45810,
+          held: true,
+        ),
+      );
+      harness.torrentStats.response = swarm;
+      await harness.pump(tester);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      expect(harness.portForwardingStatusReads, 1);
+
+      await pressShiftI(tester);
+      expect(
+        row('router   Open through FRITZ!Box 7590, port 45810'),
+        findsOneWidget,
+      );
+
+      // The panel's own polls ask about the swarm again and again. None of them
+      // asks about the router.
+      await tester.pump(PlayerScreen.torrentStatsOverlayInterval * 3);
+      expect(harness.portForwardingStatusReads, 1);
+    },
+  );
+
+  testWidgets('a server that asks no router has no router row', (tester) async {
+    final harness = await pumpPlaying(tester);
+    harness.torrentStats.response = swarm;
+    await pressShiftI(tester);
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+    expect(find.textContaining('router'), findsNothing);
   });
 
   testWidgets('a stall under an open panel only changes the pace', (

@@ -546,6 +546,74 @@ void main() {
     });
   });
 
+  group('the router row', () {
+    const held = PortForwardingStatus(
+      enabled: true,
+      searched: true,
+      gateway: 'FRITZ!Box 7590',
+      port: 45810,
+      held: true,
+    );
+    const noRouter = PortForwardingStatus(
+      enabled: true,
+      searched: true,
+      held: false,
+    );
+    const off = PortForwardingStatus(
+      enabled: false,
+      searched: false,
+      held: false,
+    );
+
+    test('says the state in the words Settings uses', () {
+      expect(
+        PlaybackStatsOverlay.describeRouter(held),
+        'router   Open through FRITZ!Box 7590, port 45810',
+      );
+    });
+
+    testWidgets('shows whenever the server asks a router, and only then', (
+      tester,
+    ) async {
+      Future<void> pumpWith(PortForwardingStatus? router) => tester.pumpWidget(
+        MaterialApp(
+          home: PlaybackStatsOverlay(
+            stats: const Stream<PlaybackStats>.empty(),
+            isTorrent: true,
+            torrent: const TorrentStats(phase: TorrentPhase.ready, peers: 4),
+            router: router,
+          ),
+        ),
+      );
+
+      await pumpWith(held);
+      await tester.pump();
+      expect(
+        find.text('router   Open through FRITZ!Box 7590, port 45810'),
+        findsOneWidget,
+      );
+
+      // Not held is still worth the row: it says why nobody dials in.
+      await pumpWith(noRouter);
+      await tester.pump();
+      expect(
+        find.text(
+          'router   No router answered, so only connections this device '
+          'starts',
+        ),
+        findsOneWidget,
+      );
+
+      await pumpWith(off);
+      await tester.pump();
+      expect(find.textContaining('router'), findsNothing);
+
+      await pumpWith(null);
+      await tester.pump();
+      expect(find.textContaining('router'), findsNothing);
+    });
+  });
+
   group('the cache row carries mpv\'s buffer and the run round the playhead', () {
     const bitrate = 8000000; // 1 MB of video a second, so bytes read as time.
 

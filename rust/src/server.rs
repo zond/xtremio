@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuar
 use std::time::Duration;
 
 use anyhow::Context;
-use enginefs::backend::DhtStatus;
+use enginefs::backend::{DhtStatus, PortForwardingStatus};
 use stream_server::{
     CacheClearReport, CacheUsage, DownloadInfo, EngineStats, EvictionReport, ProxyDownloadRequest,
     ProxyPinKey, ServerHandle, ServerSettings, UnpinOutcome,
@@ -938,6 +938,27 @@ pub fn stream_numbers(
 /// Cheap: two routing-table length reads, no I/O.
 pub fn dht_status() -> DhtStatus {
     with_handle(|handle| Ok(handle.dht_status())).unwrap_or_default()
+}
+
+/// Whether peers outside the local network can connect in through the
+/// router (`ServerHandle::port_forwarding_status`, no HTTP route): whether
+/// the server asks a router at all, whether a search has finished, which
+/// router answered, the port it asked for, whether the router holds the
+/// mapping now, and the latest failure.
+///
+/// The server asks over UPnP on every device, for the port its torrent
+/// listener announces. No router (a cellular network, UPnP turned off on
+/// the router) is a reading, not an error: `searched` with no `gateway`.
+/// A torrent downloads either way, from the peers this device dials.
+///
+/// The server not running answers the same as a loopback listener, which
+/// asks nothing (`PortForwardingStatus::default()`, `enabled: false`). Like
+/// [`dht_status`] it is information for a curious person, never a failure
+/// to surface.
+///
+/// Cheap: one read of the forwarder's latest state, no I/O.
+pub fn port_forwarding_status() -> PortForwardingStatus {
+    with_handle(|handle| Ok(handle.port_forwarding_status())).unwrap_or_default()
 }
 
 /// Ends every proxied stream carrying `token` and answers how many that

@@ -475,6 +475,161 @@ void main() {
     });
   });
 
+  group('the Incoming connections row', () {
+    /// Pumps a [SettingsScreen] with [forwarding] wired in as the injected
+    /// reader, and scrolls the row into view.
+    Future<void> pumpSettings(
+      WidgetTester tester, {
+      required PortForwardingStatus Function() forwarding,
+      FakeCoreClient? core,
+    }) async {
+      await tester.pumpWidget(
+        CoreScope(
+          client:
+              core ??
+              FakeCoreClient(state: {CoreField.ctx: loadCtxLoggedOutFixture()}),
+          child: MaterialApp(
+            home: SettingsScreen(portForwardingStatus: forwarding),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Incoming connections'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+    }
+
+    ListTile tile(WidgetTester tester) => tester.widget<ListTile>(
+      find.widgetWithText(ListTile, 'Incoming connections'),
+    );
+
+    String subtitleOf(WidgetTester tester) =>
+        (tile(tester).subtitle! as Text).data!;
+
+    testWidgets('names the router and the port while it is open', (
+      tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        forwarding: () => const PortForwardingStatus(
+          enabled: true,
+          searched: true,
+          gateway: 'FRITZ!Box 7590',
+          port: 45810,
+          held: true,
+        ),
+      );
+
+      expect(subtitleOf(tester), 'Open through FRITZ!Box 7590, port 45810');
+    });
+
+    testWidgets('says what no router means, as information', (tester) async {
+      await pumpSettings(
+        tester,
+        forwarding: () => const PortForwardingStatus(
+          enabled: true,
+          searched: true,
+          held: false,
+        ),
+      );
+
+      expect(
+        subtitleOf(tester),
+        'No router answered, so only connections this device starts',
+      );
+      expect(
+        ((tile(tester).leading! as ExplainIcon).icon as Icon).icon,
+        Icons.router_outlined,
+      );
+      expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+    });
+
+    testWidgets('says off when the server asks no router', (tester) async {
+      await pumpSettings(
+        tester,
+        forwarding: () => const PortForwardingStatus(
+          enabled: false,
+          searched: false,
+          held: false,
+        ),
+      );
+
+      expect(subtitleOf(tester), 'Off');
+    });
+
+    testWidgets('degrades to a quiet Unknown when the read fails', (
+      tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        forwarding: () => throw StateError('no server'),
+      );
+
+      expect(subtitleOf(tester), 'Unknown');
+    });
+
+    testWidgets('sits right under Peer discovery', (tester) async {
+      await pumpSettings(
+        tester,
+        forwarding: () => const PortForwardingStatus(
+          enabled: false,
+          searched: false,
+          held: false,
+        ),
+      );
+
+      // In tree order, which is the order on screen: no row between them.
+      final titles = [
+        for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+          if (tile.title case final Text title) title.data,
+      ];
+      expect(
+        titles.indexOf('Incoming connections'),
+        titles.indexOf('Peer discovery') + 1,
+      );
+    });
+
+    testWidgets('reads again when the streaming-server section refreshes, '
+        'never on a timer of its own', (tester) async {
+      var calls = 0;
+      final core = FakeCoreClient(
+        state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+      );
+      await pumpSettings(
+        tester,
+        core: core,
+        forwarding: () {
+          calls++;
+          return PortForwardingStatus(
+            enabled: true,
+            searched: calls > 1,
+            held: false,
+          );
+        },
+      );
+      expect(calls, 1);
+      expect(subtitleOf(tester), 'Asking your router…');
+
+      await tester.pump(const Duration(minutes: 5));
+      expect(calls, 1);
+
+      core.setState(CoreField.streamingServer, {
+        'baseUrl': null,
+        'settings': {'type': 'Ready', 'content': {}},
+      });
+      await tester.pumpAndSettle();
+
+      expect(calls, 2);
+      expect(
+        subtitleOf(tester),
+        'No router answered, so only connections this device starts',
+      );
+    });
+  });
+
   group('Local', () {
     Future<void> mount(
       WidgetTester tester,

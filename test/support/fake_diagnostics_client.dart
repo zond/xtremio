@@ -13,6 +13,11 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
       nodesV6: 0,
       everBootstrapped: false,
     ),
+    this.forwarding = const PortForwardingStatus(
+      enabled: false,
+      searched: false,
+      held: false,
+    ),
     this.error,
   }) : _snapshot =
            snapshot ??
@@ -39,6 +44,13 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
 
   @override
   DhtStatus dhtStatus() => dht;
+
+  /// What [portForwardingStatus] answers. Off by default, the way a server
+  /// that is not running answers.
+  PortForwardingStatus forwarding;
+
+  @override
+  PortForwardingStatus portForwardingStatus() => forwarding;
 
   /// Thrown by [snapshot] instead of answering: the core not being up.
   Object? error;

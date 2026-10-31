@@ -150,6 +150,7 @@ String formatDiagnostics({
   ServerStorage? storage,
   ImageCacheUsage? images,
   DhtStatus? dht,
+  PortForwardingStatus? forwarding,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
   bool? redact,
@@ -181,6 +182,11 @@ String formatDiagnostics({
     // nothing here, since there is nothing to explain.
     if (dht != null && dht.unavailable)
       'dht: ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}',
+    // Whether peers can connect in, whenever the server asks a router at all.
+    // Unlike the DHT line it is said in every state, held or not: a report is
+    // where a slow swarm gets explained, and reachability is half of it.
+    if (forwarding != null && forwarding.enabled)
+      'incoming connections: ${forwarding.line}',
     'stream-server: ${snapshot.streamServerRev ?? 'unknown'}',
     'stremio-core: ${snapshot.stremioCoreRev ?? 'unknown'}',
     'log: ${snapshot.logLines.length} lines, oldest first',

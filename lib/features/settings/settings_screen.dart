@@ -57,6 +57,7 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.dhtStatus,
+    this.portForwardingStatus,
     this.pickFolder = pickFolderWithTheSystem,
     this.cache = const ServerClient(),
   });
@@ -66,6 +67,11 @@ class SettingsScreen extends StatefulWidget {
   /// `PlaybackScope.dhtStatus` is, so a widget test can hand over one that
   /// returns a chosen state or throws instead of reaching FFI.
   final DhtStatus Function()? dhtStatus;
+
+  /// Where the Incoming connections row's [PortForwardingStatus] comes from
+  /// (`ServerClient().portForwardingStatus` when absent), injectable the same
+  /// way as [dhtStatus].
+  final PortForwardingStatus Function()? portForwardingStatus;
 
   /// Asks for a folder to find local videos in; a test answers one.
   final FolderPicker pickFolder;
@@ -85,6 +91,11 @@ class SettingsScreen extends StatefulWidget {
 /// `SettingsScreen.dhtStatus`'s default: the embedded server over FFI.
 DhtStatus _defaultDhtStatus() => const ServerClient().dhtStatus;
 
+/// `SettingsScreen.portForwardingStatus`'s default: the embedded server over
+/// FFI.
+PortForwardingStatus _defaultPortForwardingStatus() =>
+    const ServerClient().portForwardingStatus;
+
 class _SettingsScreenState extends State<SettingsScreen> {
   CoreFieldNotifier? _server;
   CoreFieldNotifier? _ctx;
@@ -95,6 +106,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// itself throws. Either way the row shows a quiet "Unknown" rather than an
   /// error.
   DhtStatus? _dht;
+
+  /// Whether people can connect in through the router, read with [_dht] on the
+  /// same pull and null on the same terms.
+  PortForwardingStatus? _forwarding;
 
   /// Every value a control has sent in `UpdateSettings` that no `ctx` pull
   /// has shown yet, by key. Laid over the settings the pull brought, it is
@@ -156,16 +171,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => confirmed.forEach(_unconfirmed.remove));
   }
 
-  /// The streaming-server field pulled (or failed to): piggyback the DHT
-  /// read on that same trigger rather than giving it a poll of its own.
+  /// The streaming-server field pulled (or failed to): piggyback the DHT and
+  /// router reads on that same trigger rather than giving them a poll of
+  /// their own.
   void _onServer() {
-    DhtStatus? dht;
+    final dht = _readOrNull(widget.dhtStatus ?? _defaultDhtStatus);
+    final forwarding = _readOrNull(
+      widget.portForwardingStatus ?? _defaultPortForwardingStatus,
+    );
+    if (!mounted) return;
+    setState(() {
+      _dht = dht;
+      _forwarding = forwarding;
+    });
+  }
+
+  /// What [read] answers, or null when it throws.
+  static T? _readOrNull<T>(T Function() read) {
     try {
-      dht = (widget.dhtStatus ?? _defaultDhtStatus)();
+      return read();
     } catch (_) {
-      dht = null;
+      return null;
     }
-    if (mounted) setState(() => _dht = dht);
   }
 
   @override
@@ -385,6 +412,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 leading: const ExplainIcon(Icon(Icons.hub_outlined)),
                 title: const Text('Peer discovery'),
                 subtitle: Text(_dht?.healthLine ?? 'Unknown'),
+              ),
+            ),
+          ),
+          // Beside peer discovery because it is the other half of the same
+          // question: discovery is who this device finds, this is who can find
+          // it. `PortForwardingStatus.line` is the one place the wording
+          // lives, shared with the player's stats panel and Diagnostics.
+          Explained(
+            title: 'Incoming connections',
+            explanation:
+                'Whether other people can connect to this device to share a '
+                'torrent. Xtremio asks your router to open a port while it '
+                'runs. Downloads work either way.',
+            child: Readout(
+              child: ListTile(
+                leading: const ExplainIcon(Icon(Icons.router_outlined)),
+                title: const Text('Incoming connections'),
+                subtitle: Text(_forwarding?.line ?? 'Unknown'),
               ),
             ),
           ),

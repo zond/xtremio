@@ -171,19 +171,22 @@ extension _PlayerServerPolls on _PlayerScreenState {
 
   /// Reads the DHT's status once, for the start-up card's one explanation (a
   /// trackerless magnet on a network where it never bootstrapped) and the stats
-  /// panel's own row. Never on a timer: it is called only here, when this
-  /// torrent's polling begins. It never throws: a provider that fails (the
-  /// server not up yet) simply shows nothing.
+  /// panel's own row. Whether people can connect in through the router is read
+  /// at the same moment, for the panel's `router` row. Never on a timer: it is
+  /// called only here, when this torrent's polling begins. It never throws: a
+  /// provider that fails (the server not up yet) simply shows nothing.
   void _refreshDhtStatus() {
-    final provider = _dhtStatusProvider;
-    if (provider == null) {
-      _dhtStatus = null;
-      return;
-    }
+    _dhtStatus = _readOrNull(_dhtStatusProvider);
+    _portForwardingStatus = _readOrNull(_portForwardingStatusProvider);
+  }
+
+  /// What [provider] answers, or null when there is none or it throws.
+  static T? _readOrNull<T>(T Function()? provider) {
+    if (provider == null) return null;
     try {
-      _dhtStatus = provider();
+      return provider();
     } on Object {
-      _dhtStatus = null;
+      return null;
     }
   }
 

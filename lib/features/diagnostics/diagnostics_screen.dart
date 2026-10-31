@@ -99,6 +99,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     } catch (error) {
       dht = null;
     }
+    PortForwardingStatus? forwarding;
+    try {
+      forwarding = widget.client.portForwardingStatus();
+    } catch (error) {
+      forwarding = null;
+    }
     if (!mounted) return;
     // Read last, with nothing awaited between it and the clock below: Flutter's
     // image cache changes fast enough (a screenful of posters resolves in the
@@ -123,6 +129,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         storage: storage,
         images: images,
         dht: dht,
+        forwarding: forwarding,
         at: widget.now(),
       );
       _error = null;

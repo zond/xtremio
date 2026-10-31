@@ -263,7 +263,8 @@ class NativeFullscreenController implements FullscreenController {
 /// start-up overlay polls the embedded server with, and [proxyStreams] is the
 /// way a player ends the streams it is reading on its way out; both default to
 /// the FFI one. [displayFrameRate] defaults to the `xtremio/device` channel,
-/// and [dhtStatus] to `ServerClient().dhtStatus`. The subtitle style is not
+/// [dhtStatus] to `ServerClient().dhtStatus` and [portForwardingStatus] to
+/// `ServerClient().portForwardingStatus`. The subtitle style is not
 /// here: the screen derives it from the profile's settings in the `ctx` field.
 class PlaybackScope extends InheritedWidget {
   const PlaybackScope({
@@ -274,6 +275,7 @@ class PlaybackScope extends InheritedWidget {
     this.subtitleMatch,
     this.displayFrameRate,
     this.dhtStatus,
+    this.portForwardingStatus,
     this.proxyStreams,
     this.streamNumbers,
     this.hints,
@@ -299,6 +301,12 @@ class PlaybackScope extends InheritedWidget {
   /// asks: cheap and synchronous, read once when torrent polling starts,
   /// never on a timer of its own.
   final DhtStatus Function()? dhtStatus;
+
+  /// What the stats panel's `router` row reads
+  /// (`ServerHandle::port_forwarding_status`). A plain function for the same
+  /// reasons as [dhtStatus], and read at the same moment: once when torrent
+  /// polling starts, never on a timer of its own.
+  final PortForwardingStatus Function()? portForwardingStatus;
 
   /// How the screen ends the proxied streams its player is reading when it
   /// goes -- the other half of the token it puts in the URL. An interface
@@ -351,6 +359,12 @@ class PlaybackScope extends InheritedWidget {
   static DhtStatus Function() dhtStatusOf(BuildContext context) =>
       _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
 
+  static PortForwardingStatus Function() portForwardingStatusOf(
+    BuildContext context,
+  ) =>
+      _maybeOf(context)?.portForwardingStatus ??
+      (() => const ServerClient().portForwardingStatus);
+
   static ProxyStreamControl proxyStreamsOf(BuildContext context) =>
       _maybeOf(context)?.proxyStreams ?? const ServerClient();
 
@@ -374,6 +388,7 @@ class PlaybackScope extends InheritedWidget {
       subtitleMatch != oldWidget.subtitleMatch ||
       displayFrameRate != oldWidget.displayFrameRate ||
       dhtStatus != oldWidget.dhtStatus ||
+      portForwardingStatus != oldWidget.portForwardingStatus ||
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
       hints != oldWidget.hints ||

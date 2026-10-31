@@ -49,6 +49,7 @@ export 'state/meta_details.dart';
 export 'state/meta_item.dart';
 export 'state/meta_item_preview.dart';
 export 'state/player.dart';
+export 'state/port_forwarding_status.dart';
 export 'state/profile.dart';
 export 'state/remote_addons.dart';
 export 'state/server_storage.dart';
