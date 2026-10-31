@@ -14,6 +14,7 @@ const _tick = Duration(seconds: 1);
 /// A watched playback whose facts the test sets.
 final class _Playback {
   Duration position = Duration.zero;
+  Duration shown = const Duration(seconds: 2);
   bool moving = true;
   bool loaded = true;
   String? askable = 'media';
@@ -29,7 +30,7 @@ final class _Playback {
     stuckAfter: const Duration(seconds: 5),
     stuckTwitch: const Duration(milliseconds: 500),
     readWaitInterval: const Duration(seconds: 2),
-    readWaitShown: const Duration(seconds: 3),
+    readWaitShown: shown,
     position: () => position,
     shouldMove: () => moving,
     playingLoaded: () => loaded,
@@ -141,6 +142,36 @@ void main() {
         async.elapse(const Duration(seconds: 4));
         expect(p.watchdog.readStalled, isTrue);
         p.answer = ReadWait.none;
+        async.elapse(const Duration(seconds: 2));
+        expect(p.watchdog.readStalled, isFalse);
+      });
+    });
+
+    test('does not come back when the film moved and a read still waits', () {
+      fakeAsync((async) {
+        final p = _Playback()
+          ..answer = waited
+          ..shown = const Duration(seconds: 3);
+        p.watchdog.start();
+        async.elapse(const Duration(seconds: 6));
+        expect(p.watchdog.readStalled, isTrue);
+        p.position = const Duration(seconds: 3);
+        p.watchdog.positionMoved(p.position);
+        expect(p.watchdog.readStalled, isFalse);
+        async.elapse(const Duration(seconds: 2));
+        expect(p.watchdog.readStalled, isFalse);
+      });
+    });
+
+    test('a film just resumed has not stood still, however long it paused', () {
+      fakeAsync((async) {
+        final p = _Playback()
+          ..answer = waited
+          ..shown = const Duration(seconds: 3)
+          ..loaded = false;
+        p.watchdog.start();
+        async.elapse(const Duration(seconds: 20));
+        p.loaded = true;
         async.elapse(const Duration(seconds: 2));
         expect(p.watchdog.readStalled, isFalse);
       });

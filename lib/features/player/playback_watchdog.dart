@@ -17,7 +17,7 @@ import 'playback_stats.dart';
 ///   fooled, and it is a guess.
 /// * **A read the server knows is parked** ([readStalled]): mpv's reader of
 ///   the playing media id has been blocked for [readWaitShown] and the
-///   picture has not moved since the last ask. This is the truth the first
+///   picture has stood still for as long. This is the truth the first
 ///   guessed at. Asked every [readWaitInterval].
 ///
 /// It notifies when either changes.
@@ -82,7 +82,12 @@ class PlaybackWatchdog extends ChangeNotifier {
   bool _positionStuck = false;
   bool _readStalled = false;
   bool _readWaitFetching = false;
+
+  /// Where the picture stood when it was last seen to have moved.
   Duration? _readWaitFrom;
+
+  /// How long the asks have found the picture still at [_readWaitFrom].
+  Duration _stoodFor = Duration.zero;
   StreamSubscription<PlaybackStats>? _sample;
   bool _stopped = false;
 
@@ -128,6 +133,7 @@ class PlaybackWatchdog extends ChangeNotifier {
       );
       // The next ask measures again from here.
       _readWaitFrom = position;
+      _stoodFor = Duration.zero;
       _readStalled = false;
       changed = true;
     }
@@ -206,7 +212,11 @@ class PlaybackWatchdog extends ChangeNotifier {
   /// One ask of the server about the reads of the media id playing.
   ///
   /// The card goes up when a read has waited [readWaitShown] while the picture
-  /// stood still since the last ask. It comes down at the first ask that finds
+  /// stood still for all of that time. Stillness is measured over that whole
+  /// time because two asks apart is no measure at all: mpv's read-ahead waits
+  /// on a piece with film in hand, and a film playing normally moves about
+  /// [stuckTwitch] between two asks, so it would read as still every so often
+  /// and the card would blink over a film that plays. It comes down at the first ask that finds
   /// reads flowing, whatever the read is: the file's head, its index, the
   /// resume point. No give-up: a read that waits for ever keeps the card up
   /// for ever, and the viewer decides.
@@ -225,10 +235,18 @@ class PlaybackWatchdog extends ChangeNotifier {
     }
     if (_stopped || playingId() != id) return;
     final from = _readWaitFrom;
-    _readWaitFrom = at;
-    final still = from != null && (at - from).abs() < stuckTwitch;
+    final loaded = playingLoaded();
+    if (loaded && from != null && (at - from).abs() < stuckTwitch) {
+      _stoodFor += readWaitInterval;
+    } else {
+      // Moved, or paused: a film only just resumed has not stood still.
+      _readWaitFrom = at;
+      _stoodFor = Duration.zero;
+    }
     final stalled =
-        playingLoaded() && still && wait.waitedAtLeast(readWaitShown);
+        loaded &&
+        _stoodFor >= readWaitShown &&
+        wait.waitedAtLeast(readWaitShown);
     if (stalled == _readStalled) return;
     if (stalled) {
       DiagnosticsLog.warn(
