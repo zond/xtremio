@@ -21,6 +21,9 @@ import '../../core/core.dart';
 /// what marks them. That is the point of having a floor at all: a dialog is
 /// exactly the kind of surface nobody remembers to wrap, and this one is the
 /// last thing a viewer sees before a file goes.
+///
+/// The focus starts on Cancel. A viewer who presses OK on a remote without
+/// reading keeps the file.
 class RemoveDownloadDialog extends StatelessWidget {
   const RemoveDownloadDialog({super.key, required this.view});
 
@@ -38,6 +41,7 @@ class RemoveDownloadDialog extends StatelessWidget {
     ),
     actions: [
       TextButton(
+        autofocus: true,
         onPressed: () => Navigator.of(context).pop(),
         child: const Text('Cancel'),
       ),

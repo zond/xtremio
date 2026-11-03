@@ -678,6 +678,19 @@ void main() {
       expect(find.text('Night of the Living Dead'), findsOneWidget);
     });
 
+    testWidgets('the focus starts on Cancel', (tester) async {
+      useTallViewport(tester);
+      final downloads = FakeDownloadsClient(registry: recorded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      await openDelete(tester);
+
+      final cancel = Focus.of(tester.element(find.text('Cancel')));
+      expect(cancel.hasPrimaryFocus, isTrue);
+    });
+
     testWidgets('the question says the bytes go, and offers no keeping them', (
       tester,
     ) async {
