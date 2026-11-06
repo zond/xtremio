@@ -140,7 +140,19 @@ void main() {
   /// refuses it -- so the auto-pick keeps retrying for the rest of the
   /// media, which is the state both of the tests below start from.
   Future<PlayerHarness> refusedAutoPick(WidgetTester tester) async {
-    final player = harness();
+    // The video's own track would win, except that on this show the viewer
+    // picked an addon's file over it, so the auto-pick reaches for a file.
+    final prefs = AppPrefs(
+      client: FakePrefsClient({
+        AppPrefs.subtitlePicksKey: {
+          'shows': [
+            {'series': 'tt0063350', 'language': 'English', 'overTrack': true},
+          ],
+        },
+      }),
+    );
+    await prefs.load();
+    final player = harness(prefs: prefs);
     player.fixture['subtitlePreference'] = {
       'enabled': true,
       'source': 'external',

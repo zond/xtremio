@@ -797,11 +797,15 @@ the remembered group, else the head of the language. It picks nothing at
 all for a language the episode does not offer or a show never watched. The
 best candidate in so far goes up at once and is **upgraded as addons
 answer**. Every answer runs the pick again, and a strictly better one
-replaces what is on screen. `_subtitleRank` ranks a file of the remembered
-group first, then any file of the language, then the video's own track as
-a stopgap. For a show watched on its track the order is the other way
-round. It settles once nothing can
-beat what is up or every addon has answered, and a pick by hand ends it.
+replaces what is on screen. `_subtitleRank` ranks the video's own track
+first, since it was made for this video and usually beats a download. Then
+comes a file of the remembered group, then any file of the language. The row
+turns that round (`overTrack`) only where the viewer picked a file while the
+video had a track in the same language: then the track is a stopgap until a
+file arrives. It settles once nothing can beat what is up or every addon has
+answered, and a pick by hand ends it. mpv can list the video's tracks after
+every addon has answered, so a changed track list opens it again
+(`SubtitleAutoPick.tracksChanged`).
 Only a pick by hand writes, and a preference synthesized from the row is
 never dispatched.
 The menu lifts the two languages picked most often ("You usually pick"),

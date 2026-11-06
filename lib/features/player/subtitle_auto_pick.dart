@@ -38,6 +38,12 @@ class SubtitleAutoPick {
     if (_rank != null) _settled = true;
   }
 
+  /// The video reported a different set of its own tracks. mpv can list them
+  /// after every addon has answered, and a track is a candidate the pick has
+  /// not seen. So the pick opens again. The rank still has to rise, so this
+  /// cannot switch to something no better.
+  void tracksChanged() => _settled = false;
+
   /// A pick went to the engine and has not been answered yet.
   void applying() => _applying = true;
 

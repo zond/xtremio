@@ -999,7 +999,18 @@ void main() {
     // back. mpv is already drawing a default-flagged embedded track that
     // is in step with the video; the preference asks for a 25 fps addon
     // file and mpv refuses it. Both values go back with the tracks, and
-    // neither was ever anything but untouched.
+    // neither was ever anything but untouched. The viewer picked a file over
+    // the video's own track on this show, or the track would simply win.
+    final prefs = AppPrefs(
+      client: FakePrefsClient({
+        AppPrefs.subtitlePicksKey: {
+          'shows': [
+            {'series': 'tt0063350', 'language': 'English', 'overTrack': true},
+          ],
+        },
+      }),
+    );
+    await prefs.load();
     final harness = subtitleHarness(
       [
         upload(
@@ -1011,6 +1022,7 @@ void main() {
         ),
       ],
       preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
+      prefs: prefs,
     );
     await harness.pump(tester);
     final engine = harness.engine..subtitleError = StateError('mpv: no');

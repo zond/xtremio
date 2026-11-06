@@ -21,12 +21,14 @@ void main() {
     String language = 'Swedish',
     String? releaseGroup,
     bool embedded = false,
+    bool overTrack = false,
   }) => memory.remembering(
     SubtitleShowPick(
       series: series,
       language: language,
       releaseGroup: releaseGroup,
       embedded: embedded,
+      overTrack: overTrack,
     ),
   );
 
@@ -215,6 +217,22 @@ void main() {
     });
   });
 
+  test('a file picked over the track is a different row from the same file '
+      'picked where there was none', () {
+    const plain = SubtitleShowPick(
+      series: gilmore,
+      language: 'Swedish',
+      releaseGroup: 'fgt',
+    );
+    const over = SubtitleShowPick(
+      series: gilmore,
+      language: 'Swedish',
+      releaseGroup: 'fgt',
+      overTrack: true,
+    );
+    expect(over, isNot(plain));
+  });
+
   group('the stored value', () {
     test('survives a round trip', () {
       final made = picked(
@@ -225,6 +243,7 @@ void main() {
           embedded: true,
         ),
         releaseGroup: 'fgt',
+        overTrack: true,
       ).remembering(const SubtitleShowPick.off(series: 'tt1234567'));
 
       final read = SubtitlePickMemory.fromJson(made.toJson());
@@ -232,6 +251,8 @@ void main() {
       expect(read, made);
       expect(read.forSeries(breakingBad)!.embedded, isTrue);
       expect(read.forSeries(gilmore)!.releaseGroup, 'fgt');
+      expect(read.forSeries(gilmore)!.overTrack, isTrue);
+      expect(read.forSeries(breakingBad)!.overTrack, isFalse);
       expect(read.forSeries('tt1234567')!.enabled, isFalse);
     });
 

@@ -13,7 +13,7 @@ final class _WantedSubtitle {
     required this.enabled,
     required this.language,
     this.releaseGroup,
-    this.embeddedFirst = false,
+    this.filesFirst = false,
   });
 
   /// False means subtitles off, and it is an answer rather than the
@@ -30,9 +30,11 @@ final class _WantedSubtitle {
   /// language because the group it named is not on offer this episode.
   final String? releaseGroup;
 
-  /// Whether a track inside the video wins over an addon's file of the
-  /// same language.
-  final bool embeddedFirst;
+  /// Whether an addon's file wins over a track inside the video of the same
+  /// language. Normally the track wins: it was made for this very video, and
+  /// it is usually better than a download. Only a viewer who picked a file
+  /// over the track on this show turns that round.
+  final bool filesFirst;
 }
 
 /// Subtitles: picks by hand and the auto-pick, timing and what is
@@ -517,9 +519,18 @@ extension _PlayerSubtitles on _PlayerScreenState {
     // names nothing to look for next episode. The same rule keeps an unnamed
     // release group out of the timing memory.
     if (subtitle.lang.trim().isNotEmpty) {
+      final language = subtitleLanguageLabel(subtitle.lang);
       _rememberPick(
-        language: subtitleLanguageLabel(subtitle.lang),
+        language: language,
         releaseGroup: subtitle.releaseGroupKey,
+        // A file chosen while the video had a track in the language is a
+        // judgement against that track. One chosen where there was none says
+        // nothing about tracks, and the next episode's track still wins.
+        overTrack: _tracks.value.subtitle.any(
+          (track) =>
+              track.language != null &&
+              subtitleLanguageLabel(track.language!) == language,
+        ),
       );
     }
   }
@@ -548,6 +559,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
     String? language,
     String? releaseGroup,
     bool embedded = false,
+    bool overTrack = false,
   }) {
     final prefs = _prefs;
     final series = _syncSeries;
@@ -562,6 +574,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
                     language: language,
                     releaseGroup: releaseGroup,
                     embedded: embedded,
+                    overTrack: overTrack,
                   ),
           ),
         )
@@ -579,23 +592,28 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// what a pick is remembered as. A code coming from the core goes through the
   /// same function to get there, so `sv` and `swe` are still one language on
   /// both paths.
+  ///
+  /// Whether files go first comes only from the memory, on both paths: the
+  /// core's `source` says what was picked, never whether the video had a
+  /// track to pick instead.
   _WantedSubtitle? _wanted(PlayerState state) {
     final preference = state.subtitlePreference;
+    final remembered = _prefs?.subtitlePicks.forSeries(_syncSeries);
+    final filesFirst = remembered?.overTrack ?? false;
     if (preference != null) {
       final language = preference.language;
       return _WantedSubtitle(
         enabled: preference.enabled,
         language: language == null ? null : subtitleLanguageLabel(language),
-        embeddedFirst: preference.source == 'embedded',
+        filesFirst: filesFirst,
       );
     }
-    final remembered = _prefs?.subtitlePicks.forSeries(_syncSeries);
     if (remembered == null) return null;
     return _WantedSubtitle(
       enabled: remembered.enabled,
       language: remembered.language,
       releaseGroup: remembered.releaseGroup,
-      embeddedFirst: remembered.embedded,
+      filesFirst: filesFirst,
     );
   }
 
@@ -772,17 +790,20 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// when it is what is wanted: the remembered release group, where one is
   /// remembered.
   ///
-  /// - **Addon file first** (the ordinary case): an exact file is the top,
-  ///   another file of the language is next, and the video's own track
-  ///   is the stopgap, on screen until a file arrives.
-  /// - **Track first** (the show was watched on the file's own track): the
-  ///   track is the top, and a file only stands in where there is none.
+  /// - **Track first** (the ordinary case): the video's own track is the top.
+  ///   Where there is none, an exact file beats another file of the language.
+  /// - **Addon file first** (on this show the viewer picked a file over the
+  ///   track): an exact file is the top, another file of the language is
+  ///   next, and the track is the stopgap, on screen until a file arrives.
   static int _subtitleRank(
     _WantedSubtitle preference, {
     required bool external,
     required bool exact,
   }) {
-    if (preference.embeddedFirst) return external ? 2 : _topSubtitleRank;
+    if (!preference.filesFirst) {
+      if (!external) return _topSubtitleRank;
+      return exact ? 2 : 1;
+    }
     if (!external) return 1;
     return exact ? _topSubtitleRank : 2;
   }

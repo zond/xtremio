@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1564,6 +1564,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   }
 
   void _onTracks(PlaybackTracks tracks) {
+    // A track the auto-pick has not seen may beat what it settled on.
+    if (!listEquals(tracks.subtitle, _tracks.value.subtitle)) {
+      _autoPick.tracksChanged();
+    }
     // The bars read the selection and the track count directly.
     setState(() => _tracks.value = tracks);
     _maybeAutoPickSubtitles();

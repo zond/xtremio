@@ -40,12 +40,14 @@ import 'package:flutter/foundation.dart';
 final class SubtitleShowPick {
   /// A language picked by hand. It carries the release group of the very file
   /// when the addon named one, and sets [embedded] when the pick was a track
-  /// inside the video rather than an addon's file.
+  /// inside the video rather than an addon's file. [overTrack] says an addon's
+  /// file was picked while the video had a track in the same language.
   const SubtitleShowPick({
     required this.series,
     required String this.language,
     this.releaseGroup,
     this.embedded = false,
+    this.overTrack = false,
   }) : enabled = true;
 
   /// Subtitles turned off, on purpose, on this show.
@@ -53,7 +55,8 @@ final class SubtitleShowPick {
     : enabled = false,
       language = null,
       releaseGroup = null,
-      embedded = false;
+      embedded = false,
+      overTrack = false;
 
   /// The show or film: the meta item's id and not the episode's, the same
   /// value `SubtitleSyncEntry.series` is keyed on, because a language is
@@ -79,6 +82,12 @@ final class SubtitleShowPick {
   /// session preference's `source` says too.
   final bool embedded;
 
+  /// Whether an addon's file was picked although the video had a track in the
+  /// same language. The video's own track is usually the better subtitle, so
+  /// the auto-pick prefers it. This is the one thing that says not to, on
+  /// this show.
+  final bool overTrack;
+
   /// The row as it is written to the preferences file, holding only what this
   /// pick actually knows. So a file someone reads says `off` where subtitles
   /// were turned off, and names a group only where one was named.
@@ -88,6 +97,7 @@ final class SubtitleShowPick {
     'language': ?language,
     'releaseGroup': ?releaseGroup,
     if (embedded) 'embedded': true,
+    if (overTrack) 'overTrack': true,
   };
 
   /// One stored row, or null when it is not one this build can use: no series,
@@ -105,6 +115,7 @@ final class SubtitleShowPick {
       language: language,
       releaseGroup: _token(json['releaseGroup'])?.toLowerCase(),
       embedded: json['embedded'] == true,
+      overTrack: json['overTrack'] == true,
     );
   }
 
@@ -121,7 +132,8 @@ final class SubtitleShowPick {
       other.enabled == enabled &&
       other.language == language &&
       other.releaseGroup == releaseGroup &&
-      other.embedded == embedded;
+      other.embedded == embedded &&
+      other.overTrack == overTrack;
 
   @override
   int get hashCode => Object.hash(series, enabled, language, releaseGroup);

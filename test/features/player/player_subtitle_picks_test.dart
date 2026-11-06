@@ -201,13 +201,53 @@ void main() {
     ));
   });
 
-  testWidgets('the file\'s own track stands in until an addon file arrives', (
-    tester,
-  ) async {
+  testWidgets('the video\'s own track beats an addon\'s file', (tester) async {
     useWideViewport(tester);
-    // Watched from an addon's file, in a language the video also carries
-    // a track in: the video loads before any addon has answered.
-    final prefs = remembering({'language': 'English'});
+    // Watched from an addon's file, where the video had no track. This one
+    // has an English track, and it was made for this video.
+    final prefs = remembering({'language': 'English', 'releaseGroup': 'fgt'});
+    await prefs.load();
+    final harness = harnessWith(twoEnglish(), prefs: prefs);
+    withSlowAddon(harness);
+    await playingWithTrack(tester, harness);
+    expect(harness.engine.setSubtitleTrackIds, ['3']);
+    expect(harness.engine.externalSubtitles, isEmpty);
+
+    // Not even the remembered group's file, arriving late, replaces it.
+    await slowAddonAnswers(tester, harness, [
+      upload('en-3', 'eng', swedishUrl, releaseGroup: 'FGT'),
+    ]);
+    expect(harness.engine.setSubtitleTrackIds, ['3']);
+    expect(harness.engine.externalSubtitles, isEmpty);
+  });
+
+  testWidgets('a track the video reports late still wins', (tester) async {
+    useWideViewport(tester);
+    // Every addon has answered and a file is up before mpv lists the video's
+    // own tracks. The pick had settled on the file.
+    final prefs = remembering({'language': 'English', 'embedded': true});
+    await prefs.load();
+    final harness = await playing(
+      tester,
+      harnessWith(twoEnglish(), prefs: prefs),
+    );
+    expect(harness.engine.externalSubtitles, hasLength(1));
+
+    harness.engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '3', language: 'eng')],
+      ),
+    );
+    await pumpEvents(tester);
+    expect(harness.engine.setSubtitleTrackIds, ['3']);
+  });
+
+  testWidgets('the video\'s own track stands in until a file arrives, on a '
+      'show where a file was picked over it', (tester) async {
+    useWideViewport(tester);
+    // The viewer picked an addon's file although the video had a track in
+    // the language: the video loads before any addon has answered.
+    final prefs = remembering({'language': 'English', 'overTrack': true});
     await prefs.load();
     final harness = harnessWith(const [], prefs: prefs);
     withSlowAddon(harness);
@@ -438,6 +478,37 @@ void main() {
     expect(harness.engine.externalSubtitles.last.$1, Uri.parse(swedishUrl));
     // One pick, one count: this is what the pins are read from.
     expect(prefs.subtitlePicks.languages, {'Swedish': 1});
+  });
+
+  testWidgets('a file picked over the video\'s own track is remembered as '
+      'such', (tester) async {
+    useWideViewport(tester);
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await prefs.load();
+    await playingWithTrack(
+      tester,
+      harnessWith([
+        upload('en-1', 'eng', plainUrl, releaseGroup: 'PLAIN'),
+        upload('sv-1', 'swe', swedishUrl, releaseGroup: 'FGT'),
+      ], prefs: prefs),
+    );
+
+    // Swedish: the video has no Swedish track, so this says nothing about
+    // its tracks.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Swedish'));
+    await tester.pumpAndSettle();
+    expect(prefs.subtitlePicks.forSeries(series)!.overTrack, isFalse);
+
+    // English: the addon's file, below the video's own English track.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+    final pick = prefs.subtitlePicks.forSeries(series)!;
+    expect(pick.embedded, isFalse);
+    expect(pick.overTrack, isTrue);
   });
 
   testWidgets('the auto-pick writes nothing down', (tester) async {
