@@ -24,6 +24,7 @@ import 'features/update/update_dialog.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
+import 'shell/navigation_bar_clearance.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 import 'shell/server_footprint.dart';
@@ -890,7 +891,9 @@ class _XtremioAppState extends State<XtremioApp> {
                                       context,
                                     ),
                                   ),
-                                  builder: isTv ? TvMediaQuery.builder : null,
+                                  builder: isTv
+                                      ? TvMediaQuery.builder
+                                      : NavigationBarClearance.builder,
                                   navigatorObservers: [
                                     _routes,
                                     if (kDebugMode) RouteLogObserver(),
