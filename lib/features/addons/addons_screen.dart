@@ -232,48 +232,65 @@ class _AddonsScreenState extends State<AddonsScreen> {
                 return Column(
                   children: [
                     if (profile.addonsLocked) const AddonsLockedBanner(),
-                    AddonDirectoryBar(onRefresh: _refreshFromAccount),
+                    AddonDirectoryBar(
+                      onRefresh: _refreshFromAccount,
+                      catalogInstalled: profile.addons.any(
+                        (addon) =>
+                            addon.transportUrl ==
+                            AddonDirectoryBar.catalogManifestUrl,
+                      ),
+                      onAddCatalog: () =>
+                          _openDetails(AddonDirectoryBar.catalogManifestUrl),
+                    ),
                     Expanded(
-                      child: TabBarView(
-                        children: [
-                          _InstalledTab(
-                            state: installedJson == null
-                                ? null
-                                : _installedParse.of(installedJson),
-                            locked: profile.addonsLocked,
-                            health: _health!,
-                            sort: _sort,
-                            onSort: (sort) => setState(() => _sort = sort),
-                            onForget: _forgetHistory,
-                            onSelect: (request) => _client?.dispatch(
-                              CoreActions.loadInstalledAddons(request),
+                      // One unit in the Tab order, after the bar above it. A
+                      // list scrolled down has tiles above its top edge, and
+                      // sorted by position on their own those came before the
+                      // tabs, so Tab went round the list and never left it.
+                      child: FocusTraversalGroup(
+                        child: TabBarView(
+                          children: [
+                            _InstalledTab(
+                              state: installedJson == null
+                                  ? null
+                                  : _installedParse.of(installedJson),
+                              locked: profile.addonsLocked,
+                              health: _health!,
+                              sort: _sort,
+                              onSort: (sort) => setState(() => _sort = sort),
+                              onForget: _forgetHistory,
+                              onSelect: (request) => _client?.dispatch(
+                                CoreActions.loadInstalledAddons(request),
+                              ),
+                              onUninstall: (addon) => _client?.dispatch(
+                                CoreActions.uninstallAddon(addon),
+                              ),
+                              onConfigure: (addon) =>
+                                  openAddonConfiguration(context, addon),
+                              onOpen: (addon) =>
+                                  _openDetails(addon.transportUrl),
                             ),
-                            onUninstall: (addon) => _client?.dispatch(
-                              CoreActions.uninstallAddon(addon),
+                            _CommunityTab(
+                              state: remoteJson == null
+                                  ? null
+                                  : _remoteParse.of(remoteJson),
+                              profile: profile,
+                              search: _search,
+                              sort: _remoteSort,
+                              onSort: (sort) =>
+                                  setState(() => _remoteSort = sort),
+                              onSelect: _selectRemote,
+                              onScroll: _onRemoteScroll,
+                              onInstall: (addon) => _client?.dispatch(
+                                CoreActions.installAddon(addon),
+                              ),
+                              onConfigure: (addon) =>
+                                  openAddonConfiguration(context, addon),
+                              onOpen: (addon) =>
+                                  _openDetails(addon.transportUrl),
                             ),
-                            onConfigure: (addon) =>
-                                openAddonConfiguration(context, addon),
-                            onOpen: (addon) => _openDetails(addon.transportUrl),
-                          ),
-                          _CommunityTab(
-                            state: remoteJson == null
-                                ? null
-                                : _remoteParse.of(remoteJson),
-                            profile: profile,
-                            search: _search,
-                            sort: _remoteSort,
-                            onSort: (sort) =>
-                                setState(() => _remoteSort = sort),
-                            onSelect: _selectRemote,
-                            onScroll: _onRemoteScroll,
-                            onInstall: (addon) => _client?.dispatch(
-                              CoreActions.installAddon(addon),
-                            ),
-                            onConfigure: (addon) =>
-                                openAddonConfiguration(context, addon),
-                            onOpen: (addon) => _openDetails(addon.transportUrl),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -300,13 +317,35 @@ class _AddonsScreenState extends State<AddonsScreen> {
 /// laptop *into their Stremio account* and pulls it down here. That is what
 /// the line under the buttons says.
 ///
-/// It sits above the tabs so both of them have it, and it is two ordinary
-/// buttons so the D-pad reaches them like anything else.
+/// The site is an addon too: installed, its lists join the Community tab's
+/// Catalog menu, and the site can be browsed without a browser. Until it is
+/// installed, a third button opens its install screen, the same one its
+/// Install button would. That button saves finding the site's own addon on
+/// the site, which is slow to answer when it is busy.
+///
+/// It sits above the tabs so both of them have it, and its buttons are
+/// ordinary buttons so the D-pad reaches them like anything else.
 class AddonDirectoryBar extends StatelessWidget {
-  const AddonDirectoryBar({super.key, required this.onRefresh});
+  const AddonDirectoryBar({
+    super.key,
+    required this.onRefresh,
+    required this.catalogInstalled,
+    required this.onAddCatalog,
+  });
 
   /// Pulls the account's addon list again (`PullAddonsFromAPI`).
   final VoidCallback onRefresh;
+
+  /// Whether the site's own addon is installed, which hides its button.
+  final bool catalogInstalled;
+
+  /// Opens the install screen for [catalogManifestUrl].
+  final VoidCallback onAddCatalog;
+
+  /// The site's own addon. It answers with the site's list of addons.
+  static const String catalogManifestUrl =
+      'https://stremio-addons.net/api/manifest.json';
+  static const String catalogLabel = 'Add the stremio-addons.net catalog';
 
   static const String directoryUrl = 'https://stremio-addons.net';
   static const String directoryLabel = 'Find more addons at stremio-addons.net';
@@ -314,9 +353,10 @@ class AddonDirectoryBar extends StatelessWidget {
   static const String refreshingMessage = 'Refreshing addons from your account';
   static const String explanation =
       'Install an addon there into your Stremio account and refresh, and it '
-      'shows up here. That site is an addon itself too. Install it, and its '
-      'lists join the Catalog menu on this tab. That way you can browse the '
-      'site without opening a browser.';
+      'shows up here.';
+  static const String catalogExplanation =
+      'Add the stremio-addons.net catalog, and its lists join the Catalog menu '
+      'on the Community tab. Then you can browse the site without a browser.';
 
   @override
   Widget build(BuildContext context) {
@@ -338,12 +378,20 @@ class AddonDirectoryBar extends StatelessWidget {
                 icon: const Icon(Icons.sync, size: 18),
                 label: const Text(refreshLabel),
               ),
+              if (!catalogInstalled)
+                TextButton.icon(
+                  onPressed: onAddCatalog,
+                  icon: const Icon(Icons.library_add, size: 18),
+                  label: const Text(catalogLabel),
+                ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              explanation,
+              catalogInstalled
+                  ? explanation
+                  : '$explanation $catalogExplanation',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

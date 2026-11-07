@@ -692,7 +692,7 @@ void main() {
 
     // The one line a television user needs: a remote cannot work a browser,
     // so the website installs into the account and this pulls it down.
-    expect(find.text(AddonDirectoryBar.explanation), findsOneWidget);
+    expect(find.textContaining(AddonDirectoryBar.explanation), findsOneWidget);
 
     await tester.tap(find.text(AddonDirectoryBar.refreshLabel));
     await tester.pumpAndSettle();
@@ -714,5 +714,50 @@ void main() {
 
     expect(find.text(AddonDirectoryBar.directoryLabel), findsOneWidget);
     expect(find.text(AddonDirectoryBar.refreshLabel), findsOneWidget);
+  });
+
+  testWidgets('the site\'s own catalog opens its install screen in the app', (
+    tester,
+  ) async {
+    final opener = FakeLinkOpener();
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core, opener));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining(AddonDirectoryBar.catalogExplanation),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text(AddonDirectoryBar.catalogLabel));
+    await tester.pumpAndSettle();
+
+    // The install screen, as the site's own Install button would open it. No
+    // browser, and nothing installed until that screen's button is pressed.
+    expect(opener.opened, isEmpty);
+    expect(
+      tester
+          .widget<AddonDetailsScreen>(find.byType(AddonDetailsScreen))
+          .transportUrl,
+      'https://stremio-addons.net/api/manifest.json',
+    );
+    expect(ctxActions(core), isEmpty);
+  });
+
+  testWidgets('the catalog button is gone once the catalog is installed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        fakeCore(ctx: ctxWith(extra: [AddonDirectoryBar.catalogManifestUrl])),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(AddonDirectoryBar.catalogLabel), findsNothing);
+    expect(
+      find.textContaining(AddonDirectoryBar.catalogExplanation),
+      findsNothing,
+    );
+    expect(find.text(AddonDirectoryBar.explanation), findsOneWidget);
   });
 }
