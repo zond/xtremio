@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
-import '../../shell/external_link.dart';
 import '../../shell/tv_density.dart';
 import '../../shell/tv_text_entry.dart';
 import '../../widgets/content_type_label.dart';
@@ -304,24 +303,21 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 }
 
-/// Where to find addons this catalog does not list, and how one installed
-/// there arrives here.
+/// Where to find addons the official catalogs do not list, and how one
+/// installed somewhere else arrives here.
 ///
-/// stremio-addons.net is the community's directory; its Install button
-/// hands the platform a `stremio://` link, which this app registers and
-/// opens as an addon details screen. It is a link out to the browser
-/// through the [ExternalLinkScope] and never an in-app web view.
+/// stremio-addons.net, the community's directory, is an addon too. Installed,
+/// its lists join the Community tab's Catalog menu, and every addon on the
+/// site can be browsed and installed in the app. Until it is installed, a
+/// button opens its install screen. There is no link out to the site itself:
+/// the catalog covers what it lists, and the site is slow to answer when it is
+/// busy. An Install button on any website still works, through the
+/// `stremio://` link this app registers.
 ///
-/// [onRefresh] is the other half, and the only half a television has: a
-/// remote cannot work a browser, so a TV user installs on a phone or a
-/// laptop *into their Stremio account* and pulls it down here. That is what
-/// the line under the buttons says.
-///
-/// The site is an addon too: installed, its lists join the Community tab's
-/// Catalog menu, and the site can be browsed without a browser. Until it is
-/// installed, a third button opens its install screen, the same one its
-/// Install button would. That button saves finding the site's own addon on
-/// the site, which is slow to answer when it is busy.
+/// [onRefresh] pulls down what was installed *into the Stremio account*
+/// somewhere else: on a website, or in another Stremio app. A television
+/// needs it most, since a remote cannot work a browser. That is what the
+/// line under the buttons says.
 ///
 /// It sits above the tabs so both of them have it, and its buttons are
 /// ordinary buttons so the D-pad reaches them like anything else.
@@ -347,16 +343,14 @@ class AddonDirectoryBar extends StatelessWidget {
       'https://stremio-addons.net/api/manifest.json';
   static const String catalogLabel = 'Add the stremio-addons.net catalog';
 
-  static const String directoryUrl = 'https://stremio-addons.net';
-  static const String directoryLabel = 'Find more addons at stremio-addons.net';
   static const String refreshLabel = 'Refresh addons from account';
   static const String refreshingMessage = 'Refreshing addons from your account';
   static const String explanation =
-      'Install an addon there into your Stremio account and refresh, and it '
-      'shows up here.';
+      'An addon installed into your Stremio account somewhere else shows up '
+      'here when you refresh.';
   static const String catalogExplanation =
       'Add the stremio-addons.net catalog, and its lists join the Catalog menu '
-      'on the Community tab. Then you can browse the site without a browser.';
+      'on the Community tab.';
 
   @override
   Widget build(BuildContext context) {
@@ -368,22 +362,17 @@ class AddonDirectoryBar extends StatelessWidget {
         children: [
           Wrap(
             children: [
-              TextButton.icon(
-                onPressed: () => openInBrowser(context, directoryUrl),
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text(directoryLabel),
-              ),
-              TextButton.icon(
-                onPressed: onRefresh,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text(refreshLabel),
-              ),
               if (!catalogInstalled)
                 TextButton.icon(
                   onPressed: onAddCatalog,
                   icon: const Icon(Icons.library_add, size: 18),
                   label: const Text(catalogLabel),
                 ),
+              TextButton.icon(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.sync, size: 18),
+                label: const Text(refreshLabel),
+              ),
             ],
           ),
           Padding(
@@ -391,7 +380,7 @@ class AddonDirectoryBar extends StatelessWidget {
             child: Text(
               catalogInstalled
                   ? explanation
-                  : '$explanation $catalogExplanation',
+                  : '$catalogExplanation $explanation',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

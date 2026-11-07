@@ -294,9 +294,10 @@ a restart through a security-scoped bookmark. See
 
 Settings lists the installed and community addons. An addon can be
 installed, updated, uninstalled or configured by manifest URL. Settings
-also has a link out to [stremio-addons.net](https://stremio-addons.net)
-and **Refresh addons from account**, which is also how a television gets
-an addon installed from a website on another device. An addon site's Install button opens the addon's
+also has **Add the stremio-addons.net catalog**, which puts that site's
+addons in the Community tab's Catalog menu, and **Refresh addons from
+account**, which is also how a television gets an addon installed from a
+website on another device. An addon site's Install button opens the addon's
 details screen through a `stremio://` link ([DEEP_LINKS.md](DEEP_LINKS.md)).
 Each installed addon carries a verdict on how it has been answering
 ([ADDONS.md](ADDONS.md)).

@@ -646,41 +646,6 @@ void main() {
     expect(find.text('Addon is already installed'), findsOneWidget);
   });
 
-  testWidgets('the addon directory opens in the browser, never in the app', (
-    tester,
-  ) async {
-    final opener = FakeLinkOpener();
-    await tester.pumpWidget(harness(fakeCore(), opener));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text(AddonDirectoryBar.directoryLabel));
-    await tester.pumpAndSettle();
-
-    // Out to the system browser (the stance in lib/shell/external_link.dart:
-    // the address bar has to be there to be trusted), so nothing is pushed
-    // over the Addons screen.
-    expect(opener.opened, [Uri.parse(AddonDirectoryBar.directoryUrl)]);
-    expect(find.byType(AddonsScreen), findsOneWidget);
-    expect(find.byType(AddonDetailsScreen), findsNothing);
-  });
-
-  testWidgets('a directory that cannot be opened says so', (tester) async {
-    final opener = FakeLinkOpener(result: false);
-    await tester.pumpWidget(harness(fakeCore(), opener));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text(AddonDirectoryBar.directoryLabel));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(
-      find.text(
-        'Could not open ${Uri.parse(AddonDirectoryBar.directoryUrl).host}',
-      ),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('Refresh from account pulls the addons again, and the screen '
       'says an addon installed on the website arrives that way', (
     tester,
@@ -691,7 +656,8 @@ void main() {
     expect(ctxActions(core), isEmpty);
 
     // The one line a television user needs: a remote cannot work a browser,
-    // so the website installs into the account and this pulls it down.
+    // so an addon is installed into the account elsewhere and this pulls it
+    // down.
     expect(find.textContaining(AddonDirectoryBar.explanation), findsOneWidget);
 
     await tester.tap(find.text(AddonDirectoryBar.refreshLabel));
@@ -705,14 +671,14 @@ void main() {
     expect(find.text(AddonDirectoryBar.refreshingMessage), findsOneWidget);
   });
 
-  testWidgets('the directory and the refresh are on the community tab too', (
+  testWidgets('the catalog and the refresh are on the community tab too', (
     tester,
   ) async {
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
     await openCommunity(tester);
 
-    expect(find.text(AddonDirectoryBar.directoryLabel), findsOneWidget);
+    expect(find.text(AddonDirectoryBar.catalogLabel), findsOneWidget);
     expect(find.text(AddonDirectoryBar.refreshLabel), findsOneWidget);
   });
 
