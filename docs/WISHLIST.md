@@ -257,7 +257,7 @@ Flutter delivers HDR comes from apps, not from Flutter's own docs:
 - [m3u-tv](https://github.com/m3ue/m3u-tv/issues/221), a Flutter Android TV
   app, moved full-screen playback from a Flutter texture to a Media3
   `SurfaceView` in hybrid composition (October 2026). HDR output works
-  there, and it matches the frame rate as this app does.
+  there.
 - [DreamPlayer](https://github.com/mangeshghodke/DreamPlayer), a Flutter
   player for Android TV, does the same with Media3 for HDR10+ and Dolby
   Vision. It also runs libmpv in its own `SurfaceView` through hybrid
@@ -282,7 +282,6 @@ Any of the three also needs these:
 - Ask the display what it takes (`Display.getHdrCapabilities()`, and per
   mode from API 34). Send HDR only to a television that takes it, and
   tone-map as today otherwise.
-- Make the frame-rate switch (`FrameRateMode`) follow onto the new surface.
 - Look at Flutter's controls over an HDR layer on a real panel. Android
   dims graphics to SDR white there.
 

@@ -177,13 +177,6 @@ extension _PlayerNextEpisode on _PlayerScreenState {
     }
     _phase = _ScreenPhase.handedOver;
     DiagnosticsLog.info('player', 'handing over to the next episode');
-    // Before the push, not in [dispose]. `pushReplacement` keeps this screen
-    // alive until the transition finishes, and the new player can read its
-    // file's rate and ask for it inside that (an already downloaded episode
-    // opens at once). This screen's dispose would then clear the ask the
-    // successor had just made. Nothing is left holding a rate either way,
-    // because the release comes first.
-    _releaseDisplayFrameRate();
     final current = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(

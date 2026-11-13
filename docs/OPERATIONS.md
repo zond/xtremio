@@ -361,9 +361,8 @@ every five seconds while the panel is up and the app in front (`PlayerScreen.tor
 are polled every two seconds, panel or not, because the stall card reads
 them too.
 
-On Android a `display` row gives the refresh rate the display settled on;
-see [ANDROID.md](ANDROID.md#telling-mpv-when-the-screen-refreshes) for how
-it and the `hwdec` row are read.
+See [ANDROID.md](ANDROID.md#decoding-straight-to-the-screen) for how the
+`hwdec` row is read on Android.
 
 ## Building for iOS
 

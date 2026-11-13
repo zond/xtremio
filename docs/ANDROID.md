@@ -143,13 +143,11 @@ renderer for them.
     feature. Any error means "a phone", and no other platform calls it. The
     answer goes down the tree as `DeviceScope`, the only thing the TV layout
     keys on. The channel also carries `os` (the Diagnostics device line),
-    `editText`, `startSpeech` and `stopSpeech` (below), the
-    frame-rate calls, and `castDeviceAddress`. That is the
+    `editText`, `startSpeech` and `stopSpeech` (below), and
+    `castDeviceAddress`. That is the
     receiver's IPv4 address off the MediaRouter route, which
     `flutter_chrome_cast` drops and the server needs to pick an interface
     (see [CASTING.md](CASTING.md)).
-  - `xtremio/display`: an event channel pushing the display's refresh rate
-    (below).
   - `xtremio/speech`: an event channel carrying what the search field's
     microphone hears (below).
   - `xtremio/cast_picture`: an event channel, `CastPictureChannel.kt`,
@@ -328,45 +326,30 @@ D-pad, select, Enter and Back carry no character. It is untested on a
 device whether a keyboard paired with a television delivers its keys to
 Flutter this way.
 
-## Telling the television what rate the film is
+## The display mode is left alone
 
-A 23.976 fps film on a 59.94 Hz output lands on a 3:2 cadence, which is the
-picture jumping. So the player asks the display for the film's rate while
-a film plays, and gives it back when it stops. `DisplayFrameRate`
-(`lib/shell/display_frame_rate.dart`) is the Dart half, asked only on a
-television, with the container's rate (`PlaybackEngine.videoFrameRate`).
-`MainActivity` answers on one of two paths:
+The player never asks the display for a mode or a frame rate.
+The television stays at the rate its menus run at, usually 59.94 Hz.
+It once switched to the film's rate while a film played.
 
-- **Android 12 (API 31) and up**: `Surface.setFrameRate` on Flutter's
-  surface, `FRAME_RATE_COMPATIBILITY_FIXED_SOURCE` and
-  `CHANGE_FRAME_RATE_ALWAYS` (a switch that retrains HDMI and blanks the
-  picture for a second is allowed, since every useful one is of that kind).
-- **Android 11 and below**: the window's `preferredDisplayModeId`, the mode
-  of the current resolution whose rate is the evenest whole multiple of the
-  film's (`FrameRateMode.matching`).
+That switch made things worse.
+A film goes straight to its own `SurfaceView` (`vo=mediacodec_embed`).
+mpv hands each decoded frame to Android to show at once, with no
+presentation time.
+At 24 Hz the panel refreshes once per frame.
+Any jitter in mpv's hand-overs then puts two frames into one refresh, and
+SurfaceFlinger drops the older (`CCodecBufferChannel: no present fence for
+frame N`).
+On a Chromecast with Google TV, a 1080p HEVC episode dropped 80 frames in
+91 s at 23.976 Hz and 5 in 52 s at 59.94 Hz (measured 2026-11-13).
+A mode switch also blacks the screen for about a second each way.
+Netflix-style apps do not switch either.
 
-On API 31+ the vote can be dropped in silence, so the user's
-match-content setting is read first
-(`DisplayManager.getMatchContentFrameRateUserPreference`, mapped by
-`FrameRateMode.askFor`). For **seamless only, or unknown**, the player
-votes and names the mode as well (an unset setting is seamless-only, and
-59.94 to 23.976 is never seamless). For **always**, it votes alone. For
-**never**, it does nothing at all.
+Do not bring the switch back until mpv releases frames at a timestamp.
 
-A rate outside 20-120 fps (`FrameRateMode.plausible`) is never asked for:
-`container-fps` is computed from track timing, and a broken file can claim
-1000 fps. The ask is repeated on resume (the surface, and its vote, is
-rebuilt) and when playback runs again after the rate was given back. The
-player keeps the rate rather than relying on libmpv's one event.
+## Decoding straight to the screen
 
-**Giving it back matters more than asking**, since a system UI left at
-24 Hz judders. It is cleared when playback ends or fails, when the player is
-left, and in `PlayerScreen.dispose`, on both paths.
-
-## Telling mpv when the screen refreshes
-
-Matching the panel fixes the cadence but not the drops, which are the
-decoder's doing. media_kit's `hwdec=auto-safe` can only pick
+media_kit's `hwdec=auto-safe` can only pick
 `mediacodec-copy` in the libmpv it ships, and that copies every frame into
 CPU memory. On a Chromecast with Google TV it meant thousands of `vo`
 drops: frames decoded on time and presented late. `MediaKitEngine.configurationFor` names
@@ -378,21 +361,9 @@ the same line the copy mode does.
 
 **No display sync.** `video-sync=display-resample` does not engage on this
 VO. Forcing it draws the audio audibly ahead of the picture over minutes,
-so `video-sync` stays mpv's default (`audio`). What remains is
-**`override-display-fps`** (`MediaKitEngine.displayRateProperties`), because
-Android's `gpu-context` answers `VO_NOTIMPL` to every display-rate request
-and this is the only way mpv learns the rate at all. It is:
+so `video-sync` stays mpv's default (`audio`).
 
-- **measured, not assumed**: `MainActivity` reports `Display.getRefreshRate()`
-  on the `xtremio/display` event channel, once on subscription and on every
-  `onDisplayChanged`, since a requested rate may not be the one delivered;
-- **Android only**: every other VO measures the rate itself, so the gate in
-  `displayRateProperties` answers an empty map elsewhere;
-- **taken back** (`displayRateOff`, the property set to `0`) on every path
-  that gives the rate back.
-
-The stats OSD draws `display 23.976 Hz` between the drop counts and
-`hwdec`. The fixed state is `hwdec mediacodec` with a `vo` count that has
+The fixed state is `hwdec mediacodec` with a `vo` count that has
 stopped climbing. Rendering into a real `Surface` rather than a Flutter
 texture, as libVLC and Kodi do, is how a film is shown here
 ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-picture-goes)): the
@@ -603,13 +574,11 @@ adb shell am start -n com.zond.xtremio/.MainActivity
 On a TV device the way in is usually ADB over the network: enable ADB
 debugging in its developer options, then `adb connect <ip>:5555`.
 
-The frame-rate work is read on a real panel:
+The display mode is read on a real panel:
 
 ```bash
 adb shell dumpsys display | grep -E 'mActiveModeId|mBaseDisplayInfo'  # while playing
-adb shell settings get secure match_content_frame_rate                # null = the box's default
 ```
 
-`dumpsys display` should name the film's mode while it plays and the
-previous one once it stops. `FrameRateMode` itself has a JVM test
-(`./gradlew :app:testDebugUnitTest`).
+`dumpsys display` should name the same mode while a film plays as before it.
+Dropped frames show in logcat as `no present fence for frame N`.

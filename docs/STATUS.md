@@ -357,8 +357,8 @@ a focus memory per tab. Tiles mark focus with a two-stroke ring, a 5 % zoom
 and a shadow ("Bold focus" thickens it and dims the rest). The D-pad walks
 rows and columns. A held centre key or the menu key is a long press, and
 the rest of that hold presses nothing after it. The player takes the
-remote's centre and media keys, stays immersive, and asks the panel for
-the film's own frame rate. Text grows 1.15x with 48 dp targets. Every
+remote's centre and media keys, stays immersive, and leaves the panel's
+mode alone. Text grows 1.15x with 48 dp targets. Every
 screen but the video and the Details backdrop keeps 5 % of each edge clear
 of overscan. Controls a remote cannot work (the volume slider, the
 fullscreen toggle) are not drawn, and neither is any scrollbar: the remote

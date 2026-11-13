@@ -18,7 +18,6 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
 import '../../src/rust/api/media.dart' as rust_media;
-import '../../shell/display_frame_rate.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'screen_awake.dart';
@@ -90,27 +89,6 @@ abstract interface class PlaybackEngine {
   /// shown and cancels when hidden, and an engine with nothing to report simply
   /// never emits.
   Stream<PlaybackStats> get stats;
-
-  /// The frame rate the open video declares (`container-fps`), emitted once per
-  /// file as it loads. Nothing is emitted for media that declares none, or on a
-  /// backend without the property.
-  ///
-  /// Its one consumer is the display: a 23.976 fps film on a 59.94 Hz
-  /// output lands on a 3:2 cadence, so the player asks the television for a
-  /// matching mode (`DisplayFrameRate`). Nothing about subtitle timing may
-  /// read this (AGENTS.md, "Nothing re-times a subtitle but the viewer").
-  Stream<double> get videoFrameRate;
-
-  /// Tells the engine what the display is **really** refreshing at, in
-  /// hertz, so it can time frames against the screen instead of the audio
-  /// clock; `null` withdraws the claim.
-  ///
-  /// On Android mpv cannot measure the rate itself (see
-  /// [MediaKitEngine.displayRateProperties]). The caller sets it while it
-  /// holds a rate on the display and clears it the moment it gives the rate
-  /// back: an override outliving the mode it described is worse than none.
-  /// Only libmpv has the property; other backends do nothing.
-  Future<void> setDisplayRefreshRate(double? hz);
 
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
@@ -262,8 +240,7 @@ class NativeFullscreenController implements FullscreenController {
 /// [FullscreenController] is here too. The [TorrentStatsClient] is what the
 /// start-up overlay polls the embedded server with, and [proxyStreams] is the
 /// way a player ends the streams it is reading on its way out; both default to
-/// the FFI one. [displayFrameRate] defaults to the `xtremio/device` channel,
-/// [dhtStatus] to `ServerClient().dhtStatus` and [portForwardingStatus] to
+/// the FFI one. [dhtStatus] defaults to `ServerClient().dhtStatus` and [portForwardingStatus] to
 /// `ServerClient().portForwardingStatus`. The subtitle style is not
 /// here: the screen derives it from the profile's settings in the `ctx` field.
 class PlaybackScope extends InheritedWidget {
@@ -273,7 +250,6 @@ class PlaybackScope extends InheritedWidget {
     this.fullscreen,
     this.torrentStats,
     this.subtitleMatch,
-    this.displayFrameRate,
     this.dhtStatus,
     this.portForwardingStatus,
     this.proxyStreams,
@@ -287,10 +263,6 @@ class PlaybackScope extends InheritedWidget {
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
   final TorrentStatsClient? torrentStats;
-
-  /// What the film's own frame rate is asked of the display through, on a
-  /// television and nowhere else.
-  final DisplayFrameRate? displayFrameRate;
 
   /// What "Match to another subtitle" asks for a ratio and an offset.
   final SubtitleMatchClient? subtitleMatch;
@@ -353,9 +325,6 @@ class PlaybackScope extends InheritedWidget {
   static SubtitleMatchClient subtitleMatchOf(BuildContext context) =>
       _maybeOf(context)?.subtitleMatch ?? const RustSubtitleMatchClient();
 
-  static DisplayFrameRate displayFrameRateOf(BuildContext context) =>
-      _maybeOf(context)?.displayFrameRate ?? const ChannelDisplayFrameRate();
-
   static DhtStatus Function() dhtStatusOf(BuildContext context) =>
       _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
 
@@ -386,7 +355,6 @@ class PlaybackScope extends InheritedWidget {
       fullscreen != oldWidget.fullscreen ||
       torrentStats != oldWidget.torrentStats ||
       subtitleMatch != oldWidget.subtitleMatch ||
-      displayFrameRate != oldWidget.displayFrameRate ||
       dhtStatus != oldWidget.dhtStatus ||
       portForwardingStatus != oldWidget.portForwardingStatus ||
       proxyStreams != oldWidget.proxyStreams ||
@@ -440,7 +408,6 @@ class MediaKitEngine implements PlaybackEngine {
     final native = _player.platform;
     if (native is NativePlayer) {
       _observeSelection(native).ignore();
-      _observeFrameRate(native).ignore();
       if (_surfaceAllowed) _observeHwdec(native).ignore();
     }
   }
@@ -525,15 +492,11 @@ class MediaKitEngine implements PlaybackEngine {
   /// ([proxiedThroughServer]).
   ///
   /// Not here: `force-seekable` is a claim about one stream ([forcesSeekable],
-  /// per `open`). `override-display-fps` is set per playback against the rate
-  /// the display settled on ([displayRateProperties]). `video-sync` is
-  /// deliberately left at mpv's default (see [displayRateProperties]).
+  /// per `open`).
   ///
-  /// mpv cannot measure the display's refresh rate on Android. media_kit runs
-  /// `vo=gpu` with `gpu-context=android`, which in the build it ships (`mpv
-  /// v0.36.0-549-g78d43740f5`) answers `VO_NOTIMPL` to `VOCTRL_GET_DISPLAY_FPS`
-  /// (`video/out/opengl/context_android.c`), so the reported rate stays 0. That
-  /// is why the rate is supplied from outside.
+  /// `video-sync` stays at mpv's default (`audio`). On a Chromecast
+  /// `display-resample` never engaged, and it put the audio on a correction
+  /// loop that drifted audibly behind the picture over a few minutes.
   static const Map<String, String> mpvOverrides = {
     'network-timeout': '300',
     'cache-on-disk': 'no',
@@ -558,50 +521,6 @@ class MediaKitEngine implements PlaybackEngine {
   /// "Verbose diagnostics".
   static Map<String, String> overridesFor({required bool verboseLog}) =>
       verboseLog ? {...mpvOverrides, ...verboseMpvOverrides} : mpvOverrides;
-
-  /// What tells mpv the rate a display is refreshing at, in hertz, and an
-  /// empty map where there is nothing to say.
-  ///
-  /// **`override-display-fps` is the whole of it; `video-sync` stays at mpv's
-  /// default (`audio`).** The override is what `update_display_fps` takes ahead
-  /// of the VO's rate (`video/out/vo.c`), and on Android the only way mpv
-  /// learns the rate at all. `video-sync=display-resample` is not used. On a
-  /// Chromecast `display-sync-active` never engaged, and it put the audio on a
-  /// correction loop against a rate mpv cannot verify, so the picture drifted
-  /// audibly behind the sound over a few minutes. The frame drops it was tried
-  /// against were the copying decoder's (see [configurationFor]). With this map
-  /// a 23.976 fps film on a panel asked for 23.976 Hz plays at `1 vo / 0
-  /// decoder` drops.
-  ///
-  /// **[hz] is a measurement, never the rate that was asked for.** The ask
-  /// (`DisplayFrameRate`) is asynchronous, reports nothing back and can land
-  /// on a neighbouring mode, so the number comes from the display itself
-  /// afterwards (`DisplayFrameRate.refreshRate`,
-  /// `MainActivity.DisplayRefreshRates`).
-  ///
-  /// **Android only.** Everywhere else mpv's VO measures the rate itself and
-  /// is right, so an override would replace a true number with ours.
-  ///
-  /// Empty rather than [displayRateOff] for a rate that is not a rate: with
-  /// nothing measured there is nothing to claim.
-  static Map<String, String> displayRateProperties(
-    double? hz, {
-    TargetPlatform? platform,
-  }) {
-    if ((platform ?? defaultTargetPlatform) != TargetPlatform.android) {
-      return const {};
-    }
-    if (hz == null || !hz.isFinite || hz <= 0) return const {};
-    return {'override-display-fps': '$hz'};
-  }
-
-  /// What takes the rate back. Whichever player claimed a rate writes this once
-  /// it stops presenting: a zero `override-display-fps` is mpv's "no display
-  /// rate". An override left standing over the next film, or over a mode the
-  /// platform has since changed, is worse than none, because it looks measured.
-  static const Map<String, String> displayRateOff = {
-    'override-display-fps': '0',
-  };
 
   /// Whether to tell mpv (`force-seekable`) that [url] can be seeked in,
   /// whatever the demuxer concluded. It is a claim about this server, decided
@@ -844,18 +763,6 @@ class MediaKitEngine implements PlaybackEngine {
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
 
-  final StreamController<double> _videoFrameRate =
-      StreamController<double>.broadcast();
-
-  /// The last rate emitted, so an observation that repeats itself (mpv
-  /// answers the first one immediately, and a re-open of the same file
-  /// answers with the same number) does not ask the display twice.
-  double? _lastVideoFrameRate;
-
-  /// Whether a rate has been claimed for this player, so only a player that
-  /// claimed one writes [displayRateOff] back over mpv's defaults.
-  bool _displayRateSet = false;
-
   late final List<StreamSubscription<void>> _trackSubscriptions;
   Tracks _lastTracks = const Tracks();
   Track _lastTrack = const Track();
@@ -936,54 +843,6 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
-
-  @override
-  Stream<double> get videoFrameRate => _videoFrameRate.stream;
-
-  /// Follows mpv's `container-fps` so the display can be asked to present
-  /// the film at its own rate. Only the native (libmpv) backend exposes
-  /// properties.
-  ///
-  /// An observation is what this needs rather than a read: the rate is not
-  /// known when the player is built, and by the time it is, nobody is
-  /// looking. mpv answers a newly observed property with its current value
-  /// straight away, so registering after the file loaded still reports it,
-  /// and the same event carries the next file's rate when there is one.
-  Future<void> _observeFrameRate(NativePlayer native) async {
-    try {
-      await native.observeProperty('container-fps', (value) async {
-        final fps = double.tryParse(value.trim());
-        // A container that declares nothing answers with an empty string
-        // or a zero, and either is worse than not asking at all.
-        if (fps == null || !fps.isFinite || fps <= 0) return;
-        if (fps == _lastVideoFrameRate) return;
-        _lastVideoFrameRate = fps;
-        if (!_disposed && !_videoFrameRate.isClosed) _videoFrameRate.add(fps);
-      });
-    } catch (_) {
-      // Torn down before the player initialised, or a build of libmpv
-      // without the property: the display keeps whatever rate it is on.
-    }
-  }
-
-  /// Puts [displayRateProperties] on the player, or [displayRateOff] back
-  /// when there is no rate left to describe.
-  ///
-  /// Whoever holds a rate on the display owns this. `PlayerScreen` sets it as
-  /// the display reports what it settled on, and clears it on every path that
-  /// gives the rate back, the same list that clears the ask itself. Nothing
-  /// here reads the film's own rate: what mpv is being told is what the
-  /// *screen* is doing.
-  @override
-  Future<void> setDisplayRefreshRate(double? hz) async {
-    final start = displayRateProperties(hz);
-    if (start.isEmpty && !_displayRateSet) return;
-    _displayRateSet = start.isNotEmpty;
-    for (final MapEntry(:key, :value)
-        in (start.isEmpty ? displayRateOff : start).entries) {
-      await _setProperty(key, value);
-    }
-  }
 
   /// Follows mpv's `aid`/`sid` so the selection reflects what is really
   /// drawn, not only what went through media_kit's setters. Only the native
@@ -1554,7 +1413,6 @@ class MediaKitEngine implements PlaybackEngine {
     }
     await _tracks.close();
     await _stats.close();
-    await _videoFrameRate.close();
     try {
       await _player.stop();
     } finally {

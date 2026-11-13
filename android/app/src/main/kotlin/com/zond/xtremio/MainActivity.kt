@@ -6,16 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.view.Display
-import android.view.Surface
-import android.view.SurfaceView
 import android.view.View
-import android.view.ViewGroup
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastDevice
 import io.flutter.embedding.android.FlutterActivity
@@ -44,13 +37,6 @@ class MainActivity : FlutterActivity() {
 
     /** The developer's codec probe (HwProbe.kt), which only the driver calls. */
     private var hwProbe: HwProbe? = null
-
-    /**
-     * What is telling Dart the rate this display is really refreshing at,
-     * alive for as long as the engine is. Held so its `DisplayListener` can
-     * be unregistered with the activity rather than outliving it.
-     */
-    private var displayRefreshRates: DisplayRefreshRates? = null
 
     /** The receiver's report of the picture it shows (CastPictureChannel). */
     private var castPicture: CastPictureChannel? = null
@@ -127,30 +113,9 @@ class MainActivity : FlutterActivity() {
                         speech?.stop()
                         result.success(null)
                     }
-                    // What rate to present the picture at, asked for while
-                    // a film is playing and given back when it stops
-                    // (lib/shell/display_frame_rate.dart). The only two
-                    // calls on this channel that do something rather than
-                    // report something. Both answer null, because what the
-                    // display then does is the platform's to decide.
-                    "setFrameRate" -> {
-                        matchFrameRate(call.argument<Double>("fps"))
-                        result.success(null)
-                    }
-                    "clearFrameRate" -> {
-                        clearFrameRate()
-                        result.success(null)
-                    }
                     else -> result.notImplemented()
                 }
             }
-        // What the display is really refreshing at, which is a different
-        // question from the rate asked for above and answered by a stream
-        // rather than a call (lib/shell/display_frame_rate.dart).
-        displayRefreshRates = DisplayRefreshRates().also {
-            EventChannel(flutterEngine.dartExecutor.binaryMessenger, DISPLAY_CHANNEL)
-                .setStreamHandler(it)
-        }
         // Whether a receiver shows the picture it was handed
         // (lib/features/cast/google_cast_client.dart).
         castPicture = CastPictureChannel().also {
@@ -206,218 +171,6 @@ class MainActivity : FlutterActivity() {
         if (hasFocus && currentFocus == null) {
             findViewById<View>(FLUTTER_VIEW_ID)?.requestFocus()
         }
-    }
-
-    /**
-     * Asks the display to present [fps] frames a second, so that a 23.976
-     * fps film is not laid out on a 59.94 Hz output's 3:2 cadence: some
-     * frames shown twice, some three times, and the ones that miss their
-     * vsync dropped. Mismatched cadence costs frames: on the owner's
-     * projector, 560 dropped at the video output against none at the
-     * decoder.
-     *
-     * Only ever called for a television: the Dart side asks the device
-     * profile first, and a phone's panel has no business switching. A rate
-     * that is not a rate is ignored rather than guessed at, because asking
-     * for one we do not know is worse than not asking. So is one outside
-     * the band real content declares ([FrameRateMode.plausible]). That band
-     * is the *only* guard the surface path has: `Surface.setFrameRate` takes
-     * whatever number it is handed, and `CHANGE_FRAME_RATE_ALWAYS` lets it
-     * blank the picture to honour it.
-     *
-     * Two paths, and the Android version chooses:
-     *
-     * - **Android 12 (API 31) and up** state what the content *is* and let
-     *   the platform pick the mode. `FRAME_RATE_COMPATIBILITY_FIXED_SOURCE`
-     *   says these frames arrive at a fixed rate, and
-     *   `CHANGE_FRAME_RATE_ALWAYS` is what permits a change the panel
-     *   cannot make invisibly: 59.94 Hz to 23.976 Hz retrains the HDMI
-     *   link and blanks the picture for about a second, and every useful
-     *   switch on a television is of that kind.
-     * - **Android 11 (API 30) and below** name a mode outright through the
-     *   window's `preferredDisplayModeId` ([FrameRateMode.matching] picks
-     *   which). API 30 has a two-argument `setFrameRate`, but it predates
-     *   `CHANGE_FRAME_RATE_ALWAYS` and so only ever switches seamlessly.
-     *   That is exactly the switch a television cannot do, so API 30 takes
-     *   the mode path with everything older.
-     *
-     * **The newer path is a vote, and a vote can be dropped in silence**:
-     * `setFrameRate` returns nothing. With "Match content frame rate" unset,
-     * the platform honours a seamless switch only, which 59.94 Hz to 23.976 Hz
-     * never is. So that setting decides whether the older path follows the vote
-     * ([FrameRateMode.askFor] holds the reasoning). A box with frame rate
-     * matching off is asked for nothing at all. With no surface to vote on
-     * there is no vote to follow, and the mode is named whatever the setting
-     * says.
-     */
-    private fun matchFrameRate(fps: Double?) {
-        if (fps == null || !FrameRateMode.plausible(fps)) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val ask = FrameRateMode.askFor(
-                displayManager()?.matchContentFrameRateUserPreference
-                    ?: FrameRateMode.MATCH_CONTENT_UNKNOWN,
-            )
-            if (ask == FrameRateAsk.NOTHING) return
-            val surface = contentSurface()
-            if (surface != null) {
-                surface.setFrameRate(
-                    fps.toFloat(),
-                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                    Surface.CHANGE_FRAME_RATE_ALWAYS,
-                )
-                if (ask == FrameRateAsk.SURFACE) return
-            }
-        }
-        preferMode(matchingModeId(fps) ?: return)
-    }
-
-    /**
-     * Gives the rate back, on every path that set one: a display left at
-     * 24 Hz makes the whole system UI judder, which is a worse fault than
-     * the one this fixes.
-     *
-     * Both paths are cleared whichever set it. Which one ran depended on
-     * the Android version *and* on there being a surface to ask, so
-     * clearing only the one this build would have used would leave the
-     * other in force. Clearing a preference that was never set costs a
-     * comparison.
-     */
-    private fun clearFrameRate() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            contentSurface()?.setFrameRate(
-                0f,
-                Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                Surface.CHANGE_FRAME_RATE_ALWAYS,
-            )
-        }
-        preferMode(0)
-    }
-
-    /**
-     * Tells Dart what this display is **really** refreshing at, once when it
-     * is subscribed to and again whenever it changes.
-     *
-     * libmpv cannot measure this for itself here. media_kit runs it with
-     * `vo=gpu` and `gpu-context=android`, which answers `VO_NOTIMPL` to
-     * `VOCTRL_GET_DISPLAY_FPS`, so the reported rate stays 0 and display
-     * sync never starts (`MediaKitEngine.mpvOverrides` holds the reading).
-     * It can be told, and this is where the number comes from.
-     *
-     * **It has to be what the display is doing, not what [matchFrameRate]
-     * asked for.** Both paths above are asynchronous and neither reports
-     * back: `Surface.setFrameRate` is a vote that returns nothing and can
-     * be dropped in silence, `preferredDisplayModeId` is a window attribute
-     * the platform acts on when it gets to it, and a set can land on a
-     * neighbouring mode or refuse to move at all. Handing mpv a rate the
-     * display never took would replace one wrong cadence with another and
-     * hide it behind a `display-sync-active` reading `yes`. So the ask is
-     * made, and then what actually happened is reported.
-     * `DisplayManager.DisplayListener.onDisplayChanged` is the callback a
-     * mode change arrives on.
-     *
-     * `Display.getRefreshRate()` and not `getMode().getRefreshRate()`,
-     * which is what [asFrameRateMode] reads for the mode choosing. The
-     * mode's rate is the panel's physical one. Since Android 12, a frame
-     * rate override can present an app at a divisor of it without changing
-     * the mode at all. `getRefreshRate()` is the one that accounts for
-     * that: the rate *this app's* frames are shown at, which is the
-     * question mpv is asking. On the owner's box the two agree
-     * (`FrameRateOverrides=none`, `frameRateOverrideConfig=Disabled`).
-     *
-     * The listener is registered only while Dart is subscribed, and the
-     * first value is pushed at subscription because a display already on
-     * the right mode fires no event and the rate would otherwise never
-     * arrive at all.
-     */
-    private inner class DisplayRefreshRates :
-        EventChannel.StreamHandler,
-        DisplayManager.DisplayListener {
-        private var sink: EventChannel.EventSink? = null
-
-        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-            sink = events
-            displayManager()?.registerDisplayListener(this, Handler(Looper.getMainLooper()))
-            emit()
-        }
-
-        override fun onCancel(arguments: Any?) = detach()
-
-        /** Lets the display go, whether Dart cancelled or the activity did. */
-        fun detach() {
-            displayManager()?.unregisterDisplayListener(this)
-            sink = null
-        }
-
-        override fun onDisplayAdded(displayId: Int) = Unit
-
-        override fun onDisplayRemoved(displayId: Int) = Unit
-
-        override fun onDisplayChanged(displayId: Int) {
-            // Every display's changes arrive here; only the one this
-            // activity is on says anything about the picture being watched.
-            if (displayId == activityDisplay()?.displayId) emit()
-        }
-
-        private fun emit() {
-            val rate = activityDisplay()?.refreshRate?.toDouble() ?: return
-            // A rate that is not a rate is not reported: Dart would have to
-            // refuse it anyway, and mpv reads a zero as "no display rate"
-            // and silently goes back to timing against the audio clock.
-            if (!rate.isFinite() || rate <= 0.0) return
-            sink?.success(rate)
-        }
-    }
-
-    private fun displayManager(): DisplayManager? =
-        getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-
-    /** The mode to ask this display for, or null for nothing to ask. */
-    private fun matchingModeId(fps: Double): Int? {
-        val display = activityDisplay() ?: return null
-        val current = display.mode?.let(::asFrameRateMode) ?: return null
-        return FrameRateMode.matching(
-            fps,
-            current,
-            display.supportedModes.orEmpty().map(::asFrameRateMode),
-        )
-    }
-
-    /** Puts [modeId] on the window, `0` being no preference at all. */
-    private fun preferMode(modeId: Int) {
-        val attributes = window.attributes
-        if (attributes.preferredDisplayModeId == modeId) return
-        attributes.preferredDisplayModeId = modeId
-        window.attributes = attributes
-    }
-
-    private fun asFrameRateMode(mode: Display.Mode): FrameRateMode =
-        FrameRateMode(mode.modeId, mode.physicalWidth, mode.physicalHeight, mode.refreshRate)
-
-    @Suppress("DEPRECATION")
-    private fun activityDisplay(): Display? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay
-
-    /**
-     * The surface the app is drawn into: Flutter's own, since
-     * [FlutterActivity] renders through a `SurfaceView` by default. The
-     * video is a texture composited into that same surface, so its rate is
-     * the surface's rate.
-     *
-     * Null before the view is attached, or if this ever runs against
-     * Flutter's `TextureView` renderer. Both fall through to naming a
-     * mode. A vote lives only as long as the surface does, so one made
-     * before the window is up is not a vote at all.
-     */
-    private fun contentSurface(): Surface? =
-        surfaceViewIn(window.decorView)?.holder?.surface?.takeIf { it.isValid }
-
-    private fun surfaceViewIn(view: View): SurfaceView? {
-        if (view is SurfaceView) return view
-        if (view !is ViewGroup) return null
-        for (index in 0 until view.childCount) {
-            surfaceViewIn(view.getChildAt(index))?.let { return it }
-        }
-        return null
     }
 
     /**
@@ -526,8 +279,6 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         downloads?.detach()
         downloads = null
-        displayRefreshRates?.detach()
-        displayRefreshRates = null
         castPicture?.detach()
         castPicture = null
         drivePicker?.detach()
@@ -564,7 +315,6 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val DEVICE_CHANNEL = "xtremio/device"
-        const val DISPLAY_CHANNEL = "xtremio/display"
         const val CAST_PICTURE_CHANNEL = "xtremio/cast_picture"
         const val REQUEST_TEXT_ENTRY = 4712
     }

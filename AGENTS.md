@@ -74,7 +74,7 @@ flutter test > /tmp/flutter-test.log 2>&1; echo EXIT=$?
 # Anything under rust/src/api (make compares before and after instead, so it
 # also passes on a tree whose regenerated bindings are not committed yet):
 flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs; echo EXIT=$?
-# Kotlin with no device in it (FrameRateMode, DownloadsProgressBar,
+# Kotlin with no device in it (DownloadsProgressBar,
 # DownloadsNotificationText, CastPicture, InstallOutcome):
 (cd android && ./gradlew :app:testDebugUnitTest); echo EXIT=$?
 ```
@@ -271,8 +271,7 @@ and `rust/tests/subtitle_threshold.rs`.
 - **A multiplier is measured, never judged or declared**: from a match
   against another file (`subtitles_match`) or from two marks
   (`SubtitleCalibration`). Never derive one from a rate an addon or a
-  container claims. Never read `PlaybackEngine.videoFrameRate` for a
-  subtitle: its one consumer is `DisplayFrameRate`.
+  container claims.
 - **A mark pairs the cue's raw time with where it is drawn**, never with the
   instant of the press. `sub-start` is the raw time in the file. That was
   measured against a running libmpv and is written down at

@@ -243,12 +243,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// At what rate mpv thinks the screen refreshes.
   ///
-  /// The row the vo drop count above is read against. On Android mpv cannot
-  /// measure the display, so the app tells it
-  /// (`MediaKitEngine.displayRateProperties`). This is mpv's own belief read
-  /// back rather than the number handed over, which is the point of showing it.
-  /// A rate here that is not the one the display settled on is a set that went
-  /// nowhere, and the drops below it belong to something else.
+  /// The row the vo drop count above is read against.
+  /// On Android mpv cannot measure the display, so the row is absent there.
   static String _display(double hz) => '${hz.toStringAsFixed(3)} Hz';
 
   /// A yes/no mpv answered.

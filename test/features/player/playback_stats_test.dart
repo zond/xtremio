@@ -191,11 +191,7 @@ void main() {
 
   test('says what rate mpv thinks the display is on, right under the drop '
       'counts', () {
-    // The row the drop counts are read against. On Android mpv cannot
-    // measure the display and is told the rate instead
-    // (`MediaKitEngine.displayRateProperties`); this is its own belief
-    // read back, so a rate here that is not the one the display settled on
-    // is a set that went nowhere and the drops belong to something else.
+    // The row the drop counts are read against.
     expect(
       PlaybackStatsOverlay.describe(
         const PlaybackStats(
@@ -210,15 +206,15 @@ void main() {
       ]),
     );
 
-    // The rate the panel was never asked to be on is as much a reading as
-    // the right one, and it is the one that says the ask did not land.
+    // Any rate mpv reports is shown, not only a film's.
     expect(
       PlaybackStatsOverlay.describe(const PlaybackStats(displayFps: 59.94)),
       contains('display  59.940 Hz'),
     );
 
-    // But an engine with no such property draws no row: a dash there would
-    // read as a measured rate of none on a backend nobody asked.
+    // But an engine with no such value draws no row: a dash there would
+    // read as a measured rate of none. That is Android, where mpv cannot
+    // measure the display.
     expect(
       PlaybackStatsOverlay.describe(const PlaybackStats(hwdec: 'no')),
       isNot(contains(startsWith('display '))),

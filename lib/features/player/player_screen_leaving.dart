@@ -97,9 +97,6 @@ extension _PlayerLeaving on _PlayerScreenState {
     // video are one act, and a leave is no exception. The timer that would have
     // done it has gone with [_detach].
     if (_controlFocused) _focusNode.requestFocus();
-    // From the press, not from the pop: the display is not presenting a
-    // film any more the moment the viewer says so.
-    _releaseDisplayFrameRate();
     final navigator = Navigator.of(context);
     // Nothing is logged here when the bound expires. The teardown times
     // itself, because it outlives this wait and because a hand-over runs

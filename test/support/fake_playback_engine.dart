@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
-import 'package:xtremio/shell/display_frame_rate.dart';
 
 /// What mpv reports for an MP4 of H.264 and AAC (libavformat's reader for
 /// the MP4 family): a file a receiver takes as it is.
@@ -33,7 +32,6 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _engineLog = StreamController<String>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
-  final _videoFrameRate = StreamController<double>.broadcast();
   late final StreamController<PlaybackStats> _stats =
       StreamController.broadcast(
         onListen: () {
@@ -163,11 +161,6 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// When set, `dispose` records the call and then fails with it.
   Object? disposeError;
 
-  /// Every `setDisplayRefreshRate` call, in order, nulls included -- a
-  /// null is the player giving display sync back, which is as much a call
-  /// as setting one is.
-  final List<double?> displayRefreshRates = [];
-
   /// When set, the calls a test may need to see in order are appended here
   /// -- `'open'`, `'quit'`, `'dispose'`: a log shared with other fakes,
   /// for tests about the order of calls across them.
@@ -217,10 +210,6 @@ class FakePlaybackEngine implements PlaybackEngine {
   void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
 
-  /// The rate the open container declares, as libmpv's `container-fps`
-  /// observation reports it once the file is loaded.
-  void emitVideoFrameRate(double fps) => _videoFrameRate.add(fps);
-
   @override
   Stream<Duration> get position => _position.stream;
 
@@ -253,9 +242,6 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
-
-  @override
-  Stream<double> get videoFrameRate => _videoFrameRate.stream;
 
   /// media_kit's `open` begins with a `stop(open: true)`, and a stop
   /// announces itself ([dispose] says how): `position: 0`, then
@@ -386,10 +372,6 @@ class FakePlaybackEngine implements PlaybackEngine {
   }
 
   @override
-  Future<void> setDisplayRefreshRate(double? hz) async =>
-      displayRefreshRates.add(hz);
-
-  @override
   Future<void> setSubtitleStyle(SubtitleStyle style) async {
     subtitleStyle = style;
   }
@@ -477,31 +459,4 @@ class FakeFullscreenController implements FullscreenController {
   Future<void> exit() async {
     exits++;
   }
-}
-
-/// Records what the display was asked to present at instead of speaking to
-/// the platform channel, and lets a test say what the display then did.
-class FakeDisplayFrameRate implements DisplayFrameRate {
-  final _refreshRate = StreamController<double>.broadcast();
-
-  /// Every rate asked for, in order.
-  final List<double> requested = [];
-
-  /// How many times the rate was given back.
-  int clears = 0;
-
-  @override
-  Future<void> request(double fps) async => requested.add(fps);
-
-  @override
-  Future<void> clear() async => clears++;
-
-  @override
-  Stream<double> get refreshRate => _refreshRate.stream;
-
-  /// The display reporting what it settled on -- which is not necessarily
-  /// what [request] asked for, and is the point of the two being separate.
-  void reportRefreshRate(double hz) => _refreshRate.add(hz);
-
-  Future<void> dispose() => _refreshRate.close();
 }

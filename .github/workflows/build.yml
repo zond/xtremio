@@ -124,9 +124,9 @@ jobs:
 
       - run: make ${{ matrix.target }}
 
-      # The Kotlin with no Android in it (FrameRateMode,
-      # DownloadsProgressBar) has JVM unit tests, run nowhere else. Once,
-      # not per ABI: nothing in them depends on one.
+      # The Kotlin with no Android in it (DownloadsProgressBar and others)
+      # has JVM unit tests, run nowhere else. Once, not per ABI: nothing in
+      # them depends on one.
       - name: Kotlin unit tests
         if: matrix.abi == 'arm64-v8a'
         working-directory: android

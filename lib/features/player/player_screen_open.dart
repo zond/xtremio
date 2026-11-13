@@ -302,8 +302,7 @@ extension _PlayerOpen on _PlayerScreenState {
     _stallAccount.seeked();
     // A re-open is a new attempt, so the last failure is not what is happening
     // any more. Left, it would sit as "Playback failed" over a stream that
-    // plays, block the display's rate ([_askDisplayFrameRate]) and hold the
-    // stats panel's request away.
+    // plays and hold the stats panel's request away.
     final failed = _engineError != null;
     if (failed) _update(() => _engineError = null);
     _open(url, reason: reason);
@@ -432,11 +431,6 @@ extension _PlayerOpen on _PlayerScreenState {
     }
     DiagnosticsLog.error('player', 'playback failed: $error');
     _cancelOpenRetry();
-    // Nothing is being presented any more, and this screen stays up. Otherwise
-    // the card and every menu drawn over it would sit on a panel held at the
-    // film's rate until the viewer pressed Back. That is the juddering system
-    // UI this feature exists to avoid.
-    _releaseDisplayFrameRate();
     _update(() {
       _engineError = error;
       _stopTorrentStats();

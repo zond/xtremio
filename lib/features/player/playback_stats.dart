@@ -157,20 +157,13 @@ class PlaybackStats {
   /// Frames the decoder dropped (`decoder-frame-drop-count`).
   final int? decoderDroppedFrames;
 
-  /// What rate mpv believes the display has (`display-fps`, which answers
-  /// with `override-display-fps` when one is set).
+  /// What rate mpv believes the display has (`display-fps`).
   ///
-  /// **Here to keep the drop counts above honest.** On Android mpv cannot
-  /// measure the display at all (its VO answers `VO_NOTIMPL`), so the app hands
-  /// it the rate (`MediaKitEngine.displayRateProperties`), and this is the only
-  /// reading back. A number here that is not the rate the display was measured
-  /// at is a set that went nowhere. A rate that matches, beside a vo count that
-  /// has stopped climbing, is what a single screencap of this panel has to be
-  /// able to say from the sofa.
+  /// The vo drop count is read against it.
+  /// On Android mpv cannot measure the display, so it has no value there.
   ///
-  /// Null on any backend without the property, which is what keeps the row
-  /// off the panel entirely rather than drawing a dash that reads as a
-  /// measured rate of none.
+  /// Null where mpv has no value, which keeps the row off the panel.
+  /// A dash would read as a measured rate of none.
   final double? displayFps;
 
   /// The hardware decoder in use (`hwdec-current`): an API name such as

@@ -624,8 +624,7 @@ one film declaring six different rates all end within 1 % of the same
 runtime, while five Gilmore Girls files at 25 fps really do run 4.27 %
 short. Nothing in the metadata separates the two populations, so anything
 applied unasked fixes one and silently breaks the other. The declared rate
-decides nothing. libmpv's `container-fps` is read only for the display (see
-[ANDROID.md](ANDROID.md#telling-the-television-what-rate-the-film-is)).
+decides nothing. libmpv's `container-fps` is read only for the stats panel.
 
 ### The menu
 

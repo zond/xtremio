@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
-import '../../shell/display_frame_rate.dart';
 import '../../widgets/remote_press.dart';
 import '../cast/cast_client.dart';
 import '../cast/cast_compatibility.dart';
@@ -451,30 +450,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
 
   /// [DeviceScope.isTv], read with the dependencies.
   bool _isTv = false;
-
-  /// What the display is asked to present the film at, read with the
-  /// dependencies. Only a television is ever asked (see
-  /// [_onVideoFrameRate]).
-  DisplayFrameRate? _displayFrameRate;
-
-  /// Whether this player is holding a frame rate on the display, so that
-  /// the release is made once and only by a player that made an ask -- and
-  /// so that nothing is said to the channel at all on a phone.
-  bool _frameRateAsked = false;
-
-  /// What rate the file on screen declares (`container-fps`), remembered
-  /// so the ask can be made again. The engine reports a rate once per
-  /// value and never repeats it, and an ask does not survive everything
-  /// that happens to a playback (see [_askDisplayFrameRate]), so a rate
-  /// kept only in the event is a rate that can be lost for good.
-  double? _containerFrameRate;
-
-  /// What the display last said it is *really* refreshing at, which is a
-  /// different number from [_containerFrameRate] and arrives from the
-  /// other direction. Remembered for the same reason: it is reported when
-  /// it changes, so a display already on the right mode reports once and
-  /// then never again, and the ask can be made after that.
-  double? _displayRefreshRate;
 
   /// A [_scheduleFocusCheck] callback is pending for the coming frame.
   bool _focusCheckScheduled = false;
@@ -1126,8 +1101,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     );
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
-    final displayFrameRate = PlaybackScope.displayFrameRateOf(context);
-    _displayFrameRate = displayFrameRate;
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playbackHints = PlaybackScope.hintsOf(context);
@@ -1168,8 +1141,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       engine.engineLog.listen(_onEngineLog),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
-      engine.videoFrameRate.listen(_onVideoFrameRate),
-      displayFrameRate.refreshRate.listen(_onDisplayRefreshRate),
     ]);
   }
 
@@ -1256,11 +1227,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// panel, the start-up card -- gets its numbers moving again.
   void _onAppShown() {
     _appHidden = false;
-    // The surface this app draws into is destroyed when it goes away and
-    // a new one built on the way back, and a `Surface.setFrameRate` vote
-    // lives on the surface it was made against. So a claim we still think
-    // we hold is one the platform has already forgotten.
-    if (_frameRateAsked) _askDisplayFrameRate();
     // A torrent still starting up: the card is back on screen, so its
     // polling comes back with it. `_syncTorrentStats` leaves this alone
     // until the media has loaded, and takes over from it then.
@@ -1302,10 +1268,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     _autoPick = SubtitleAutoPick();
     _mediaLoaded = false;
     // A different video. The adjustment the last subtitle was played with says
-    // nothing about it, and neither does the rate the last container declared.
-    // This one reports its own, and until it does there is nothing to ask again
-    // for.
-    _containerFrameRate = null;
+    // nothing about it.
     _resetSubtitleTiming();
     _upNext.dismiss();
     final progress = state.progress;
@@ -1468,10 +1431,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // purpose, and its report says nothing about what is being watched.
     if (_handedOver || _casting) return;
     if (playing) _onMediaLoaded();
-    // Playing again with the rate given back: the film ended and the
-    // viewer has rewound into it, or an open that failed has been retried.
-    // Either way the picture is back and wants the rate the picture is.
-    if (playing && !_frameRateAsked) _askDisplayFrameRate();
     if (_playing != playing) {
       setState(() => _playing = playing);
       _controls.show();
@@ -1500,9 +1459,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       return;
     }
     _client?.dispatch(CoreActions.playerEnded());
-    // Nothing is being presented at the film's rate any more, and what is
-    // left on screen is the up-next card and the controls.
-    _releaseDisplayFrameRate();
     // `bingeWatching` off: the episode just ends; the Next button remains.
     if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
     _controls.show();
@@ -1571,80 +1527,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // The bars read the selection and the track count directly.
     setState(() => _tracks.value = tracks);
     _maybeAutoPickSubtitles();
-  }
-
-  // --- The display's own frame rate ----------------------------------------
-
-  /// The engine has read what rate the container declares, which is once
-  /// per value: write it down and ask the display to present at it.
-  ///
-  /// Nothing is asked when the rate is unknown, because nothing arrives:
-  /// the engine emits only a rate it read. Asking for a rate we are
-  /// guessing at is worse than not asking, since what a wrong guess buys
-  /// is a mode change and the same uneven cadence afterwards.
-  void _onVideoFrameRate(double fps) {
-    _containerFrameRate = fps;
-    _askDisplayFrameRate();
-  }
-
-  /// Asks the display for [_containerFrameRate], if the file has said what
-  /// it is. A television only: a phone's panel is not the film's to switch,
-  /// and a desktop has no such API.
-  ///
-  /// Not once per file. On Android 12+ the ask is a vote on the surface Flutter
-  /// draws into, which is rebuilt when the app returns from the background.
-  /// Every path that releases the rate leaves the file playable (rewinding
-  /// after the end). Repeating the ask is free when the panel is already on the
-  /// rate.
-  void _askDisplayFrameRate() {
-    final fps = _containerFrameRate;
-    if (!_isTv || fps == null || _engineError != null) return;
-    _frameRateAsked = true;
-    _displayFrameRate?.request(fps).ignore();
-    // The display may already be on the rate being asked for. Then nothing
-    // changes and nothing is reported, so what it last said is the whole of
-    // what will ever be said, and this is where it reaches mpv.
-    _applyDisplaySync();
-  }
-
-  /// The display has reported what it is really refreshing at. It reports at
-  /// subscription and again whenever it changes, which is how the rate a mode
-  /// switch settled on arrives.
-  void _onDisplayRefreshRate(double hz) {
-    _displayRefreshRate = hz;
-    // Only while this player is holding a rate on the display. The first
-    // reading arrives as soon as the display is listened to, which is
-    // before any film has said what rate it is, and a screen nobody is
-    // presenting on has no rate worth telling mpv about.
-    if (_frameRateAsked) _applyDisplaySync();
-  }
-
-  /// Tells the engine what the screen is doing, so mpv can time frames
-  /// against it (`MediaKitEngine.displayRateProperties`).
-  ///
-  /// Tied to the ask rather than to the playback: once the rate is given
-  /// back the number describes a mode nobody is in, so the paths that clear
-  /// the ask clear this too, through [_releaseDisplayFrameRate].
-  /// [_frameRateAsked] is only ever true on a television.
-  void _applyDisplaySync() {
-    _engine
-        ?.setDisplayRefreshRate(_frameRateAsked ? _displayRefreshRate : null)
-        .ignore();
-  }
-
-  /// Gives the display's rate back: when the film ends, playback fails, the
-  /// viewer leaves, and in [dispose], which every route out passes through.
-  /// [_frameRateAsked] makes the repeats free.
-  ///
-  /// Not on a pause: a mode change costs a second of black picture each way.
-  void _releaseDisplayFrameRate() {
-    if (!_frameRateAsked) return;
-    _frameRateAsked = false;
-    _displayFrameRate?.clear().ignore();
-    // And the override with it. A rate mpv is still holding after the
-    // platform has taken the mode back is the stale claim this exists to
-    // avoid.
-    _applyDisplaySync();
   }
 
   // --- Controls visibility -------------------------------------------------
@@ -2152,10 +2034,6 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     // while this screen is alive, so exiting here would drop it out of
     // fullscreen.
     if (_fullscreenOn && !_handedOver) _fullscreen?.exit().ignore();
-    // The rate goes back whatever else is true: a display held at 24 Hz by a
-    // player that no longer exists judders every menu. A hand-over has
-    // already released it ([_handOver]), so this is a no-op there.
-    _releaseDisplayFrameRate();
     // Ordinarily already finished: [_leave] runs the teardown before the
     // pop. This covers the screen that went without a leave, where the
     // engine would otherwise keep its packet memory and socket. Unawaited;
