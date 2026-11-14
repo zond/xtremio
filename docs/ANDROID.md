@@ -147,7 +147,15 @@ renderer for them.
     `castDeviceAddress`. That is the
     receiver's IPv4 address off the MediaRouter route, which
     `flutter_chrome_cast` drops and the server needs to pick an interface
-    (see [CASTING.md](CASTING.md)).
+    (see [CASTING.md](CASTING.md)). And it carries `hwVideoDecoders`
+    (`HwVideoDecoders.kt`), which the player asks once per process
+    (`HardwareDecoders.onThisDevice`, `lib/shell/video_decoders.dart`). It
+    answers, per video type, the largest width and height any hardware
+    decoder takes. Hardware means `isHardwareAccelerated`, not
+    `isSoftwareOnly` and not `isAlias` on API 29 and up. Below that it means
+    a name that does not start `OMX.google.` or `c2.android.`. Any error
+    means today's fixed list ([Where the picture
+    goes](ARCHITECTURE.md#where-the-picture-goes)).
   - `xtremio/speech`: an event channel carrying what the search field's
     microphone hears (below).
   - `xtremio/cast_picture`: an event channel, `CastPictureChannel.kt`,

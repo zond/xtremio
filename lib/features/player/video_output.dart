@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../shell/video_decoders.dart';
+
 /// Where a film's picture goes.
 ///
 /// **[texture]** is media_kit's way: mpv draws each frame with OpenGL into a
@@ -18,14 +20,17 @@ import 'package:flutter/foundation.dart';
 /// drawn over it as before.
 ///
 /// The surface shows only what MediaCodec decodes. A film mpv decodes in
-/// software has no picture there, so it goes to [texture] instead: decided
-/// before decoding from the codec ([videoOutputForCodec]), and corrected
-/// after it if the decoder still fell back to software
-/// ([surfaceDecodingFellBack]).
+/// software has no picture there, so it goes to [texture] instead. That is
+/// decided before decoding from the codec and the picture's size, against
+/// the device's own hardware decoders ([videoOutputForCodec],
+/// [HardwareDecoders]). It is corrected after it if the decoder still fell
+/// back to software ([surfaceDecodingFellBack]), or if mpv gave up on the
+/// picture ([surfaceLostPicture]).
 enum VideoOutput { texture, surface }
 
-/// The codecs mpv sends to Android's MediaCodec (`hwdec-codecs`). Everything
-/// else is decoded in software, which the surface cannot show.
+/// The codecs mpv may send to Android's MediaCodec when the device could not
+/// be asked which it decodes in hardware ([HardwareDecoders.assumed]).
+/// Everything else is decoded in software, which the surface cannot show.
 const Set<String> surfaceCodecs = {'h264', 'hevc', 'vp8', 'vp9', 'av1'};
 
 /// Whether a player may use [VideoOutput.surface] at all: on Android, with
@@ -42,14 +47,21 @@ bool surfaceAllowed({
 /// `current-tracks/video/codec`), in a player where the surface is
 /// [allowed]. Null while mpv has not said: nothing is decided, and nothing
 /// is drawn, until it has.
+///
+/// The surface takes the film only when one of [decoders] takes the codec
+/// at the track's [width] by [height] (mpv's `demux-w`/`demux-h`). An
+/// unknown size is decided by the codec alone.
 VideoOutput? videoOutputForCodec({
   required bool allowed,
   required String? codec,
+  required HardwareDecoders decoders,
+  int? width,
+  int? height,
 }) {
   if (!allowed) return VideoOutput.texture;
   final name = codec?.trim().toLowerCase();
   if (name == null || name.isEmpty) return null;
-  return surfaceCodecs.contains(name)
+  return decoders.decodes(name, width: width, height: height)
       ? VideoOutput.surface
       : VideoOutput.texture;
 }
@@ -63,4 +75,24 @@ bool surfaceDecodingFellBack(String? hwdecCurrent) {
   final value = hwdecCurrent?.trim();
   if (value == null || value.isEmpty) return false;
   return value == 'no';
+}
+
+/// Whether an mpv log line says the film on the surface has no picture.
+///
+/// On the surface every decoder but MediaCodec is no picture at all. When
+/// MediaCodec will not open, mpv logs `vd: Could not open codec.` and falls
+/// back to a software decoder. Its first frame cannot be handed to the
+/// surface, so mpv gives up on the picture with two fatal lines and plays
+/// the sound on. By then `hwdec-current` has no value, so
+/// [surfaceDecodingFellBack] never hears of it.
+bool surfaceLostPicture({
+  required String prefix,
+  required String level,
+  required String text,
+}) {
+  final line = text.trim();
+  if (prefix == 'vd' && line == 'Could not open codec.') return true;
+  if (level != 'fatal') return false;
+  return line.startsWith('Cannot convert decoder/filter output') ||
+      line == 'Could not initialize video chain.';
 }

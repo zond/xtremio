@@ -17,7 +17,9 @@ import 'package:media_kit/src/player/native/core/native_library.dart'
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
+import '../../shell/video_decoders.dart';
 import '../../src/rust/api/media.dart' as rust_media;
+import 'decode_keep_up.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'screen_awake.dart';
@@ -74,6 +76,11 @@ abstract interface class PlaybackEngine {
   /// error the screen shows. It is a line for the diagnostics report, which is
   /// the only place a failure on someone else's phone is legible.
   Stream<String> get engineLog;
+
+  /// Fires once per film when its picture cannot keep up with its sound:
+  /// a film decoded in software that this device is too slow for
+  /// ([DecodeKeepUp]).
+  Stream<void> get cannotKeepUp;
 
   /// Output volume, `0..100`.
   Stream<double> get volume;
@@ -375,6 +382,7 @@ class MediaKitEngine implements PlaybackEngine {
     bool hardwareDecoding = true,
     bool verboseLog = false,
     MediaIdProtocolRegistrar? registerMediaIdProtocol,
+    Future<HardwareDecoders>? decoders,
   }) : _verboseLog = verboseLog,
        _hardwareDecoding = hardwareDecoding,
        _surfaceAllowed = surfaceAllowed(hardwareDecoding: hardwareDecoding),
@@ -392,6 +400,9 @@ class MediaKitEngine implements PlaybackEngine {
             registerMediaIdProtocol ?? rust_media.mpvStreamRegister,
           ),
         );
+    _decodersKnown = (decoders ?? HardwareDecoders.onThisDevice())
+        .then<void>((known) => _decoders = known)
+        .catchError((Object _) {});
     if (!_surfaceAllowed) _useTexture();
     _trackSubscriptions = [
       _player.stream.tracks.listen((tracks) {
@@ -404,6 +415,7 @@ class MediaKitEngine implements PlaybackEngine {
         _lastTrack = track;
         _emitTracks();
       }),
+      if (_surfaceAllowed) _player.stream.log.listen(_onLogForSurface),
     ];
     final native = _player.platform;
     if (native is NativePlayer) {
@@ -430,6 +442,25 @@ class MediaKitEngine implements PlaybackEngine {
   /// Whether this player may put the film on its own surface
   /// ([surfaceAllowed]: Android, with hardware decoding on).
   final bool _surfaceAllowed;
+
+  /// The video codecs this device decodes in hardware, once asked
+  /// ([HardwareDecoders.onThisDevice]). [open] waits for [_decodersKnown],
+  /// so it is the device's answer from the first `loadfile` on.
+  HardwareDecoders _decoders = HardwareDecoders.assumed;
+  late final Future<void> _decodersKnown;
+
+  /// Set once the film is on its way off the surface, so a second line
+  /// that says the same thing moves nothing ([_leaveSurface]).
+  bool _leavingSurface = false;
+
+  /// The one check per film that software decoding keeps up
+  /// ([DecodeKeepUp]), its ticks, and the reading it started from.
+  DecodeKeepUp _keepUp = DecodeKeepUp();
+  Timer? _keepUpTimer;
+  PlaybackStats _keepUpBaseline = const PlaybackStats();
+  bool _keepUpReading = false;
+  final StreamController<void> _cannotKeepUp =
+      StreamController<void>.broadcast();
 
   /// media_kit's controller for the texture, made when the film goes to the
   /// texture ([_useTexture]): at construction where the surface is not
@@ -730,25 +761,6 @@ class MediaKitEngine implements PlaybackEngine {
     ('wid', '0'),
   ];
 
-  /// Which codecs may go to the hardware decoder.
-  ///
-  /// **MPEG-4 Part 2 and MPEG-2 are deliberately not on it.** media_kit's
-  /// Android controller sets
-  /// `hwdec-codecs=h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1`
-  /// (`android_video_controller/real.dart`), and with the direct
-  /// `mediacodec` hwdec ([configurationFor]) an MPEG-4 file fails at decoder
-  /// init:
-  ///
-  ///     mpeg4_mediacodec: Both surface and native_window are NULL
-  ///     mpeg4_mediacodec: MediaCodec 0x0 failed to start
-  ///     vd: Could not open codec.
-  ///
-  /// It then plays, after about three seconds of stalling with an error on
-  /// screen. Software decodes those old formats comfortably on the weakest
-  /// device this runs on, and the codecs the hardware is needed for are all
-  /// still on the list.
-  static const String hwdecCodecs = 'h264,hevc,vp8,vp9,av1';
-
   /// How often [stats] samples while listened to.
   static const Duration statsInterval = Duration(milliseconds: 500);
 
@@ -823,17 +835,22 @@ class MediaKitEngine implements PlaybackEngine {
       )
       .map((entry) => '${entry.prefix}: ${entry.text}');
 
-  /// Whether an mpv log line reaches [engineLog]: every error, and under
-  /// "Verbose diagnostics" the subsystems that say why a read happened --
-  /// demuxer, stream and cache -- and only those. Everything else at that
-  /// level is noise that would evict the diagnostics ring.
+  /// Whether an mpv log line reaches [engineLog]: every error and every
+  /// fatal line, and under "Verbose diagnostics" the subsystems that say why
+  /// a read happened -- demuxer, stream and cache -- and only those.
+  /// Everything else at that level is noise that would evict the
+  /// diagnostics ring.
   static bool engineLogCarries({
     required String prefix,
     required String level,
     required bool verboseLog,
   }) =>
       level == 'error' ||
+      level == 'fatal' ||
       (verboseLog && const {'demux', 'stream', 'cache'}.contains(prefix));
+
+  @override
+  Stream<void> get cannotKeepUp => _cannotKeepUp.stream;
 
   @override
   Stream<double> get volume => _player.stream.volume;
@@ -1002,12 +1019,19 @@ class MediaKitEngine implements PlaybackEngine {
     // `force-seekable` once, when it builds the demuxer, so it has to be
     // set for the stream about to be opened and not for the last one.
     await _setProperty('force-seekable', forcesSeekable(url) ? 'yes' : 'no');
-    // And which codecs the hardware is allowed to have. This is here rather
-    // than in [mpvOverrides] for two reasons. mpv reads it when it picks a
-    // decoder, which is at the `loadfile` below. And media_kit's Android
-    // controller writes its own value while *it* initialises, so a value set
-    // once at construction is racing something that has not run yet.
-    await _setProperty('hwdec-codecs', hwdecCodecs);
+    // And which codecs the hardware is allowed to have: the ones this device
+    // has a hardware decoder for ([HardwareDecoders.hwdecCodecs]). This is
+    // here rather than in [mpvOverrides] for two reasons. mpv reads it when
+    // it picks a decoder, which is at the `loadfile` below. And media_kit's
+    // Android controller writes its own value while *it* initialises, so a
+    // value set once at construction is racing something that has not run
+    // yet.
+    await _decodersKnown;
+    await _setProperty('hwdec-codecs', _decoders.hwdecCodecs);
+    // A new film gets its own check that the decoding keeps up.
+    _keepUp = DecodeKeepUp();
+    _keepUpBaseline = const PlaybackStats();
+    if (_output.value == VideoOutput.texture) _watchKeepUp();
     await _player.open(Media(url.toString(), start: start));
   }
 
@@ -1293,12 +1317,23 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// Puts the film on the texture: media_kit's controller, made once. It sets
   /// its own `vo`, `hwdec` and `vid` and waits for its texture.
+  ///
+  /// **On the surface's player the texture decodes in software.** It gets a
+  /// film only when the hardware cannot take it, decided up front or found
+  /// out on the surface. Hardware decoding would only fail again. It is
+  /// worse than that: media_kit's controller writes its own `hwdec-codecs`
+  /// (with `av1` and `mpeg4` on it) as it starts, so mpv would try again
+  /// the decoder that just failed. That film is then checked for keeping
+  /// up ([_watchKeepUp]).
   void _useTexture() {
     _controller ??= VideoController(
       _player,
-      configuration: configurationFor(hardwareDecoding: _hardwareDecoding),
+      configuration: configurationFor(
+        hardwareDecoding: _hardwareDecoding && !_surfaceAllowed,
+      ),
     );
     _output.value = VideoOutput.texture;
+    _watchKeepUp();
   }
 
   /// Decides the output from the first video track's codec, once
@@ -1316,11 +1351,18 @@ class MediaKitEngine implements PlaybackEngine {
     if (_aspect.value == null && w != null && h != null && w > 0 && h > 0) {
       _aspect.value = w / h;
     }
-    final output = videoOutputForCodec(allowed: true, codec: first.codec);
+    final output = videoOutputForCodec(
+      allowed: true,
+      codec: first.codec,
+      decoders: _decoders,
+      width: w,
+      height: h,
+    );
     if (output == null) return;
     DiagnosticsLog.info(
       'player',
-      'video output: ${output.name} for ${first.codec}',
+      'video output: ${output.name} for ${first.codec} ${w}x$h '
+          '(hardware: ${_decoders.sizes})',
     );
     if (output == VideoOutput.texture) {
       _useTexture();
@@ -1343,23 +1385,111 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> _observeHwdec(NativePlayer native) async {
     try {
       await native.observeProperty('hwdec-current', (value) async {
-        if (_output.value != VideoOutput.surface || _surface == null) return;
         if (!surfaceDecodingFellBack(value)) return;
-        DiagnosticsLog.warn(
-          'player',
-          'video output: the surface got a software decoder; to the texture',
-        );
-        await _writeSurface(surfaceDetach);
-        _surface = null;
-        _useTexture();
+        await _leaveSurface('the surface got a software decoder');
       });
     } catch (_) {
       // Torn down before the player initialised: nothing left to watch.
     }
   }
 
+  /// Reads mpv's log for the lines that say the surface has no picture
+  /// ([surfaceLostPicture]). mpv can give up on the picture without
+  /// `hwdec-current` ever saying "no", so [_observeHwdec] alone misses it.
+  void _onLogForSurface(PlayerLog entry) {
+    if (!surfaceLostPicture(
+      prefix: entry.prefix,
+      level: entry.level,
+      text: entry.text,
+    )) {
+      return;
+    }
+    _leaveSurface('mpv lost the picture (${entry.prefix}: ${entry.text})')
+        .ignore();
+  }
+
+  /// Takes the film off the surface it has no picture on and puts it on
+  /// the texture, once. [why] is for the log.
+  Future<void> _leaveSurface(String why) async {
+    if (_output.value != VideoOutput.surface || _surface == null) return;
+    if (_leavingSurface || _disposed) return;
+    _leavingSurface = true;
+    DiagnosticsLog.warn('player', 'video output: $why; to the texture');
+    _surface = null;
+    _surfaceWrites = _surfaceWrites.then((_) => _writeSurface(surfaceDetach));
+    await _surfaceWrites;
+    if (_disposed) return;
+    _useTexture();
+  }
+
+  /// Starts the ticks of [_keepUp] on the surface's player, where the
+  /// texture means software decoding ([_useTexture]).
+  void _watchKeepUp() {
+    if (!_surfaceAllowed || _disposed || _keepUp.done) return;
+    final native = _player.platform;
+    if (native is! NativePlayer) return;
+    _keepUpTimer ??= Timer.periodic(
+      DecodeKeepUp.interval,
+      (_) => _keepUpTick(native),
+    );
+  }
+
+  /// The properties a [DecodeKeepUp] reading takes.
+  static const List<String> keepUpProperties = [
+    'estimated-vf-fps',
+    'container-fps',
+    'frame-drop-count',
+    'decoder-frame-drop-count',
+  ];
+
+  Future<void> _keepUpTick(NativePlayer native) async {
+    if (_keepUpReading || _disposed) return;
+    final watch = _keepUp;
+    final step = watch.tick(
+      playing: _player.state.playing,
+      buffering: _player.state.buffering,
+    );
+    if (step == KeepUpStep.wait) return;
+    if (step == KeepUpStep.sample) {
+      _keepUpTimer?.cancel();
+      _keepUpTimer = null;
+    }
+    _keepUpReading = true;
+    try {
+      final values = <String, String>{};
+      for (final property in keepUpProperties) {
+        values[property] = await native.getProperty(property);
+        if (_disposed || !identical(watch, _keepUp)) return;
+      }
+      final reading = PlaybackStats.fromMpv(values);
+      if (step == KeepUpStep.baseline) {
+        _keepUpBaseline = reading;
+        return;
+      }
+      if (!decodingFallsBehind(
+        baseline: _keepUpBaseline,
+        sample: reading,
+        played: watch.played,
+      )) {
+        return;
+      }
+      DiagnosticsLog.warn(
+        'player',
+        'software decoding behind: ${reading.outputFps} of '
+            '${reading.containerFps} fps, drops '
+            '${reading.droppedFrames}/${reading.decoderDroppedFrames}',
+      );
+      if (!_cannotKeepUp.isClosed) _cannotKeepUp.add(null);
+    } catch (_) {
+      // Unavailable property or a player torn down mid-reading: no verdict.
+    } finally {
+      _keepUpReading = false;
+    }
+  }
+
   void _onSurface(VideoSurfaceInfo surface) {
     if (_output.value != VideoOutput.surface || _disposed) return;
+    if (_leavingSurface) return;
     _surface = surface;
     _surfaceWrites = _surfaceWrites.then((_) async {
       await _writeSurface(surfaceAttach(surface));
@@ -1408,11 +1538,14 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> dispose() async {
     _disposed = true;
     _stopStats();
+    _keepUpTimer?.cancel();
+    _keepUpTimer = null;
     for (final subscription in _trackSubscriptions) {
       await subscription.cancel();
     }
     await _tracks.close();
     await _stats.close();
+    await _cannotKeepUp.close();
     try {
       await _player.stop();
     } finally {

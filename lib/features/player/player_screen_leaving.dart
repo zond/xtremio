@@ -56,8 +56,8 @@ extension _PlayerLeaving on _PlayerScreenState {
     _clickTimer?.cancel();
     _clickTimer = null;
     _watchdog.stop();
-    _subtitleFailureTimer?.cancel();
-    _subtitleFailureTimer = null;
+    _noticeTimer?.cancel();
+    _noticeTimer = null;
   }
 
   /// Stops the player, waits for it, and only then leaves the screen.

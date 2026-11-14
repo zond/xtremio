@@ -30,6 +30,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _completed = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
   final _engineLog = StreamController<String>.broadcast();
+  final _cannotKeepUp = StreamController<void>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
   late final StreamController<PlaybackStats> _stats =
@@ -206,6 +207,10 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   /// One of mpv's own error-level log lines.
   void emitEngineLog(String line) => _engineLog.add(line);
+
+  /// The film's decoding falling behind it, as the real engine reports it
+  /// once per film.
+  void emitCannotKeepUp() => _cannotKeepUp.add(null);
   void emitVolume(double volume) => _volume.add(volume);
   void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
@@ -233,6 +238,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<String> get engineLog => _engineLog.stream;
+
+  @override
+  Stream<void> get cannotKeepUp => _cannotKeepUp.stream;
 
   @override
   Stream<double> get volume => _volume.stream;

@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/shell/video_decoders.dart';
 
 /// Which codecs the hardware decoder is allowed to have.
 ///
-/// A constant, checked against what it is for: this side of libmpv nothing
-/// can open a decoder, so what is testable is the list itself and the
-/// reasoning that picked it.
+/// A list checked against what it is for: this side of libmpv nothing can
+/// open a decoder, so what is testable is the list itself and the reasoning
+/// that picked it.
 void main() {
   test('the old codecs are not offered to the hardware decoder', () {
     // media_kit's Android controller widens mpv's own list to include
@@ -14,16 +15,23 @@ void main() {
     // asks for, an MPEG-4 file then fails decoder init ("Both surface and
     // native_window are NULL") and only the player's retry recovers a
     // picture, after seconds of stalling and an error on screen.
-    final allowed = MediaKitEngine.hwdecCodecs.split(',');
+    final allowed = HardwareDecoders.assumed.hwdecCodecs.split(',');
     expect(allowed, isNot(contains('mpeg4')));
     expect(allowed, isNot(contains('mpeg2video')));
+    // Nor when the device says it has a hardware decoder for them.
+    final probed = HardwareDecoders.fromReply({
+      'video/avc': {'maxWidth': 1920, 'maxHeight': 1088},
+      'video/mp4v-es': {'maxWidth': 1920, 'maxHeight': 1088},
+      'video/mpeg2': {'maxWidth': 1920, 'maxHeight': 1088},
+    });
+    expect(probed.hwdecCodecs, 'h264');
   });
 
   test('and the ones worth accelerating still are', () {
     // Taking the old two off is only free because these stay: they are the
     // formats a television cannot decode in software at the bitrates this
     // app plays them at, which is what hardware decoding is here for.
-    final allowed = MediaKitEngine.hwdecCodecs.split(',');
+    final allowed = HardwareDecoders.assumed.hwdecCodecs.split(',');
     expect(allowed, containsAll(['h264', 'hevc', 'vp9', 'av1']));
   });
 

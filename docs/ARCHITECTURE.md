@@ -353,10 +353,34 @@ by rules, all in `video_output.dart` and pinned by `video_output_test.dart`.
 A player on the surface starts with no video output and no video decoding
 (`surfaceStartOverrides`). Started with nowhere to draw, MediaCodec fails at
 init and the player reads that as a failed open. Once mpv's track list names
-the codec, a codec mpv sends to MediaCodec (`surfaceCodecs`, the same list as
-`hwdec-codecs`) goes to the surface, and anything else to the texture. If the
-decoder still ends up in software (`hwdec-current` says `no`), the film moves
-to the texture. With hardware decoding off, every film goes to the texture.
+the codec and the size, the film goes to the surface only when this device
+has a hardware decoder for that codec at that size. Android is asked once
+which it has (`HardwareDecoders`, `lib/shell/video_decoders.dart`, the
+`hwVideoDecoders` call). The same set is `hwdec-codecs`, so mpv never offers
+the hardware a codec it lacks. When Android cannot be asked, the set is
+`surfaceCodecs` at any size. Anything else goes to the texture. A Chromecast
+with Google TV has AV1 only in software, so an AV1 film goes to the texture
+there.
+
+**A film the surface cannot show after all moves to the texture.** Either of
+two things moves it. One is `hwdec-current` saying `no`. The other is mpv's
+log saying it lost the picture (`surfaceLostPicture`): `vd: Could not open
+codec.`, or the fatal `Cannot convert decoder/filter output…` and `Could not
+initialize video chain.`. That second path is the one that fires when
+MediaCodec will not open. mpv then falls back to a software decoder, cannot
+hand its first frame to the surface, and drops the video for the file. By
+then `hwdec-current` has no value and is never reported. Fatal lines reach
+the diagnostics log for that reason (`engineLogCarries`).
+
+**On the surface's player the texture decodes in software.** It gets a film
+only when the hardware cannot take it. media_kit's controller writes its own
+`hwdec-codecs` as it starts, so with hardware decoding on mpv would try the
+failed decoder again. About eight seconds into playback (paused and
+buffering time not counted) the player checks once that the decoding keeps
+up (`DecodeKeepUp`, `decodingFallsBehind`). Behind means mpv shows under 80%
+of the film's frame rate, or drops more than a fifth of its frames. The
+viewer is then told that this device can't play the video smoothly. With
+hardware decoding off, every film goes to the texture.
 
 **The surface is attached in media_kit's own order** (`surfaceAttach`: `vo`
 off, size, `wid`, `vo` on, `vid` again, then a seek to where it was) and

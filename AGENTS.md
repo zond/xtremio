@@ -322,6 +322,8 @@ instead of media_kit's texture (`VideoOutput`,
 `lib/features/player/video_output.dart`; see
 [Where the picture goes](docs/ARCHITECTURE.md#where-the-picture-goes)). Tests:
 `test/features/player/video_output_test.dart`,
+`test/features/player/decode_keep_up_test.dart`,
+`android/app/src/test/kotlin/com/zond/xtremio/HwVideoDecodersTest.kt`,
 `test/features/player/subtitle_lines_test.dart`,
 `test/features/player/screen_awake_test.dart`.
 
@@ -329,8 +331,14 @@ instead of media_kit's texture (`VideoOutput`,
   `vo=null` and `vid=no`, and attaches nothing until mpv's track list names the
   codec. MediaCodec started with nowhere to draw fails, and the player reads
   that as a failed open.
-- **A codec mpv decodes in software goes to the texture.** `surfaceCodecs` is
-  `hwdec-codecs`, and a test holds them equal. Change one only with the other.
+- **A codec the device decodes in software goes to the texture.** The
+  surface's codecs and `hwdec-codecs` are one set (`HardwareDecoders`,
+  `lib/shell/video_decoders.dart`), Android's answer or `surfaceCodecs`
+  without one, and a test holds them equal.
+- **A surface with no picture gives the film to the texture**, on
+  `hwdec-current` saying `no` or on mpv's log (`surfaceLostPicture`), once.
+  The texture then decodes in software, and a film it cannot keep up with
+  says so once (`DecodeKeepUp`).
 - **Attach in media_kit's order, detach whenever the surface goes**
   (`surfaceAttach`, `surfaceDetach`). Nothing may draw into a destroyed
   surface.

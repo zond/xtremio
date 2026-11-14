@@ -145,8 +145,15 @@ class PlayerScreen extends StatefulWidget {
   /// shorter than the controls take to fade is not worth a card.
   static const Duration stuckAfter = Duration(seconds: 5);
 
-  /// How long "this subtitle could not be loaded" stays over the picture.
-  static const Duration subtitleFailureShown = Duration(seconds: 6);
+  /// How long a notice ("this subtitle could not be loaded") stays over
+  /// the picture.
+  static const Duration noticeShown = Duration(seconds: 6);
+
+  /// What the player says when this device decodes the film too slowly
+  /// for its picture to keep up ([PlaybackEngine.cannotKeepUp]).
+  static String cannotKeepUpNotice({required bool tv}) =>
+      "${tv ? 'This TV' : 'This device'} can't play this video smoothly. "
+      'Try another stream.';
 
   /// How often that is checked. A position that has stopped produces no
   /// events at all, which is exactly why it needs a clock and not a
@@ -664,10 +671,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   })?
   _subtitlePick;
 
-  /// What is said about a subtitle file that would not load, over the
-  /// picture for [PlayerScreen.subtitleFailureShown]; null otherwise.
-  String? _subtitleFailure;
-  Timer? _subtitleFailureTimer;
+  /// A notice over the picture for [PlayerScreen.noticeShown]: a subtitle
+  /// file that would not load, or a device too slow for the film. Null
+  /// otherwise.
+  String? _notice;
+  Timer? _noticeTimer;
 
   /// Whether the engine has reported the opened media loaded (a duration,
   /// or that it is playing). Until then mpv is between files and refuses
@@ -1139,6 +1147,9 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       engine.buffering.listen(_onBuffering),
       engine.errors.listen(_onEngineError),
       engine.engineLog.listen(_onEngineLog),
+      engine.cannotKeepUp.listen(
+        (_) => _showNotice(PlayerScreen.cannotKeepUpNotice(tv: _isTv)),
+      ),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
     ]);
@@ -2152,10 +2163,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
                     centreControls: status == null && !startup,
                   ),
                   // Outside the OSD's fade: it says why the
-                  // subtitle the viewer is looking for is not there, and
-                  // the bar is not what they are looking at.
-                  if (_subtitleFailure case final failure?)
-                    _subtitleFailureLayer(failure),
+                  // subtitle the viewer is looking for is not there, or
+                  // why the picture stutters, and the bar is not what they
+                  // are looking at.
+                  if (_notice case final notice?) _noticeLayer(notice),
                   // Outside the bar's [AnimatedOpacity] on purpose: this
                   // is the layer that must still be there when the OSD has
                   // faded, which is the whole of what it is for. Top right,
@@ -2388,8 +2399,8 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     );
   }
 
-  /// Why the subtitle the viewer picked is not on screen, top centre.
-  Widget _subtitleFailureLayer(String failure) => SafeArea(
+  /// The notice ([_notice]), top centre.
+  Widget _noticeLayer(String notice) => SafeArea(
     child: Align(
       alignment: Alignment.topCenter,
       child: Padding(
@@ -2401,7 +2412,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Text(failure, style: const TextStyle(color: Colors.white)),
+            child: Text(notice, style: const TextStyle(color: Colors.white)),
           ),
         ),
       ),

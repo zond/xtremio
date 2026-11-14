@@ -65,7 +65,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _subtitlePick = null;
     final subtitle = _externalSubtitle;
     _undoSubtitlePick(pick.before, pick.beforeSubtitle);
-    _showSubtitleFailure(
+    _showNotice(
       subtitle == null
           ? 'This subtitle could not be loaded.'
           : 'The subtitle "${SubtitleMenu.externalLabel(subtitle)}" could '
@@ -92,12 +92,13 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _update(() => _resetSubtitleTiming(beforeSubtitle));
   }
 
-  void _showSubtitleFailure(String message) {
-    _subtitleFailureTimer?.cancel();
-    _update(() => _subtitleFailure = message);
-    _subtitleFailureTimer = Timer(PlayerScreen.subtitleFailureShown, () {
-      _subtitleFailureTimer = null;
-      if (mounted) _update(() => _subtitleFailure = null);
+  /// Shows [message] over the picture for [PlayerScreen.noticeShown].
+  void _showNotice(String message) {
+    _noticeTimer?.cancel();
+    _update(() => _notice = message);
+    _noticeTimer = Timer(PlayerScreen.noticeShown, () {
+      _noticeTimer = null;
+      if (mounted) _update(() => _notice = null);
     });
   }
 

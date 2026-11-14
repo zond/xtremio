@@ -92,6 +92,13 @@ class MainActivity : FlutterActivity() {
                             "manufacturer" to Build.MANUFACTURER,
                         ),
                     )
+                    // Which codecs the player may put on its own surface
+                    // (lib/shell/video_decoders.dart, HwVideoDecoders.kt).
+                    "hwVideoDecoders" -> try {
+                        result.success(HwVideoDecoders.onThisDevice())
+                    } catch (e: RuntimeException) {
+                        result.error("unavailable", e.javaClass.simpleName, null)
+                    }
                     // Where a receiver actually is, which is what lets the
                     // embedded server name an interface that receiver can
                     // connect back to

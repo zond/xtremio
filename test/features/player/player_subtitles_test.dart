@@ -446,7 +446,7 @@ void main() {
     expect(engine.externalSubtitles, hasLength(2));
 
     // And the note goes, the film having gone on underneath it.
-    await tester.pump(PlayerScreen.subtitleFailureShown);
+    await tester.pump(PlayerScreen.noticeShown);
     expect(find.textContaining('could not be loaded'), findsNothing);
   });
 

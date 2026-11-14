@@ -53,4 +53,20 @@ void main() {
     expect(carries('cplayer', 'info', verbose: true), isFalse);
     expect(carries('vo/gpu', 'v', verbose: true), isFalse);
   });
+
+  test('a fatal line always reaches the engine log', () {
+    // mpv gives up on a picture at fatal level ("Could not initialize video
+    // chain."), and a report without that line says nothing went wrong.
+    for (final verbose in [false, true]) {
+      expect(
+        MediaKitEngine.engineLogCarries(
+          prefix: 'cplayer',
+          level: 'fatal',
+          verboseLog: verbose,
+        ),
+        isTrue,
+        reason: 'verbose $verbose',
+      );
+    }
+  });
 }
