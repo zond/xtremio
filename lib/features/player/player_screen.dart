@@ -18,6 +18,7 @@ import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'playback_engine.dart';
+import 'video_output.dart' show codecLabel;
 import 'cast_preparation.dart';
 import 'cast_session.dart';
 import 'cast_stats_overlay.dart';
@@ -150,10 +151,28 @@ class PlayerScreen extends StatefulWidget {
   static const Duration noticeShown = Duration(seconds: 6);
 
   /// What the player says when this device decodes the film too slowly
-  /// for its picture to keep up ([PlaybackEngine.cannotKeepUp]).
-  static String cannotKeepUpNotice({required bool tv}) =>
-      "${tv ? 'This TV' : 'This device'} can't play this video smoothly. "
+  /// for its picture to keep up ([PlaybackEngine.cannotKeepUp]). [codec] is
+  /// mpv's name for the film's codec.
+  static String cannotKeepUpNotice({required bool tv, String? codec}) =>
+      '${_noHardwareDecoder(tv: tv, codec: codec)} '
+      'Its processor is too slow to decode it in software. '
       'Try another stream.';
+
+  /// What the player says, in place of the picture, when this device has
+  /// no hardware decoder for the film and too little memory to decode it in
+  /// software ([PlaybackEngine.tooLargeForSoftware]).
+  static String tooLargeForSoftwareNotice({required bool tv, String? codec}) =>
+      '${_noHardwareDecoder(tv: tv, codec: codec)} '
+      'Decoding it in software needs more memory than '
+      '${tv ? 'this TV' : 'this device'} has. '
+      'Try a 1080p stream or another format.';
+
+  static String _noHardwareDecoder({required bool tv, String? codec}) {
+    final label = codecLabel(codec);
+    final video = label == null ? 'this video' : 'this $label video';
+    return "${tv ? 'This TV' : 'This device'} can't decode $video in "
+        'hardware.';
+  }
 
   /// How often that is checked. A position that has stopped produces no
   /// events at all, which is exactly why it needs a clock and not a
@@ -529,6 +548,10 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   bool _playing = false;
   bool _buffering = false;
   String? _engineError;
+
+  /// Why this device cannot show the film at all, in the viewer's words
+  /// ([PlaybackEngine.tooLargeForSoftware]). Shown as an unplayable stream.
+  String? _refusedHere;
   double _volume = 100;
   double? _volumeBeforeMute;
   double _rate = 1;
@@ -1148,7 +1171,17 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       engine.errors.listen(_onEngineError),
       engine.engineLog.listen(_onEngineLog),
       engine.cannotKeepUp.listen(
-        (_) => _showNotice(PlayerScreen.cannotKeepUpNotice(tv: _isTv)),
+        (codec) => _showNotice(
+          PlayerScreen.cannotKeepUpNotice(tv: _isTv, codec: codec),
+        ),
+      ),
+      engine.tooLargeForSoftware.listen(
+        (codec) => _update(
+          () => _refusedHere = PlayerScreen.tooLargeForSoftwareNotice(
+            tv: _isTv,
+            codec: codec,
+          ),
+        ),
       ),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
@@ -1278,6 +1311,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
     unawaited(_unpublishCast());
     _autoPick = SubtitleAutoPick();
     _mediaLoaded = false;
+    _refusedHere = null;
     // A different video. The adjustment the last subtitle was played with says
     // nothing about it.
     _resetSubtitleTiming();
@@ -1435,6 +1469,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
       _engineError == null &&
       _opened != null &&
       state?.unplayableReason == null &&
+      _refusedHere == null &&
       _torrentStatsRequest != null;
 
   void _onPlaying(bool playing) {
@@ -2541,7 +2576,7 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   PlayerStatus? _status(PlayerState? state) => PlayerStatus.of(
     engineError: _engineError,
     loaded: state != null && state.isLoaded,
-    unplayable: state?.unplayableReason,
+    unplayable: _refusedHere ?? state?.unplayableReason,
     opened: _opened != null,
     waiting: _waiting,
     torrent: state?.selectedStream?.kind == StreamKind.torrent,

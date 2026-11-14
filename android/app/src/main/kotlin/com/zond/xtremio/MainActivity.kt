@@ -1,5 +1,6 @@
 package com.zond.xtremio
 
+import android.app.ActivityManager
 import android.app.UiModeManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -94,8 +95,13 @@ class MainActivity : FlutterActivity() {
                     )
                     // Which codecs the player may put on its own surface
                     // (lib/shell/video_decoders.dart, HwVideoDecoders.kt).
+                    // The device's memory rides along: software decoding
+                    // needs it where a hardware decoder is missing.
                     "hwVideoDecoders" -> try {
-                        result.success(HwVideoDecoders.onThisDevice())
+                        result.success(
+                            HwVideoDecoders.onThisDevice() +
+                                ("totalMemory" to totalMemoryBytes()),
+                        )
                     } catch (e: RuntimeException) {
                         result.error("unavailable", e.javaClass.simpleName, null)
                     }
@@ -319,6 +325,16 @@ class MainActivity : FlutterActivity() {
 
     private fun hasTouch(): Boolean =
         packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
+
+    // All the memory the system can give apps, in bytes; 0 where it will
+    // not say.
+    private fun totalMemoryBytes(): Long {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return 0L
+        val info = ActivityManager.MemoryInfo()
+        manager.getMemoryInfo(info)
+        return info.totalMem
+    }
 
     private companion object {
         const val DEVICE_CHANNEL = "xtremio/device"

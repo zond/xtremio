@@ -79,8 +79,13 @@ abstract interface class PlaybackEngine {
 
   /// Fires once per film when its picture cannot keep up with its sound:
   /// a film decoded in software that this device is too slow for
-  /// ([DecodeKeepUp]).
-  Stream<void> get cannotKeepUp;
+  /// ([DecodeKeepUp]). It carries the film's codec, by mpv's name.
+  Stream<String?> get cannotKeepUp;
+
+  /// Fires when a film this device has no hardware decoder for is too large
+  /// to decode in software here ([softwareDecodeTooLarge]). The film is
+  /// paused and shows no picture. It carries the codec, by mpv's name.
+  Stream<String?> get tooLargeForSoftware;
 
   /// Output volume, `0..100`.
   Stream<double> get volume;
@@ -453,14 +458,26 @@ class MediaKitEngine implements PlaybackEngine {
   /// that says the same thing moves nothing ([_leaveSurface]).
   bool _leavingSurface = false;
 
+  /// Set once the film was refused as too large to decode in software
+  /// ([_refuseSoftwareDecode]). The output is back to none, so this is what
+  /// keeps [_decideOutput] from deciding, and refusing, again.
+  bool _refusedSoftware = false;
+
   /// The one check per film that software decoding keeps up
   /// ([DecodeKeepUp]), its ticks, and the reading it started from.
   DecodeKeepUp _keepUp = DecodeKeepUp();
   Timer? _keepUpTimer;
   PlaybackStats _keepUpBaseline = const PlaybackStats();
   bool _keepUpReading = false;
-  final StreamController<void> _cannotKeepUp =
-      StreamController<void>.broadcast();
+  final StreamController<String?> _cannotKeepUp =
+      StreamController<String?>.broadcast();
+  final StreamController<String?> _tooLargeForSoftware =
+      StreamController<String?>.broadcast();
+
+  /// The first video track's codec and size, from [_decideOutput].
+  String? _videoCodec;
+  int? _videoWidth;
+  int? _videoHeight;
 
   /// media_kit's controller for the texture, made when the film goes to the
   /// texture ([_useTexture]): at construction where the surface is not
@@ -850,7 +867,10 @@ class MediaKitEngine implements PlaybackEngine {
       (verboseLog && const {'demux', 'stream', 'cache'}.contains(prefix));
 
   @override
-  Stream<void> get cannotKeepUp => _cannotKeepUp.stream;
+  Stream<String?> get cannotKeepUp => _cannotKeepUp.stream;
+
+  @override
+  Stream<String?> get tooLargeForSoftware => _tooLargeForSoftware.stream;
 
   @override
   Stream<double> get volume => _player.stream.volume;
@@ -1326,6 +1346,15 @@ class MediaKitEngine implements PlaybackEngine {
   /// the decoder that just failed. That film is then checked for keeping
   /// up ([_watchKeepUp]).
   void _useTexture() {
+    if (_surfaceAllowed &&
+        softwareDecodeTooLarge(
+          width: _videoWidth,
+          height: _videoHeight,
+          memoryBytes: _decoders.memoryBytes,
+        )) {
+      _refuseSoftwareDecode();
+      return;
+    }
     _controller ??= VideoController(
       _player,
       configuration: configurationFor(
@@ -1336,10 +1365,28 @@ class MediaKitEngine implements PlaybackEngine {
     _watchKeepUp();
   }
 
+  /// Leaves a film this device can neither decode in hardware nor afford to
+  /// decode in software paused, with no picture
+  /// ([softwareDecodeTooLarge]). Nothing is decoded: the texture is never
+  /// built, so mpv has no video output to decode for.
+  void _refuseSoftwareDecode() {
+    DiagnosticsLog.warn(
+      'player',
+      'video output: none; ${_videoCodec ?? 'video'} '
+          '${_videoWidth}x$_videoHeight is too large to decode in software '
+          'with ${_decoders.memoryBytes} bytes of memory',
+    );
+    _refusedSoftware = true;
+    _output.value = null;
+    _player.pause().ignore();
+    if (!_tooLargeForSoftware.isClosed) _tooLargeForSoftware.add(_videoCodec);
+  }
+
   /// Decides the output from the first video track's codec, once
   /// ([videoOutputForCodec]). A film with no video track decides nothing.
   void _decideOutput(Tracks tracks) {
     if (!_surfaceAllowed || _output.value != null || _disposed) return;
+    if (_refusedSoftware) return;
     final video = [
       for (final track in tracks.video)
         if (track.id != 'auto' && track.id != 'no') track,
@@ -1348,6 +1395,9 @@ class MediaKitEngine implements PlaybackEngine {
     final first = video.first;
     final w = first.w;
     final h = first.h;
+    _videoCodec = first.codec;
+    _videoWidth = w;
+    _videoHeight = h;
     if (_aspect.value == null && w != null && h != null && w > 0 && h > 0) {
       _aspect.value = w / h;
     }
@@ -1479,7 +1529,7 @@ class MediaKitEngine implements PlaybackEngine {
             '${reading.containerFps} fps, drops '
             '${reading.droppedFrames}/${reading.decoderDroppedFrames}',
       );
-      if (!_cannotKeepUp.isClosed) _cannotKeepUp.add(null);
+      if (!_cannotKeepUp.isClosed) _cannotKeepUp.add(_videoCodec);
     } catch (_) {
       // Unavailable property or a player torn down mid-reading: no verdict.
     } finally {
@@ -1546,6 +1596,7 @@ class MediaKitEngine implements PlaybackEngine {
     await _tracks.close();
     await _stats.close();
     await _cannotKeepUp.close();
+    await _tooLargeForSoftware.close();
     try {
       await _player.stop();
     } finally {

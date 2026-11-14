@@ -151,7 +151,7 @@ renderer for them.
     (`HwVideoDecoders.kt`), which the player asks once per process
     (`HardwareDecoders.onThisDevice`, `lib/shell/video_decoders.dart`). It
     answers, per video type, the largest width and height any hardware
-    decoder takes. Hardware means `isHardwareAccelerated`, not
+    decoder takes, and the device's memory in bytes under `totalMemory`. Hardware means `isHardwareAccelerated`, not
     `isSoftwareOnly` and not `isAlias` on API 29 and up. Below that it means
     a name that does not start `OMX.google.` or `c2.android.`. Any error
     means today's fixed list ([Where the picture

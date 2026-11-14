@@ -344,4 +344,71 @@ void main() {
       expect(seen, ['surface 7 1920x800', 'gone']);
     });
   });
+
+  group('a film too large to decode in software', () {
+    const gb = 1024 * 1024 * 1024;
+
+    test('is refused above 1080p on a device with little memory', () {
+      // The Chromecast with Google TV reports just under 2 GB.
+      expect(
+        softwareDecodeTooLarge(
+          width: 3840,
+          height: 2160,
+          memoryBytes: 2030588000,
+        ),
+        isTrue,
+      );
+      expect(
+        softwareDecodeTooLarge(width: 2560, height: 1440, memoryBytes: 2 * gb),
+        isTrue,
+      );
+    });
+
+    test('is tried at 1080p, or with enough memory', () {
+      expect(
+        softwareDecodeTooLarge(width: 1920, height: 1080, memoryBytes: 2 * gb),
+        isFalse,
+      );
+      expect(
+        softwareDecodeTooLarge(width: 3840, height: 2160, memoryBytes: 4 * gb),
+        isFalse,
+      );
+    });
+
+    test('decides nothing without a size or the memory', () {
+      expect(
+        softwareDecodeTooLarge(width: null, height: 2160, memoryBytes: gb),
+        isFalse,
+      );
+      expect(
+        softwareDecodeTooLarge(width: 3840, height: 2160, memoryBytes: null),
+        isFalse,
+      );
+      expect(
+        softwareDecodeTooLarge(width: 3840, height: 2160, memoryBytes: 0),
+        isFalse,
+      );
+    });
+
+    test('the device says how much memory it has', () {
+      final decoders = HardwareDecoders.fromReply({
+        'video/hevc': {'maxWidth': 4096, 'maxHeight': 4096},
+        HardwareDecoders.memoryKey: 2030588000,
+      });
+      expect(decoders.memoryBytes, 2030588000);
+      expect(decoders.codecs, {'hevc'});
+      expect(
+        HardwareDecoders.fromReply({HardwareDecoders.memoryKey: 0}).memoryBytes,
+        isNull,
+      );
+    });
+  });
+
+  test('codecs go by the names the stream list shows', () {
+    expect(codecLabel('av1'), 'AV1');
+    expect(codecLabel('h264'), 'H.264');
+    expect(codecLabel('mpeg2video'), 'MPEG-2');
+    expect(codecLabel('theora'), isNull);
+    expect(codecLabel(null), isNull);
+  });
 }

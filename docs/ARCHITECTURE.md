@@ -379,8 +379,18 @@ failed decoder again. About eight seconds into playback (paused and
 buffering time not counted) the player checks once that the decoding keeps
 up (`DecodeKeepUp`, `decodingFallsBehind`). Behind means mpv shows under 80%
 of the film's frame rate, or drops more than a fifth of its frames. The
-viewer is then told that this device can't play the video smoothly. With
-hardware decoding off, every film goes to the texture.
+viewer is then told that this device can't decode the video in hardware and
+is too slow to do it in software. With hardware decoding off, every film
+goes to the texture.
+
+**A film too large for software decoding is not decoded at all.** On a
+device with under 3 GB of memory, a picture larger than 1080p with no
+hardware decoder is refused (`softwareDecodeTooLarge`). The film is paused
+with no picture, and the viewer is told why: no hardware decoder, and too
+little memory to decode it in software. Measured on a Chromecast with Google
+TV: a 2160p 10-bit AV1 film took the app to 855 MB, and Android killed it
+while it was on screen. The device's memory comes with the decoder answer
+(`hwVideoDecoders`, key `totalMemory`).
 
 **The surface is attached in media_kit's own order** (`surfaceAttach`: `vo`
 off, size, `wid`, `vo` on, `vid` again, then a seek to where it was) and

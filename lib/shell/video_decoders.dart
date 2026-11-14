@@ -38,11 +38,20 @@ class DecoderSize {
 /// it is [assumed].
 @immutable
 class HardwareDecoders {
-  const HardwareDecoders(this.sizes);
+  const HardwareDecoders(this.sizes, {this.memoryBytes});
 
   /// mpv's codec name to the largest picture its decoder takes, or null
   /// where only the codec is known.
   final Map<String, DecoderSize?> sizes;
+
+  /// The device's memory in bytes, or null where it was not asked. Decoding
+  /// in software needs memory the hardware decoder would not
+  /// (`softwareDecodeTooLarge`).
+  final int? memoryBytes;
+
+  /// The key in the channel's reply that carries [memoryBytes]. It is not a
+  /// video type, so [fromReply]'s walk over [mimeOf] never reads it as one.
+  static const String memoryKey = 'totalMemory';
 
   /// What the player assumes with nobody to ask: [surfaceCodecs], at any
   /// size.
@@ -99,7 +108,8 @@ class HardwareDecoders {
 
   /// [reply] from the `hwVideoDecoders` call: Android type to
   /// `{maxWidth, maxHeight}`. A type the player does not know is ignored,
-  /// and a size that is missing or not positive is unknown.
+  /// and a size that is missing or not positive is unknown. [memoryKey]
+  /// carries the device's memory.
   static HardwareDecoders fromReply(Map<Object?, Object?> reply) {
     final sizes = <String, DecoderSize?>{};
     for (final MapEntry(key: codec, value: mime) in mimeOf.entries) {
@@ -111,7 +121,11 @@ class HardwareDecoders {
           ? DecoderSize(w, h)
           : null;
     }
-    return HardwareDecoders(sizes);
+    final memory = reply[memoryKey];
+    return HardwareDecoders(
+      sizes,
+      memoryBytes: memory is int && memory > 0 ? memory : null,
+    );
   }
 
   /// Asks Android which video codecs it decodes in hardware
@@ -146,5 +160,5 @@ class HardwareDecoders {
   static Future<HardwareDecoders> onThisDevice() => _onThisDevice ??= probe();
 
   @override
-  String toString() => 'HardwareDecoders($sizes)';
+  String toString() => 'HardwareDecoders($sizes, memory: $memoryBytes)';
 }

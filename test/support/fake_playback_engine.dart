@@ -30,7 +30,8 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _completed = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
   final _engineLog = StreamController<String>.broadcast();
-  final _cannotKeepUp = StreamController<void>.broadcast();
+  final _cannotKeepUp = StreamController<String?>.broadcast();
+  final _tooLargeForSoftware = StreamController<String?>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
   late final StreamController<PlaybackStats> _stats =
@@ -210,7 +211,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   /// The film's decoding falling behind it, as the real engine reports it
   /// once per film.
-  void emitCannotKeepUp() => _cannotKeepUp.add(null);
+  void emitCannotKeepUp([String? codec]) => _cannotKeepUp.add(codec);
+  void emitTooLargeForSoftware([String? codec]) =>
+      _tooLargeForSoftware.add(codec);
   void emitVolume(double volume) => _volume.add(volume);
   void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
@@ -240,7 +243,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   Stream<String> get engineLog => _engineLog.stream;
 
   @override
-  Stream<void> get cannotKeepUp => _cannotKeepUp.stream;
+  Stream<String?> get cannotKeepUp => _cannotKeepUp.stream;
+
+  @override
+  Stream<String?> get tooLargeForSoftware => _tooLargeForSoftware.stream;
 
   @override
   Stream<double> get volume => _volume.stream;

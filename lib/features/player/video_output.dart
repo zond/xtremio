@@ -96,3 +96,44 @@ bool surfaceLostPicture({
   return line.startsWith('Cannot convert decoder/filter output') ||
       line == 'Could not initialize video chain.';
 }
+
+/// The most pixels a picture decoded in software may have on a device with
+/// less than [softwareDecodeMemoryFloor] of memory: 1080p.
+const int softwareDecodePixelCeiling = 1920 * 1088;
+
+/// Below this much memory, a picture larger than 1080p is not decoded in
+/// software at all.
+const int softwareDecodeMemoryFloor = 3 * 1024 * 1024 * 1024;
+
+/// Whether a [width] by [height] picture is too large to decode in software
+/// on a device with [memoryBytes] of memory.
+///
+/// Measured on a Chromecast with Google TV (2 GB): a 2160p 10-bit AV1 film
+/// decoded in software took the app to 855 MB, and Android killed it while
+/// it was on screen. The decoder holds several 4K frames of about 25 MB
+/// each, and the texture holds its own copies. An unknown size or memory
+/// decides nothing.
+bool softwareDecodeTooLarge({
+  required int? width,
+  required int? height,
+  required int? memoryBytes,
+}) {
+  if (width == null || height == null || memoryBytes == null) return false;
+  if (width <= 0 || height <= 0 || memoryBytes <= 0) return false;
+  return memoryBytes < softwareDecodeMemoryFloor &&
+      width * height > softwareDecodePixelCeiling;
+}
+
+/// The name a viewer knows mpv's [codec] by, as the stream list shows it,
+/// or null for one without a familiar name.
+String? codecLabel(String? codec) => switch (codec?.trim().toLowerCase()) {
+  'av1' => 'AV1',
+  'hevc' => 'HEVC',
+  'h264' => 'H.264',
+  'vp9' => 'VP9',
+  'vp8' => 'VP8',
+  'mpeg4' => 'MPEG-4',
+  'mpeg2video' => 'MPEG-2',
+  'vc1' => 'VC-1',
+  _ => null,
+};
