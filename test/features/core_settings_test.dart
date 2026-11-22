@@ -106,7 +106,6 @@ void main() {
   group('switches write the flipped value', () {
     for (final (key, expected) in [
       (ProfileSettings.bingeWatchingKey, false),
-      (ProfileSettings.pauseOnMinimizeKey, true),
       (ProfileSettings.hardwareDecodingKey, false),
       (ProfileSettings.escExitFullscreenKey, false),
       (ProfileSettings.hideSpoilersKey, true),
@@ -124,6 +123,14 @@ void main() {
     }
   });
 
+  testWidgets('offers no switch for pausing when the app is left', (
+    tester,
+  ) async {
+    // Leaving the app always pauses (see the player's settings test).
+    await pumpSettings(tester);
+    expect(find.text('Pause when minimised'), findsNothing);
+  });
+
   group('writes in a row', () {
     testWidgets('the second carries the first before the engine reports it', (
       tester,
@@ -136,7 +143,7 @@ void main() {
       );
       await tester.pump();
       await tester.tap(
-        find.byKey(settingKey(ProfileSettings.pauseOnMinimizeKey)),
+        find.byKey(settingKey(ProfileSettings.escExitFullscreenKey)),
       );
       await tester.pump();
       expect(core.dispatched, hasLength(2));
@@ -144,7 +151,7 @@ void main() {
       expect(sent, {
         ...fixtureSettings(),
         ProfileSettings.bingeWatchingKey: false,
-        ProfileSettings.pauseOnMinimizeKey: true,
+        ProfileSettings.escExitFullscreenKey: false,
       });
       // The controls show what was sent…
       expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isFalse);
@@ -160,7 +167,7 @@ void main() {
       expect(core.dispatched.last.action['args']['args'], {
         ...fixtureSettings(),
         ProfileSettings.bingeWatchingKey: false,
-        ProfileSettings.pauseOnMinimizeKey: true,
+        ProfileSettings.escExitFullscreenKey: false,
         ProfileSettings.hideSpoilersKey: true,
       });
     });

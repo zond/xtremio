@@ -165,7 +165,6 @@ void main() {
     }
     for (final title in [
       'Binge watching',
-      'Pause when minimised',
       'Hardware decoding',
       'Esc leaves fullscreen',
       'Hide spoilers',

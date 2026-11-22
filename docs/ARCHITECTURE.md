@@ -214,14 +214,16 @@ two quick changes do not revert each other. Settings are device-local
 
 What the app reads: `seekTimeDuration` and `seekShortTimeDuration` (Shift +
 arrow, the *short* seek), `bingeWatching`, `nextVideoNotificationDuration`
-(the up-next countdown; 0 plays the next at once), `pauseOnMinimize`,
+(the up-next countdown; 0 plays the next at once),
 `escExitFullscreen`, `subtitlesSize` / `subtitlesTextColor` /
 `subtitlesBackgroundColor` (`SubtitleStyle.fromSettings`: 32 px scaled by
 the percentage, `#RRGGBBAA`, a transparent background meaning no box), and
 `hardwareDecoding` (applied to the next player that opens).
 `streamingServerUrl` is not offered: it is always the embedded server's.
 `quitOnClose` and `hideSpoilers` are stored but not honoured. The rest pass
-through untouched.
+through untouched. `pauseOnMinimize` is not offered or read: leaving the
+app always pauses a playing film, because nothing here (no
+picture-in-picture, no media notification) can control one out of sight.
 
 **Account.** Settings → Account dispatches `Authenticate` (`Login`, or
 `Register` with the GDPR consent the API requires, `from: xtremio`) and

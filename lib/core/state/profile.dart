@@ -107,7 +107,6 @@ final class ProfileSettings {
       'nextVideoNotificationDuration';
   static const String seekTimeDurationKey = 'seekTimeDuration';
   static const String seekShortTimeDurationKey = 'seekShortTimeDuration';
-  static const String pauseOnMinimizeKey = 'pauseOnMinimize';
   static const String hardwareDecodingKey = 'hardwareDecoding';
   static const String audioLanguageKey = 'audioLanguage';
   static const String subtitlesLanguageKey = 'subtitlesLanguage';
@@ -140,7 +139,6 @@ final class ProfileSettings {
   /// Milliseconds a Shift + arrow-key seek moves (the *short* seek).
   int get seekShortTimeDuration => _int(seekShortTimeDurationKey) ?? 3000;
 
-  bool get pauseOnMinimize => json[pauseOnMinimizeKey] as bool? ?? false;
   bool get hardwareDecoding => json[hardwareDecodingKey] as bool? ?? true;
 
   /// ISO 639-2 code (`eng`), or null for the player's default.

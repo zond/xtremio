@@ -138,12 +138,10 @@ void main() {
 
   testWidgets('the app going to the background during the wait does not '
       'pause the player', (tester) async {
-    // `pauseOnMinimize` is about a playback the viewer is coming back to.
-    // A player being released is not one, and media_kit throws on a player
-    // it has already let go.
+    // Pausing on the way out is for a playback the viewer is coming back
+    // to. A player being released is not one, and media_kit throws on a
+    // player it has already let go.
     final ctx = loadCtxLoggedOutFixture();
-    (ctx['profile']['settings'] as Map<String, dynamic>)['pauseOnMinimize'] =
-        true;
     final wedged = Completer<void>();
     final harness = PlayerHarness(
       ctx: ctx,

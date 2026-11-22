@@ -125,18 +125,6 @@ class PlayerSettingsSection extends StatelessWidget {
           onSetting: onSetting,
         ),
         Explained(
-          title: 'Pause when minimised',
-          explanation: 'Playback pauses when you leave the app.',
-          child: SwitchListTile(
-            key: settingKey(ProfileSettings.pauseOnMinimizeKey),
-            secondary: const ExplainIcon(Icon(Icons.pause_circle_outline)),
-            title: const Text('Pause when minimised'),
-            value: settings.pauseOnMinimize,
-            onChanged: (value) =>
-                onSetting(ProfileSettings.pauseOnMinimizeKey, value),
-          ),
-        ),
-        Explained(
           title: 'Hardware decoding',
           explanation:
               "Lets the device's own video chip draw the picture, which "

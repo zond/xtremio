@@ -151,7 +151,7 @@ void main() {
     expect(harness.playerActions(), contains('NextVideo'));
   });
 
-  group('pauseOnMinimize', () {
+  group('leaving the app', () {
     /// Minimised and back, through the transitions the framework allows.
     Future<void> hide(WidgetTester tester) async {
       for (final state in [
@@ -168,7 +168,7 @@ void main() {
     testWidgets('pauses a playing video when the app is hidden', (
       tester,
     ) async {
-      final harness = await pumpPlaying(tester, {'pauseOnMinimize': true});
+      final harness = await pumpPlaying(tester, {});
       await hide(tester);
       expect(harness.engine.pauseCalls, 1);
 
@@ -179,10 +179,14 @@ void main() {
       expect(harness.engine.pauseCalls, 1);
     });
 
-    testWidgets('is off by default', (tester) async {
-      final harness = await pumpPlaying(tester, {});
+    testWidgets('pauses even with the stored setting saying not to', (
+      tester,
+    ) async {
+      // Stremio's `pauseOnMinimize`, off by default, is for apps that keep a
+      // hidden film controllable. This one has nothing to control it with.
+      final harness = await pumpPlaying(tester, {'pauseOnMinimize': false});
       await hide(tester);
-      expect(harness.engine.pauseCalls, 0);
+      expect(harness.engine.pauseCalls, 1);
     });
   });
 

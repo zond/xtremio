@@ -70,8 +70,8 @@ part 'player_screen_leaving.dart';
 /// `profile.settings` drives the seek steps (`seekTimeDuration`; Shift +
 /// arrows is `seekShortTimeDuration`), whether an ending episode moves on
 /// (`bingeWatching`), the up-next countdown (`nextVideoNotificationDuration`;
-/// 0 plays at once), `pauseOnMinimize`, whether Esc leaves fullscreen
-/// (`escExitFullscreen`), and the subtitle style.
+/// 0 plays at once), whether Esc leaves fullscreen (`escExitFullscreen`), and
+/// the subtitle style. `pauseOnMinimize` is not read: see [_onAppHidden].
 ///
 /// On a TV ([DeviceScope.isTv]) the remote drives it in two modes. With the OSD
 /// down there is nothing to aim at. The centre key is play/pause, and it leaves
@@ -1251,16 +1251,22 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   Duration get _shortSeekStep =>
       Duration(milliseconds: _settings.seekShortTimeDuration);
 
-  /// The window was minimised or the app went to the background: with
-  /// `pauseOnMinimize` a playing video pauses, and the torrent polls stop,
-  /// since nobody can see what they feed.
+  /// The window was minimised or the app went to the background: a playing
+  /// video pauses, and the torrent polls stop, since nobody can see what
+  /// they feed.
+  ///
+  /// Always, whatever the stored `pauseOnMinimize` says. Stremio's own
+  /// apps keep a hidden film controllable (picture-in-picture, a media
+  /// notification, the taskbar's controls); this app has none of those, so
+  /// a film playing on out of sight is sound nobody can stop without coming
+  /// back. The stored value is left as it is.
   ///
   /// The start-up poll is stopped here by hand: [_syncTorrentStats] manages
   /// only a *loaded* torrent's polling, so the start-up timer would otherwise
   /// go on firing twice a second in the background.
   void _onAppHidden() {
     _appHidden = true;
-    if (_settings.pauseOnMinimize && _playing && !_handedOver) {
+    if (_playing && !_handedOver) {
       _engine?.pause();
     }
     if (!_mediaLoaded) _torrentPoll.pause();

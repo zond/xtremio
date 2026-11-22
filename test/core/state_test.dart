@@ -938,7 +938,6 @@ void main() {
       expect(settings.nextVideoNotificationDuration, 35000);
       expect(settings.seekTimeDuration, 10000);
       expect(settings.seekShortTimeDuration, 3000);
-      expect(settings.pauseOnMinimize, isFalse);
       expect(settings.hardwareDecoding, isTrue);
       expect(settings.audioLanguage, 'eng');
       expect(settings.subtitlesLanguage, 'eng');

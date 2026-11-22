@@ -45,6 +45,10 @@ Future<void> tapCheck(WidgetTester tester) async {
     200,
     scrollable: find.byType(Scrollable).first,
   );
+  // Scrolled in steps, the tile can stop half under the list's edge, where
+  // a tap lands on nothing. Bring all of it in.
+  await tester.ensureVisible(tile);
+  await tester.pumpAndSettle();
   await tester.tap(tile);
   await tester.pumpAndSettle();
 }
