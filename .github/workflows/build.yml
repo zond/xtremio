@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: 3.47.1
+  FLUTTER_VERSION: 3.50.1
 
 # A newer dispatch supersedes an older one on the same ref, but a tag build is
 # never cancelled: it is the one whose artifacts a Release is made of.

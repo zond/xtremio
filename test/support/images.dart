@@ -12,7 +12,7 @@
 /// from this file.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:xtremio/core/core.dart';
 
 /// What [image] is fetching, through the wrapper a bounded decode adds.

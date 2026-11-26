@@ -8,10 +8,15 @@ Glue that builds the `rust/` crate with Flutter. The FFI plugin skeleton
 ## Local patches to the vendored cargokit
 
 - `cargokit/gradle/plugin.gradle`: the debug variant no longer appends
-  `android-x86`. Flutter 3.47 has no `android-x86` target platform (its
+  `android-x86`. Flutter 3.50 has no `android-x86` target platform (its
   `PLATFORM_ARCH_MAP` lists arm, arm64 and x64 only) and sets
   `abiFilters` accordingly, so an i686 build would be compiled and then
   dropped from the APK. `android-x64` is kept for the emulator.
+
+- `cargokit/gradle/plugin.gradle`: the app's `compileSdkVersion` is read
+  by its major number. Android Gradle Plugin 9.3 names API 37
+  `android-37.0`, and upstream's `substring(8) as int` fails on it with
+  `For input string: "37.0"`.
 
 - `cargokit/build_tool/lib/src/android_environment.dart`: additionally
   exports `BINDGEN_EXTRA_CLANG_ARGS_<triple>` = `--target=<triple><minSdk>

@@ -9,7 +9,7 @@ real box) is in [ANDROID.md](ANDROID.md).
 
 ## Setting up a dev machine
 
-A build needs Flutter stable (CI uses 3.47.1) and a Rust toolchain no older
+A build needs Flutter stable (CI uses 3.50.1) and a Rust toolchain no older
 than `rust-version` in `rust/Cargo.toml` (1.97.1), because the build itself
 compiles the crate, through cargokit. Linux desktop also needs:
 
@@ -29,7 +29,7 @@ dev package fails in cmake.
 ### With Nix
 
 `flake.nix` has the same tools as development shells, for Linux (x86_64,
-aarch64) and Apple-silicon macOS, the systems nixpkgs builds Flutter 3.47
+aarch64) and Apple-silicon macOS, the systems nixpkgs builds Flutter 3.50
 for:
 
 ```bash

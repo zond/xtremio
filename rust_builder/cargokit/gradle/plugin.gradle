@@ -146,7 +146,7 @@ class CargoKitPlugin implements Plugin<Project> {
 
             // Same thing addFlutterDependencies does in flutter.gradle.
             // Local patch (see rust_builder/README.md): upstream also adds
-            // "android-x86" here, but Flutter 3.47 has no android-x86 target
+            // "android-x86" here, but Flutter 3.50 has no android-x86 target
             // any more and drops x86 from the APK via abiFilters, so the
             // i686-linux-android cross-compile would be pure waste.
             if (buildType == "debug") {
@@ -173,7 +173,10 @@ class CargoKitPlugin implements Plugin<Project> {
                     ndkVersion = plugin.project.android.ndkVersion
                     sdkDirectory = plugin.project.android.sdkDirectory
                     minSdkVersion = plugin.project.android.defaultConfig.minSdkVersion.apiLevel as int
-                    compileSdkVersion = plugin.project.android.compileSdkVersion.substring(8) as int
+                    // Local patch (see rust_builder/README.md): Android Gradle
+                    // Plugin 9.3 names API 37 "android-37.0", which upstream's
+                    // `substring(8) as int` cannot read. Take the major number.
+                    compileSdkVersion = plugin.project.android.compileSdkVersion.substring(8).tokenize('.')[0] as int
                     targetPlatforms = platforms
                     pluginFile = CargoKitPlugin.file
                 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../player/seek_bar.dart';
 import '../player/time_format.dart';

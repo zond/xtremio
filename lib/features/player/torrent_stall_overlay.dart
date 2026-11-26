@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'torrent_progress_card.dart';
 import 'torrent_stats.dart';

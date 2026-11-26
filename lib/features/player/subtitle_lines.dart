@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' show sqrt;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The subtitle text over a film on the surface ([VideoOutput.surface]).
 ///

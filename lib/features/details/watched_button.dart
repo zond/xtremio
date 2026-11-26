@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Whether a film is watched, and the way to say it is or is not: a check
 /// beside the bookmark on the details page, before the faces.

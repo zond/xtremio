@@ -2,7 +2,7 @@
 /// a focus spreads, and the ring a television draws round it.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/features/details/details_header.dart';

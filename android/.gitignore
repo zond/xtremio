@@ -1,6 +1,8 @@
 gradle-wrapper.jar
 /.gradle
 /captures/
+# Gradle 9.5 writes its problems report here.
+/build/
 /gradlew
 /gradlew.bat
 /local.properties

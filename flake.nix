@@ -8,7 +8,7 @@
   #                             desktop libraries, libmpv and ffmpeg for the
   #                             FFmpeg tests
   #   nix develop .#android     the same plus JDK 21, the Android SDK and NDK
-  #                             Flutter 3.47 pins, an emulator and an image
+  #                             Flutter 3.50 pins, an emulator and an image
   #   nix develop .#xervice     Node 22 and firebase-tools for xtremio-xervice/
   #
   # Not provided, because Nix cannot: Xcode (a macOS build, `make macos`, uses
@@ -20,7 +20,7 @@
   outputs =
     { self, nixpkgs }:
     let
-      # flutter347 is built for these three only.
+      # flutter350 is built for these three only.
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -44,8 +44,8 @@
           };
           inherit (pkgs) lib stdenv;
 
-          # CI's FLUTTER_VERSION is 3.47.1; nixpkgs carries the newest 3.47.x.
-          flutter = pkgs.flutter347;
+          # CI's FLUTTER_VERSION is 3.50.1; nixpkgs carries the newest 3.50.x.
+          flutter = pkgs.flutter350;
 
           # rust/src/libav.rs reads FFmpeg's structs by layout and refuses any
           # FFmpeg major but 6 -- the one the vendored Android libmpv carries.
@@ -127,7 +127,7 @@
           };
 
           # Android: platform 36, build-tools 36.0.0 and NDK 28.2.13676358,
-          # the versions Flutter 3.47's Gradle plugin asks for
+          # the versions Flutter 3.50's Gradle plugin asks for
           # (docs/ANDROID.md, "Prerequisites"), plus an emulator image for
           # this host's architecture: x86_64 on an x86_64 host, arm64-v8a on
           # Apple silicon and arm64 Linux.

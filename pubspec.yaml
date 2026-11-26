@@ -45,6 +45,8 @@ dependencies:
   qr_flutter: ^4.1.0
   file_selector: ^1.1.0
   wakelock_plus: ^1.8.2
+  # Material, which Flutter 3.50 moved out of the framework into this package.
+  material_ui: ^1.11.1
 
 dev_dependencies:
   flutter_test:

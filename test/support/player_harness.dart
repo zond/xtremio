@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:xtremio/features/local/local_media.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A page's "there is nothing here": an icon, a title and, when there is
 /// one, the sentence that says what to do about it.

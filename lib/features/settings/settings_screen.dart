@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/core.dart';
 import '../../widgets/explained.dart';

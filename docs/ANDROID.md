@@ -11,7 +11,7 @@ Android-only decisions behind it. How the app works is in
 ([OPERATIONS.md](OPERATIONS.md#with-nix)).
 
 - **Android SDK**: platform 36, build-tools 36.0.0 and NDK 28.2.13676358,
-  the versions Flutter 3.47 pins. `android/app/build.gradle.kts` takes the
+  the versions Flutter 3.50 pins. `android/app/build.gradle.kts` takes the
   NDK, `minSdk` 24 and `targetSdk` from the Flutter Gradle plugin. The app
   also needs **platform 37**, which it compiles against (`compileSdk = 37`).
   `flutter_chrome_cast` 1.5.0 brings `permission_handler_android` 14.1,
@@ -55,7 +55,7 @@ Debug and profile builds are the package `com.zond.xtremio.debug`
 ("xtremio debug"), installed beside a release build rather than over it
 ([DRIVING.md](DRIVING.md#the-second-app)). Debug builds always add x86_64
 for the emulator, since cargokit mirrors Flutter here. The vendored copy is
-patched to stop also adding android-x86, which Flutter 3.47 cannot package.
+patched to stop also adding android-x86, which Flutter 3.50 cannot package.
 Output lands in `build/app/outputs/flutter-apk/`.
 
 **The APK carries only the ABIs requested.** `--target-platform` controls
@@ -488,7 +488,7 @@ adb shell am start -n com.zond.xtremio.debug/com.zond.xtremio.MainActivity
 For **Android TV**, use the same flow with
 `system-images;android-36;android-tv;x86_64` and `-d tv_1080p` (AVD
 `xtremio_tv36`). The same x86_64 debug APK installs.
-Use the x86_64 TV image, not the 32-bit `x86` one: Flutter 3.47 cannot
+Use the x86_64 TV image, not the 32-bit `x86` one: Flutter 3.50 cannot
 package an x86 APK at all. Check the image answers "television":
 
 ```bash

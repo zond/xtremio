@@ -10,7 +10,7 @@
 /// viewer an account of the rest.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/core.dart';
 import 'addon_details_screen.dart';

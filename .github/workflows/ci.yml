@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: 3.47.1
+  FLUTTER_VERSION: 3.50.1
   FRB_VERSION: 2.13.0
 
 jobs:

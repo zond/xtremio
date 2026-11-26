@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart' show PlatformException;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 /// Opens a URL outside the app (the system browser): addon configuration

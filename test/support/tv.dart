@@ -1,7 +1,7 @@
 /// Helpers for the tests that drive a screen with a remote.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/focus_emphasis.dart';
