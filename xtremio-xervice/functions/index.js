@@ -113,11 +113,11 @@ app.use(express.json());
 /**
  * An async route whose failure is answered rather than left hanging.
  *
- * Express 4 does not look at the promise a handler returns, so a rejected
- * one -- Firestore unavailable, a fetch that could not connect, Google
- * answering a 5xx page that `json()` cannot parse -- reached nobody: no
- * response, and the television or the phone waited out the whole request
- * timeout for an answer that was never coming. This answers 502 instead.
+ * A handler's promise can be rejected: Firestore unavailable, a fetch that
+ * could not connect, Google answering a 5xx page that `json()` cannot
+ * parse. Express 5 would hand that to its own error handler, which answers
+ * 500 and prints the error, message and all. This answers 502 instead and
+ * keeps the message out of the log.
  *
  * **Nothing of the failure goes out, and only its name goes in the log.**
  * A request here carries a refresh token or an auth code, and an error's
