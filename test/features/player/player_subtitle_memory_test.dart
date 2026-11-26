@@ -49,7 +49,6 @@ void main() {
   /// from -- so there is nothing to key a correction on for it.
   PlayerHarness harness({AppPrefs? prefs}) {
     final harness = PlayerHarness(prefs: prefs);
-    harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
         'request': {

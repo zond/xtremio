@@ -73,11 +73,9 @@ void main() {
     'releaseGroup': group,
   };
 
-  /// Two English files from one addon, and no session preference: what
-  /// the subtitle menu, the match picker and the timing panel all need
-  /// something to work on.
-  void offerSubtitles(PlayerHarness harness, {Map<String, dynamic>? prefer}) {
-    harness.fixture['subtitlePreference'] = prefer;
+  /// Two English files from one addon: what the subtitle menu, the match
+  /// picker and the timing panel all need something to work on.
+  void offerSubtitles(PlayerHarness harness) {
     harness.fixture['subtitles'] = [
       {
         'request': {
@@ -293,11 +291,12 @@ void main() {
         final answered = Completer<void>();
         final harness = PlayerHarness(
           configureEngine: (engine) => engine.disposeGate = wedged,
+          subtitlePick: const SessionSubtitlePick(
+            enabled: true,
+            language: 'eng',
+          ),
         );
-        offerSubtitles(
-          harness,
-          prefer: {'enabled': true, 'source': 'external', 'language': 'eng'},
-        );
+        offerSubtitles(harness);
         await harness.pumpPushed(tester);
         harness.engine
           ..subtitleError = StateError('mpv: no')

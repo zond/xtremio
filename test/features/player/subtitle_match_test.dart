@@ -30,7 +30,6 @@ void main() {
   /// A film-timed video with [uploads] on offer from one addon.
   PlayerHarness harness({required List<Map<String, dynamic>> uploads}) {
     final harness = PlayerHarness();
-    harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
         'request': {

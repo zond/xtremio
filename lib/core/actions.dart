@@ -236,20 +236,6 @@ abstract final class CoreActions {
     'videoParams': {'hash': hash, 'size': size, 'filename': filename},
   });
 
-  /// The user's subtitle choice for this Player session: on or off, and
-  /// from which [source] (`embedded` / `external`) in which [language].
-  static CoreAction playerSubtitlePreferenceChanged({
-    required bool enabled,
-    String? source,
-    String? language,
-  }) => _player('SubtitlePreferenceChanged', {
-    'preference': {
-      'enabled': enabled,
-      'source': ?source,
-      'language': ?language,
-    },
-  });
-
   // --- Ctx: account -------------------------------------------------------
   //
   // Every `Action::Ctx` goes out with `field: ctx`. With `field: null` the

@@ -78,8 +78,7 @@ final class SubtitleShowPick {
 
   /// Whether the pick was a track already in the video. Those have no release
   /// group and no URL to carry to another episode. All this remembers is that
-  /// the file's own track was preferred to a download, which is what the
-  /// session preference's `source` says too.
+  /// the file's own track was preferred to a download.
   final bool embedded;
 
   /// Whether an addon's file was picked although the video had a track in the

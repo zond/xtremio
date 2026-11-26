@@ -10,11 +10,12 @@ import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_prefs_client.dart';
+import '../../support/fake_playback_engine.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// Subtitles: the menu over embedded tracks and addon files, selection,
-/// the session preference, styling, and the parameters the core needs to
+/// the session's pick by hand, styling, and the parameters the core needs to
 /// ask the addons at all.
 void main() {
   const spanishUrl = 'https://subs.example.org/tt0063350/spa.srt';
@@ -52,10 +53,10 @@ void main() {
   /// The recorded torrent plus two addon subtitle files (one of them also
   /// attached to the stream itself) and an addon still loading.
   PlayerHarness harnessWithSubtitles({
-    Map<String, dynamic>? preference,
+    SessionSubtitlePick? preference,
     bool loading = false,
   }) {
-    final harness = PlayerHarness();
+    final harness = PlayerHarness(subtitlePick: preference);
     harness.fixture['subtitles'] = [
       subtitlesResponse([
         {
@@ -71,7 +72,6 @@ void main() {
     (harness.selected['stream'] as Map<String, dynamic>)['subtitles'] = [
       {'id': 'dup', 'lang': 'spa', 'url': spanishUrl},
     ];
-    harness.fixture['subtitlePreference'] = preference;
     return harness;
   }
 
@@ -113,7 +113,7 @@ void main() {
     expect(find.text('subs.example.org'), findsNWidgets(2));
     expect(find.text('Looking for subtitles…'), findsNothing);
 
-    // An addon file: loaded from its URL, remembered as the preference.
+    // An addon file: loaded from its URL.
     // (The sheet scrolls; the last rows start below the fold.)
     await tester.ensureVisible(find.text('French'));
     await tester.pumpAndSettle();
@@ -121,9 +121,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SubtitleMenu), findsNothing);
     expect(engine.externalSubtitles, [(Uri.parse(frenchUrl), 'French', 'fre')]);
-    expect(harness.lastPlayerArgs('SubtitlePreferenceChanged'), {
-      'preference': {'enabled': true, 'source': 'external', 'language': 'fre'},
-    });
     expect(find.byIcon(Icons.subtitles), findsOneWidget);
 
     // Reopening shows it selected.
@@ -140,9 +137,6 @@ void main() {
     await tester.tap(find.text('Commentary'));
     await tester.pumpAndSettle();
     expect(engine.setSubtitleTrackIds, ['4']);
-    expect(harness.lastPlayerArgs('SubtitlePreferenceChanged'), {
-      'preference': {'enabled': true, 'source': 'embedded', 'language': 'eng'},
-    });
 
     // Off.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
@@ -151,9 +145,6 @@ void main() {
     await tester.tap(find.text('Off'));
     await tester.pumpAndSettle();
     expect(engine.disableSubtitlesCalls, 1);
-    expect(harness.lastPlayerArgs('SubtitlePreferenceChanged'), {
-      'preference': {'enabled': false},
-    });
     expect(find.byIcon(Icons.subtitles_off), findsOneWidget);
   });
 
@@ -327,25 +318,21 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('applies the session preference once the media is loaded', (
+  testWidgets('applies the session pick once the media is loaded', (
     tester,
   ) async {
     useWideViewport(tester);
-    // External French picked earlier in this Player session. Nothing is
+    // External French picked by hand on the episode before, in this player. Nothing is
     // added while mpv is still between files: the pick waits for the
     // engine to report the media in (a duration, or playing).
     var harness = harnessWithSubtitles(
-      preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
+      preference: const SessionSubtitlePick(enabled: true, language: 'fre'),
     );
     await harness.pump(tester);
     expect(harness.engine.externalSubtitles, isEmpty);
     harness.engine.emitPlaying(true);
     await pumpEvents(tester);
     expect(harness.engine.externalSubtitles.single.$1, Uri.parse(frenchUrl));
-    expect(
-      harness.playerActions(),
-      isNot(contains('SubtitlePreferenceChanged')),
-    );
     // Once applied, later state changes do not re-add it.
     pokeState(harness);
     await pumpEvents(tester);
@@ -353,7 +340,7 @@ void main() {
 
     // Embedded English: waits for the tracks, then picks the first match.
     harness = harnessWithSubtitles(
-      preference: {'enabled': true, 'source': 'embedded', 'language': 'en'},
+      preference: const SessionSubtitlePick(enabled: true, language: 'en'),
     );
     await harness.pump(tester);
     harness.engine.emitTracks(embedded);
@@ -365,7 +352,9 @@ void main() {
     expect(harness.engine.externalSubtitles, isEmpty);
 
     // Off stays off, whatever the container would default to.
-    harness = harnessWithSubtitles(preference: {'enabled': false});
+    harness = harnessWithSubtitles(
+      preference: const SessionSubtitlePick(enabled: false),
+    );
     await harness.pump(tester);
     expect(harness.engine.disableSubtitlesCalls, 0);
     harness.engine.emitPlaying(true);
@@ -373,12 +362,116 @@ void main() {
     expect(harness.engine.disableSubtitlesCalls, 1);
   });
 
+  group('a pick by hand carries into the next episode', () {
+    /// [harnessWithSubtitles] with an episode after this one, and no
+    /// memory of the show: only this player's own pick can explain what
+    /// the next one puts up.
+    PlayerHarness withNextEpisode() {
+      final harness = harnessWithSubtitles();
+      harness.fixture['nextVideo'] = {
+        'id': 'tt0063350:1:2',
+        'title': 'The Cellar',
+        'season': 1,
+        'episode': 2,
+      };
+      harness.fixture['nextStream'] = {
+        'url': 'https://x.example/e2.mp4',
+        'name': 'Direct',
+      };
+      return harness;
+    }
+
+    /// Picks the [row] of the subtitle menu by hand.
+    Future<void> pick(WidgetTester tester, String row) async {
+      await tester.tap(find.byTooltip('Subtitles (S)'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(row));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(row));
+      await tester.pumpAndSettle();
+    }
+
+    /// Moves on to the next episode and lets its player load the media,
+    /// with the video's own [tracks]. Returns the next player's engine.
+    Future<FakePlaybackEngine> playNext(
+      WidgetTester tester,
+      PlayerHarness harness, {
+      PlaybackTracks tracks = const PlaybackTracks(),
+    }) async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pumpAndSettle();
+      expect(harness.engines, hasLength(2), reason: 'the next episode plays');
+      final next = harness.engines.last;
+      next.emitTracks(tracks);
+      next.emitDuration(const Duration(minutes: 96));
+      await pumpEvents(tester);
+      return next;
+    }
+
+    testWidgets('an addon file', (tester) async {
+      useWideViewport(tester);
+      final harness = withNextEpisode();
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      await pumpEvents(tester);
+      await pick(tester, 'French');
+
+      final next = await playNext(tester, harness);
+      expect(next.externalSubtitles, [(Uri.parse(frenchUrl), 'French', 'fre')]);
+    });
+
+    testWidgets('a track in the video', (tester) async {
+      useWideViewport(tester);
+      final harness = withNextEpisode();
+      await harness.pump(tester);
+      harness.engine
+        ..emitTracks(embedded)
+        ..emitDuration(const Duration(minutes: 96));
+      await pumpEvents(tester);
+      await pick(tester, 'Commentary');
+
+      // The language carries, not the track: the next episode's first
+      // English track goes up.
+      final next = await playNext(tester, harness, tracks: embedded);
+      expect(next.setSubtitleTrackIds, ['3']);
+      expect(next.externalSubtitles, isEmpty);
+    });
+
+    testWidgets('off', (tester) async {
+      useWideViewport(tester);
+      final harness = withNextEpisode();
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      await pumpEvents(tester);
+      await pick(tester, 'French');
+      await pick(tester, 'Off');
+
+      final next = await playNext(tester, harness);
+      expect(next.disableSubtitlesCalls, 1);
+      expect(next.externalSubtitles, isEmpty);
+    });
+
+    testWidgets('and a player opened anew has none', (tester) async {
+      useWideViewport(tester);
+      final harness = withNextEpisode();
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      await pumpEvents(tester);
+
+      // Nothing picked here, and nothing remembered: the next episode is
+      // left as it opens.
+      final next = await playNext(tester, harness);
+      expect(next.externalSubtitles, isEmpty);
+      expect(next.disableSubtitlesCalls, 0);
+    });
+  });
+
   testWidgets('a rejected auto-pick is retried, not counted as applied', (
     tester,
   ) async {
     useWideViewport(tester);
     final harness = harnessWithSubtitles(
-      preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
+      preference: const SessionSubtitlePick(enabled: true, language: 'fre'),
     );
     await harness.pump(tester);
     final engine = harness.engine..subtitleError = StateError('mpv: no');
@@ -416,7 +509,7 @@ void main() {
     useWideViewport(tester);
     const otherFrench = 'https://subs.example.org/tt0063350/fre-2.srt';
     final harness = harnessWithSubtitles(
-      preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
+      preference: const SessionSubtitlePick(enabled: true, language: 'fre'),
     );
     (harness.fixture['subtitles'] as List).add(
       subtitlesResponse(base: 'https://other.example.org/manifest.json', [
@@ -658,15 +751,14 @@ void main() {
     expect(harness.engine.rates, [1.5]);
   });
 
-  /// A harness whose addon answers [items], with no session preference to
-  /// auto-apply.
+  /// A harness whose addon answers [items], with no session pick to
+  /// auto-apply unless [preference] hands one over.
   PlayerHarness subtitleHarness(
     List<Map<String, dynamic>> items, {
-    Map<String, dynamic>? preference,
+    SessionSubtitlePick? preference,
     AppPrefs? prefs,
   }) {
-    final harness = PlayerHarness(prefs: prefs);
-    harness.fixture['subtitlePreference'] = preference;
+    final harness = PlayerHarness(prefs: prefs, subtitlePick: preference);
     harness.fixture['subtitles'] = [subtitlesResponse(items)];
     return harness;
   }
@@ -895,13 +987,10 @@ void main() {
     // shows. English was picked on the previous episode; the addon
     // answers an upload for another release first and one for this
     // release second.
-    final harness = subtitleHarness(
-      [
-        upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
-        upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
-      ],
-      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
-    );
+    final harness = subtitleHarness([
+      upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
+      upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
+    ], preference: const SessionSubtitlePick(enabled: true, language: 'eng'));
     harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
@@ -944,13 +1033,10 @@ void main() {
     // list: the alphabetically first language, not whichever addon
     // answers first. The addon here answers Swedish first and German
     // second.
-    final harness = subtitleHarness(
-      [
-        upload('sv-1', 'swe', 'https://subs.example.org/sv.srt', 'YTS'),
-        upload('de-1', 'ger', 'https://subs.example.org/de.srt', 'YTS'),
-      ],
-      preference: {'enabled': true, 'source': 'external'},
-    );
+    final harness = subtitleHarness([
+      upload('sv-1', 'swe', 'https://subs.example.org/sv.srt', 'YTS'),
+      upload('de-1', 'ger', 'https://subs.example.org/de.srt', 'YTS'),
+    ], preference: const SessionSubtitlePick(enabled: true));
     harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
@@ -969,18 +1055,15 @@ void main() {
     // the file whose declared rate differs -- and plays it exactly as it
     // was written. This is the pick with nobody watching it, which is
     // the last place to act on a guess.
-    final harness = subtitleHarness(
-      [
-        upload(
-          'en-1',
-          'eng',
-          'https://subs.example.org/en-25.srt',
-          'PAL',
-          fpsMilli: 25000,
-        ),
-      ],
-      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
-    );
+    final harness = subtitleHarness([
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+    ], preference: const SessionSubtitlePick(enabled: true, language: 'eng'));
     await harness.pump(tester);
     final engine = harness.engine;
     engine.emitDuration(const Duration(minutes: 96));
@@ -1021,7 +1104,7 @@ void main() {
           fpsMilli: 25000,
         ),
       ],
-      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
+      preference: const SessionSubtitlePick(enabled: true, language: 'eng'),
       prefs: prefs,
     );
     await harness.pump(tester);

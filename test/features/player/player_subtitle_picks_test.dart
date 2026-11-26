@@ -1,15 +1,17 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_tracks.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_prefs_client.dart';
 import '../../support/player_harness.dart';
 
 /// The next episode comes up the way the last one was left.
 ///
-/// The engine's session preference is cleared when the player is
-/// unloaded, so on a fresh start what this show was last watched with is
-/// the only thing that knows anything -- the language, and the release
+/// A player opened anew has no pick by hand of its own, so on a fresh
+/// start what this show was last watched with is the only thing that
+/// knows anything -- the language, and the release
 /// group of the file that was picked when the addon named one. What is
 /// remembered is *only ever* written by a pick made by hand, and it never
 /// invents a language this episode does not offer.
@@ -29,16 +31,15 @@ void main() {
     String? releaseGroup,
   }) => {'id': id, 'lang': lang, 'url': url, 'releaseGroup': ?releaseGroup};
 
-  /// The addon answering with [items] and no session preference at all --
-  /// which is what every fresh start looks like, since the core clears
-  /// the preference on `Unload`.
+  /// The addon answering with [items] and, unless [subtitlePick] says
+  /// otherwise, no pick by hand handed over: what every fresh start looks
+  /// like.
   PlayerHarness harnessWith(
     List<Map<String, dynamic>> items, {
     AppPrefs? prefs,
-    Map<String, dynamic>? preference,
+    SessionSubtitlePick? subtitlePick,
   }) {
-    final harness = PlayerHarness(prefs: prefs);
-    harness.fixture['subtitlePreference'] = preference;
+    final harness = PlayerHarness(prefs: prefs, subtitlePick: subtitlePick);
     harness.fixture['subtitles'] = [
       {
         'request': {
@@ -392,6 +393,41 @@ void main() {
     ]);
   });
 
+  testWidgets('what the memory put up is not handed to the next episode', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final prefs = remembering({'language': 'English', 'releaseGroup': 'fgt'});
+    await prefs.load();
+    final harness = harnessWith(twoEnglish(), prefs: prefs);
+    harness.fixture['nextVideo'] = {
+      'id': 'tt0063350:1:2',
+      'title': 'The Cellar',
+      'season': 1,
+      'episode': 2,
+    };
+    harness.fixture['nextStream'] = {
+      'url': 'https://x.example/e2.mp4',
+      'name': 'Direct',
+    };
+    await playing(tester, harness);
+    expect(harness.engine.externalSubtitles, [
+      (Uri.parse(fgtUrl), 'English', 'eng'),
+    ]);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+    expect(harness.engines, hasLength(2), reason: 'the next episode plays');
+    final next = harness.engines.last;
+    next.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    // The memory still answers, group and all. Had the auto-pick passed
+    // for a pick by hand, English with no group would have won over it
+    // and put up the head of the language.
+    expect(next.externalSubtitles, [(Uri.parse(fgtUrl), 'English', 'eng')]);
+  });
+
   testWidgets('a show watched with subtitles off comes up with none', (
     tester,
   ) async {
@@ -541,9 +577,7 @@ void main() {
     expect(prefs.subtitlePicks.languages, {'English': 9});
   });
 
-  testWidgets('the session preference still wins over the memory', (
-    tester,
-  ) async {
+  testWidgets('the session pick still wins over the memory', (tester) async {
     useWideViewport(tester);
     final prefs = remembering({'language': 'Swedish', 'releaseGroup': 'fgt'});
     await prefs.load();
@@ -559,7 +593,7 @@ void main() {
           upload('sv-1', 'swe', swedishUrl, releaseGroup: 'FGT'),
         ],
         prefs: prefs,
-        preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
+        subtitlePick: const SessionSubtitlePick(enabled: true, language: 'eng'),
       ),
     );
 

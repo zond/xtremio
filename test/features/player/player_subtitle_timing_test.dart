@@ -49,9 +49,16 @@ void main() {
   /// Two English uploads on offer: one the addon says nothing about
   /// (`PLAIN`, from its group 6) and one it says was cut for 25 fps
   /// (`PAL`). Both are played exactly as they were written.
-  PlayerHarness harness({DeviceProfile? device, AppPrefs? prefs}) {
-    final harness = PlayerHarness(device: device, prefs: prefs);
-    harness.fixture['subtitlePreference'] = null;
+  PlayerHarness harness({
+    DeviceProfile? device,
+    AppPrefs? prefs,
+    SessionSubtitlePick? subtitlePick,
+  }) {
+    final harness = PlayerHarness(
+      device: device,
+      prefs: prefs,
+      subtitlePick: subtitlePick,
+    );
     harness.fixture['subtitles'] = [
       {
         'request': {
@@ -135,8 +142,11 @@ void main() {
     Map<String, dynamic>.from(player.fixture),
   );
 
+  /// English picked by hand on the episode before, in this player.
+  const englishPick = SessionSubtitlePick(enabled: true, language: 'eng');
+
   /// The player with an English track of mpv's own drawn, a session
-  /// preference asking for an English addon file, and an engine that
+  /// pick asking for an English addon file, and an engine that
   /// refuses it -- so the auto-pick keeps retrying for the rest of the
   /// media, which is the state both of the tests below start from.
   Future<PlayerHarness> refusedAutoPick(WidgetTester tester) async {
@@ -152,12 +162,7 @@ void main() {
       }),
     );
     await prefs.load();
-    final player = harness(prefs: prefs);
-    player.fixture['subtitlePreference'] = {
-      'enabled': true,
-      'source': 'external',
-      'language': 'eng',
-    };
+    final player = harness(prefs: prefs, subtitlePick: englishPick);
     await player.pump(tester);
     final engine = player.engine..subtitleError = StateError('mpv: no');
     engine.emitTracks(
@@ -352,12 +357,7 @@ void main() {
   testWidgets('a refused auto-pick leaves alone a file picked while it was '
       'in flight', (tester) async {
     useWideViewport(tester);
-    final player = harness();
-    player.fixture['subtitlePreference'] = {
-      'enabled': true,
-      'source': 'external',
-      'language': 'eng',
-    };
+    final player = harness(subtitlePick: englishPick);
     await player.pump(tester);
     final gate = Completer<void>();
     final engine = player.engine

@@ -260,31 +260,6 @@ void main() {
         },
       },
     });
-    expect(
-      CoreActions.playerSubtitlePreferenceChanged(
-        enabled: true,
-        source: 'embedded',
-        language: 'eng',
-      ).action['args'],
-      {
-        'action': 'SubtitlePreferenceChanged',
-        'args': {
-          'preference': {
-            'enabled': true,
-            'source': 'embedded',
-            'language': 'eng',
-          },
-        },
-      },
-    );
-    // Absent options are omitted, as the Rust side skips them when None.
-    expect(
-      CoreActions.playerSubtitlePreferenceChanged(enabled: false)
-          .action['args']['args'],
-      {
-        'preference': {'enabled': false},
-      },
-    );
   });
 
   test('resource types roundtrip through JSON', () {

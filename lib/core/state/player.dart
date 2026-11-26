@@ -186,28 +186,6 @@ final class SubtitleSource {
   final String? addonBase;
 }
 
-/// Where subtitles for this Player session should come from
-/// (`SubtitlePreference`), remembered by the engine across `Load Player`
-/// until `Unload`.
-final class SubtitlePreference {
-  const SubtitlePreference({required this.enabled, this.source, this.language});
-
-  final bool enabled;
-
-  /// `embedded` or `external`; null to keep the client's own ordering.
-  final String? source;
-
-  /// Normalized language code; null when unknown.
-  final String? language;
-
-  factory SubtitlePreference.fromJson(Map<String, dynamic> json) =>
-      SubtitlePreference(
-        enabled: json['enabled'] as bool? ?? false,
-        source: json['source'] as String?,
-        language: json['language'] as String?,
-      );
-}
-
 /// View over the `player` field (`Player`).
 final class PlayerState {
   const PlayerState({
@@ -219,7 +197,6 @@ final class PlayerState {
     required this.nextStream,
     required this.progress,
     required this.subtitles,
-    required this.subtitlePreference,
     this.streamRequest,
     this.metaRequest,
     this.subtitlesPath,
@@ -247,7 +224,6 @@ final class PlayerState {
   /// One entry per subtitle addon asked (`Player.subtitles`), each Loading,
   /// Ready with its files, or Err.
   final List<ResourceLoadable<List<SubtitleInfo>>> subtitles;
-  final SubtitlePreference? subtitlePreference;
 
   /// The requests `Load Player` was given, so a follow-up load (the next
   /// episode) can be built from them.
@@ -268,7 +244,6 @@ final class PlayerState {
     final metaRequest = selected?['metaRequest'] as Map<String, dynamic>?;
     final subtitlesPath = selected?['subtitlesPath'] as Map<String, dynamic>?;
     final nextStream = json['nextStream'] as Map<String, dynamic>?;
-    final preference = json['subtitlePreference'] as Map<String, dynamic>?;
     return PlayerState(
       selectedStream: selectedStream == null
           ? null
@@ -303,9 +278,6 @@ final class PlayerState {
             SubtitleInfo.listFromJson,
           ),
       ],
-      subtitlePreference: preference == null
-          ? null
-          : SubtitlePreference.fromJson(preference),
       streamRequest: streamRequest == null
           ? null
           : ResourceRequest.fromJson(streamRequest),

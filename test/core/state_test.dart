@@ -512,11 +512,6 @@ void main() {
             'content': {'type': 'EmptyContent'},
           }),
         ],
-        'subtitlePreference': {
-          'enabled': true,
-          'source': 'external',
-          'language': 'eng',
-        },
         'nextVideo': {
           'id': 'tt1:1:2',
           'title': 'Two',
@@ -534,9 +529,6 @@ void main() {
       expect(external.first.label, 'English (SDH)');
       expect(external.last.lang, 'spa');
       expect(external.last.id, '2');
-      expect(state.subtitlePreference?.enabled, isTrue);
-      expect(state.subtitlePreference?.source, 'external');
-      expect(state.subtitlePreference?.language, 'eng');
       expect(state.convertedStream?.filename, 'converted.mkv');
       expect(state.nextVideo?.id, 'tt1:1:2');
       expect(state.nextStream?.url, 'https://x/e2.mkv');
@@ -721,12 +713,11 @@ void main() {
       ], reason: "a file the stream carried has no addon behind it");
     });
 
-    test('the recorded fixture has no subtitles, preference or next video', () {
+    test('the recorded fixture has no subtitles or next video', () {
       final state = PlayerState.fromJson(loadPlayerFixture());
       expect(state.subtitles, isEmpty);
       expect(state.subtitlesLoading, isFalse);
       expect(state.externalSubtitleSources, isEmpty);
-      expect(state.subtitlePreference, isNull);
       expect(state.nextStream, isNull);
       expect(state.convertedStream?.infoHash, state.selectedStream?.infoHash);
       expect(state.subtitlesPath, isNull);

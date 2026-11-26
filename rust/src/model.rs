@@ -709,6 +709,7 @@ mod tests {
                 r#type: None,
                 extra: vec![],
             }),
+            spotlight: vec![],
             catalogs: (0..catalogs)
                 .map(|index| {
                     vec![ResourceLoadable {
@@ -970,6 +971,7 @@ mod tests {
                 r#type: None,
                 extra: vec![],
             }),
+            spotlight: vec![],
             catalogs: vec![
                 planned_catalog("https://v3-cinemeta.strem.io/manifest.json", "movie", "top"),
                 // No catalog name in the manifest: the addon name stands in.
@@ -1019,6 +1021,7 @@ mod tests {
                     r#type: Some("movie".to_owned()),
                     extra: vec![],
                 }),
+                spotlight: vec![],
                 catalogs: vec![
                     vec![ResourceLoadable {
                         request: catalog_request(base, "movie", "top"),

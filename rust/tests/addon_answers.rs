@@ -78,6 +78,7 @@ fn board(rows: Vec<Vec<ResourceLoadable<Vec<MetaItemPreview>>>>) -> GridCatalogs
             extra: vec![],
         }),
         catalogs: rows,
+        spotlight: vec![],
     }
     .into()
 }

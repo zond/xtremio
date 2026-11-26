@@ -55,6 +55,20 @@ part 'player_screen_casting.dart';
 part 'player_screen_keys.dart';
 part 'player_screen_leaving.dart';
 
+/// A subtitle choice the viewer made by hand in the player: off, or on in a
+/// language. It lasts while the player moves on to the next episode
+/// ([PlayerScreen.subtitlePick]) and ends when the viewer leaves the player.
+final class SessionSubtitlePick {
+  const SessionSubtitlePick({required this.enabled, this.language});
+
+  /// False means subtitles off.
+  final bool enabled;
+
+  /// The language as the track or the addon named it, a code or a name. Null
+  /// when it named none, which matches any language.
+  final String? language;
+}
+
 /// Plays one stream.
 ///
 /// Dispatches `Load Player` for [stream], waits for the engine to resolve it
@@ -96,6 +110,7 @@ class PlayerScreen extends StatefulWidget {
     this.driveOpener = const ServerDriveFileOpener(),
     this.now = DateTime.now,
     this.fullscreen = false,
+    this.subtitlePick,
   });
 
   /// Raw stream JSON as it came out of `meta_details.streams` (or a
@@ -125,6 +140,10 @@ class PlayerScreen extends StatefulWidget {
   /// replaces was, and handed over to this one for the next episode. This
   /// player takes it over as it is, without entering it again.
   final bool fullscreen;
+
+  /// The subtitle choice the viewer made by hand in the player this one
+  /// replaces, for the next episode. Null for a player opened anew.
+  final SessionSubtitlePick? subtitlePick;
 
   /// The name every route that mounts this screen is pushed under, so
   /// whoever is about to open something over the player can tell there is
@@ -671,6 +690,11 @@ class _PlayerScreenState extends State<PlayerScreen> implements PlayerProbe {
   /// Where the subtitle auto-pick stands for this media; see
   /// [SubtitleAutoPick]. Replaced when a new stream opens.
   SubtitleAutoPick _autoPick = SubtitleAutoPick();
+
+  /// The last subtitle choice made by hand in this player, or the one the
+  /// player before it handed over. The auto-pick prefers it to the memory
+  /// ([_wanted]).
+  late SessionSubtitlePick? _sessionPick = widget.subtitlePick;
 
   /// The addon files mpv has said it could not load for this media
   /// ([externalSubtitleFailure]), by URL. The auto-pick passes over them:

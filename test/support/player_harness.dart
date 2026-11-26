@@ -46,6 +46,7 @@ class PlayerHarness {
     this.navigatorObservers = const [],
     this.mpvReport,
     this.now,
+    this.subtitlePick,
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
     PortForwardingStatus? portForwardingStatus,
@@ -205,6 +206,10 @@ class PlayerHarness {
   /// the real one otherwise.
   final DateTime Function()? now;
 
+  /// The subtitle choice a previous episode's player handed over
+  /// ([PlayerScreen.subtitlePick]); null for a player opened anew.
+  final SessionSubtitlePick? subtitlePick;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -293,6 +298,7 @@ class PlayerHarness {
     subtitlesPath: subtitlesPath,
     driveOpener: driveOpener ?? const ServerDriveFileOpener(),
     now: now ?? DateTime.now,
+    subtitlePick: subtitlePick,
   );
 
   /// Mounts the screen and lets it open the stream.

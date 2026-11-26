@@ -37,6 +37,7 @@ use serde::{Deserialize, Serialize};
 use stremio_core::models::ctx::Ctx;
 use stremio_core::models::streaming_server::StreamingServer;
 use stremio_core::runtime::{Env, EnvError, EnvFuture, EnvFutureExt, TryEnvFuture};
+use stremio_core::types::remote_config::ClientInfo;
 
 // The three statics below stay statics on purpose, and are not part of
 // `crate::state::AppState`, because an executor and a connection pool are
@@ -518,6 +519,14 @@ fn percent_decode(text: &str) -> Option<String> {
 pub enum XtremioEnv {}
 
 impl Env for XtremioEnv {
+    /// What the core's remote config (Stremio's notifications and
+    /// experiments) is evaluated against. Nothing is told: this app never
+    /// asks the core to pull that config, so there is nothing to evaluate
+    /// and no one to describe the device to.
+    fn client_info() -> ClientInfo {
+        ClientInfo::default()
+    }
+
     fn fetch<IN: Serialize + Send + 'static, OUT: for<'de> Deserialize<'de> + Send + 'static>(
         request: Request<IN>,
     ) -> TryEnvFuture<OUT> {

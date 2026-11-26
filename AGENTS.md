@@ -312,8 +312,8 @@ and `rust/tests/subtitle_threshold.rs`.
   unused slot down. A row names the addon and why it is first, never a rate.
 - **Pick memory** (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`):
   only a pick by hand writes, nothing the episode does not offer is
-  preselected, Off is a value, and a synthesized preference is never
-  dispatched as `SubtitlePreferenceChanged`.
+  preselected, Off is a value, and the auto-pick never sets the session's
+  pick by hand (`SessionSubtitlePick`).
 
 ## The surface shows only what MediaCodec decodes
 

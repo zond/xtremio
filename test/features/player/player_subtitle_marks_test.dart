@@ -44,7 +44,6 @@ void main() {
 
   PlayerHarness harness({AppPrefs? prefs}) {
     final harness = PlayerHarness(prefs: prefs);
-    harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
         'request': {

@@ -1,8 +1,8 @@
 part of 'player_screen.dart';
 
 /// What the auto-pick is looking for, from whichever of the two answers
-/// there is: the engine's session preference, or what this show was last
-/// watched with (`SubtitlePickMemory`).
+/// there is: the session's pick by hand ([SessionSubtitlePick]), or what this
+/// show was last watched with (`SubtitlePickMemory`).
 ///
 /// One shape for both so there is one piece of code that applies it. What the
 /// two can say differs: only the memory names a release group, and only it
@@ -479,13 +479,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
     _resetSubtitleTiming();
     _engine?.setSubtitleTrack(track.id);
-    _client?.dispatch(
-      CoreActions.playerSubtitlePreferenceChanged(
-        enabled: true,
-        source: 'embedded',
-        language: track.language,
-      ),
-    );
+    _sessionPick = SessionSubtitlePick(enabled: true, language: track.language);
     // A track in the file has no release group and no URL that means anything
     // on the next episode. What is worth remembering is the language, and that
     // the file's own track was preferred to a download.
@@ -509,12 +503,9 @@ extension _PlayerSubtitles on _PlayerScreenState {
     );
     _resetSubtitleTiming(subtitle);
     _addExternalSubtitle(subtitle);
-    _client?.dispatch(
-      CoreActions.playerSubtitlePreferenceChanged(
-        enabled: true,
-        source: 'external',
-        language: subtitle.lang.isEmpty ? null : subtitle.lang,
-      ),
+    _sessionPick = SessionSubtitlePick(
+      enabled: true,
+      language: subtitle.lang.isEmpty ? null : subtitle.lang,
     );
     // A file the addon gave no language for is a row reading `Unknown`, which
     // names nothing to look for next episode. The same rule keeps an unnamed
@@ -541,9 +532,7 @@ extension _PlayerSubtitles on _PlayerScreenState {
     _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
     _resetSubtitleTiming();
     _engine?.disableSubtitles();
-    _client?.dispatch(
-      CoreActions.playerSubtitlePreferenceChanged(enabled: false),
-    );
+    _sessionPick = const SessionSubtitlePick(enabled: false);
     _rememberPick();
   }
 
@@ -584,21 +573,21 @@ extension _PlayerSubtitles on _PlayerScreenState {
 
   /// What the auto-pick should look for, or null when nothing says.
   ///
-  /// The session preference wins: it is what the viewer did a moment ago, on
-  /// this very run, and the memory is what they did some other evening. It
-  /// carries no release group, because the core's field has no room for one, so
-  /// the group only ever comes from the memory.
+  /// The session's pick by hand ([_sessionPick]) wins: it is what the viewer
+  /// did a moment ago, on this very run, and the memory is what they did some
+  /// other evening. It carries no release group, so the group only ever comes
+  /// from the memory.
   ///
   /// The languages are compared as the *labels* the menu prints, since that is
-  /// what a pick is remembered as. A code coming from the core goes through the
-  /// same function to get there, so `sv` and `swe` are still one language on
-  /// both paths.
+  /// what a pick is remembered as. The session pick holds the code the track or
+  /// the addon gave. It goes through the same function to get there, so `sv`
+  /// and `swe` are still one language on both paths.
   ///
-  /// Whether files go first comes only from the memory, on both paths: the
-  /// core's `source` says what was picked, never whether the video had a
-  /// track to pick instead.
-  _WantedSubtitle? _wanted(PlayerState state) {
-    final preference = state.subtitlePreference;
+  /// Whether files go first comes only from the memory, on both paths. The
+  /// session pick says what was picked, never whether the video had a track to
+  /// pick instead.
+  _WantedSubtitle? _wanted() {
+    final preference = _sessionPick;
     final remembered = _prefs?.subtitlePicks.forSeries(_syncSeries);
     final filesFirst = remembered?.overTrack ?? false;
     if (preference != null) {
@@ -630,22 +619,22 @@ extension _PlayerSubtitles on _PlayerScreenState {
   /// addon has answered and nothing better came. A pick by hand ends it at once
   /// ([SubtitleAutoPick.byHand]).
   ///
-  /// With no session preference, what this show was last watched with stands in
-  /// ([_wanted]). That is every fresh start, since the core clears the
-  /// preference on `Unload`. The memory can also prefer the release group of
+  /// With no pick by hand this session, what this show was last watched with
+  /// stands in ([_wanted]). That is every fresh start, since a player opened
+  /// anew has no session pick. The memory can also prefer the release group of
   /// the file picked. A show never watched is left alone: off is the honest
   /// floor.
   ///
-  /// **Nothing here dispatches `SubtitlePreferenceChanged`**: the core's field
-  /// means "the viewer said so, this session", and a remembered guess in it
-  /// would be indistinguishable from a judgement.
+  /// **Nothing here sets [_sessionPick]**: it means "the viewer said so, this
+  /// session", and a remembered guess in it would be indistinguishable from a
+  /// judgement.
   void _maybeAutoPickSubtitles() {
     if (!_autoPick.mayPick || !_mediaLoaded || _opened == null || _handedOver) {
       return;
     }
     final state = _state;
     if (state == null) return;
-    final preference = _wanted(state);
+    final preference = _wanted();
     if (preference == null) return;
     final before = _tracks.value;
     // Where the multiplier has to go back to if the engine refuses the

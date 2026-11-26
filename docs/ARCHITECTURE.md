@@ -704,12 +704,12 @@ under a finger, since counts change only on a pick and a pick closes the
 sheet.
 
 **Which track is active** comes from mpv's own `sid`/`aid`, so a default
-track mpv chose shows as selected. A pick dispatches
-`SubtitlePreferenceChanged`, which the core keeps for the session. The next
-episode's player applies it to the first matching file once loaded, out of
-the same ordered list (`PlayerScreen._offeredSubtitles`). Text subtitles are
-drawn by Flutter (media_kit's `libass: false`), so size, colour and box are a
-`TextStyle`. Bitmap subtitles (PGS, VobSub) are listed but not drawn.
+track mpv chose shows as selected. A pick by hand is kept by the player
+(`SessionSubtitlePick`) and handed to the next episode's player, until the
+viewer leaves. The next episode's player applies it to the first matching
+file once loaded, out of the same ordered list
+(`PlayerScreen._offeredSubtitles`). Text subtitles are drawn by Flutter
+(media_kit's `libass: false`), so size, colour and box are a `TextStyle`. Bitmap subtitles (PGS, VobSub) are listed but not drawn.
 
 ### Adjusting timing
 
@@ -742,7 +742,7 @@ refusal. It replaces the whole `SubtitleTiming` with what is remembered for
 the file going on screen, or untouched. Both values are re-applied after a re-open,
 the addon file first (a re-open is a fresh `loadfile`, and nothing
 `sub-add` put in survives one). A pick from the menu or a press on the panel
-stops the session preference's auto-pick for that media
+stops the auto-pick for that media
 (`SubtitleAutoPick.byHand`).
 
 ### Matching against another subtitle

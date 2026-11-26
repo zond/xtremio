@@ -191,6 +191,7 @@ extension _PlayerNextEpisode on _PlayerScreenState {
           subtitlesPath: subtitlesPath?.copyWith(id: next.id),
           driveOpener: widget.driveOpener,
           fullscreen: _fullscreenOn,
+          subtitlePick: _sessionPick,
         ),
       ),
     );
