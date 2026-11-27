@@ -2,11 +2,11 @@
 name = "xtremio_core"
 version = "0.1.0"
 edition = "2021"
-# What the dependency graph needs, checked with `cargo +1.97.1 check --locked
-# --all-targets`: reedsolomon-rs (stream-server -> unrar-rs) declares 1.97.1, the
-# highest in the lock. The 1.88 this said before was refused outright, with
-# five dependencies naming newer compilers. Bump it with the pins.
-rust-version = "1.97.1"
+# What the dependency graph needs. stream-server is written for 1.100 (its
+# rust-toolchain.toml; it calls the atomics' `try_update`) and declares no
+# rust-version of its own, so Cargo cannot tell: an older compiler fails
+# inside it. Bump this with the pins.
+rust-version = "1.100.0"
 publish = false
 
 [lib]
@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "7e9a4a40fed57ce029cf6f6c5cff0e185013a477" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "22abc2b9281b8c5750068dcfaef5de79e2148a50" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "7e9a4a40fed57ce029cf6f6c5cff0e185013a477" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "22abc2b9281b8c5750068dcfaef5de79e2148a50" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -148,7 +148,7 @@ mimalloc = { version = "0.1.52", default-features = false, features = ["local_dy
 # them at build time, which needs libclang on the host. Desktop and arm64
 # builds are untouched.
 [target.'cfg(all(target_os = "android", not(target_arch = "aarch64")))'.dependencies]
-aws-lc-sys = { version = "0.45", features = ["bindgen"] }
+aws-lc-sys = { version = "0.47", features = ["bindgen"] }
 
 [dev-dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
